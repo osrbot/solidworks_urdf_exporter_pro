@@ -1,27 +1,29 @@
 ﻿using log4net;
+using log4net.Appender;
 using SW2URDF.Utilities;
 using System.IO;
+using System.Linq;
+using System.Text;
 using Xunit;
 
 namespace SW2URDF.Test
 {
-    public class TestLogger : SW2URDFTest
+    public class TestLogger
     {
-        public TestLogger(SWTestFixture fixture) : base(fixture)
-        {
-        }
-
-        public static void TestGetLogger()
+        [Fact]
+        public void TestGetLogger()
         {
             Assert.NotNull(Logger.GetLogger());
         }
 
-        public static void TestGetLoggerTwice()
+        [Fact]
+        public void TestGetLoggerTwice()
         {
             Assert.Equal(Logger.GetLogger(), Logger.GetLogger());
         }
 
-        public static void TestLoggerFileExists()
+        [Fact]
+        public void TestLoggerFileExists()
         {
             ILog logger = Logger.GetLogger();
             string filename = Logger.GetFileName();
@@ -30,8 +32,49 @@ namespace SW2URDF.Test
             LogManager.Flush(1000);
             Assert.True(File.Exists(filename));
 
-            string[] text = File.ReadAllLines(filename);
-            Assert.Contains(message, text[text.Length - 1]);
+            string text = ReadSharedText(filename, Encoding.UTF8);
+            Assert.Contains(message, text);
+        }
+
+        [Fact]
+        public void TestLoggerUsesUtf8Encoding()
+        {
+            Logger.GetLogger();
+            RollingFileAppender appender = LogManager.GetRepository()
+                .GetAppenders()
+                .OfType<RollingFileAppender>()
+                .FirstOrDefault();
+
+            Assert.NotNull(appender);
+            Assert.Equal("utf-8", appender.Encoding.WebName);
+        }
+
+        [Fact]
+        public void TestLoggerWritesValidUtf8()
+        {
+            ILog logger = Logger.GetLogger();
+            string filename = Logger.GetFileName();
+            string message = "UTF-8 path check: 中文路径";
+
+            logger.Info(message);
+            LogManager.Flush(1000);
+
+            UTF8Encoding strictUtf8 = new UTF8Encoding(false, true);
+            string text = ReadSharedText(filename, strictUtf8);
+            Assert.Contains(message, text);
+        }
+
+        private static string ReadSharedText(string filename, Encoding encoding)
+        {
+            using (FileStream stream = new FileStream(
+                filename,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite))
+            using (StreamReader reader = new StreamReader(stream, encoding, true))
+            {
+                return reader.ReadToEnd();
+            }
         }
     }
 }

@@ -1052,8 +1052,25 @@ namespace SW2URDF.URDFExport
                 else
                 {
                     logger.Info("Copying " + log_filename + " to " + destination);
-                    File.Copy(log_filename, destination, true);
+                    CopyLogFileWithSharedRead(log_filename, destination);
                 }
+            }
+        }
+
+        private static void CopyLogFileWithSharedRead(string source, string destination)
+        {
+            using (FileStream sourceStream = new FileStream(
+                source,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite))
+            using (FileStream destinationStream = new FileStream(
+                destination,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None))
+            {
+                sourceStream.CopyTo(destinationStream);
             }
         }
 

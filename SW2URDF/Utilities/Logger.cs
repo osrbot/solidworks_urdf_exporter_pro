@@ -9,6 +9,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 
 namespace SW2URDF.Utilities
 {
@@ -49,6 +50,7 @@ namespace SW2URDF.Utilities
                 AppendToFile = false,
                 File = Path.Combine(homeDir, "sw2urdf_logs", "sw2urdf.log"),
                 Layout = patternLayout,
+                Encoding = new UTF8Encoding(true),
                 MaxSizeRollBackups = 5,
                 MaximumFileSize = "10MB",
                 RollingStyle = RollingFileAppender.RollingMode.Size,
