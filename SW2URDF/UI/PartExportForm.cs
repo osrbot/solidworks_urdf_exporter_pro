@@ -30,6 +30,10 @@ namespace SW2URDF.UI
 {
     public partial class PartExportForm : Form
     {
+        private const string GeneralDisplayFormat = "G5";
+        // Keep SolidWorks mass properties intact when the textbox values are saved back.
+        private const string InertiaDisplayFormat = "R";
+
         public ExportHelper Exporter;
 
         public PartExportForm(SldWorks iSwApp)
@@ -141,7 +145,7 @@ namespace SW2URDF.UI
                                                              textBox_collision_origin_roll,
                                                              textBox_collision_origin_pitch,
                                                              textBox_collision_origin_yaw,
-                                                             "G5");
+                                                             GeneralDisplayFormat);
 
             Exporter.URDFRobot.BaseLink.Visual.Origin.FillBoxes(textBox_visual_origin_x,
                                                              textBox_visual_origin_y,
@@ -149,13 +153,13 @@ namespace SW2URDF.UI
                                                              textBox_visual_origin_roll,
                                                              textBox_visual_origin_pitch,
                                                              textBox_visual_origin_yaw,
-                                                             "G5");
+                                                             GeneralDisplayFormat);
 
             Exporter.URDFRobot.BaseLink.Visual.Material.Color.FillBoxes(domainUpDown_red,
                                                                      domainUpDown_green,
                                                                      domainUpDown_blue,
                                                                      domainUpDown_alpha,
-                                                                     "G5");
+                                                                     GeneralDisplayFormat);
 
             Exporter.URDFRobot.BaseLink.Inertial.Origin.FillBoxes(textBox_inertial_origin_x,
                                                                textBox_inertial_origin_y,
@@ -163,9 +167,9 @@ namespace SW2URDF.UI
                                                                textBox_inertial_origin_roll,
                                                                textBox_inertial_origin_pitch,
                                                                textBox_inertial_origin_yaw,
-                                                               "G5");
+                                                               InertiaDisplayFormat);
 
-            Exporter.URDFRobot.BaseLink.Inertial.Mass.FillBoxes(textBox_mass, "G5");
+            Exporter.URDFRobot.BaseLink.Inertial.Mass.FillBoxes(textBox_mass, InertiaDisplayFormat);
 
             Exporter.URDFRobot.BaseLink.Inertial.Inertia.FillBoxes(textBox_ixx,
                                                                 textBox_ixy,
@@ -173,7 +177,7 @@ namespace SW2URDF.UI
                                                                 textBox_iyy,
                                                                 textBox_iyz,
                                                                 textBox_izz,
-                                                                "G5");
+                                                                InertiaDisplayFormat);
         }
 
         #endregion Form event handlers

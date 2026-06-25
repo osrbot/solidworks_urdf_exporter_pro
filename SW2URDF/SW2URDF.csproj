@@ -346,6 +346,7 @@
     <Compile Include="Test\TestROSFIles.cs" />
     <Compile Include="Test\TestSerialization.cs" />
     <Compile Include="Test\TestSWAttached.cs" />
+    <Compile Include="Test\TestURDFAttributePrecision.cs" />
     <Compile Include="Test\TestURDFMerge.cs" />
     <Compile Include="Test\TestURDFPackage.cs" />
     <Compile Include="Test\TestVersioning.cs" />

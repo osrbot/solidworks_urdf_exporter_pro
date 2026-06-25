@@ -55,6 +55,28 @@ namespace SW2URDF.Test
             Assert.Equal(3, ellipsoid.PrincipalAxes.ColumnCount);
         }
 
+        [Fact]
+        public void TestThinWheelTensorFromSolidWorksLogStaysDisplayable()
+        {
+            bool success = InertiaEllipsoid.TryCreate(
+                0.836349965,
+                new[]
+                {
+                    3.998552042E-4, -1.130620548E-8, 1.764469125E-7,
+                    -1.130620548E-8, 3.998137025E-4, 2.945171384E-7,
+                    1.764469125E-7, 2.945171384E-7, 4.809812796E-8
+                },
+                out InertiaEllipsoid ellipsoid,
+                out string error);
+
+            Assert.True(success, error);
+            Assert.All(ellipsoid.SemiAxes, value => Assert.True(value > 0.0));
+            Array.Sort(ellipsoid.SemiAxes);
+            Assert.InRange(ellipsoid.SemiAxes[0], 4.0E-5, 6.0E-5);
+            Assert.InRange(ellipsoid.SemiAxes[1], 4.0E-4, 7.0E-4);
+            Assert.InRange(ellipsoid.SemiAxes[2], 4.0E-2, 6.0E-2);
+        }
+
         [Theory]
         [InlineData(0.0)]
         [InlineData(-1.0)]

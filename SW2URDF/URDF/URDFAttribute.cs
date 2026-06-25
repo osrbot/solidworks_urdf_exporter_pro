@@ -10,6 +10,9 @@ namespace SW2URDF.URDF
     [DataContract(IsReference = true, Name = "Attribute", Namespace = "http://schemas.datacontract.org/2004/07/SW2URDF")]
     public class URDFAttribute
     {
+        // URDF export should preserve SolidWorks double precision, especially for near-degenerate inertia tensors.
+        public const string PreciseDoubleFormat = "G17";
+
         public static readonly NumberFormatInfo URDFNumberFormat =
             CultureInfo.CreateSpecificCulture("en-US").NumberFormat;
 
@@ -37,17 +40,14 @@ namespace SW2URDF.URDF
             if (Value.GetType() == typeof(double[]))
             {
                 double[] valueArray = (double[])Value;
-                foreach (double d in valueArray)
-                {
-                    valueString +=
-                        d.ToString(URDFNumberFormat) + " ";
-                }
-                valueString = valueString.Trim();
+                valueString = String.Join(" ",
+                    Array.ConvertAll(valueArray,
+                        d => d.ToString(PreciseDoubleFormat, URDFNumberFormat)));
             }
             else if (Value.GetType() == typeof(double))
             {
                 valueString =
-                    ((Double)Value).ToString(URDFNumberFormat);
+                    ((Double)Value).ToString(PreciseDoubleFormat, URDFNumberFormat);
             }
             else if (Value.GetType() == typeof(string))
             {

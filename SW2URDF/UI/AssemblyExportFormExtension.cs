@@ -35,6 +35,10 @@ namespace SW2URDF.UI
     // the ones that are helpers.
     public partial class AssemblyExportForm : Form
     {
+        private const string GeneralDisplayFormat = "G5";
+        // The preview button saves textbox values before display, so inertia values must round-trip.
+        private const string InertiaDisplayFormat = "R";
+
         //From the link, this method fills the property boxes on the Link Properties page
         public void FillLinkPropertyBoxes(Link Link)
         {
@@ -48,7 +52,7 @@ namespace SW2URDF.UI
                                              textBoxVisualOriginRoll,
                                              textBoxVisualOriginPitch,
                                              textBoxVisualOriginYaw,
-                                             "G5");
+                                             GeneralDisplayFormat);
 
                 Link.Inertial.Origin.FillBoxes(textBoxInertialOriginX,
                                                textBoxInertialOriginY,
@@ -56,9 +60,9 @@ namespace SW2URDF.UI
                                                textBoxInertialOriginRoll,
                                                textBoxInertialOriginPitch,
                                                textBoxInertialOriginYaw,
-                                               "G5");
+                                               InertiaDisplayFormat);
 
-                Link.Inertial.Mass.FillBoxes(textBoxMass, "G5");
+                Link.Inertial.Mass.FillBoxes(textBoxMass, InertiaDisplayFormat);
 
                 Link.Inertial.Inertia.FillBoxes(textBoxIxx,
                                                 textBoxIxy,
@@ -66,7 +70,7 @@ namespace SW2URDF.UI
                                                 textBoxIyy,
                                                 textBoxIyz,
                                                 textBoxIzz,
-                                                "G5");
+                                                InertiaDisplayFormat);
 
                 Link.Visual.Material.FillBoxes(comboBoxMaterials);
                 textBoxTexture.Text = Link.Visual.Material.Texture.wFilename;
@@ -75,7 +79,7 @@ namespace SW2URDF.UI
                                                      domainUpDownGreen,
                                                      domainUpDownBlue,
                                                      domainUpDownAlpha,
-                                                     "G5");
+                                                     GeneralDisplayFormat);
                 UpdateMaterialColorPreview();
 
                 radioButtonFine.Checked = Link.STLQualityFine;
@@ -113,11 +117,11 @@ namespace SW2URDF.UI
                                        textBoxJointRoll,
                                        textBoxJointPitch,
                                        textBoxJointYaw,
-                                       "G5");
+                                       GeneralDisplayFormat);
 
                 if (joint.Type != "fixed")
                 {
-                    joint.Axis.FillBoxes(textBoxAxisX, textBoxAxisY, textBoxAxisZ, "G5");
+                    joint.Axis.FillBoxes(textBoxAxisX, textBoxAxisY, textBoxAxisZ, GeneralDisplayFormat);
                 }
 
                 if (joint.Limit != null && joint.Type != "fixed")
@@ -126,21 +130,21 @@ namespace SW2URDF.UI
                                           textBoxLimitUpper,
                                           textBoxLimitEffort,
                                           textBoxLimitVelocity,
-                                          "G5");
+                                          GeneralDisplayFormat);
                 }
 
                 if (joint.Calibration != null)
                 {
                     joint.Calibration.FillBoxes(textBoxCalibrationRising,
                                                 textBoxCalibrationFalling,
-                                                "G5");
+                                                GeneralDisplayFormat);
                 }
 
                 if (joint.Dynamics != null)
                 {
                     joint.Dynamics.FillBoxes(textBoxDamping,
                                              textBoxFriction,
-                                             "G5");
+                                             GeneralDisplayFormat);
                 }
 
                 if (joint.Safety != null)
@@ -149,7 +153,7 @@ namespace SW2URDF.UI
                                            textBoxSoftUpper,
                                            textBoxKPosition,
                                            textBoxKVelocity,
-                                           "G5");
+                                           GeneralDisplayFormat);
                 }
             }
 
