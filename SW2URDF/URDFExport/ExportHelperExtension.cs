@@ -24,11 +24,14 @@ using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
+using SW2URDF.UI;
 using SW2URDF.URDF;
 using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Windows;
 
 namespace SW2URDF.URDFExport
@@ -160,11 +163,14 @@ namespace SW2URDF.URDFExport
             ExportErrorWhy = "";
             URDFRobot = new Robot();
 
-            progressBar.Start(0, CommonSwOperations.GetCount(baseNode.Nodes) + 1, "Building links");
+            progressBar.Start(0, CommonSwOperations.GetCount(baseNode.Nodes) + 1,
+                ChineseUiText.Translate("Building links", "\u6b63\u5728\u6784\u5efa Link"));
             int count = 0;
 
             progressBar.UpdateProgress(count);
-            progressBar.UpdateTitle("Building link: " + baseNode.Name);
+            progressBar.UpdateTitle(ChineseUiText.Translate(
+                "Building link: " + baseNode.Name,
+                "\u6b63\u5728\u6784\u5efa Link: " + baseNode.Name));
             
             Link baseLink = CreateLink(baseNode, 1);
             if (baseLink == null || !string.IsNullOrWhiteSpace(ExportErrorWhy))
@@ -201,7 +207,9 @@ namespace SW2URDF.URDFExport
         //Method which builds an entire link and iterates through.
         private Link CreateLink(LinkNode node, int count)
         {
-            progressBar.UpdateTitle("Building link: " + node.Name);
+            progressBar.UpdateTitle(ChineseUiText.Translate(
+                "Building link: " + node.Name,
+                "\u6b63\u5728\u6784\u5efa Link: " + node.Name));
             progressBar.UpdateProgress(count);
             Link link;
             if (node.IsBaseNode)
@@ -238,77 +246,293 @@ namespace SW2URDF.URDFExport
             return link;
         }
 
-        /// <summary>
-        /// Gets the Moment of Inertia of specific component bodies with respect to the coordinate system.
-        /// This reuses some code with other methods because creating the mass property has to happen every time
-        /// </summary>
-        /// <param name="bodies">Component Bodies with which to get the MOI</param>
-        /// <param name="coordinateSystemTransform">The coordinate system to take the MOI with respect to</param>
-        /// <returns>Moment of Inertia array</returns>
-        private double[] GetComponentsMomentOfInertia(List<Body2> bodies, MathTransform coordinateSystemTransform)
-        {
-            MassProperty swMass = ActiveSWModel.Extension.CreateMassProperty();
-            swMass.SetCoordinateSystem(coordinateSystemTransform);
-            bool bRet = swMass.AddBodies(bodies.ToArray());
-            if (!bRet)
-            {
-                throw new Exception("Failed to add bodies to swMass");
-            }
-
-            return (double[])swMass.GetMomentOfInertia(
-            (int)swMomentsOfInertiaReferenceFrame_e.swMomentsOfInertiaReferenceFrame_CenterOfMass);
-        }
-
-        /// <summary>
-        /// Gets the components mass. This reuses some code with other methods because creating the
-        /// mass property has to happen every time
-        /// </summary>
-        /// <param name="bodies">Component Bodies with which to get the mass</param>
-        /// <returns>Mass value of component bodies</returns>
-        private double GetCompomentsMass(List<Body2> bodies)
-        {
-            MassProperty swMass = ActiveSWModel.Extension.CreateMassProperty();
-            bool bRet = swMass.AddBodies(bodies.ToArray());
-            if (!bRet)
-            {
-                throw new Exception("Failed to add bodies to swMass");
-            }
-            return swMass.Mass;
-        }
-
-        /// <summary>
-        /// Gets the Center of Mass with respect to the coordinate system. This reuses some code
-        /// with other similar methods because creating the mass property has to happen every time.
-        /// </summary>
-        /// <param name="bodies">Component bodies with which to get the mass</param>
-        /// <param name="coordinateSystemTransform">Coordinate system take get the centor of mess with respect to</param>
-        /// <returns>3D double array of center of mass</returns>
-        private double[] GetCompomentsCenterOfMass(List<Body2> bodies, MathTransform coordinateSystemTransform)
-        {
-            MassProperty swMass = ActiveSWModel.Extension.CreateMassProperty();
-            swMass.SetCoordinateSystem(coordinateSystemTransform);
-            bool bRet = swMass.AddBodies(bodies.ToArray());
-            if (!bRet)
-            {
-                throw new Exception("Failed to add bodies to swMass");
-            }
-            return swMass.CenterOfMass;
-        }
-
         private void ComputeInertialProperties(Link link)
         {
             // Get the SolidWorks MathTransform that corresponds to the child coordinate system
             MathTransform jointTransform = GetCoordinateSystemTransform(link.Joint.CoordinateSystemName);
+            if (jointTransform == null)
+            {
+                throw new Exception("Cannot compute mass properties because coordinate system " +
+                    link.Joint.CoordinateSystemName + " was not found");
+            }
             List<Body2> bodies = GetBodies(link.SWComponents);
 
-            double[] moment = GetComponentsMomentOfInertia(bodies, jointTransform);
+            logger.Info("Computing inertial properties for link " + link.Name +
+                " from " + bodies.Count + " solid bodies in coordinate system " +
+                link.Joint.CoordinateSystemName);
+            MassProperty swMass = CreateMassProperty(bodies, jointTransform);
+
+            link.Inertial.Mass.Value = swMass.Mass;
+            link.Inertial.Origin.SetXYZ(swMass.CenterOfMass);
+            link.Inertial.Origin.SetRPY(new double[3] { 0, 0, 0 });
+
+            double[] moment = (double[])swMass.GetMomentOfInertia(
+                (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass);
             link.Inertial.Inertia.SetMomentMatrix(moment);
 
-            link.Inertial.Mass.Value = GetCompomentsMass(bodies);
+            if (!InertiaEllipsoid.TryCreate(
+                link.Inertial.Mass.Value,
+                link.Inertial.Inertia,
+                out InertiaEllipsoid ellipsoid,
+                out string error))
+            {
+                throw new Exception("Computed inertia for link " + link.Name +
+                    " is not physically valid: " + error);
+            }
+            logger.Info(string.Format(CultureInfo.InvariantCulture,
+                "Computed inertia for link {0}: mass={1:G9} kg, COM=({2:G9}, {3:G9}, {4:G9}) m, " +
+                "equivalent ellipsoid semi-axes=({5:G9}, {6:G9}, {7:G9}) m",
+                link.Name,
+                link.Inertial.Mass.Value,
+                link.Inertial.Origin.GetXYZ()[0],
+                link.Inertial.Origin.GetXYZ()[1],
+                link.Inertial.Origin.GetXYZ()[2],
+                ellipsoid.SemiAxes[0],
+                ellipsoid.SemiAxes[1],
+                ellipsoid.SemiAxes[2]));
+        }
 
-            double[] centerOfMass = GetCompomentsCenterOfMass(bodies, jointTransform);
-            link.Inertial.Origin.SetXYZ(centerOfMass);
-            link.Inertial.Origin.SetRPY(new double[3] { 0, 0, 0 });
+        private void LogInertialValidation(Link link)
+        {
+            logger.Info("Validating URDF inertial values against SolidWorks mass properties");
+            LogLinkInertialValidation(link);
+        }
+
+        private void LogLinkInertialValidation(Link link)
+        {
+            if (link == null)
+            {
+                return;
+            }
+
+            try
+            {
+                LogSingleLinkInertialValidation(link);
+            }
+            catch (Exception e)
+            {
+                logger.Warn("Could not validate inertial values for link " + link.Name, e);
+            }
+
+            foreach (Link child in link.Children)
+            {
+                LogLinkInertialValidation(child);
+            }
+        }
+
+        private void LogSingleLinkInertialValidation(Link link)
+        {
+            if (link.SWComponents == null || link.SWComponents.Count == 0)
+            {
+                logger.Warn("Skipping inertial validation for link " + link.Name +
+                    " because it has no SolidWorks components");
+                return;
+            }
+
+            MathTransform jointTransform = GetCoordinateSystemTransform(link.Joint.CoordinateSystemName);
+            if (jointTransform == null)
+            {
+                logger.Warn("Skipping inertial validation for link " + link.Name +
+                    " because coordinate system " + link.Joint.CoordinateSystemName + " was not found");
+                return;
+            }
+
+            List<Body2> bodies = GetBodies(link.SWComponents);
+            MassProperty swMass = CreateMassProperty(bodies, jointTransform);
+            double[] swCenterOfMass = swMass.CenterOfMass;
+            double[] swMoment = (double[])swMass.GetMomentOfInertia(
+                (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass);
+            double[] expectedMoment = ConvertSolidWorksMomentToUrdfConvention(swMoment);
+
+            double[] urdfOrigin = link.Inertial.Origin.GetXYZ();
+            double[] urdfMoment = new double[]
+            {
+                link.Inertial.Inertia.Ixx,
+                link.Inertial.Inertia.Ixy,
+                link.Inertial.Inertia.Ixz,
+                link.Inertial.Inertia.Iyy,
+                link.Inertial.Inertia.Iyz,
+                link.Inertial.Inertia.Izz
+            };
+
+            List<InertialValidationRow> rows = new List<InertialValidationRow>
+            {
+                new InertialValidationRow("mass", "kg", swMass.Mass, link.Inertial.Mass.Value),
+                new InertialValidationRow("origin.x", "m", swCenterOfMass[0], urdfOrigin[0]),
+                new InertialValidationRow("origin.y", "m", swCenterOfMass[1], urdfOrigin[1]),
+                new InertialValidationRow("origin.z", "m", swCenterOfMass[2], urdfOrigin[2]),
+                new InertialValidationRow("ixx", "kg*m^2", expectedMoment[0], urdfMoment[0]),
+                new InertialValidationRow("ixy", "kg*m^2", expectedMoment[1], urdfMoment[1]),
+                new InertialValidationRow("ixz", "kg*m^2", expectedMoment[2], urdfMoment[2]),
+                new InertialValidationRow("iyy", "kg*m^2", expectedMoment[3], urdfMoment[3]),
+                new InertialValidationRow("iyz", "kg*m^2", expectedMoment[4], urdfMoment[4]),
+                new InertialValidationRow("izz", "kg*m^2", expectedMoment[5], urdfMoment[5])
+            };
+
+            StringBuilder builder = new StringBuilder();
+            builder.AppendLine("Inertial validation for link '" + link.Name + "'");
+            builder.AppendLine("Coordinate system: " + link.Joint.CoordinateSystemName);
+            builder.AppendLine("SolidWorks source: MassProperty with selected coordinate system, COM inertia; " +
+                "off-diagonal products converted to URDF sign convention.");
+            builder.AppendLine("Units: mass kg, origin m, inertia kg*m^2. SolidWorks UI equivalent: origin m*1000, inertia kg*m^2*1e6.");
+            builder.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                "{0,-12} {1,-8} {2,18} {3,18} {4,18} {5,14} {6,8}",
+                "quantity", "unit", "sw_expected", "urdf_value", "abs_error", "rel_error_%", "status"));
+
+            double maxAbsError = 0;
+            double maxRelativeErrorPercent = 0;
+            bool validationPassed = true;
+            foreach (InertialValidationRow row in rows)
+            {
+                maxAbsError = Math.Max(maxAbsError, Math.Abs(row.AbsoluteError));
+                double? relativeErrorPercent = row.RelativeErrorPercent;
+                if (relativeErrorPercent.HasValue)
+                {
+                    maxRelativeErrorPercent = Math.Max(maxRelativeErrorPercent, relativeErrorPercent.Value);
+                }
+                validationPassed &= row.Passed;
+
+                builder.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                    "{0,-12} {1,-8} {2,18} {3,18} {4,18} {5,14} {6,8}",
+                    row.Quantity,
+                    row.Unit,
+                    FormatValidationNumber(row.SolidWorksExpected),
+                    FormatValidationNumber(row.UrdfValue),
+                    FormatValidationNumber(row.AbsoluteError),
+                    FormatValidationPercent(relativeErrorPercent),
+                    row.Passed ? "PASS" : "FAIL"));
+            }
+
+            builder.AppendLine("Max abs error: " + FormatValidationNumber(maxAbsError) +
+                "; max relative error: " + FormatValidationNumber(maxRelativeErrorPercent) + "%");
+            builder.AppendLine("Validation result: " + (validationPassed ? "PASS" : "FAIL"));
+            if (validationPassed)
+            {
+                logger.Info(builder.ToString());
+            }
+            else
+            {
+                logger.Warn(builder.ToString());
+            }
+        }
+
+        internal static double[] ConvertSolidWorksMomentToUrdfConvention(double[] solidWorksMoment)
+        {
+            return new double[]
+            {
+                solidWorksMoment[0],
+                -solidWorksMoment[1],
+                -solidWorksMoment[2],
+                solidWorksMoment[4],
+                -solidWorksMoment[5],
+                solidWorksMoment[8]
+            };
+        }
+
+        private static string FormatValidationNumber(double value)
+        {
+            return value.ToString("0.#########E+0", CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatValidationPercent(double? value)
+        {
+            if (!value.HasValue)
+            {
+                return "n/a";
+            }
+
+            return FormatValidationNumber(value.Value);
+        }
+
+        internal class InertialValidationRow
+        {
+            private const double RelativeErrorFloor = 1e-30;
+            private const double RoundedUrdfRelativeTolerance = 5e-5;
+
+            public InertialValidationRow(string quantity, string unit, double solidWorksExpected, double urdfValue)
+            {
+                Quantity = quantity;
+                Unit = unit;
+                SolidWorksExpected = solidWorksExpected;
+                UrdfValue = urdfValue;
+            }
+
+            public string Quantity { get; private set; }
+
+            public string Unit { get; private set; }
+
+            public double SolidWorksExpected { get; private set; }
+
+            public double UrdfValue { get; private set; }
+
+            public double AbsoluteError
+            {
+                get { return UrdfValue - SolidWorksExpected; }
+            }
+
+            public double? RelativeErrorPercent
+            {
+                get
+                {
+                    if (Math.Abs(SolidWorksExpected) < RelativeErrorFloor)
+                    {
+                        if (Math.Abs(AbsoluteError) < RelativeErrorFloor)
+                        {
+                            return 0;
+                        }
+
+                        return null;
+                    }
+
+                    return Math.Abs(AbsoluteError) / Math.Abs(SolidWorksExpected) * 100.0;
+                }
+            }
+
+            public bool Passed
+            {
+                get
+                {
+                    double absoluteTolerance;
+                    if (Quantity == "mass")
+                    {
+                        absoluteTolerance = Math.Max(1e-9,
+                            Math.Abs(SolidWorksExpected) * RoundedUrdfRelativeTolerance);
+                    }
+                    else if (Quantity.StartsWith("origin.", StringComparison.Ordinal))
+                    {
+                        absoluteTolerance = Math.Max(5e-6,
+                            Math.Abs(SolidWorksExpected) * RoundedUrdfRelativeTolerance);
+                    }
+                    else
+                    {
+                        absoluteTolerance = Math.Max(1e-12,
+                            Math.Abs(SolidWorksExpected) * 1e-4);
+                    }
+                    return Math.Abs(AbsoluteError) <= absoluteTolerance;
+                }
+            }
+        }
+
+        private MassProperty CreateMassProperty(List<Body2> bodies, MathTransform coordinateSystemTransform)
+        {
+            if (bodies.Count == 0)
+            {
+                throw new Exception("Cannot compute mass properties because no solid bodies were found");
+            }
+
+            MassProperty swMass = ActiveSWModel.Extension.CreateMassProperty();
+            bool addedBodies = swMass.AddBodies(bodies.ToArray());
+            if (!addedBodies)
+            {
+                throw new Exception("Failed to add bodies to swMass");
+            }
+            bool coordinateSystemSet = swMass.SetCoordinateSystem(coordinateSystemTransform);
+            if (!coordinateSystemSet)
+            {
+                throw new Exception("SolidWorks rejected the requested mass-property coordinate system");
+            }
+
+            return swMass;
         }
 
         private static void ComputeVisualCollisionProperties(Link link)
@@ -336,6 +560,8 @@ namespace SW2URDF.URDFExport
         //Method which builds a single link
         private Link CreateLinkFromComponents(Link parent, LinkNode node)
         {
+            ApplyCollisionStrategyPrefix(node.Link);
+
             if (node.Link.SWComponents.Count > 0)
             {
                 List<Component2> components = node.Link.SWComponents;
@@ -922,7 +1148,7 @@ namespace SW2URDF.URDFExport
         // coordinate systems that are embedded in subcomponents, and apply the correct transformation to return
         // it to a global transform. It assumes that the coordinate system name is formatted like:
         // "Coordinate System 1 <assy/subassy/comp>" where the full Component2.Name2 is between the <>
-        private MathTransform GetCoordinateSystemTransform(string CoordinateSystemName)
+        internal MathTransform GetCoordinateSystemTransform(string CoordinateSystemName)
         {
             ModelDoc2 ComponentModel = ActiveSWModel;
             MathTransform ComponentTransform = default;

@@ -21,15 +21,22 @@ THE SOFTWARE.
 */
 
 using SW2URDF.UI;
+using SW2URDF.Utilities;
 using System;
 using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace SW2URDF.URDFExport
 {
     public class URDFPackage
     {
+        private static readonly log4net.ILog logger = Logger.GetLogger();
+
         public static IMessageBox MessageBox = new MessageBoxHelper();
         public string PackageName { get; }
+        public string RobotName { get; }
 
         public string PackageDirectory { get; }
         public string MeshesDirectory { get; }
@@ -39,6 +46,8 @@ namespace SW2URDF.URDFExport
         public string LaunchDirectory { get; }
 
         public string WindowsPackageDirectory { get; }
+        public string WindowsExportRootDirectory { get; }
+        public string WindowsExportLogFile { get; }
         public string WindowsMeshesDirectory { get; }
         public string WindowsTexturesDirectory { get; }
         public string WindowsRobotsDirectory { get; }
@@ -46,11 +55,26 @@ namespace SW2URDF.URDFExport
         public string WindowsConfigDirectory { get; }
         public string WindowsCMakeLists { get; }
         public string WindowsConfigYAML { get; }
+        public string Ros2PackageName { get; }
+        public string WindowsRos2PackageDirectory { get; }
+        public string WindowsRos2MeshesDirectory { get; }
+        public string WindowsRos2RobotsDirectory { get; }
+        public string WindowsRos2TexturesDirectory { get; }
+        public string WindowsRos2LaunchDirectory { get; }
+        public string WindowsRos2ConfigDirectory { get; }
+        public string WindowsRos2ResourceDirectory { get; }
 
         public URDFPackage(string name, string dir)
+            : this(name, name, dir)
         {
-            PackageName = name;
-            PackageDirectory = @"package://" + name + @"/";
+        }
+
+        public URDFPackage(string robotName, string packageName, string dir)
+        {
+            RobotName = SanitizePackageName(robotName);
+            PackageName = SanitizePackageName(packageName);
+            Ros2PackageName = PackageName;
+            PackageDirectory = @"package://" + PackageName + @"/";
             MeshesDirectory = PackageDirectory + @"meshes/";
             RobotsDirectory = PackageDirectory + @"urdf/";
             TexturesDirectory = PackageDirectory + @"textures/";
@@ -59,18 +83,29 @@ namespace SW2URDF.URDFExport
 
             char last = dir[dir.Length - 1];
             dir = (last == '\\') ? dir : dir + @"\";
-            WindowsPackageDirectory = dir + name + @"\";
+            WindowsExportRootDirectory = dir;
+            WindowsExportLogFile = WindowsExportRootDirectory + "export.log";
+            WindowsPackageDirectory = dir + @"ROS1\" + PackageName + @"\";
             WindowsMeshesDirectory = WindowsPackageDirectory + @"meshes\";
             WindowsRobotsDirectory = WindowsPackageDirectory + @"urdf\";
             WindowsTexturesDirectory = WindowsPackageDirectory + @"textures\";
             WindowsLaunchDirectory = WindowsPackageDirectory + @"launch\";
             WindowsConfigDirectory = WindowsPackageDirectory + @"config\";
             WindowsCMakeLists = WindowsPackageDirectory + @"CMakeLists.txt";
-            WindowsConfigYAML = WindowsConfigDirectory + @"joint_names_" + name + ".yaml";
+            WindowsConfigYAML = WindowsConfigDirectory + @"joint_names_" + PackageName + ".yaml";
+
+            WindowsRos2PackageDirectory = dir + @"ROS2\" + Ros2PackageName + @"\";
+            WindowsRos2MeshesDirectory = WindowsRos2PackageDirectory + @"meshes\";
+            WindowsRos2RobotsDirectory = WindowsRos2PackageDirectory + @"urdf\";
+            WindowsRos2TexturesDirectory = WindowsRos2PackageDirectory + @"textures\";
+            WindowsRos2LaunchDirectory = WindowsRos2PackageDirectory + @"launch\";
+            WindowsRos2ConfigDirectory = WindowsRos2PackageDirectory + @"config\";
+            WindowsRos2ResourceDirectory = WindowsRos2PackageDirectory + @"resource\";
         }
 
         public void CreateDirectories()
         {
+            logger.Info("Creating ROS 1 package directories at " + WindowsPackageDirectory);
             MessageBox.Show("Creating URDF Package \"" +
                 PackageName + "\" at:\n" + WindowsPackageDirectory);
             if (!Directory.Exists(WindowsPackageDirectory))
@@ -101,6 +136,7 @@ namespace SW2URDF.URDFExport
 
         public void CreateCMakeLists()
         {
+            logger.Info("Creating ROS 1 CMakeLists.txt at " + WindowsCMakeLists);
             using (StreamWriter file = new StreamWriter(WindowsCMakeLists))
             {
                 file.WriteLine("cmake_minimum_required(VERSION 2.8.3)\r\n");
@@ -117,6 +153,8 @@ namespace SW2URDF.URDFExport
 
         public void CreateConfigYAML(String[] jointNames)
         {
+            logger.Info("Creating ROS 1 joint config at " + WindowsConfigYAML +
+                " with " + jointNames.Length + " joints");
             using (StreamWriter file = new StreamWriter(WindowsConfigYAML))
             {
                 file.Write("controller_joint_names: " + "[");
@@ -128,6 +166,221 @@ namespace SW2URDF.URDFExport
 
                 file.WriteLine("]");
             }
+        }
+
+        public void CreateRos2Package(string windowsURDFFileName)
+        {
+            logger.Info("Creating ROS 2 package at " + WindowsRos2PackageDirectory);
+            CreateRos2Directories();
+            logger.Info("Copying ROS 2 meshes from " + WindowsMeshesDirectory + " to " + WindowsRos2MeshesDirectory);
+            CopyDirectory(WindowsMeshesDirectory, WindowsRos2MeshesDirectory);
+            logger.Info("Copying ROS 2 textures from " + WindowsTexturesDirectory + " to " + WindowsRos2TexturesDirectory);
+            CopyDirectory(WindowsTexturesDirectory, WindowsRos2TexturesDirectory);
+            logger.Info("Copying ROS 2 config from " + WindowsConfigDirectory + " to " + WindowsRos2ConfigDirectory);
+            CopyDirectory(WindowsConfigDirectory, WindowsRos2ConfigDirectory);
+
+            string ros2URDFFileName = WindowsRos2RobotsDirectory + RobotName + ".urdf";
+            logger.Info("Creating ROS 2 URDF at " + ros2URDFFileName);
+            string urdf = File.ReadAllText(windowsURDFFileName, Encoding.UTF8);
+            urdf = urdf.Replace("package://" + PackageName + "/", "package://" + Ros2PackageName + "/");
+            File.WriteAllText(ros2URDFFileName, urdf, new UTF8Encoding(false));
+
+            CreateRos2PackageXml();
+            CreateRos2SetupPy();
+            CreateRos2ResourceMarker();
+            CreateRos2DisplayLaunch();
+            CreateRos2GazeboLaunch();
+            logger.Info("Finished creating ROS 2 package at " + WindowsRos2PackageDirectory);
+        }
+
+        private void CreateRos2Directories()
+        {
+            logger.Info("Creating ROS 2 package directories");
+            Directory.CreateDirectory(WindowsRos2PackageDirectory);
+            Directory.CreateDirectory(WindowsRos2MeshesDirectory);
+            Directory.CreateDirectory(WindowsRos2RobotsDirectory);
+            Directory.CreateDirectory(WindowsRos2TexturesDirectory);
+            Directory.CreateDirectory(WindowsRos2LaunchDirectory);
+            Directory.CreateDirectory(WindowsRos2ConfigDirectory);
+            Directory.CreateDirectory(WindowsRos2ResourceDirectory);
+        }
+
+        private void CreateRos2PackageXml()
+        {
+            string path = WindowsRos2PackageDirectory + "package.xml";
+            logger.Info("Creating ROS 2 package.xml at " + path);
+            using (StreamWriter file = new StreamWriter(path, false, new UTF8Encoding(false)))
+            {
+                file.WriteLine("<?xml version=\"1.0\"?>");
+                file.WriteLine("<package format=\"3\">");
+                file.WriteLine("  <name>" + Ros2PackageName + "</name>");
+                file.WriteLine("  <version>1.0.0</version>");
+                file.WriteLine("  <description>ROS 2 URDF description package for " + PackageName + "</description>");
+                file.WriteLine("  <maintainer email=\"TODO\">TODO</maintainer>");
+                file.WriteLine("  <license>BSD</license>");
+                file.WriteLine("  <buildtool_depend>ament_python</buildtool_depend>");
+                file.WriteLine("  <exec_depend>joint_state_publisher_gui</exec_depend>");
+                file.WriteLine("  <exec_depend>robot_state_publisher</exec_depend>");
+                file.WriteLine("  <exec_depend>rviz2</exec_depend>");
+                file.WriteLine("  <exec_depend>xacro</exec_depend>");
+                file.WriteLine("  <export>");
+                file.WriteLine("    <build_type>ament_python</build_type>");
+                file.WriteLine("  </export>");
+                file.WriteLine("</package>");
+            }
+        }
+
+        private void CreateRos2SetupPy()
+        {
+            string ros2Name = Ros2PackageName;
+            string path = WindowsRos2PackageDirectory + "setup.py";
+            logger.Info("Creating ROS 2 setup.py at " + path);
+            using (StreamWriter file = new StreamWriter(path, false, new UTF8Encoding(false)))
+            {
+                file.WriteLine("from glob import glob");
+                file.WriteLine("from setuptools import setup");
+                file.WriteLine("");
+                file.WriteLine("package_name = '" + ros2Name + "'");
+                file.WriteLine("");
+                file.WriteLine("setup(");
+                file.WriteLine("    name=package_name,");
+                file.WriteLine("    version='1.0.0',");
+                file.WriteLine("    packages=[],");
+                file.WriteLine("    data_files=[");
+                file.WriteLine("        ('share/ament_index/resource_index/packages', ['resource/' + package_name]),");
+                file.WriteLine("        ('share/' + package_name, ['package.xml']),");
+                file.WriteLine("        ('share/' + package_name + '/launch', glob('launch/*.py')),");
+                file.WriteLine("        ('share/' + package_name + '/urdf', glob('urdf/*')),");
+                file.WriteLine("        ('share/' + package_name + '/meshes', glob('meshes/*')),");
+                file.WriteLine("        ('share/' + package_name + '/textures', glob('textures/*')),");
+                file.WriteLine("        ('share/' + package_name + '/config', glob('config/*')),");
+                file.WriteLine("    ],");
+                file.WriteLine("    install_requires=['setuptools'],");
+                file.WriteLine("    zip_safe=True,");
+                file.WriteLine("    maintainer='TODO',");
+                file.WriteLine("    maintainer_email='TODO',");
+                file.WriteLine("    description='ROS 2 URDF description package for " + PackageName + "',");
+                file.WriteLine("    license='BSD',");
+                file.WriteLine(")");
+            }
+        }
+
+        private void CreateRos2ResourceMarker()
+        {
+            logger.Info("Creating ROS 2 resource marker at " + WindowsRos2ResourceDirectory + Ros2PackageName);
+            File.WriteAllText(WindowsRos2ResourceDirectory + Ros2PackageName, "");
+        }
+
+        private void CreateRos2DisplayLaunch()
+        {
+            string ros2Name = Ros2PackageName;
+            string path = WindowsRos2LaunchDirectory + "display.launch.py";
+            logger.Info("Creating ROS 2 display launch file at " + path);
+            using (StreamWriter file = new StreamWriter(path, false, new UTF8Encoding(false)))
+            {
+                file.WriteLine("from launch import LaunchDescription");
+                file.WriteLine("from launch_ros.actions import Node");
+                file.WriteLine("from ament_index_python.packages import get_package_share_directory");
+                file.WriteLine("import os");
+                file.WriteLine("");
+                file.WriteLine("def generate_launch_description():");
+                file.WriteLine("    package_share = get_package_share_directory('" + ros2Name + "')");
+                file.WriteLine("    urdf_file = os.path.join(package_share, 'urdf', '" + RobotName + ".urdf')");
+                file.WriteLine("    with open(urdf_file, 'r', encoding='utf-8') as f:");
+                file.WriteLine("        robot_description = f.read()");
+                file.WriteLine("    return LaunchDescription([");
+                file.WriteLine("        Node(package='robot_state_publisher', executable='robot_state_publisher',");
+                file.WriteLine("             parameters=[{'robot_description': robot_description}]),");
+                file.WriteLine("        Node(package='joint_state_publisher_gui', executable='joint_state_publisher_gui'),");
+                file.WriteLine("        Node(package='rviz2', executable='rviz2', output='screen'),");
+                file.WriteLine("    ])");
+            }
+        }
+
+        private void CreateRos2GazeboLaunch()
+        {
+            string ros2Name = Ros2PackageName;
+            string path = WindowsRos2LaunchDirectory + "gazebo.launch.py";
+            logger.Info("Creating ROS 2 gazebo launch file at " + path);
+            using (StreamWriter file = new StreamWriter(path, false, new UTF8Encoding(false)))
+            {
+                file.WriteLine("from launch import LaunchDescription");
+                file.WriteLine("from launch.actions import ExecuteProcess");
+                file.WriteLine("from ament_index_python.packages import get_package_share_directory");
+                file.WriteLine("import os");
+                file.WriteLine("");
+                file.WriteLine("def generate_launch_description():");
+                file.WriteLine("    package_share = get_package_share_directory('" + ros2Name + "')");
+                file.WriteLine("    urdf_file = os.path.join(package_share, 'urdf', '" + RobotName + ".urdf')");
+                file.WriteLine("    return LaunchDescription([");
+                file.WriteLine("        ExecuteProcess(cmd=['ros2', 'run', 'gazebo_ros', 'spawn_entity.py',");
+                file.WriteLine("                            '-entity', '" + RobotName + "', '-file', urdf_file],");
+                file.WriteLine("                       output='screen'),");
+                file.WriteLine("    ])");
+            }
+        }
+
+        private static void CopyDirectory(string source, string destination)
+        {
+            if (!Directory.Exists(source))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(destination);
+            foreach (string file in Directory.GetFiles(source))
+            {
+                CopyFileWithRetry(file, Path.Combine(destination, Path.GetFileName(file)));
+            }
+        }
+
+        private static void CopyFileWithRetry(string source, string destination)
+        {
+            const int timeoutMilliseconds = 15000;
+            const int sleepMilliseconds = 250;
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+            Exception lastException = null;
+
+            while (DateTime.UtcNow <= deadline)
+            {
+                try
+                {
+                    File.Copy(source, destination, true);
+                    return;
+                }
+                catch (IOException e)
+                {
+                    lastException = e;
+                }
+                catch (UnauthorizedAccessException e)
+                {
+                    lastException = e;
+                }
+
+                Thread.Sleep(sleepMilliseconds);
+                System.Windows.Forms.Application.DoEvents();
+            }
+
+            throw new IOException("Timed out copying file: " + source, lastException);
+        }
+
+        public static string SanitizePackageName(string name)
+        {
+            string packageName = string.IsNullOrWhiteSpace(name) ? "robot" : Path.GetFileName(name);
+            string extension = Path.GetExtension(packageName);
+            if (String.Equals(extension, ".sldasm", StringComparison.OrdinalIgnoreCase) ||
+                String.Equals(extension, ".sldprt", StringComparison.OrdinalIgnoreCase))
+            {
+                packageName = Path.GetFileNameWithoutExtension(packageName);
+            }
+
+            string sanitized = Regex.Replace(packageName.ToLowerInvariant(), "[^a-z0-9_]", "_");
+            sanitized = Regex.Replace(sanitized, "_+", "_").Trim('_');
+            if (string.IsNullOrWhiteSpace(sanitized) || !Regex.IsMatch(sanitized.Substring(0, 1), "[a-z]"))
+            {
+                sanitized = "robot_" + sanitized;
+            }
+            return sanitized;
         }
     }
 }

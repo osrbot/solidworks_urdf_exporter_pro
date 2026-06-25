@@ -7,6 +7,14 @@ using System.Xml;
 
 namespace SW2URDF.URDF
 {
+    public enum CollisionMeshStrategy
+    {
+        VisualMesh,
+        AccurateMesh,
+        Primitive,
+        ConvexHull
+    }
+
     //The link class, it contains many other elements not found in the URDF.
     [DataContract(IsReference = true, Namespace = "http://schemas.datacontract.org/2004/07/SW2URDF")]
     public class Link : URDFElement//, ISerializable
@@ -42,6 +50,12 @@ namespace SW2URDF.URDF
         public bool STLQualityFine;
 
         [DataMember]
+        public double MeshReductionRatio;
+
+        [DataMember]
+        public CollisionMeshStrategy CollisionMeshStrategy;
+
+        [DataMember]
         public bool isIncomplete;
 
         [DataMember]
@@ -71,6 +85,8 @@ namespace SW2URDF.URDF
             Joint = new Joint();
 
             isFixedFrame = false;
+            MeshReductionRatio = 0;
+            CollisionMeshStrategy = CollisionMeshStrategy.VisualMesh;
 
             Attributes.Add(NameAttribute);
             ChildElements.Add(Inertial);
@@ -106,6 +122,8 @@ namespace SW2URDF.URDF
             Joint = new Joint();
 
             isFixedFrame = false;
+            MeshReductionRatio = 0;
+            CollisionMeshStrategy = CollisionMeshStrategy.VisualMesh;
 
             Attributes.Add(NameAttribute);
             ChildElements.Add(Inertial);
@@ -182,6 +200,9 @@ namespace SW2URDF.URDF
             SWMainComponent = externalLink.SWMainComponent;
             SWMainComponentPID = externalLink.SWMainComponentPID;
 
+            STLQualityFine = externalLink.STLQualityFine;
+            MeshReductionRatio = externalLink.MeshReductionRatio;
+            CollisionMeshStrategy = externalLink.CollisionMeshStrategy;
             isFixedFrame = externalLink.isFixedFrame;
         }
 

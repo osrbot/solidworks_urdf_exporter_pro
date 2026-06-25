@@ -253,16 +253,29 @@ namespace SW2URDF.SW
                 "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS\\URDFExporter\\images\\ros_logo_96x96.png",
                 "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS\\URDFExporter\\images\\ros_logo_128x128.png",
             };
-            int ret = SwApp.AddMenuItem5((int)swDocumentTypes_e.swDocASSEMBLY, add_in_id_, "Export as URDF@&Tools",
-                -1, "AssemblyURDFExporter", "", "Export assembly as URDF file", images);
+            string exportMenuText = ChineseUiText.Translate(
+                "Export as URDF",
+                "\u5bfc\u51fa\u4e3a URDF");
+            int ret = SwApp.AddMenuItem5((int)swDocumentTypes_e.swDocASSEMBLY, add_in_id_,
+                exportMenuText + "@&Tools",
+                -1, "AssemblyURDFExporter", "",
+                ChineseUiText.Translate(
+                    "Export assembly as URDF file",
+                    "\u5c06\u88c5\u914d\u4f53\u5bfc\u51fa\u4e3a URDF \u6587\u4ef6"),
+                images);
             if (ret < 0)
             {
                 logger.Error("Failure to add menu item 'Export as URDF' to menu 'Tools'");
                 return;
             }
             logger.Info("Adding Assembly export to file menu");
-            ret = SwApp.AddMenuItem5((int)swDocumentTypes_e.swDocPART, add_in_id_, "Export as URDF@&Tools",
-                -1, "PartURDFExporter", "", "Export part as URDF file", images);
+            ret = SwApp.AddMenuItem5((int)swDocumentTypes_e.swDocPART, add_in_id_,
+                exportMenuText + "@&Tools",
+                -1, "PartURDFExporter", "",
+                ChineseUiText.Translate(
+                    "Export part as URDF file",
+                    "\u5c06\u96f6\u4ef6\u5bfc\u51fa\u4e3a URDF \u6587\u4ef6"),
+                images);
             if (ret < 0)
             {
                 logger.Error("Failure to add menu item 'Export as URDF' to menu 'Tools'");
@@ -278,9 +291,14 @@ namespace SW2URDF.SW
         }
         public void RemoveCommandMgr()
         {
-            SwApp.RemoveMenu((int)swDocumentTypes_e.swDocASSEMBLY, "Export as URDF@&File", "");
+            string exportMenuText = ChineseUiText.Translate(
+                "Export as URDF",
+                "\u5bfc\u51fa\u4e3a URDF");
+            SwApp.RemoveMenu((int)swDocumentTypes_e.swDocASSEMBLY,
+                exportMenuText + "@&Tools", "");
             logger.Info("Removing assembly export from file menu");
-            SwApp.RemoveMenu((int)swDocumentTypes_e.swDocPART, "Export as URDF@&File", "");
+            SwApp.RemoveMenu((int)swDocumentTypes_e.swDocPART,
+                exportMenuText + "@&Tools", "");
             logger.Info("Removing part export from file menu");
         }
 
@@ -305,8 +323,14 @@ namespace SW2URDF.SW
                 logger.Info("A rebuild is required");
             }
             if (saveAndRebuild ||
-                MessageBox.Show("The SW to URDF exporter requires saving and/or rebuilding before continuing",
-                "Save and rebuild document?", MessageBoxButtons.YesNo) == DialogResult.Yes)
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "The SW to URDF exporter requires saving and/or rebuilding before continuing",
+                        "SW \u5230 URDF \u5bfc\u51fa\u5668\u9700\u8981\u5148\u4fdd\u5b58\u5e76/\u6216\u91cd\u5efa\u6a21\u578b"),
+                    ChineseUiText.Translate(
+                        "Save and rebuild document?",
+                        "\u4fdd\u5b58\u5e76\u91cd\u5efa\u6587\u6863\uff1f"),
+                    MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
                 int options = (int)swSaveAsOptions_e.swSaveAsOptions_SaveReferenced |
                         (int)swSaveAsOptions_e.swSaveAsOptions_Silent;
@@ -327,9 +351,10 @@ namespace SW2URDF.SW
             catch (Exception e)
             {
                 logger.Error("An exception was caught when trying to setup the assembly exporter", e);
-                MessageBox.Show("There was a problem setting up the property manager: \n\"" +
-                    e.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                ShowMaintenanceError(
+                    "There was a problem setting up the property manager.",
+                    "\u521b\u5efa\u5c5e\u6027\u7ba1\u7406\u5668\u65f6\u53d1\u751f\u9519\u8bef\u3002",
+                    e);
             }
         }
 
@@ -351,9 +376,14 @@ namespace SW2URDF.SW
             logger.Info("Part export called");
             ModelDoc2 modeldoc = SwApp.ActiveDoc;
             if ((modeldoc.Extension.NeedsRebuild2 == 0) ||
-                MessageBox.Show("Save and rebuild document?",
-                "The SW to URDF exporter requires saving before continuing",
-                MessageBoxButtons.YesNo) == DialogResult.Yes)
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "Save and rebuild document?",
+                        "\u4fdd\u5b58\u5e76\u91cd\u5efa\u6587\u6863\uff1f"),
+                    ChineseUiText.Translate(
+                        "The SW to URDF exporter requires saving before continuing",
+                        "SW \u5230 URDF \u5bfc\u51fa\u5668\u9700\u8981\u5148\u4fdd\u5b58\u6587\u6863"),
+                    MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
                 if (modeldoc.Extension.NeedsRebuild2 != 0)
                 {
@@ -378,9 +408,25 @@ namespace SW2URDF.SW
             catch (Exception e)
             {
                 logger.Error("Excoption caught setting up export form", e);
-                MessageBox.Show("An exception occured setting up the export form, please email " +
-                    " your maintainer with the log file found at " + Logger.GetFileName());
+                ShowMaintenanceError(
+                    "An exception occurred while setting up the export form.",
+                    "\u521b\u5efa\u5bfc\u51fa\u7a97\u53e3\u65f6\u53d1\u751f\u9519\u8bef\u3002",
+                    e);
             }
+        }
+
+        private static void ShowMaintenanceError(
+            string englishMessage,
+            string chineseMessage,
+            Exception exception)
+        {
+            MessageBox.Show(
+                ChineseUiText.Translate(englishMessage, chineseMessage) +
+                "\r\n\"" + exception.Message + "\"" +
+                ChineseUiText.Translate(
+                    "\r\nEmail your maintainer with the log file found at ",
+                    "\r\n\u8bf7\u5c06\u4ee5\u4e0b\u65e5\u5fd7\u6587\u4ef6\u53d1\u9001\u7ed9\u7ef4\u62a4\u4eba\u5458\uff1a") +
+                Logger.GetFileName());
         }
 
         public void FlyoutCallback()

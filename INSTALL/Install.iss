@@ -8,9 +8,14 @@
 
 #define MainBinaryName  "SW2URDF.dll"
 #define SetupBaseName   "sw2urdfSetup_"
-#define DllLocation     AddBackslash(SourcePath + "..\SW2URDF\bin\x64\Debug") + MainBinaryName
+#define DllLocation     AddBackslash(SourcePath + "..\SW2URDF\bin\x64\Release") + MainBinaryName
 #define BuildVersion    GetFileVersion(DllLocation)
 #define CommitVersion   GetFileProductVersion(DllLocation)
+#if CommitVersion == ""
+  #define InstallerVersion BuildVersion
+#else
+  #define InstallerVersion CommitVersion
+#endif
 #define AVF1            Copy(BuildVersion, 1, Pos(".", BuildVersion) - 1) + "_" + Copy(BuildVersion, Pos(".", BuildVersion) + 1)
 #define AVF2            Copy(AVF1,       1, Pos(".", AVF1      ) - 1) + "_" + Copy(AVF1      , Pos(".", AVF1      ) + 1)
 #define AppVersionFile  Copy(AVF2,       1, Pos(".", AVF2      ) - 1) + "_" + Copy(AVF2      , Pos(".", AVF2      ) + 1)
@@ -21,7 +26,7 @@
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
 AppId={{E43E85A9-071D-430A-91B2-84B7AB923170}
 AppName={#MyAppName}
-AppVersion={#CommitVersion}
+AppVersion={#InstallerVersion}
 VersionInfoVersion={#BuildVersion}
 VersionInfoCopyright=2019
 VersionInfoProductName={#MyAppName}
@@ -31,34 +36,43 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 CreateAppDir=yes
+DisableDirPage=no
+UsePreviousAppDir=no
 OutputBaseFilename=sw2urdfSetup
 ;OutputBaseFilename={#SetupBaseName + AppVersionFile}
-Compression=lzma                                                        
-DefaultDirName="C:\Program Files\SolidWorks Corp\SolidWorks\URDFExporter"
+Compression=lzma
+DefaultDirName="{autopf}\SolidWorks Corp\SolidWorks\URDFExporter"
 SolidCompression=no
 PrivilegesRequired=admin
 OutputDir=..\..\INSTALL\OUTPUT
 SourceDir=..\SW2URDF\bin\
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "chinesesimplified"; MessagesFile: "compiler:Default.isl,{#AddBackslash(SourcePath) + "Languages\ChineseSimplified.isl"}"
+
+[CustomMessages]
+english.RegisteringControls=Registering SolidWorks URDF exporter...
+english.UnregisteringControls=Unregistering SolidWorks URDF exporter...
+chinesesimplified.RegisteringControls=正在注册 SolidWorks URDF 导出插件...
+chinesesimplified.UnregisteringControls=正在注销 SolidWorks URDF 导出插件...
 
 [Files]
-Source: x64\Debug\*;  DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
+Source: x64\Release\*;  DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
 ;Source: x86\Debug\*;  DestDir: {app}; Flags: regserver ignoreversion; Check: not IsWin64
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Run]                                                        
-Filename: "{reg:HKLM64\SOFTWARE\Microsoft\.NETFramework,InstallRoot}\v4.0.30319\RegAsm.exe"; Parameters: """{app}\SW2URDF.dll"" ""/codebase"""; StatusMsg: Registering controls ...; Check: IsWin64; Languages:
+Filename: "{reg:HKLM64\SOFTWARE\Microsoft\.NETFramework,InstallRoot}\v4.0.30319\RegAsm.exe"; Parameters: """{app}\SW2URDF.dll"" ""/codebase"""; StatusMsg: "{cm:RegisteringControls}"; Check: IsWin64;
 
 
 [Registry]
-Root: HKLM64; Subkey: "SOFTWARE\SolidWorks\Addins\65c9fc17-6a74-45a3-8f84-55185900275d";        ValueType: none; ValueName: ""; Flags: dontcreatekey deletekey uninsdeletevalue; Check: IsWin64
-Root: HKCU64; Subkey: "Software\SolidWorks\AddInsStartup\65c9fc17-6a74-45a3-8f84-55185900275d"; ValueType: none; ValueName: ""; Flags: dontcreatekey deletekey uninsdeletevalue; Check: IsWin64
+Root: HKLM64; Subkey: "SOFTWARE\SolidWorks\Addins\{{65c9fc17-6a74-45a3-8f84-55185900275d}";        ValueType: none; ValueName: ""; Flags: dontcreatekey deletekey uninsdeletevalue; Check: IsWin64
+Root: HKCU64; Subkey: "Software\SolidWorks\AddInsStartup\{{65c9fc17-6a74-45a3-8f84-55185900275d}"; ValueType: none; ValueName: ""; Flags: dontcreatekey deletekey uninsdeletevalue; Check: IsWin64
 
 [UninstallRun]
 
-Filename: "{reg:HKLM64\SOFTWARE\Microsoft\.NETFramework,InstallRoot}\v4.0.30319\RegAsm.exe"; Parameters:  """{app}\SW2URDF.dll"" ""/unregister"""; StatusMsg: Unregistering controls ...; Check: IsWin64; Languages:
+Filename: "{reg:HKLM64\SOFTWARE\Microsoft\.NETFramework,InstallRoot}\v4.0.30319\RegAsm.exe"; Parameters:  """{app}\SW2URDF.dll"" ""/unregister"""; StatusMsg: "{cm:UnregisteringControls}"; Check: IsWin64; RunOnceId: "UnregisterSW2URDF";

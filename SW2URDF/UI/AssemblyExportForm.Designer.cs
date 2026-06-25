@@ -65,9 +65,24 @@
             this.label49 = new System.Windows.Forms.Label();
             this.textBoxIxy = new System.Windows.Forms.TextBox();
             this.textBoxIzz = new System.Windows.Forms.TextBox();
+            this.labelInertiaIyx = new System.Windows.Forms.Label();
+            this.textBoxIyxMirror = new System.Windows.Forms.TextBox();
+            this.labelInertiaIzx = new System.Windows.Forms.Label();
+            this.textBoxIzxMirror = new System.Windows.Forms.TextBox();
+            this.labelInertiaIzy = new System.Windows.Forms.Label();
+            this.textBoxIzyMirror = new System.Windows.Forms.TextBox();
             this.label50 = new System.Windows.Forms.Label();
             this.textBoxMass = new System.Windows.Forms.TextBox();
+            this.buttonShowInertiaPreview = new System.Windows.Forms.Button();
+            this.labelInertiaPreviewStatus = new System.Windows.Forms.Label();
+            this.labelRosPackageName = new System.Windows.Forms.Label();
+            this.textBoxRosPackageName = new System.Windows.Forms.TextBox();
+            this.labelRosPackageNameHint = new System.Windows.Forms.Label();
             this.groupBox4 = new System.Windows.Forms.GroupBox();
+            this.labelEstimatedMeshSize = new System.Windows.Forms.Label();
+            this.labelMeshReductionValue = new System.Windows.Forms.Label();
+            this.trackBarMeshReduction = new System.Windows.Forms.TrackBar();
+            this.labelMeshReduction = new System.Windows.Forms.Label();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.radioButton3dxml = new System.Windows.Forms.RadioButton();
             this.radioButtonStl = new System.Windows.Forms.RadioButton();
@@ -87,6 +102,8 @@
             this.label20 = new System.Windows.Forms.Label();
             this.domainUpDownAlpha = new System.Windows.Forms.DomainUpDown();
             this.label29 = new System.Windows.Forms.Label();
+            this.panelMaterialColorPreview = new System.Windows.Forms.Panel();
+            this.buttonMaterialColorPick = new System.Windows.Forms.Button();
             this.label25 = new System.Windows.Forms.Label();
             this.label21 = new System.Windows.Forms.Label();
             this.label33 = new System.Windows.Forms.Label();
@@ -102,6 +119,7 @@
             this.textBoxVisualOriginY = new System.Windows.Forms.TextBox();
             this.label30 = new System.Windows.Forms.Label();
             this.textBoxTexture = new System.Windows.Forms.TextBox();
+            this.colorDialogMaterial = new System.Windows.Forms.ColorDialog();
             this.treeViewLinkProperties = new System.Windows.Forms.TreeView();
             this.buttonJointNext = new System.Windows.Forms.Button();
             this.buttonJointCancel = new System.Windows.Forms.Button();
@@ -186,12 +204,17 @@
             this.panelLinkProperties.SuspendLayout();
             this.groupBox5.SuspendLayout();
             this.groupBox4.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.trackBarMeshReduction)).BeginInit();
             this.groupBox1.SuspendLayout();
             this.SuspendLayout();
             // 
             // panelLinkProperties
             // 
+            this.panelLinkProperties.AutoScroll = true;
             this.panelLinkProperties.Controls.Add(this.buttonLinksExportUrdfOnly);
+            this.panelLinkProperties.Controls.Add(this.labelRosPackageNameHint);
+            this.panelLinkProperties.Controls.Add(this.textBoxRosPackageName);
+            this.panelLinkProperties.Controls.Add(this.labelRosPackageName);
             this.panelLinkProperties.Controls.Add(this.label2);
             this.panelLinkProperties.Controls.Add(this.label5);
             this.panelLinkProperties.Controls.Add(this.buttonLinksFinish);
@@ -271,9 +294,40 @@
             this.buttonLinksCancel.UseVisualStyleBackColor = true;
             this.buttonLinksCancel.Click += new System.EventHandler(this.ButtonLinksCancelClick);
             // 
+            // labelRosPackageName
+            // 
+            this.labelRosPackageName.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.labelRosPackageName.AutoSize = true;
+            this.labelRosPackageName.Location = new System.Drawing.Point(494, 55);
+            this.labelRosPackageName.Name = "labelRosPackageName";
+            this.labelRosPackageName.Size = new System.Drawing.Size(104, 12);
+            this.labelRosPackageName.TabIndex = 95;
+            this.labelRosPackageName.Text = "ROS package name";
+            // 
+            // textBoxRosPackageName
+            // 
+            this.textBoxRosPackageName.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.textBoxRosPackageName.Location = new System.Drawing.Point(604, 52);
+            this.textBoxRosPackageName.Name = "textBoxRosPackageName";
+            this.textBoxRosPackageName.Size = new System.Drawing.Size(205, 21);
+            this.textBoxRosPackageName.TabIndex = 96;
+            this.textBoxRosPackageName.TextChanged += new System.EventHandler(this.TextBoxRosPackageNameTextChanged);
+            // 
+            // labelRosPackageNameHint
+            // 
+            this.labelRosPackageNameHint.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.labelRosPackageNameHint.AutoSize = true;
+            this.labelRosPackageNameHint.Location = new System.Drawing.Point(815, 55);
+            this.labelRosPackageNameHint.Name = "labelRosPackageNameHint";
+            this.labelRosPackageNameHint.Size = new System.Drawing.Size(239, 12);
+            this.labelRosPackageNameHint.TabIndex = 97;
+            this.labelRosPackageNameHint.Text = "Output: ROS1/robot and ROS2/robot";
+            // 
             // groupBox5
             // 
             this.groupBox5.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.groupBox5.Controls.Add(this.labelInertiaPreviewStatus);
+            this.groupBox5.Controls.Add(this.buttonShowInertiaPreview);
             this.groupBox5.Controls.Add(this.label15);
             this.groupBox5.Controls.Add(this.textBoxIxx);
             this.groupBox5.Controls.Add(this.textBoxIxz);
@@ -301,6 +355,12 @@
             this.groupBox5.Controls.Add(this.label49);
             this.groupBox5.Controls.Add(this.textBoxIxy);
             this.groupBox5.Controls.Add(this.textBoxIzz);
+            this.groupBox5.Controls.Add(this.labelInertiaIyx);
+            this.groupBox5.Controls.Add(this.textBoxIyxMirror);
+            this.groupBox5.Controls.Add(this.labelInertiaIzx);
+            this.groupBox5.Controls.Add(this.textBoxIzxMirror);
+            this.groupBox5.Controls.Add(this.labelInertiaIzy);
+            this.groupBox5.Controls.Add(this.textBoxIzyMirror);
             this.groupBox5.Controls.Add(this.label50);
             this.groupBox5.Controls.Add(this.textBoxMass);
             this.groupBox5.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
@@ -460,9 +520,9 @@
             this.label44.AutoSize = true;
             this.label44.Location = new System.Drawing.Point(235, 20);
             this.label44.Name = "label44";
-            this.label44.Size = new System.Drawing.Size(144, 13);
+            this.label44.Size = new System.Drawing.Size(158, 13);
             this.label44.TabIndex = 23;
-            this.label44.Text = "Moment of Inertia (Kg * m^2)";
+            this.label44.Text = "Inertia matrix (kg*m^2)";
             // 
             // label45
             // 
@@ -529,7 +589,64 @@
             this.textBoxIzz.Name = "textBoxIzz";
             this.textBoxIzz.Size = new System.Drawing.Size(66, 20);
             this.textBoxIzz.TabIndex = 12;
-            // 
+            //
+            // labelInertiaIyx
+            //
+            this.labelInertiaIyx.AutoSize = true;
+            this.labelInertiaIyx.Location = new System.Drawing.Point(239, 82);
+            this.labelInertiaIyx.Name = "labelInertiaIyx";
+            this.labelInertiaIyx.Size = new System.Drawing.Size(28, 13);
+            this.labelInertiaIyx.TabIndex = 36;
+            this.labelInertiaIyx.Text = "= ixy";
+            //
+            // textBoxIyxMirror
+            //
+            this.textBoxIyxMirror.BackColor = System.Drawing.SystemColors.ControlLight;
+            this.textBoxIyxMirror.Location = new System.Drawing.Point(273, 78);
+            this.textBoxIyxMirror.Name = "textBoxIyxMirror";
+            this.textBoxIyxMirror.ReadOnly = true;
+            this.textBoxIyxMirror.Size = new System.Drawing.Size(66, 20);
+            this.textBoxIyxMirror.TabIndex = 37;
+            this.textBoxIyxMirror.TabStop = false;
+            //
+            // labelInertiaIzx
+            //
+            this.labelInertiaIzx.AutoSize = true;
+            this.labelInertiaIzx.Location = new System.Drawing.Point(239, 106);
+            this.labelInertiaIzx.Name = "labelInertiaIzx";
+            this.labelInertiaIzx.Size = new System.Drawing.Size(28, 13);
+            this.labelInertiaIzx.TabIndex = 38;
+            this.labelInertiaIzx.Text = "= ixz";
+            //
+            // textBoxIzxMirror
+            //
+            this.textBoxIzxMirror.BackColor = System.Drawing.SystemColors.ControlLight;
+            this.textBoxIzxMirror.Location = new System.Drawing.Point(273, 102);
+            this.textBoxIzxMirror.Name = "textBoxIzxMirror";
+            this.textBoxIzxMirror.ReadOnly = true;
+            this.textBoxIzxMirror.Size = new System.Drawing.Size(66, 20);
+            this.textBoxIzxMirror.TabIndex = 39;
+            this.textBoxIzxMirror.TabStop = false;
+            //
+            // labelInertiaIzy
+            //
+            this.labelInertiaIzy.AutoSize = true;
+            this.labelInertiaIzy.Location = new System.Drawing.Point(335, 106);
+            this.labelInertiaIzy.Name = "labelInertiaIzy";
+            this.labelInertiaIzy.Size = new System.Drawing.Size(28, 13);
+            this.labelInertiaIzy.TabIndex = 40;
+            this.labelInertiaIzy.Text = "= iyz";
+            //
+            // textBoxIzyMirror
+            //
+            this.textBoxIzyMirror.BackColor = System.Drawing.SystemColors.ControlLight;
+            this.textBoxIzyMirror.Location = new System.Drawing.Point(369, 102);
+            this.textBoxIzyMirror.Name = "textBoxIzyMirror";
+            this.textBoxIzyMirror.ReadOnly = true;
+            this.textBoxIzyMirror.Size = new System.Drawing.Size(66, 20);
+            this.textBoxIzyMirror.TabIndex = 41;
+            this.textBoxIzyMirror.TabStop = false;
+            //
             // label50
             // 
             this.label50.AutoSize = true;
@@ -546,9 +663,32 @@
             this.textBoxMass.Size = new System.Drawing.Size(66, 20);
             this.textBoxMass.TabIndex = 6;
             // 
-            // groupBox4
+            // buttonShowInertiaPreview
             // 
+            this.buttonShowInertiaPreview.Location = new System.Drawing.Point(238, 145);
+            this.buttonShowInertiaPreview.Name = "buttonShowInertiaPreview";
+            this.buttonShowInertiaPreview.Size = new System.Drawing.Size(145, 24);
+            this.buttonShowInertiaPreview.TabIndex = 34;
+            this.buttonShowInertiaPreview.Text = "Show inertia ellipsoid";
+            this.buttonShowInertiaPreview.UseVisualStyleBackColor = true;
+            this.buttonShowInertiaPreview.Click += new System.EventHandler(this.ButtonShowInertiaPreviewClick);
+            // 
+            // labelInertiaPreviewStatus
+            // 
+            this.labelInertiaPreviewStatus.AutoSize = true;
+            this.labelInertiaPreviewStatus.Location = new System.Drawing.Point(389, 151);
+            this.labelInertiaPreviewStatus.Name = "labelInertiaPreviewStatus";
+            this.labelInertiaPreviewStatus.Size = new System.Drawing.Size(169, 13);
+            this.labelInertiaPreviewStatus.TabIndex = 35;
+            this.labelInertiaPreviewStatus.Text = "R a / G b / B c: principal semi-axes";
+            // 
+            // groupBox4
+            //
             this.groupBox4.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.groupBox4.Controls.Add(this.labelEstimatedMeshSize);
+            this.groupBox4.Controls.Add(this.labelMeshReductionValue);
+            this.groupBox4.Controls.Add(this.trackBarMeshReduction);
+            this.groupBox4.Controls.Add(this.labelMeshReduction);
             this.groupBox4.Controls.Add(this.groupBox1);
             this.groupBox4.Controls.Add(this.radioButtonFine);
             this.groupBox4.Controls.Add(this.radioButtonCourse);
@@ -566,6 +706,8 @@
             this.groupBox4.Controls.Add(this.label20);
             this.groupBox4.Controls.Add(this.domainUpDownAlpha);
             this.groupBox4.Controls.Add(this.label29);
+            this.groupBox4.Controls.Add(this.panelMaterialColorPreview);
+            this.groupBox4.Controls.Add(this.buttonMaterialColorPick);
             this.groupBox4.Controls.Add(this.label25);
             this.groupBox4.Controls.Add(this.label21);
             this.groupBox4.Controls.Add(this.label33);
@@ -586,6 +728,43 @@
             this.groupBox4.Size = new System.Drawing.Size(568, 305);
             this.groupBox4.TabIndex = 72;
             this.groupBox4.TabStop = false;
+            //
+            // labelEstimatedMeshSize
+            //
+            this.labelEstimatedMeshSize.AutoSize = true;
+            this.labelEstimatedMeshSize.Location = new System.Drawing.Point(318, 225);
+            this.labelEstimatedMeshSize.Name = "labelEstimatedMeshSize";
+            this.labelEstimatedMeshSize.Size = new System.Drawing.Size(160, 12);
+            this.labelEstimatedMeshSize.TabIndex = 78;
+            this.labelEstimatedMeshSize.Text = "Rough STL estimate: logged on export";
+            //
+            // labelMeshReductionValue
+            //
+            this.labelMeshReductionValue.AutoSize = true;
+            this.labelMeshReductionValue.Location = new System.Drawing.Point(492, 178);
+            this.labelMeshReductionValue.Name = "labelMeshReductionValue";
+            this.labelMeshReductionValue.Size = new System.Drawing.Size(23, 12);
+            this.labelMeshReductionValue.TabIndex = 77;
+            this.labelMeshReductionValue.Text = "0.00";
+            //
+            // trackBarMeshReduction
+            //
+            this.trackBarMeshReduction.Location = new System.Drawing.Point(316, 174);
+            this.trackBarMeshReduction.Maximum = 100;
+            this.trackBarMeshReduction.Name = "trackBarMeshReduction";
+            this.trackBarMeshReduction.Size = new System.Drawing.Size(170, 45);
+            this.trackBarMeshReduction.TabIndex = 76;
+            this.trackBarMeshReduction.TickFrequency = 25;
+            this.trackBarMeshReduction.Scroll += new System.EventHandler(this.TrackBarMeshReductionScroll);
+            //
+            // labelMeshReduction
+            //
+            this.labelMeshReduction.AutoSize = true;
+            this.labelMeshReduction.Location = new System.Drawing.Point(318, 156);
+            this.labelMeshReduction.Name = "labelMeshReduction";
+            this.labelMeshReduction.Size = new System.Drawing.Size(112, 12);
+            this.labelMeshReduction.TabIndex = 75;
+            this.labelMeshReduction.Text = "Export STL reduction (0-1)";
             // 
             // groupBox1
             // 
@@ -751,6 +930,7 @@
             this.domainUpDownAlpha.Size = new System.Drawing.Size(60, 19);
             this.domainUpDownAlpha.TabIndex = 57;
             this.domainUpDownAlpha.Text = "1";
+            this.domainUpDownAlpha.TextChanged += new System.EventHandler(this.MaterialColorValueChanged);
             // 
             // label29
             // 
@@ -760,6 +940,27 @@
             this.label29.Size = new System.Drawing.Size(32, 12);
             this.label29.TabIndex = 49;
             this.label29.Text = "Color";
+            //
+            // panelMaterialColorPreview
+            //
+            this.panelMaterialColorPreview.BackColor = System.Drawing.Color.White;
+            this.panelMaterialColorPreview.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.panelMaterialColorPreview.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.panelMaterialColorPreview.Location = new System.Drawing.Point(494, 56);
+            this.panelMaterialColorPreview.Name = "panelMaterialColorPreview";
+            this.panelMaterialColorPreview.Size = new System.Drawing.Size(60, 43);
+            this.panelMaterialColorPreview.TabIndex = 75;
+            this.panelMaterialColorPreview.Click += new System.EventHandler(this.MaterialColorPreviewClick);
+            //
+            // buttonMaterialColorPick
+            //
+            this.buttonMaterialColorPick.Location = new System.Drawing.Point(494, 106);
+            this.buttonMaterialColorPick.Name = "buttonMaterialColorPick";
+            this.buttonMaterialColorPick.Size = new System.Drawing.Size(60, 23);
+            this.buttonMaterialColorPick.TabIndex = 76;
+            this.buttonMaterialColorPick.Text = "Pick...";
+            this.buttonMaterialColorPick.UseVisualStyleBackColor = true;
+            this.buttonMaterialColorPick.Click += new System.EventHandler(this.ButtonMaterialColorPickClick);
             // 
             // label25
             // 
@@ -795,6 +996,7 @@
             this.domainUpDownRed.Size = new System.Drawing.Size(60, 19);
             this.domainUpDownRed.TabIndex = 50;
             this.domainUpDownRed.Text = "1";
+            this.domainUpDownRed.TextChanged += new System.EventHandler(this.MaterialColorValueChanged);
             // 
             // label24
             // 
@@ -830,6 +1032,7 @@
             this.domainUpDownGreen.Size = new System.Drawing.Size(60, 19);
             this.domainUpDownGreen.TabIndex = 51;
             this.domainUpDownGreen.Text = "1";
+            this.domainUpDownGreen.TextChanged += new System.EventHandler(this.MaterialColorValueChanged);
             // 
             // textBoxVisualOriginX
             // 
@@ -854,6 +1057,7 @@
             this.domainUpDownBlue.Size = new System.Drawing.Size(60, 19);
             this.domainUpDownBlue.TabIndex = 52;
             this.domainUpDownBlue.Text = "1";
+            this.domainUpDownBlue.TextChanged += new System.EventHandler(this.MaterialColorValueChanged);
             // 
             // label23
             // 
@@ -1427,7 +1631,7 @@
             // 
             this.treeViewJointTree.Location = new System.Drawing.Point(12, 74);
             this.treeViewJointTree.Name = "treeViewJointTree";
-            this.treeViewJointTree.Size = new System.Drawing.Size(462, 525);
+            this.treeViewJointTree.Size = new System.Drawing.Size(462, 480);
             this.treeViewJointTree.TabIndex = 163;
             this.treeViewJointTree.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.TreeViewJointtreeAfterSelect);
             // 
@@ -1480,8 +1684,9 @@
             // 
             // label4
             // 
+            this.label4.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.label4.AutoSize = true;
-            this.label4.Location = new System.Drawing.Point(521, 603);
+            this.label4.Location = new System.Drawing.Point(100, 558);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(263, 12);
             this.label4.TabIndex = 230;
@@ -1523,8 +1728,9 @@
             // 
             // label27
             // 
+            this.label27.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.label27.AutoSize = true;
-            this.label27.Location = new System.Drawing.Point(521, 617);
+            this.label27.Location = new System.Drawing.Point(100, 580);
             this.label27.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.label27.Name = "label27";
             this.label27.Size = new System.Drawing.Size(130, 12);
@@ -1618,8 +1824,8 @@
             // 
             // AssemblyExportForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.ClientSize = new System.Drawing.Size(1073, 634);
             this.Controls.Add(this.panelLinkProperties);
             this.Controls.Add(this.buttonJointNext);
@@ -1712,6 +1918,7 @@
             this.groupBox5.PerformLayout();
             this.groupBox4.ResumeLayout(false);
             this.groupBox4.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.trackBarMeshReduction)).EndInit();
             this.groupBox1.ResumeLayout(false);
             this.groupBox1.PerformLayout();
             this.ResumeLayout(false);
@@ -1756,9 +1963,24 @@
         private System.Windows.Forms.Label label49;
         private System.Windows.Forms.TextBox textBoxIxy;
         private System.Windows.Forms.TextBox textBoxIzz;
+        private System.Windows.Forms.Label labelInertiaIyx;
+        private System.Windows.Forms.TextBox textBoxIyxMirror;
+        private System.Windows.Forms.Label labelInertiaIzx;
+        private System.Windows.Forms.TextBox textBoxIzxMirror;
+        private System.Windows.Forms.Label labelInertiaIzy;
+        private System.Windows.Forms.TextBox textBoxIzyMirror;
         private System.Windows.Forms.Label label50;
         private System.Windows.Forms.TextBox textBoxMass;
+        private System.Windows.Forms.Button buttonShowInertiaPreview;
+        private System.Windows.Forms.Label labelInertiaPreviewStatus;
+        private System.Windows.Forms.Label labelRosPackageName;
+        private System.Windows.Forms.TextBox textBoxRosPackageName;
+        private System.Windows.Forms.Label labelRosPackageNameHint;
         private System.Windows.Forms.GroupBox groupBox4;
+        private System.Windows.Forms.Label labelEstimatedMeshSize;
+        private System.Windows.Forms.Label labelMeshReductionValue;
+        private System.Windows.Forms.TrackBar trackBarMeshReduction;
+        private System.Windows.Forms.Label labelMeshReduction;
         private System.Windows.Forms.RadioButton radioButtonFine;
         private System.Windows.Forms.RadioButton radioButtonCourse;
         private System.Windows.Forms.Label label10;
@@ -1776,6 +1998,8 @@
         private System.Windows.Forms.Label label20;
         private System.Windows.Forms.DomainUpDown domainUpDownAlpha;
         private System.Windows.Forms.Label label29;
+        private System.Windows.Forms.Panel panelMaterialColorPreview;
+        private System.Windows.Forms.Button buttonMaterialColorPick;
         private System.Windows.Forms.Label label25;
         private System.Windows.Forms.Label label21;
         private System.Windows.Forms.Label label33;
@@ -1787,6 +2011,7 @@
         private System.Windows.Forms.TextBox textBoxVisualOriginX;
         private System.Windows.Forms.Label label31;
         private System.Windows.Forms.DomainUpDown domainUpDownBlue;
+        private System.Windows.Forms.ColorDialog colorDialogMaterial;
         private System.Windows.Forms.Label label23;
         private System.Windows.Forms.TextBox textBoxVisualOriginY;
         private System.Windows.Forms.Label label30;

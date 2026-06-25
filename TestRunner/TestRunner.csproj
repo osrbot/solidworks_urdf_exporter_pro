@@ -7,6 +7,8 @@
     <ApplicationIcon />
     <OutputType>Exe</OutputType>
     <StartupObject />
+    <LangVersion>7.1</LangVersion>
+    <SolidWorksInstallDir Condition=" '$(SolidWorksInstallDir)' == '' ">E:\Solidworks 2023\SOLIDWORKS Crop\SOLIDWORKS</SolidWorksInstallDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,16 +21,16 @@
 
   <ItemGroup>
     <Reference Include="SolidWorks.Interop.sldworks">
-      <HintPath>..\..\..\..\..\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SolidWorks.Interop.sldworks.dll</HintPath>
+      <HintPath>$(SolidWorksInstallDir)\SolidWorks.Interop.sldworks.dll</HintPath>
     </Reference>
     <Reference Include="SolidWorks.Interop.swconst">
-      <HintPath>..\..\..\..\..\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SolidWorks.Interop.swconst.dll</HintPath>
+      <HintPath>$(SolidWorksInstallDir)\SolidWorks.Interop.swconst.dll</HintPath>
     </Reference>
     <Reference Include="SolidWorks.Interop.swpublished">
-      <HintPath>..\..\..\..\..\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SolidWorks.Interop.swpublished.dll</HintPath>
+      <HintPath>$(SolidWorksInstallDir)\SolidWorks.Interop.swpublished.dll</HintPath>
     </Reference>
     <Reference Include="SolidWorksTools">
-      <HintPath>..\..\..\..\..\Program Files\SOLIDWORKS Corp\SOLIDWORKS\solidworkstools.dll</HintPath>
+      <HintPath>$(SolidWorksInstallDir)\solidworkstools.dll</HintPath>
     </Reference>
   </ItemGroup>
 

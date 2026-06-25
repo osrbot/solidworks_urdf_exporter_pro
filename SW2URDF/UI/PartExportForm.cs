@@ -35,6 +35,7 @@ namespace SW2URDF.UI
         public PartExportForm(SldWorks iSwApp)
         {
             InitializeComponent();
+            ChineseUiText.Apply(this);
             Exporter = new ExportHelper(iSwApp);
         }
 
@@ -46,7 +47,7 @@ namespace SW2URDF.UI
             {
                 RestoreDirectory = true,
                 InitialDirectory = Path.GetDirectoryName(textBox_save_as.Text),
-                FileName = Path.GetFileName(textBox_save_as.Text)
+                FileName = URDFPackage.SanitizePackageName(Path.GetFileName(textBox_save_as.Text))
             };
 
             if (saveFileDialog1.ShowDialog() == DialogResult.OK)
@@ -76,7 +77,7 @@ namespace SW2URDF.UI
 
         private void ButtonFinishClick(object sender, EventArgs e)
         {
-            Exporter.PackageName = Path.GetFileName(textBox_save_as.Text);
+            Exporter.PackageName = URDFPackage.SanitizePackageName(Path.GetFileName(textBox_save_as.Text));
             Exporter.SavePath = Path.GetDirectoryName(textBox_save_as.Text);
             Exporter.URDFRobot.BaseLink.Name = Exporter.PackageName;
 

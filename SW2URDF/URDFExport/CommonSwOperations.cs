@@ -124,15 +124,45 @@ namespace SW2URDF.URDFExport
         //Shows the components in the list. Useful  for exporting STLs
         public static void ShowComponents(ModelDoc2 model, List<Component2> components)
         {
-            SelectComponents(model, components, true);
+            SelectComponents(model, ExpandComponents(components), true);
             model.ShowComponent2();
         }
 
         //Hides the components from a list
         public static void HideComponents(ModelDoc2 model, List<Component2> components)
         {
-            SelectComponents(model, components, true);
+            SelectComponents(model, ExpandComponents(components), true);
             model.HideComponent2();
+        }
+
+        private static List<Component2> ExpandComponents(List<Component2> components)
+        {
+            List<Component2> expandedComponents = new List<Component2>();
+            foreach (Component2 component in components)
+            {
+                AddComponentAndChildren(component, expandedComponents);
+            }
+            return expandedComponents;
+        }
+
+        private static void AddComponentAndChildren(Component2 component, List<Component2> components)
+        {
+            if (component == null)
+            {
+                return;
+            }
+
+            components.Add(component);
+            object[] children = (object[])component.GetChildren();
+            if (children == null)
+            {
+                return;
+            }
+
+            foreach (object child in children)
+            {
+                AddComponentAndChildren((Component2)child, components);
+            }
         }
 
         public static int GetCount(Link Link)

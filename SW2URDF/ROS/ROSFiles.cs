@@ -26,6 +26,11 @@ using System.Xml;
 
 namespace SW2URDF.ROS
 {
+    internal static class ROSFileLogger
+    {
+        public static readonly log4net.ILog Logger = SW2URDF.Utilities.Logger.GetLogger();
+    }
+
     public abstract class LaunchElement
     {
         public abstract void WriteFile(XmlWriter writer);
@@ -190,6 +195,9 @@ namespace SW2URDF.ROS
 
         public void WriteFile(string dir)
         {
+            string displayLaunch = dir + @"gazebo.launch";
+            ROSFileLogger.Logger.Info("Creating ROS 1 Gazebo launch file at " + displayLaunch);
+
             XmlWriter writer;
             XmlWriterSettings settings = new XmlWriterSettings
             {
@@ -199,7 +207,6 @@ namespace SW2URDF.ROS
                 NewLineOnAttributes = true
             };
 
-            string displayLaunch = dir + @"gazebo.launch";
             writer = XmlWriter.Create(displayLaunch, settings);
 
             writer.WriteStartDocument();
@@ -239,6 +246,9 @@ namespace SW2URDF.ROS
 
         public void WriteFiles(string dir)
         {
+            string displayLaunch = dir + @"display.launch";
+            ROSFileLogger.Logger.Info("Creating ROS 1 RViz display launch file at " + displayLaunch);
+
             XmlWriter writer;
             XmlWriterSettings settings = new XmlWriterSettings
             {
@@ -248,7 +258,6 @@ namespace SW2URDF.ROS
                 NewLineOnAttributes = true
             };
 
-            string displayLaunch = dir + @"display.launch";
             writer = XmlWriter.Create(displayLaunch, settings);
 
             writer.WriteStartDocument();

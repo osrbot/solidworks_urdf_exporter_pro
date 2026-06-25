@@ -76,9 +76,15 @@ namespace SW2URDF.UI
                                                      domainUpDownBlue,
                                                      domainUpDownAlpha,
                                                      "G5");
+                UpdateMaterialColorPreview();
 
                 radioButtonFine.Checked = Link.STLQualityFine;
                 radioButtonCourse.Checked = !Link.STLQualityFine;
+                double meshReductionRatio = meshReductionRatioEdited
+                    ? meshReductionRatioForExport
+                    : Link.MeshReductionRatio;
+                trackBarMeshReduction.Value = MeshReductionRatioToTrackBarValue(meshReductionRatio);
+                UpdateMeshReductionLabel();
             }
         }
 
@@ -186,6 +192,7 @@ namespace SW2URDF.UI
                 labelKPosition.Text = "k position";
                 labelKVelocity.Text = "k velocity";
             }
+            LocalizeDynamicJointLabels();
             comboBoxOrigin.Items.Clear();
             List<string> originNames = Exporter.GetRefCoordinateSystems();
             comboBoxOrigin.Items.AddRange(originNames.ToArray());
@@ -271,6 +278,7 @@ namespace SW2URDF.UI
                                                   domainUpDownAlpha);
 
                 Link.STLQualityFine = radioButtonFine.Checked;
+                Link.MeshReductionRatio = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
             }
         }
 
@@ -347,6 +355,20 @@ namespace SW2URDF.UI
             {
                 Joint.Mimic.Clear();
             }
+        }
+
+        private void LocalizeDynamicJointLabels()
+        {
+            labelLowerLimit.Text = ChineseUiText.DynamicJointLabel(labelLowerLimit.Text);
+            labelLimitUpper.Text = ChineseUiText.DynamicJointLabel(labelLimitUpper.Text);
+            labelEffort.Text = ChineseUiText.DynamicJointLabel(labelEffort.Text);
+            labelVelocity.Text = ChineseUiText.DynamicJointLabel(labelVelocity.Text);
+            labelFriction.Text = ChineseUiText.DynamicJointLabel(labelFriction.Text);
+            labelDamping.Text = ChineseUiText.DynamicJointLabel(labelDamping.Text);
+            labelSoftLower.Text = ChineseUiText.DynamicJointLabel(labelSoftLower.Text);
+            labelSoftUpper.Text = ChineseUiText.DynamicJointLabel(labelSoftUpper.Text);
+            labelKPosition.Text = ChineseUiText.DynamicJointLabel(labelKPosition.Text);
+            labelKVelocity.Text = ChineseUiText.DynamicJointLabel(labelKVelocity.Text);
         }
 
         //Fills specifically the joint TreeView

@@ -56,6 +56,9 @@
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
+    <SolidWorksInstallDir Condition=" '$(SolidWorksInstallDir)' == '' ">E:\Solidworks 2023\SOLIDWORKS Crop\SOLIDWORKS</SolidWorksInstallDir>
+    <CscToolPath Condition="Exists('$(MSBuildProjectDirectory)\..\packages\Microsoft.Net.Compilers.3.11.0\tools\csc.exe')">$(MSBuildProjectDirectory)\..\packages\Microsoft.Net.Compilers.3.11.0\tools</CscToolPath>
+    <CscToolExe Condition="Exists('$(MSBuildProjectDirectory)\..\packages\Microsoft.Net.Compilers.3.11.0\tools\csc.exe')">csc.exe</CscToolExe>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
   </PropertyGroup>
@@ -84,6 +87,7 @@
     <CodeAnalysisRuleSet>
     </CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
+    <LangVersion>7.1</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <OutputPath>bin\Debug\</OutputPath>
@@ -110,6 +114,7 @@
     <CodeAnalysisRuleSet>
     </CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
+    <LangVersion>7.1</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
     <DebugSymbols>true</DebugSymbols>
@@ -181,6 +186,7 @@
     <CodeAnalysisRuleSet>
     </CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
+    <LangVersion>7.1</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Test|AnyCPU'">
     <DebugSymbols>true</DebugSymbols>
@@ -253,20 +259,20 @@
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="SolidWorks.Interop.sldworks">
-      <HintPath>..\..\..\..\..\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SolidWorks.Interop.sldworks.dll</HintPath>
+      <HintPath>$(SolidWorksInstallDir)\SolidWorks.Interop.sldworks.dll</HintPath>
       <EmbedInteropTypes>True</EmbedInteropTypes>
     </Reference>
     <Reference Include="SolidWorks.Interop.swconst">
-      <HintPath>..\..\..\..\..\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SolidWorks.Interop.swconst.dll</HintPath>
+      <HintPath>$(SolidWorksInstallDir)\SolidWorks.Interop.swconst.dll</HintPath>
       <EmbedInteropTypes>True</EmbedInteropTypes>
     </Reference>
     <Reference Include="SolidWorks.Interop.swpublished">
-      <HintPath>..\..\..\..\..\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SolidWorks.Interop.swpublished.dll</HintPath>
+      <HintPath>$(SolidWorksInstallDir)\SolidWorks.Interop.swpublished.dll</HintPath>
       <EmbedInteropTypes>True</EmbedInteropTypes>
     </Reference>
     <Reference Include="solidworkstools, Version=2.0.0.0, Culture=neutral, PublicKeyToken=bd18593873b4686d, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\..\..\Program Files\SOLIDWORKS Corp\SOLIDWORKS\solidworkstools.dll</HintPath>
+      <HintPath>$(SolidWorksInstallDir)\solidworkstools.dll</HintPath>
     </Reference>
     <Reference Include="System">
       <Name>System</Name>
@@ -319,14 +325,23 @@
     <Compile Include="GlobalSuppressions.cs" />
     <Compile Include="Legacy\SerialNode.cs" />
     <Compile Include="UI\IMessageBox.cs" />
+    <Compile Include="UI\ChineseUiText.cs" />
+    <Compile Include="UI\InertiaPreview.cs" />
     <Compile Include="UI\MessageBoxHelper.cs" />
     <Compile Include="Test\SW2URDFTest.cs" />
     <Compile Include="Test\SWTestFixture.cs" />
     <Compile Include="Test\TestCommon.cs" />
     <Compile Include="Test\TestCSVImportExport.cs" />
+    <Compile Include="Test\TestAssemblyExportLayout.cs" />
     <Compile Include="Test\TestExportHelper.cs" />
+    <Compile Include="Test\TestInstallerScript.cs" />
+    <Compile Include="Test\TestInertiaEllipsoid.cs" />
+    <Compile Include="Test\TestInertiaConvention.cs" />
+    <Compile Include="Test\TestInertiaPreview.cs" />
     <Compile Include="Test\TestLogger.cs" />
     <Compile Include="Test\TestMathOps.cs" />
+    <Compile Include="Test\TestMeshReduction.cs" />
+    <Compile Include="Test\TestOperationHeartbeat.cs" />
     <Compile Include="Test\TestPropertyManager.cs" />
     <Compile Include="Test\TestROSFIles.cs" />
     <Compile Include="Test\TestSerialization.cs" />
@@ -336,6 +351,7 @@
     <Compile Include="Test\TestVersioning.cs" />
     <Compile Include="URDF\Mimic.cs" />
     <Compile Include="Utilities\Logger.cs" />
+    <Compile Include="Utilities\OperationHeartbeat.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -362,6 +378,7 @@
     <Compile Include="URDFExport\ConfigurationSerialization.cs" />
     <Compile Include="URDFExport\ExportHelper.cs" />
     <Compile Include="URDFExport\ExportHelperExtension.cs" />
+    <Compile Include="URDFExport\InertiaEllipsoid.cs" />
     <Compile Include="UI\AssemblyExportFormExtension.cs">
       <SubType>Form</SubType>
     </Compile>

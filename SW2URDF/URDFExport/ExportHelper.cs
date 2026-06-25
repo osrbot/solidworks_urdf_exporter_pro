@@ -24,13 +24,16 @@ using MathNet.Numerics.LinearAlgebra;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SW2URDF.ROS;
+using SW2URDF.UI;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport.CSV;
 using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using System.Xml.Serialization;
 
@@ -59,9 +62,13 @@ namespace SW2URDF.URDFExport
         private bool mSaveComponentsIntoOneFile;
         private int mSTLUnits;
         private int mSTLQuality;
+        private double mSTLDeviation;
+        private double mSTLAngleTolerance;
         private double mHideTransitionSpeed;
 
         private UserProgressBar progressBar;
+        private Stopwatch exportStopwatch;
+        private int exportStageNumber;
 
         [XmlIgnore]
         public ModelDoc2 ActiveSWModel;
@@ -79,6 +86,9 @@ namespace SW2URDF.URDFExport
         public string PackageName
         { get; set; }
 
+        public string RosPackageName
+        { get; set; }
+
         public string SavePath
         { get; set; }
 
@@ -86,6 +96,11 @@ namespace SW2URDF.URDFExport
 
         private readonly List<string> ReferenceCoordinateSystemNames;
         private readonly List<string> ReferenceAxesNames;
+
+        private const double MinimumCustomStlDeviation = 0.001;
+        private const double MaximumCustomStlDeviation = 0.02;
+        private const double MinimumCustomStlAngleTolerance = Math.PI / 6.0;
+        private const double MaximumCustomStlAngleTolerance = 2.0 * Math.PI / 3.0;
 
         private bool ComputeInertialValues;
         private bool ComputeVisualCollision;
@@ -102,6 +117,7 @@ namespace SW2URDF.URDFExport
 
             SavePath = System.Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%");
             PackageName = ActiveSWModel.GetTitle();
+            RosPackageName = URDFPackage.SanitizePackageName(PackageName);
 
             ReferenceCoordinateSystemNames = FindRefGeoNames("CoordSys");
             ReferenceAxesNames = FindRefGeoNames("RefAxis");
@@ -145,14 +161,28 @@ namespace SW2URDF.URDFExport
         public void ExportRobot(bool exportSTL = true, MeshExportFormat meshFormat = MeshExportFormat.STL)
         {
             //Setting up the progress bar
+            exportStopwatch = Stopwatch.StartNew();
+            exportStageNumber = 0;
             logger.Info("Beginning the export process");
+            logger.Info("Export metadata: commit version " + Versioning.Version.GetCommitVersion() +
+                ", build version " + Versioning.Version.GetBuildVersion() +
+                ", started " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz") +
+                ", robot " + PackageName +
+                ", ROS package " + RosPackageName +
+                ", save path " + SavePath +
+                ", export meshes " + exportSTL +
+                ", mesh format " + meshFormat);
             int progressBarBound = CommonSwOperations.GetCount(URDFRobot.BaseLink);
             iSwApp.GetUserProgressBar(out progressBar);
-            progressBar.Start(0, progressBarBound, "Creating package directories");
+            progressBar.Start(0, progressBarBound,
+                ChineseUiText.Translate("Creating package directories", "\u6b63\u5728\u521b\u5efa\u529f\u80fd\u5305\u76ee\u5f55"));
 
             //Creating package directories
-            logger.Info("Creating package directories with name " + PackageName + " and save path " + SavePath);
-            URDFPackage package = new URDFPackage(PackageName, SavePath);
+            PackageName = URDFPackage.SanitizePackageName(PackageName);
+            RosPackageName = URDFPackage.SanitizePackageName(RosPackageName);
+            logger.Info("Creating package directories with ROS package name " + RosPackageName +
+                ", robot name " + PackageName + " and save path " + SavePath);
+            URDFPackage package = new URDFPackage(PackageName, RosPackageName, SavePath);
             package.CreateDirectories();
             URDFRobot.Name = PackageName;
             string windowsURDFFileName = package.WindowsRobotsDirectory + URDFRobot.Name + ".urdf";
@@ -160,6 +190,7 @@ namespace SW2URDF.URDFExport
             string windowsPackageXMLFileName = package.WindowsPackageDirectory + "package.xml";
 
             //Create CMakeLists
+            UpdateProgressTitle("Creating ROS package metadata", "\u6b63\u5728\u521b\u5efa ROS \u529f\u80fd\u5305\u5143\u6570\u636e");
             logger.Info("Creating CMakeLists.txt at " + package.WindowsCMakeLists);
             package.CreateCMakeLists();
 
@@ -170,16 +201,16 @@ namespace SW2URDF.URDFExport
             //Creating package.xml file
             logger.Info("Creating package.xml at " + windowsPackageXMLFileName);
             PackageXMLWriter packageXMLWriter = new PackageXMLWriter(windowsPackageXMLFileName);
-            PackageXML packageXML = new PackageXML(PackageName);
+            PackageXML packageXML = new PackageXML(RosPackageName);
             packageXML.WriteElement(packageXMLWriter);
 
             //Creating RVIZ launch file
-            Rviz rviz = new Rviz(PackageName, URDFRobot.Name + ".urdf");
+            Rviz rviz = new Rviz(RosPackageName, URDFRobot.Name + ".urdf");
             logger.Info("Creating RVIZ launch file in " + package.WindowsLaunchDirectory);
             rviz.WriteFiles(package.WindowsLaunchDirectory);
 
             //Creating Gazebo launch file
-            Gazebo gazebo = new Gazebo(URDFRobot.Name, PackageName, URDFRobot.Name + ".urdf");
+            Gazebo gazebo = new Gazebo(URDFRobot.Name, RosPackageName, URDFRobot.Name + ".urdf");
             logger.Info("Creating Gazebo launch file in " + package.WindowsLaunchDirectory);
 
             gazebo.WriteFile(package.WindowsLaunchDirectory);
@@ -196,6 +227,7 @@ namespace SW2URDF.URDFExport
             List<string> hiddenComponents = CommonSwOperations.FindHiddenComponents(assyDoc.GetComponents(false));
             logger.Info("Found " + hiddenComponents.Count + " hidden components " + String.Join(", ", hiddenComponents));
             logger.Info("Hiding all components");
+            UpdateProgressTitle("Preparing SolidWorks components", "\u6b63\u5728\u51c6\u5907 SolidWorks \u7ec4\u4ef6");
             ActiveSWModel.Extension.SelectAll();
             ActiveSWModel.HideComponent2();
 
@@ -213,6 +245,8 @@ namespace SW2URDF.URDFExport
             finally
             {
                 logger.Info("Showing all components except previously hidden components");
+                UpdateProgressTitle("Restoring SolidWorks component visibility",
+                    "\u6b63\u5728\u6062\u590d SolidWorks \u7ec4\u4ef6\u53ef\u89c1\u6027");
                 CommonSwOperations.ShowAllComponents(ActiveSWModel, hiddenComponents);
 
                 logger.Info("Resetting STL preferences");
@@ -221,23 +255,40 @@ namespace SW2URDF.URDFExport
 
             if (!success)
             {
+                progressBar.End();
+                exportStopwatch.Stop();
+                logger.Error("Export process failed after " +
+                    OperationHeartbeat.FormatElapsed(exportStopwatch.Elapsed));
                 MessageBox.Show("Exporting the URDF failed unexpectedly. Email your maintainer " +
                     "with the log file found at " + Logger.GetFileName());
                 return;
             }
 
+            LogInertialValidation(URDFRobot.BaseLink);
+
+            UpdateProgressTitle("Writing URDF file", "\u6b63\u5728\u5199\u5165 URDF \u6587\u4ef6");
             logger.Info("Writing URDF file to " + windowsURDFFileName);
             URDFWriter uWriter = new URDFWriter(windowsURDFFileName);
             URDFRobot.WriteURDF(uWriter.writer);
 
+            UpdateProgressTitle("Writing CSV file", "\u6b63\u5728\u5199\u5165 CSV \u6587\u4ef6");
             ImportExport.WriteRobotToCSV(URDFRobot, windowsCSVFileName);
 
+            UpdateProgressTitle("Creating ROS 2 package", "\u6b63\u5728\u521b\u5efa ROS 2 \u529f\u80fd\u5305");
+            logger.Info("Creating ROS 2 package at " + package.WindowsRos2PackageDirectory);
+            package.CreateRos2Package(windowsURDFFileName);
+
+            UpdateProgressTitle("Copying export log", "\u6b63\u5728\u590d\u5236\u5bfc\u51fa\u65e5\u5fd7");
             logger.Info("Copying log file");
             CopyLogFile(package);
 
             logger.Info("Resetting STL preferences");
             ResetUserPreferences();
             progressBar.End();
+            exportStopwatch.Stop();
+            logger.Info("Export process completed successfully for ROS package " + RosPackageName +
+                " and robot " + PackageName + "; elapsed " +
+                OperationHeartbeat.FormatElapsed(exportStopwatch.Elapsed));
         }
 
         public List<string> GetJointNames()
@@ -267,7 +318,9 @@ namespace SW2URDF.URDFExport
         private void ExportFiles(Link link, URDFPackage package, int count, bool exportSTL = true, MeshExportFormat meshFormat = MeshExportFormat.STL)
         {
             progressBar.UpdateProgress(count);
-            progressBar.UpdateTitle("Exporting mesh: " + link.Name);
+            progressBar.UpdateTitle(ChineseUiText.Translate(
+                "Exporting mesh: " + link.Name,
+                "\u6b63\u5728\u5bfc\u51fa\u7f51\u683c: " + link.Name));
             logger.Info("Exporting link: " + link.Name);
             // Iterate through each child and export its files
             logger.Info("Link " + link.Name + " has " + link.Children.Count + " children");
@@ -294,47 +347,416 @@ namespace SW2URDF.URDFExport
                 }
             }
 
-            // Create the mesh filenames. SolidWorks likes to use / but that will get messy in filenames so use _ instead
-            string linkName = link.Name.Replace('/', '_');
-            string meshFilename = package.MeshesDirectory + linkName;
-            string windowsMeshFileName = package.WindowsMeshesDirectory + linkName;
-            switch(meshFormat)
-            {
-                case MeshExportFormat.STL:
-                    meshFilename += ".STL";
-                    windowsMeshFileName += ".STL";
-                    break;
-
-                case MeshExportFormat.THREEDXML:
-                    meshFilename += ".3dxml";
-                    windowsMeshFileName += ".3dxml";
-                    break;
-
-                default:
-                    meshFilename += ".STL";
-                    windowsMeshFileName += ".STL";
-                    break;
-            }
+            MeshFileNames meshFiles = CreateLinkMeshFileNames(package, link, meshFormat);
             // Export STL
             if (exportSTL)
             {
+                Directory.CreateDirectory(Path.GetDirectoryName(meshFiles.WindowsVisualMeshFilename));
+                Directory.CreateDirectory(Path.GetDirectoryName(meshFiles.WindowsCollisionMeshFilename));
                 switch (meshFormat)
                 {
                     case MeshExportFormat.STL:
-                        SaveSTL(link, windowsMeshFileName);
+                        SaveSTL(link, meshFiles.WindowsVisualMeshFilename);
                         break;
 
                     case MeshExportFormat.THREEDXML:
-                        Save3dxml(link, windowsMeshFileName);
+                        Save3dxml(link, meshFiles.WindowsVisualMeshFilename);
                         break;
 
                     default:
-                        SaveSTL(link, windowsMeshFileName);
+                        SaveSTL(link, meshFiles.WindowsVisualMeshFilename);
                         break;
                 }
+                ExportCollisionMesh(link, meshFiles, meshFormat);
             }
-            link.Visual.Geometry.Mesh.Filename = meshFilename;
-            link.Collision.Geometry.Mesh.Filename = meshFilename;
+            link.Visual.Geometry.Mesh.Filename = meshFiles.VisualMeshFilename;
+            link.Collision.Geometry.Mesh.Filename = meshFiles.CollisionMeshFilename;
+        }
+
+        internal static void ApplyCollisionStrategyPrefix(Link link)
+        {
+            if (link == null)
+            {
+                return;
+            }
+
+            CollisionMeshStrategy strategy;
+            string cleanName = StripCollisionStrategyPrefix(link.Name, out strategy);
+            if (!String.Equals(cleanName, link.Name, StringComparison.Ordinal))
+            {
+                logger.Info(link.Name + ": collision strategy tag parsed as " + strategy +
+                    "; exported link name is " + cleanName);
+                link.Name = cleanName;
+                link.CollisionMeshStrategy = strategy;
+            }
+        }
+
+        internal static string StripCollisionStrategyPrefix(
+            string linkName,
+            out CollisionMeshStrategy strategy)
+        {
+            strategy = CollisionMeshStrategy.VisualMesh;
+            if (String.IsNullOrEmpty(linkName))
+            {
+                return linkName;
+            }
+
+            if (linkName.StartsWith("!acc_", StringComparison.OrdinalIgnoreCase) &&
+                linkName.Length > "!acc_".Length)
+            {
+                strategy = CollisionMeshStrategy.AccurateMesh;
+                return linkName.Substring("!acc_".Length);
+            }
+            if (linkName.StartsWith("!pri_", StringComparison.OrdinalIgnoreCase) &&
+                linkName.Length > "!pri_".Length)
+            {
+                strategy = CollisionMeshStrategy.Primitive;
+                return linkName.Substring("!pri_".Length);
+            }
+            if (linkName.StartsWith("!cxh_", StringComparison.OrdinalIgnoreCase) &&
+                linkName.Length > "!cxh_".Length)
+            {
+                strategy = CollisionMeshStrategy.ConvexHull;
+                return linkName.Substring("!cxh_".Length);
+            }
+
+            return linkName;
+        }
+
+        internal static MeshFileNames CreateLinkMeshFileNames(
+            URDFPackage package,
+            Link link,
+            MeshExportFormat meshFormat)
+        {
+            string linkName = link.Name.Replace('/', '_');
+            string extension = GetMeshFileExtension(meshFormat);
+            return new MeshFileNames
+            {
+                VisualMeshFilename = package.MeshesDirectory + "visual/" + linkName + extension,
+                WindowsVisualMeshFilename = Path.Combine(
+                    package.WindowsMeshesDirectory, "visual", linkName + extension),
+                CollisionMeshFilename = package.MeshesDirectory + "collision/" + linkName + extension,
+                WindowsCollisionMeshFilename = Path.Combine(
+                    package.WindowsMeshesDirectory, "collision", linkName + extension)
+            };
+        }
+
+        private static string GetMeshFileExtension(MeshExportFormat meshFormat)
+        {
+            switch (meshFormat)
+            {
+                case MeshExportFormat.THREEDXML:
+                    return ".3dxml";
+
+                case MeshExportFormat.STL:
+                default:
+                    return ".STL";
+            }
+        }
+
+        private void ExportCollisionMesh(
+            Link link,
+            MeshFileNames meshFiles,
+            MeshExportFormat meshFormat)
+        {
+            switch (link.CollisionMeshStrategy)
+            {
+                case CollisionMeshStrategy.Primitive:
+                    if (meshFormat == MeshExportFormat.STL &&
+                        TryWritePrimitiveCollisionMesh(link, meshFiles.WindowsCollisionMeshFilename))
+                    {
+                        return;
+                    }
+                    logger.Warn(link.Name + ": primitive collision mesh failed; falling back to visual mesh copy");
+                    break;
+
+                case CollisionMeshStrategy.ConvexHull:
+                    logger.Warn(link.Name + ": convex hull collision mesh is not implemented yet; " +
+                        "falling back to primitive box collision");
+                    if (meshFormat == MeshExportFormat.STL &&
+                        TryWritePrimitiveCollisionMesh(link, meshFiles.WindowsCollisionMeshFilename))
+                    {
+                        return;
+                    }
+                    logger.Warn(link.Name + ": convex hull fallback failed; falling back to visual mesh copy");
+                    break;
+
+                case CollisionMeshStrategy.AccurateMesh:
+                case CollisionMeshStrategy.VisualMesh:
+                default:
+                    break;
+            }
+
+            CopyVisualMeshToCollisionMesh(link, meshFiles);
+        }
+
+        private static void CopyVisualMeshToCollisionMesh(Link link, MeshFileNames meshFiles)
+        {
+            if (meshFiles.WindowsVisualMeshFilename == meshFiles.WindowsCollisionMeshFilename)
+            {
+                return;
+            }
+
+            if (!File.Exists(meshFiles.WindowsVisualMeshFilename))
+            {
+                logger.Warn(link.Name + ": visual mesh was not found, collision mesh copy skipped: " +
+                    meshFiles.WindowsVisualMeshFilename);
+                return;
+            }
+
+            File.Copy(meshFiles.WindowsVisualMeshFilename, meshFiles.WindowsCollisionMeshFilename, true);
+            logger.Info(link.Name + ": copied visual mesh to collision mesh " +
+                meshFiles.WindowsCollisionMeshFilename);
+        }
+
+        private bool TryWritePrimitiveCollisionMesh(Link link, string windowsCollisionMeshFilename)
+        {
+            try
+            {
+                LinkLocalBoundingBox box = CreateLinkLocalBoundingBox(link);
+                if (!box.IsUsable)
+                {
+                    logger.Warn(link.Name + ": could not create primitive collision box");
+                    return false;
+                }
+
+                WriteBoxPrimitiveStl(windowsCollisionMeshFilename, box);
+                logger.Info(link.Name + ": wrote primitive collision box " +
+                    windowsCollisionMeshFilename + " with dimensions " +
+                    box.Width + " x " + box.Depth + " x " + box.Height + " m");
+                return true;
+            }
+            catch (Exception e)
+            {
+                logger.Warn(link.Name + ": primitive collision mesh export failed: " + e.Message);
+                return false;
+            }
+        }
+
+        private LinkLocalBoundingBox CreateLinkLocalBoundingBox(Link link)
+        {
+            LinkLocalBoundingBox box = new LinkLocalBoundingBox();
+            if (link == null || link.SWComponents == null || link.SWComponents.Count == 0 ||
+                link.Joint == null || String.IsNullOrWhiteSpace(link.Joint.CoordinateSystemName))
+            {
+                return box;
+            }
+
+            MathTransform linkTransform = GetCoordinateSystemTransform(link.Joint.CoordinateSystemName);
+            if (linkTransform == null)
+            {
+                return box;
+            }
+
+            Matrix<double> globalToLink = MathOps.GetTransformation(linkTransform).Inverse();
+            foreach (Component2 comp in link.SWComponents)
+            {
+                if (comp == null)
+                {
+                    continue;
+                }
+
+                double[] componentBox = comp.GetBox(false, false);
+                IncludeTransformedBoxCorners(box, globalToLink, componentBox);
+            }
+
+            return box;
+        }
+
+        private static void IncludeTransformedBoxCorners(
+            LinkLocalBoundingBox targetBox,
+            Matrix<double> globalToLink,
+            double[] componentBox)
+        {
+            if (componentBox == null || componentBox.Length < 6)
+            {
+                return;
+            }
+
+            double x0 = componentBox[0];
+            double y0 = componentBox[1];
+            double z0 = componentBox[2];
+            double x1 = componentBox[3];
+            double y1 = componentBox[4];
+            double z1 = componentBox[5];
+
+            IncludeTransformedPoint(targetBox, globalToLink, x0, y0, z0);
+            IncludeTransformedPoint(targetBox, globalToLink, x0, y0, z1);
+            IncludeTransformedPoint(targetBox, globalToLink, x0, y1, z0);
+            IncludeTransformedPoint(targetBox, globalToLink, x0, y1, z1);
+            IncludeTransformedPoint(targetBox, globalToLink, x1, y0, z0);
+            IncludeTransformedPoint(targetBox, globalToLink, x1, y0, z1);
+            IncludeTransformedPoint(targetBox, globalToLink, x1, y1, z0);
+            IncludeTransformedPoint(targetBox, globalToLink, x1, y1, z1);
+        }
+
+        private static void IncludeTransformedPoint(
+            LinkLocalBoundingBox targetBox,
+            Matrix<double> transform,
+            double x,
+            double y,
+            double z)
+        {
+            targetBox.Include(
+                transform[0, 0] * x + transform[0, 1] * y + transform[0, 2] * z + transform[0, 3],
+                transform[1, 0] * x + transform[1, 1] * y + transform[1, 2] * z + transform[1, 3],
+                transform[2, 0] * x + transform[2, 1] * y + transform[2, 2] * z + transform[2, 3]);
+        }
+
+        internal static void WriteBoxPrimitiveStl(string filename, LinkLocalBoundingBox box)
+        {
+            if (box == null || !box.IsUsable)
+            {
+                throw new InvalidOperationException("Primitive collision box is invalid");
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(filename));
+            double[][] vertices = box.CreateCornerVertices();
+            int[][] triangles = new[]
+            {
+                new[] { 0, 2, 1 },
+                new[] { 0, 3, 2 },
+                new[] { 4, 5, 6 },
+                new[] { 4, 6, 7 },
+                new[] { 0, 1, 5 },
+                new[] { 0, 5, 4 },
+                new[] { 3, 6, 2 },
+                new[] { 3, 7, 6 },
+                new[] { 0, 4, 7 },
+                new[] { 0, 7, 3 },
+                new[] { 1, 2, 6 },
+                new[] { 1, 6, 5 }
+            };
+
+            using (BinaryWriter writer = new BinaryWriter(File.Open(filename, FileMode.Create, FileAccess.Write)))
+            {
+                byte[] header = new byte[80];
+                writer.Write(header);
+                writer.Write((uint)triangles.Length);
+                foreach (int[] triangle in triangles)
+                {
+                    WriteBinaryStlTriangle(
+                        writer,
+                        vertices[triangle[0]],
+                        vertices[triangle[1]],
+                        vertices[triangle[2]]);
+                }
+            }
+        }
+
+        private static void WriteBinaryStlTriangle(
+            BinaryWriter writer,
+            double[] p0,
+            double[] p1,
+            double[] p2)
+        {
+            double[] normal = CalculateTriangleNormal(p0, p1, p2);
+            WriteBinaryStlVector(writer, normal);
+            WriteBinaryStlVector(writer, p0);
+            WriteBinaryStlVector(writer, p1);
+            WriteBinaryStlVector(writer, p2);
+            writer.Write((ushort)0);
+        }
+
+        private static double[] CalculateTriangleNormal(double[] p0, double[] p1, double[] p2)
+        {
+            double ux = p1[0] - p0[0];
+            double uy = p1[1] - p0[1];
+            double uz = p1[2] - p0[2];
+            double vx = p2[0] - p0[0];
+            double vy = p2[1] - p0[1];
+            double vz = p2[2] - p0[2];
+
+            double nx = uy * vz - uz * vy;
+            double ny = uz * vx - ux * vz;
+            double nz = ux * vy - uy * vx;
+            double length = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+            if (length <= 0)
+            {
+                return new[] { 0.0, 0.0, 0.0 };
+            }
+
+            return new[] { nx / length, ny / length, nz / length };
+        }
+
+        private static void WriteBinaryStlVector(BinaryWriter writer, double[] point)
+        {
+            writer.Write((float)point[0]);
+            writer.Write((float)point[1]);
+            writer.Write((float)point[2]);
+        }
+
+        internal class LinkLocalBoundingBox
+        {
+            private const double MinimumDimension = 1e-9;
+            private bool hasPoint;
+
+            public double MinX { get; private set; }
+            public double MinY { get; private set; }
+            public double MinZ { get; private set; }
+            public double MaxX { get; private set; }
+            public double MaxY { get; private set; }
+            public double MaxZ { get; private set; }
+
+            public double Width => MaxX - MinX;
+            public double Depth => MaxY - MinY;
+            public double Height => MaxZ - MinZ;
+
+            public bool IsUsable =>
+                hasPoint &&
+                IsFinite(MinX) &&
+                IsFinite(MinY) &&
+                IsFinite(MinZ) &&
+                IsFinite(MaxX) &&
+                IsFinite(MaxY) &&
+                IsFinite(MaxZ) &&
+                Width > MinimumDimension &&
+                Depth > MinimumDimension &&
+                Height > MinimumDimension;
+
+            public void Include(double x, double y, double z)
+            {
+                if (!IsFinite(x) || !IsFinite(y) || !IsFinite(z))
+                {
+                    return;
+                }
+
+                if (!hasPoint)
+                {
+                    MinX = MaxX = x;
+                    MinY = MaxY = y;
+                    MinZ = MaxZ = z;
+                    hasPoint = true;
+                    return;
+                }
+
+                MinX = Math.Min(MinX, x);
+                MinY = Math.Min(MinY, y);
+                MinZ = Math.Min(MinZ, z);
+                MaxX = Math.Max(MaxX, x);
+                MaxY = Math.Max(MaxY, y);
+                MaxZ = Math.Max(MaxZ, z);
+            }
+
+            public double[][] CreateCornerVertices()
+            {
+                return new[]
+                {
+                    new[] { MinX, MinY, MinZ },
+                    new[] { MaxX, MinY, MinZ },
+                    new[] { MaxX, MaxY, MinZ },
+                    new[] { MinX, MaxY, MinZ },
+                    new[] { MinX, MinY, MaxZ },
+                    new[] { MaxX, MinY, MaxZ },
+                    new[] { MaxX, MaxY, MaxZ },
+                    new[] { MinX, MaxY, MaxZ }
+                };
+            }
+
+            private static bool IsFinite(double value)
+            {
+                return !Double.IsNaN(value) && !Double.IsInfinity(value);
+            }
         }
 
         private void Save3dxml(Link link, string windowsMeshFilename)
@@ -355,7 +777,7 @@ namespace SW2URDF.URDFExport
 
             int saveOptions = (int)swSaveAsOptions_e.swSaveAsOptions_Silent |
                 (int)swSaveAsOptions_e.swSaveAsOptions_Copy;
-            SetLinkSpecificSTLPreferences(names["geo"], link.STLQualityFine, ActiveDoc);
+            SetLinkSpecificSTLPreferences(names["geo"], link, ActiveDoc);
 
             logger.Info("Saving 3dxml to " + windowsMeshFilename);
 
@@ -427,45 +849,63 @@ namespace SW2URDF.URDFExport
 
         private bool SaveSTL(Link link, string windowsMeshFilename)
         {
-            int errors = 0;
-            int warnings = 0;
-
-            string coordsysName = link.Joint.CoordinateSystemName;
-
-            logger.Info(link.Name + ": Exporting STL with coordinate frame " + coordsysName);
-
-            Dictionary<string, string> names = GetComponentRefGeoNames(coordsysName);
-            ModelDoc2 ActiveDoc = ActiveSWModel;
-
-            logger.Info(link.Name + ": Reference geometry name " + names["component"]);
-
-            CommonSwOperations.ShowComponents(ActiveSWModel, link.SWComponents);
-
-            int saveOptions = (int)swSaveAsOptions_e.swSaveAsOptions_Silent |
-                (int)swSaveAsOptions_e.swSaveAsOptions_Copy;
-            SetLinkSpecificSTLPreferences(names["geo"], link.STLQualityFine, ActiveDoc);
-
-            logger.Info("Saving STL to " + windowsMeshFilename);
-            ActiveDoc.Extension.SaveAs(windowsMeshFilename,
-                (int)swSaveAsVersion_e.swSaveAsCurrentVersion, saveOptions, null, ref errors, ref warnings);
-            if (errors + warnings != 0)
+            using (OperationHeartbeat.Start(logger, "STL export for link " + link.Name))
             {
-                logger.Warn("Exporting STL for link " + link.Name + " failed with error " + errors + 
-                    " or warnings " + warnings);
-            }
-            CommonSwOperations.HideComponents(ActiveSWModel, link.SWComponents);
+                int errors = 0;
+                int warnings = 0;
 
-            bool success = CorrectSTLMesh(windowsMeshFilename);
-            if (!success)
-            {
-                logger.Warn("There was an issue exporting the STL for " + link.Name + ". It " +
-                    "may not be readable by CAD programs that aren't SolidWorks");
+                UpdateProgressTitle("Preparing STL: " + link.Name,
+                    "\u6b63\u5728\u51c6\u5907 STL: " + link.Name);
+
+                string coordsysName = link.Joint.CoordinateSystemName;
+
+                logger.Info(link.Name + ": Exporting STL with coordinate frame " + coordsysName);
+
+                Dictionary<string, string> names = GetComponentRefGeoNames(coordsysName);
+                ModelDoc2 ActiveDoc = ActiveSWModel;
+
+                logger.Info(link.Name + ": Reference geometry name " + names["component"]);
+
+                CommonSwOperations.ShowComponents(ActiveSWModel, link.SWComponents);
+
+                int saveOptions = (int)swSaveAsOptions_e.swSaveAsOptions_Silent |
+                    (int)swSaveAsOptions_e.swSaveAsOptions_Copy;
+                StlMeshSettings meshSettings =
+                    SetLinkSpecificSTLPreferences(names["geo"], link, ActiveDoc);
+                int estimatedTriangleCount = LogEstimatedBinaryStlSize(link, meshSettings);
+
+                logger.Info("Saving STL to " + windowsMeshFilename);
+                UpdateProgressTitle("SolidWorks is saving STL: " + link.Name,
+                    "SolidWorks \u6b63\u5728\u4fdd\u5b58 STL: " + link.Name);
+                ActiveDoc.Extension.SaveAs(windowsMeshFilename,
+                    (int)swSaveAsVersion_e.swSaveAsCurrentVersion, saveOptions, null,
+                    ref errors, ref warnings);
+                if (errors + warnings != 0)
+                {
+                    logger.Warn("Exporting STL for link " + link.Name + " failed with error " +
+                        errors + " or warnings " + warnings);
+                }
+                CommonSwOperations.HideComponents(ActiveSWModel, link.SWComponents);
+
+                UpdateProgressTitle("Finalizing STL: " + link.Name,
+                    "\u6b63\u5728\u6574\u7406 STL: " + link.Name);
+                bool success = CorrectSTLMesh(windowsMeshFilename);
+                LogActualBinaryStlSize(link, windowsMeshFilename, estimatedTriangleCount);
+                if (!success)
+                {
+                    logger.Warn("There was an issue exporting the STL for " + link.Name + ". It " +
+                        "may not be readable by CAD programs that aren't SolidWorks");
+                }
+                return success;
             }
-            return success;
         }
 
         public void ExportLink(bool zIsUp)
         {
+            logger.Info("Beginning part export for package " + PackageName +
+                ", save path " + SavePath +
+                ", z is up " + zIsUp +
+                ", started " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
             CreateBaseRefOrigin(zIsUp);
             MathTransform coordSysTransform =
                 ActiveSWModel.Extension.GetCoordinateSystemTransformByName("Origin_global");
@@ -474,6 +914,9 @@ namespace SW2URDF.URDFExport
             LocalizeLink(URDFRobot.BaseLink, GlobalTransform);
 
             //Creating package directories
+            PackageName = URDFPackage.SanitizePackageName(PackageName);
+            URDFRobot.Name = PackageName;
+            URDFRobot.BaseLink.Name = PackageName;
             URDFPackage package = new URDFPackage(PackageName, SavePath);
             package.CreateDirectories();
             string meshFileName = package.MeshesDirectory + URDFRobot.BaseLink.Name + ".STL";
@@ -482,6 +925,7 @@ namespace SW2URDF.URDFExport
             string windowsManifestFileName = package.WindowsPackageDirectory + "manifest.xml";
 
             //Creating manifest file
+            logger.Info("Creating part manifest at " + windowsManifestFileName);
             PackageXMLWriter manifestWriter = new PackageXMLWriter(windowsManifestFileName);
             PackageXML Manifest = new PackageXML(URDFRobot.Name);
             Manifest.WriteElement(manifestWriter);
@@ -489,14 +933,19 @@ namespace SW2URDF.URDFExport
             //Customizing STL preferences to how I want them
             SaveUserPreferences();
             SetSTLExportPreferences();
-            SetLinkSpecificSTLPreferences("", URDFRobot.BaseLink.STLQualityFine, ActiveSWModel);
+            SetLinkSpecificSTLPreferences("", URDFRobot.BaseLink, ActiveSWModel);
             int errors = 0;
             int warnings = 0;
 
             //Saving part as STL mesh
 
+            logger.Info("Saving part STL to " + windowsMeshFileName);
             ActiveSWModel.Extension.SaveAs(windowsMeshFileName, (int)swSaveAsVersion_e.swSaveAsCurrentVersion,
                 (int)swSaveAsOptions_e.swSaveAsOptions_Silent, null, ref errors, ref warnings);
+            if (errors + warnings != 0)
+            {
+                logger.Warn("Exporting part STL failed with error " + errors + " or warnings " + warnings);
+            }
             URDFRobot.BaseLink.Visual.Geometry.Mesh.Filename = meshFileName;
             URDFRobot.BaseLink.Collision.Geometry.Mesh.Filename = meshFileName;
 
@@ -510,11 +959,13 @@ namespace SW2URDF.URDFExport
             }
 
             //Writing URDF to file
+            logger.Info("Writing part URDF file to " + windowsURDFFileName);
             URDFWriter uWriter = new URDFWriter(windowsURDFFileName);
             //mRobot.addLink(mLink);
             URDFRobot.WriteURDF(uWriter.writer);
 
             ResetUserPreferences();
+            logger.Info("Part export completed successfully for package " + PackageName);
         }
 
         //Writes an empty header to the STL to get rid of the BS that SolidWorks adds to a binary STL file
@@ -523,8 +974,25 @@ namespace SW2URDF.URDFExport
             logger.Info("Removing SW header in STL file");
             try
             {
-                using (FileStream fileStream = new FileStream(filename, FileMode.Open, FileAccess.Write, FileShare.None))
+                using (FileStream fileStream = OpenFileWithRetry(filename, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
                 {
+                    if (fileStream.Length < 84)
+                    {
+                        logger.Warn("STL " + filename + " is too small to contain triangle data");
+                        return false;
+                    }
+
+                    fileStream.Seek(80, SeekOrigin.Begin);
+                    byte[] triangleCountBytes = new byte[4];
+                    fileStream.Read(triangleCountBytes, 0, triangleCountBytes.Length);
+                    uint triangleCount = BitConverter.ToUInt32(triangleCountBytes, 0);
+                    if (triangleCount == 0)
+                    {
+                        logger.Warn("STL " + filename + " contains zero triangles");
+                        return false;
+                    }
+
+                    fileStream.Seek(0, SeekOrigin.Begin);
                     byte[] emptyHeader = new byte[80];
                     fileStream.Write(emptyHeader, 0, emptyHeader.Length);
                 }
@@ -538,11 +1006,40 @@ namespace SW2URDF.URDFExport
             return true;
         }
 
+        private static FileStream OpenFileWithRetry(string filename, FileMode mode, FileAccess access, FileShare share)
+        {
+            const int timeoutMilliseconds = 15000;
+            const int sleepMilliseconds = 250;
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+            Exception lastException = null;
+
+            while (DateTime.UtcNow <= deadline)
+            {
+                try
+                {
+                    return new FileStream(filename, mode, access, share);
+                }
+                catch (IOException e)
+                {
+                    lastException = e;
+                }
+                catch (UnauthorizedAccessException e)
+                {
+                    lastException = e;
+                }
+
+                Thread.Sleep(sleepMilliseconds);
+                System.Windows.Forms.Application.DoEvents();
+            }
+
+            throw new IOException("Timed out waiting for file access: " + filename, lastException);
+        }
+
         #endregion Export Methods
 
         private static void CopyLogFile(URDFPackage package)
         {
-            string destination = package.WindowsPackageDirectory + "export.log";
+            string destination = package.WindowsExportLogFile;
             string log_filename = Logger.GetFileName();
 
             if (log_filename != null)
@@ -570,6 +1067,8 @@ namespace SW2URDF.URDFExport
             mTranslateToPositive = iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLDontTranslateToPositive);
             mSTLUnits = iSwApp.GetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swExportStlUnits);
             mSTLQuality = iSwApp.GetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality);
+            mSTLDeviation = iSwApp.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation);
+            mSTLAngleTolerance = iSwApp.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance);
             mshowInfo = iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLShowInfoOnSave);
             mSTLPreview = iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLPreview);
             mHideTransitionSpeed = iSwApp.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent);
@@ -598,6 +1097,8 @@ namespace SW2URDF.URDFExport
             iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLDontTranslateToPositive, mTranslateToPositive);
             iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swExportStlUnits, mSTLUnits);
             iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, mSTLQuality);
+            iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation, mSTLDeviation);
+            iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance, mSTLAngleTolerance);
             iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLShowInfoOnSave, mshowInfo);
             iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLPreview, mSTLPreview);
             iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent, mHideTransitionSpeed);
@@ -605,11 +1106,21 @@ namespace SW2URDF.URDFExport
         }
 
         //If the user selected something specific for a particular link, that is handled here.
-        private void SetLinkSpecificSTLPreferences(string CoordinateSystemName, bool qualityFine, ModelDoc2 doc)
+        private StlMeshSettings SetLinkSpecificSTLPreferences(string CoordinateSystemName, Link link, ModelDoc2 doc)
         {
             doc.Extension.SetUserPreferenceString((int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem,
                 (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified, CoordinateSystemName);
-            if (qualityFine)
+            StlMeshSettings settings = CreateStlMeshSettings(link.STLQualityFine, link.MeshReductionRatio);
+            if (settings.UseCustom)
+            {
+                iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality,
+                    (int)swSTLQuality_e.swSTLQuality_Custom);
+                iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation,
+                    settings.Deviation);
+                iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance,
+                    settings.AngleTolerance);
+            }
+            else if (link.STLQualityFine)
             {
                 iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, (int)swSTLQuality_e.swSTLQuality_Fine);
             }
@@ -617,6 +1128,205 @@ namespace SW2URDF.URDFExport
             {
                 iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, (int)swSTLQuality_e.swSTLQuality_Coarse);
             }
+
+            logger.Info(string.Format(
+                "{0}: STL mesh settings quality={1}, reduction={2:0.00}, custom={3}, deviation={4:G5} m, angle={5:G5} rad",
+                link.Name,
+                settings.QualityLabel,
+                settings.ReductionRatio,
+                settings.UseCustom,
+                settings.Deviation,
+                settings.AngleTolerance));
+            return settings;
+        }
+
+        internal static StlMeshSettings CreateStlMeshSettings(bool qualityFine, double reductionRatio)
+        {
+            reductionRatio = Math.Max(0.0, Math.Min(1.0, reductionRatio));
+            double estimateRatio = reductionRatio > 0 ? reductionRatio : (qualityFine ? 0.25 : 0.75);
+            double curvedRatio = estimateRatio * estimateRatio;
+            return new StlMeshSettings
+            {
+                UseCustom = reductionRatio > 0,
+                QualityLabel = reductionRatio > 0 ? "custom" : (qualityFine ? "fine" : "coarse"),
+                ReductionRatio = reductionRatio,
+                Deviation = MinimumCustomStlDeviation +
+                    (MaximumCustomStlDeviation - MinimumCustomStlDeviation) * curvedRatio,
+                AngleTolerance = MinimumCustomStlAngleTolerance +
+                    (MaximumCustomStlAngleTolerance - MinimumCustomStlAngleTolerance) * estimateRatio
+            };
+        }
+
+        private int LogEstimatedBinaryStlSize(Link link, StlMeshSettings settings)
+        {
+            try
+            {
+                int triangleCount = EstimateStlTriangleCount(link, settings);
+                if (triangleCount <= 0)
+                {
+                    logger.Info(link.Name + ": STL size estimate unavailable because tessellation returned no facets");
+                    return 0;
+                }
+
+                long estimatedBytes = EstimateBinaryStlSizeBytes(triangleCount);
+                logger.Info(string.Format(
+                    "{0}: SolidWorks API rough STL estimate {1} ({2} triangles) before export; " +
+                    "the final SaveAs tessellation can differ",
+                    link.Name, FormatByteSize(estimatedBytes), triangleCount));
+                return triangleCount;
+            }
+            catch (Exception e)
+            {
+                logger.Warn("Could not estimate STL size for link " + link.Name, e);
+                return 0;
+            }
+        }
+
+        private int EstimateStlTriangleCount(Link link, StlMeshSettings settings)
+        {
+            int totalFacetCount = 0;
+            List<Body2> bodies = GetBodies(link.SWComponents);
+            foreach (Body2 body in bodies)
+            {
+                Tessellation tessellation = body.GetTessellation(null) as Tessellation;
+                if (tessellation == null)
+                {
+                    continue;
+                }
+
+                tessellation.SurfacePlaneTolerance = settings.Deviation;
+                tessellation.SurfacePlaneAngleTolerance = settings.AngleTolerance;
+                tessellation.CurveChordTolerance = settings.Deviation;
+                tessellation.CurveChordAngleTolerance = settings.AngleTolerance;
+                tessellation.ImprovedQuality = !settings.UseCustom;
+                if (tessellation.Tessellate())
+                {
+                    totalFacetCount += tessellation.GetFacetCount();
+                }
+            }
+
+            return totalFacetCount;
+        }
+
+        private void LogActualBinaryStlSize(Link link, string filename, int estimatedTriangleCount)
+        {
+            try
+            {
+                FileInfo fileInfo = new FileInfo(filename);
+                uint triangleCount = ReadBinaryStlTriangleCount(filename);
+                logger.Info(string.Format("{0}: Actual binary STL size {1} ({2} triangles) at {3}",
+                    link.Name, FormatByteSize(fileInfo.Length), triangleCount, filename));
+
+                if (estimatedTriangleCount > 0)
+                {
+                    double errorPercent = CalculateEstimateErrorPercent(estimatedTriangleCount, triangleCount);
+                    string comparison = string.Format(
+                        "{0}: Rough STL estimate error {1:+0.##;-0.##;0}% " +
+                        "(estimated {2} triangles, actual {3} triangles)",
+                        link.Name, errorPercent, estimatedTriangleCount, triangleCount);
+                    if (Math.Abs(errorPercent) > 50.0)
+                    {
+                        logger.Warn(comparison);
+                    }
+                    else
+                    {
+                        logger.Info(comparison);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                logger.Warn("Could not read exported STL size for link " + link.Name, e);
+            }
+        }
+
+        private static uint ReadBinaryStlTriangleCount(string filename)
+        {
+            using (FileStream fileStream = OpenFileWithRetry(filename, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                if (fileStream.Length < 84)
+                {
+                    return 0;
+                }
+
+                fileStream.Seek(80, SeekOrigin.Begin);
+                byte[] triangleCountBytes = new byte[4];
+                fileStream.Read(triangleCountBytes, 0, triangleCountBytes.Length);
+                return BitConverter.ToUInt32(triangleCountBytes, 0);
+            }
+        }
+
+        internal static long EstimateBinaryStlSizeBytes(int triangleCount)
+        {
+            return triangleCount > 0 ? 84L + 50L * triangleCount : 0;
+        }
+
+        internal static double CalculateEstimateErrorPercent(long estimatedTriangleCount, long actualTriangleCount)
+        {
+            if (actualTriangleCount <= 0)
+            {
+                return 0.0;
+            }
+
+            return (estimatedTriangleCount - actualTriangleCount) * 100.0 / actualTriangleCount;
+        }
+
+        private static string FormatByteSize(long bytes)
+        {
+            const double scale = 1024.0;
+            if (bytes < scale)
+            {
+                return bytes + " B";
+            }
+
+            double kib = bytes / scale;
+            if (kib < scale)
+            {
+                return kib.ToString("0.##") + " KiB";
+            }
+
+            double mib = kib / scale;
+            return mib.ToString("0.##") + " MiB";
+        }
+
+        private void UpdateProgressTitle(string english, string chinese)
+        {
+            string title = ChineseUiText.Translate(english, chinese);
+            exportStageNumber++;
+            string elapsed = exportStopwatch == null
+                ? "not available"
+                : OperationHeartbeat.FormatElapsed(exportStopwatch.Elapsed);
+            logger.Info("Export stage " + exportStageNumber + ": " + title +
+                "; elapsed " + elapsed);
+
+            if (progressBar != null)
+            {
+                progressBar.UpdateTitle(title);
+            }
+        }
+
+        internal class StlMeshSettings
+        {
+            public bool UseCustom { get; set; }
+
+            public string QualityLabel { get; set; }
+
+            public double ReductionRatio { get; set; }
+
+            public double Deviation { get; set; }
+
+            public double AngleTolerance { get; set; }
+        }
+
+        internal class MeshFileNames
+        {
+            public string VisualMeshFilename { get; set; }
+
+            public string WindowsVisualMeshFilename { get; set; }
+
+            public string CollisionMeshFilename { get; set; }
+
+            public string WindowsCollisionMeshFilename { get; set; }
         }
 
         #endregion STL Preference shuffling

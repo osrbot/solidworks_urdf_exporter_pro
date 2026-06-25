@@ -146,7 +146,9 @@ namespace SW2URDF.URDFExport
             #region Create and instantiate components of PM page
 
             //Set the variables for the page
-            string PageTitle = "URDF Exporter";
+            string PageTitle = ChineseUiText.Translate(
+                "URDF Exporter",
+                "URDF \u5bfc\u51fa\u5668");
             long options = (int)swPropertyManagerPageOptions_e.swPropertyManagerOptions_OkayButton +
                 (int)swPropertyManagerPageOptions_e.swPropertyManagerOptions_CancelButton +
                 (int)swPropertyManagerPageOptions_e.swPropertyManagerOptions_HandleKeystrokes;
@@ -165,8 +167,9 @@ namespace SW2URDF.URDFExport
             {
                 //If the page is not created
                 logger.Error("An error occurred while attempting to create the PropertyManager Page\nError: " + longerrors);
-                MessageBox.Show("There was a problem setting up the property manager: " +
-                    "\nEmail your maintainer with the log file found at " + Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem setting up the property manager.",
+                    "\u521b\u5efa\u5c5e\u6027\u7ba1\u7406\u5668\u65f6\u53d1\u751f\u9519\u8bef\u3002");
             }
 
             #endregion Create and instantiate components of PM page
@@ -213,7 +216,12 @@ namespace SW2URDF.URDFExport
 
                 //This call can be a real sink of processing time if the model is large.
                 //Unfortunately there isn't a way around it I believe.
-                int result = assy.ResolveAllLightWeightComponents(true);
+                int result;
+                using (OperationHeartbeat.Start(logger,
+                    "Resolving all lightweight SolidWorks components"))
+                {
+                    result = assy.ResolveAllLightWeightComponents(true);
+                }
 
                 // If the user confirms to resolve the components and they are successfully
                 // resolved we can continue
@@ -226,8 +234,12 @@ namespace SW2URDF.URDFExport
                         string componentNames = string.Join("\r\n", unresolvedComponents);
                         logger.Error("SolidWorks told us the resolve succeeded, but ModelDocs" +
                             " could not be obtained for: " + componentNames);
-                        MessageBox.Show("Model Documents could not be obtained for the following" +
-                            " components. Plesae resolve them:\r\n" + componentNames);
+                        MessageBox.Show(
+                            ChineseUiText.Translate(
+                                "Model documents could not be obtained for the following components. " +
+                                    "Please resolve them:\r\n",
+                                "\u65e0\u6cd5\u83b7\u53d6\u4ee5\u4e0b\u7ec4\u4ef6\u7684\u6a21\u578b\u6587\u6863\uff0c\u8bf7\u5148\u89e3\u6790\u8fd9\u4e9b\u7ec4\u4ef6\uff1a\r\n") +
+                            componentNames);
                         return;
                     }
 
@@ -248,16 +260,22 @@ namespace SW2URDF.URDFExport
                     result == (int)swComponentResolveStatus_e.swResolveNotPerformed)
                 {
                     logger.Warn("Resolving components failed. Warning user to do so on their own");
-                    MessageBox.Show("Resolving components failed. In order to export to URDF, " +
-                        " this tool needs all components to be resolved. Try resolving " +
-                        "lightweight components manually before attempting to export again");
+                    MessageBox.Show(
+                        ChineseUiText.Translate(
+                            "Resolving components failed. All components must be resolved before " +
+                                "exporting to URDF. Resolve lightweight components manually and try again.",
+                            "\u7ec4\u4ef6\u89e3\u6790\u5931\u8d25\u3002\u5bfc\u51fa URDF \u524d\u5fc5\u987b\u89e3\u6790\u6240\u6709\u7ec4\u4ef6\u3002" +
+                                "\u8bf7\u624b\u52a8\u89e3\u6790\u8f7b\u91cf\u5316\u7ec4\u4ef6\u540e\u91cd\u8bd5\u3002"));
                 }
                 else if (result == (int)swComponentResolveStatus_e.swResolveAbortedByUser)
                 {
                     logger.Warn("Components were not resolved by user");
-                    MessageBox.Show("In order to export to URDF, this tool needs all " +
-                        "components to be resolved. You can resolve them manually or try " +
-                        "exporting again");
+                    MessageBox.Show(
+                        ChineseUiText.Translate(
+                            "All components must be resolved before exporting to URDF. " +
+                                "Resolve them manually or try exporting again.",
+                            "\u5bfc\u51fa URDF \u524d\u5fc5\u987b\u89e3\u6790\u6240\u6709\u7ec4\u4ef6\u3002" +
+                                "\u8bf7\u624b\u52a8\u89e3\u6790\uff0c\u6216\u91cd\u65b0\u5c1d\u8bd5\u5bfc\u51fa\u3002"));
                 }
             }
         }
@@ -272,9 +290,13 @@ namespace SW2URDF.URDFExport
         {
             if (!e.Success)
             {
-                MessageBox.Show("Merging the loaded CSV configuration with the assembly's configuration " +
-                    "failed. Check your CSV file. If you continue to run into errors, delete the " +
-                    "configuration in the assembly and load a proper CSV.");
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "Merging the loaded CSV configuration with the assembly configuration failed. " +
+                            "Check the CSV file. If the error persists, delete the assembly configuration " +
+                            "and load a valid CSV.",
+                        "\u5408\u5e76 CSV \u914d\u7f6e\u4e0e\u88c5\u914d\u4f53\u914d\u7f6e\u5931\u8d25\u3002\u8bf7\u68c0\u67e5 CSV \u6587\u4ef6\u3002" +
+                            "\u5982\u679c\u9519\u8bef\u6301\u7eed\uff0c\u8bf7\u5220\u9664\u88c5\u914d\u4f53\u4e2d\u7684\u914d\u7f6e\u540e\u91cd\u65b0\u52a0\u8f7d\u6709\u6548 CSV\u3002"));
                 return;
             }
 
@@ -294,7 +316,9 @@ namespace SW2URDF.URDFExport
             PMComputeVisualCollision.Checked = !e.UsedCSVVisualCollision;
             PMComputeJointKinematics.Checked = !e.UsedCSVJointKinematics;
             PMComputeJointLimits.Checked = !e.UsedCSVJointOther;
-            PMLabelCSVFilename.Caption = "Filename: " + e.CSVFilename;
+            PMLabelCSVFilename.Caption = ChineseUiText.Translate(
+                "Filename: ",
+                "\u6587\u4ef6\u540d\uff1a") + e.CSVFilename;
 
             // Make the controls visible, but only enable them if values have been loaded from the CSV
             // otherwise they do need to be computed.
@@ -333,8 +357,15 @@ namespace SW2URDF.URDFExport
             {
                 logger.Warn("Loading a configuration with an incomplete export");
                 if (MessageBox.Show(
-                    "This model has not been fully exported and saved. Merging may result in an incomplete URDF, " +
-                    "would you like to continue?", "Continue with incomplete export?", MessageBoxButtons.YesNo) == 
+                    ChineseUiText.Translate(
+                        "This model has not been fully exported and saved. Merging may result in an " +
+                            "incomplete URDF. Do you want to continue?",
+                        "\u6b64\u6a21\u578b\u5c1a\u672a\u5b8c\u6574\u5bfc\u51fa\u5e76\u4fdd\u5b58\uff0c\u5408\u5e76\u540e\u53ef\u80fd\u4ea7\u751f\u4e0d\u5b8c\u6574\u7684 URDF\u3002" +
+                            "\u662f\u5426\u7ee7\u7eed\uff1f"),
+                    ChineseUiText.Translate(
+                        "Continue with incomplete export?",
+                        "\u7ee7\u7eed\u4e0d\u5b8c\u6574\u7684\u5bfc\u51fa\uff1f"),
+                    MessageBoxButtons.YesNo) ==
                         DialogResult.No) {
                     return;
                 }
@@ -342,7 +373,9 @@ namespace SW2URDF.URDFExport
 
             OpenFileDialog loadFileDialog = new OpenFileDialog
             {
-                Filter = "CSV (.csv)|*.csv|All files (*.*)|*.*",
+                Filter = ChineseUiText.Translate(
+                    "CSV (.csv)|*.csv|All files (*.*)|*.*",
+                    "CSV (.csv)|*.csv|\u6240\u6709\u6587\u4ef6 (*.*)|*.*"),
                 Multiselect = false,
                 ValidateNames = true,
                 CheckPathExists = true
@@ -401,8 +434,10 @@ namespace SW2URDF.URDFExport
             catch (Exception e)
             {
                 logger.Error("Exception caught handling button press " + Id, e);
-                MessageBox.Show("There was a problem with the configuration property manager: \n\"" +
-                    e.Message + "\"\nEmail your maintainer with the log file found at " + Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem with the configuration property manager.",
+                    "\u914d\u7f6e\u5c5e\u6027\u7ba1\u7406\u5668\u53d1\u751f\u9519\u8bef\u3002",
+                    e);
             }
         }
 
@@ -427,8 +462,10 @@ namespace SW2URDF.URDFExport
             catch (Exception e)
             {
                 logger.Error("Exception caught on close ", e);
-                MessageBox.Show("There was a problem closing the property manager: \n\"" +
-                    e.Message + "\"\nEmail your maintainer with the log file found at " + Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem closing the property manager.",
+                    "\u5173\u95ed\u5c5e\u6027\u7ba1\u7406\u5668\u65f6\u53d1\u751f\u9519\u8bef\u3002",
+                    e);
             }
         }
 
@@ -516,9 +553,10 @@ namespace SW2URDF.URDFExport
             catch (Exception ex)
             {
                 logger.Error("Exception caught on tree view AfterSelect ", ex);
-                MessageBox.Show("There was a problem with the property manager: \n\"" +
-                    ex.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem with the property manager.",
+                    "\u5c5e\u6027\u7ba1\u7406\u5668\u53d1\u751f\u9519\u8bef\u3002",
+                    ex);
             }
         }
 
@@ -554,9 +592,10 @@ namespace SW2URDF.URDFExport
             catch (Exception ex)
             {
                 logger.Error("Exception caught on tree view add child ", ex);
-                MessageBox.Show("There was a problem with the property manager: \n\"" +
-                    ex.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem with the property manager.",
+                    "\u5c5e\u6027\u7ba1\u7406\u5668\u53d1\u751f\u9519\u8bef\u3002",
+                    ex);
             }
         }
 
@@ -571,9 +610,10 @@ namespace SW2URDF.URDFExport
             catch (Exception ex)
             {
                 logger.Error("Exception caught on tree view remove child ", ex);
-                MessageBox.Show("There was a problem with the property manager: \n\"" +
-                    ex.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem with the property manager.",
+                    "\u5c5e\u6027\u7ba1\u7406\u5668\u53d1\u751f\u9519\u8bef\u3002",
+                    ex);
             }
         }
 
@@ -592,9 +632,10 @@ namespace SW2URDF.URDFExport
             catch (Exception ex)
             {
                 logger.Error("Exception caught on tree view rename child ", ex);
-                MessageBox.Show("There was a problem with the property manager: \n\"" +
-                    ex.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem with the property manager.",
+                    "\u5c5e\u6027\u7ba1\u7406\u5668\u53d1\u751f\u9519\u8bef\u3002",
+                    ex);
             }
         }
 
@@ -607,9 +648,10 @@ namespace SW2URDF.URDFExport
             catch (Exception ex)
             {
                 logger.Error("Exception caught on tree view Drag ", ex);
-                MessageBox.Show("There was a problem with the property manager: \n\"" +
-                    ex.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem with the property manager.",
+                    "\u5c5e\u6027\u7ba1\u7406\u5668\u53d1\u751f\u9519\u8bef\u3002",
+                    ex);
             }
         }
 
@@ -627,9 +669,10 @@ namespace SW2URDF.URDFExport
             catch (Exception ex)
             {
                 logger.Error("Exception caught on tree view Drag Over ", ex);
-                MessageBox.Show("There was a problem with the property manager: \n\"" +
-                    ex.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem with the property manager.",
+                    "\u5c5e\u6027\u7ba1\u7406\u5668\u53d1\u751f\u9519\u8bef\u3002",
+                    ex);
             }
         }
 
@@ -647,9 +690,10 @@ namespace SW2URDF.URDFExport
             catch (Exception ex)
             {
                 logger.Error("Exception caught on tree view DragEnter ", ex);
-                MessageBox.Show("There was a problem with the property manager: \n\"" +
-                    ex.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem with the property manager.",
+                    "\u5c5e\u6027\u7ba1\u7406\u5668\u53d1\u751f\u9519\u8bef\u3002",
+                    ex);
             }
         }
 
@@ -686,13 +730,30 @@ namespace SW2URDF.URDFExport
             catch (Exception ex)
             {
                 logger.Error("Exception caught on tree view Drag Drop ", ex);
-                MessageBox.Show("There was a problem with the property manager: \n\"" +
-                    ex.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                ShowPropertyManagerError(
+                    "There was a problem with the property manager.",
+                    "\u5c5e\u6027\u7ba1\u7406\u5668\u53d1\u751f\u9519\u8bef\u3002",
+                    ex);
             }
         }
 
         #endregion TreeView handler methods
+
+        private static void ShowPropertyManagerError(
+            string englishMessage,
+            string chineseMessage,
+            Exception exception = null)
+        {
+            string detail = exception == null ? "" : "\r\n\"" + exception.Message + "\"";
+            string logFileMessage = ChineseUiText.Translate(
+                "\r\nEmail your maintainer with the log file found at ",
+                "\r\n\u8bf7\u5c06\u4ee5\u4e0b\u65e5\u5fd7\u6587\u4ef6\u53d1\u9001\u7ed9\u7ef4\u62a4\u4eba\u5458\uff1a");
+            MessageBox.Show(
+                ChineseUiText.Translate(englishMessage, chineseMessage) +
+                detail +
+                logFileMessage +
+                Logger.GetFileName());
+        }
 
         //A method that sets up the Property Manager Page
         private void SetupPropertyManagerPage(ref string caption, ref string tip,
@@ -700,14 +761,16 @@ namespace SW2URDF.URDFExport
         {
             //Begin adding the controls to the page
             //Create the group box
-            caption = "Configure and Organize Links";
+            caption = ChineseUiText.Translate(
+                "Configure and Organize Links",
+                "\u914d\u7f6e\u548c\u7ec4\u7ec7 Link");
             options = (int)swAddGroupBoxOptions_e.swGroupBoxOptions_Visible +
                 (int)swAddGroupBoxOptions_e.swGroupBoxOptions_Expanded;
             PMGroup = (PropertyManagerPageGroup)PMPage.AddGroupBox(GroupID, caption, (int)options);
 
             //Create the parent link label (static)
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
-            caption = "Parent Link";
+            caption = ChineseUiText.Translate("Parent Link", "\u7236 Link");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible +
                 (int)swAddControlOptions_e.swControlOptions_Enabled;
@@ -722,8 +785,10 @@ namespace SW2URDF.URDFExport
 
             //Create the link name text box label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
-            caption = "Link Name";
-            tip = "Enter the name of the link";
+            caption = ChineseUiText.Translate("Link Name", "Link \u540d\u79f0");
+            tip = ChineseUiText.Translate(
+                "Enter the name of the link",
+                "\u8f93\u5165 Link \u540d\u79f0");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible +
                 (int)swAddControlOptions_e.swControlOptions_Enabled;
@@ -732,7 +797,9 @@ namespace SW2URDF.URDFExport
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Textbox;
             caption = "base_link";
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
-            tip = "Enter the name of the link";
+            tip = ChineseUiText.Translate(
+                "Enter the name of the link",
+                "\u8f93\u5165 Link \u540d\u79f0");
             options = (int)swAddControlOptions_e.swControlOptions_Visible +
                 (int)swAddControlOptions_e.swControlOptions_Enabled;
             PMTextBoxLinkName = (PropertyManagerPageTextbox)PMGroup.AddControl2(
@@ -740,8 +807,10 @@ namespace SW2URDF.URDFExport
 
             //Create the joint name text box label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
-            caption = "Joint Name";
-            tip = "Enter the name of the joint";
+            caption = ChineseUiText.Translate("Joint Name", "Joint \u540d\u79f0");
+            tip = ChineseUiText.Translate(
+                "Enter the name of the joint",
+                "\u8f93\u5165 Joint \u540d\u79f0");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMLabelJointName = (PropertyManagerPageLabel)PMGroup.AddControl2(
@@ -751,15 +820,21 @@ namespace SW2URDF.URDFExport
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Textbox;
             caption = "";
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
-            tip = "Enter the name of the joint";
+            tip = ChineseUiText.Translate(
+                "Enter the name of the joint",
+                "\u8f93\u5165 Joint \u540d\u79f0");
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMTextBoxJointName = (PropertyManagerPageTextbox)PMGroup.AddControl2(
                 TextBoxLinkNameID, (short)(controlType), caption, (short)alignment, (int)options, tip);
 
             //Create the global origin coordinate sys label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
-            caption = "Global Origin Coordinate System";
-            tip = "Select the reference coordinate system for the global origin";
+            caption = ChineseUiText.Translate(
+                "Global Origin Coordinate System",
+                "\u5168\u5c40\u539f\u70b9\u5750\u6807\u7cfb");
+            tip = ChineseUiText.Translate(
+                "Select the reference coordinate system for the global origin",
+                "\u9009\u62e9\u5168\u5c40\u539f\u70b9\u7684\u53c2\u8003\u5750\u6807\u7cfb");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMLabelGlobalCoordsys = (PropertyManagerPageLabel)PMGroup.AddControl2(
@@ -767,8 +842,12 @@ namespace SW2URDF.URDFExport
 
             // Create pull down menu for Coordinate systems
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Combobox;
-            caption = "Global Origin Coordinate System Name";
-            tip = "Select the reference coordinate system for the global origin";
+            caption = ChineseUiText.Translate(
+                "Global Origin Coordinate System Name",
+                "\u5168\u5c40\u539f\u70b9\u5750\u6807\u7cfb\u540d\u79f0");
+            tip = ChineseUiText.Translate(
+                "Select the reference coordinate system for the global origin",
+                "\u9009\u62e9\u5168\u5c40\u539f\u70b9\u7684\u53c2\u8003\u5750\u6807\u7cfb");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMComboBoxGlobalCoordsys = (PropertyManagerPageCombobox)PMGroup.AddControl2(
@@ -778,8 +857,12 @@ namespace SW2URDF.URDFExport
 
             //Create the ref coordinate sys label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
-            caption = "Reference Coordinate System";
-            tip = "Select the reference coordinate system for the joint origin";
+            caption = ChineseUiText.Translate(
+                "Reference Coordinate System",
+                "\u53c2\u8003\u5750\u6807\u7cfb");
+            tip = ChineseUiText.Translate(
+                "Select the reference coordinate system for the joint origin",
+                "\u9009\u62e9 Joint \u539f\u70b9\u7684\u53c2\u8003\u5750\u6807\u7cfb");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = 0;
             PMLabelCoordSys = (PropertyManagerPageLabel)PMGroup.AddControl2(
@@ -787,8 +870,12 @@ namespace SW2URDF.URDFExport
 
             // Create pull down menu for Coordinate systems
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Combobox;
-            caption = "Reference Coordinate System Name";
-            tip = "Select the reference coordinate system for the joint origin";
+            caption = ChineseUiText.Translate(
+                "Reference Coordinate System Name",
+                "\u53c2\u8003\u5750\u6807\u7cfb\u540d\u79f0");
+            tip = ChineseUiText.Translate(
+                "Select the reference coordinate system for the joint origin",
+                "\u9009\u62e9 Joint \u539f\u70b9\u7684\u53c2\u8003\u5750\u6807\u7cfb");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
             options = 0;
             PMComboBoxCoordSys = (PropertyManagerPageCombobox)PMGroup.AddControl2(
@@ -798,8 +885,10 @@ namespace SW2URDF.URDFExport
 
             //Create the ref axis label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
-            caption = "Reference Axis";
-            tip = "Select the reference axis for the joint";
+            caption = ChineseUiText.Translate("Reference Axis", "\u53c2\u8003\u8f74");
+            tip = ChineseUiText.Translate(
+                "Select the reference axis for the joint",
+                "\u9009\u62e9 Joint \u7684\u53c2\u8003\u8f74");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMLabelAxes = (PropertyManagerPageLabel)PMGroup.AddControl2(
@@ -807,8 +896,12 @@ namespace SW2URDF.URDFExport
 
             // Create pull down menu for axes
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Combobox;
-            caption = "Reference Axis Name";
-            tip = "Select the reference axis for the joint";
+            caption = ChineseUiText.Translate(
+                "Reference Axis Name",
+                "\u53c2\u8003\u8f74\u540d\u79f0");
+            tip = ChineseUiText.Translate(
+                "Select the reference axis for the joint",
+                "\u9009\u62e9 Joint \u7684\u53c2\u8003\u8f74");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMComboBoxAxes = (PropertyManagerPageCombobox)PMGroup.AddControl2(
@@ -818,8 +911,10 @@ namespace SW2URDF.URDFExport
 
             //Create the joint type label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
-            caption = "Joint Type";
-            tip = "Select the joint type";
+            caption = ChineseUiText.Translate("Joint Type", "Joint \u7c7b\u578b");
+            tip = ChineseUiText.Translate(
+                "Select the joint type",
+                "\u9009\u62e9 Joint \u7c7b\u578b");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMLabelJointType = (PropertyManagerPageLabel)PMGroup.AddControl2(
@@ -827,8 +922,10 @@ namespace SW2URDF.URDFExport
 
             // Create pull down menu for joint type
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Combobox;
-            caption = "Joint type";
-            tip = "Select the joint type";
+            caption = ChineseUiText.Translate("Joint type", "Joint \u7c7b\u578b");
+            tip = ChineseUiText.Translate(
+                "Select the joint type",
+                "\u9009\u62e9 Joint \u7c7b\u578b");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMComboBoxJointType = (PropertyManagerPageCombobox)PMGroup.AddControl2(
@@ -840,18 +937,22 @@ namespace SW2URDF.URDFExport
 
             //Create the selection box label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
-            caption = "Link Components";
-            tip = "Select components associated with this link";
+            caption = ChineseUiText.Translate("Link Components", "Link \u7ec4\u4ef6");
+            tip = ChineseUiText.Translate(
+                "Select components associated with this link",
+                "\u9009\u62e9\u5c5e\u4e8e\u6b64 Link \u7684\u7ec4\u4ef6");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible +
                 (int)swAddControlOptions_e.swControlOptions_Enabled;
             
             //Create selection box
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Selectionbox;
-            caption = "Link Components";
+            caption = ChineseUiText.Translate("Link Components", "Link \u7ec4\u4ef6");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
             options = (int)swAddControlOptions_e.swControlOptions_Visible + (int)swAddControlOptions_e.swControlOptions_Enabled;
-            tip = "Select components associated with this link";
+            tip = ChineseUiText.Translate(
+                "Select components associated with this link",
+                "\u9009\u62e9\u5c5e\u4e8e\u6b64 Link \u7684\u7ec4\u4ef6");
             PMSelection = (PropertyManagerPageSelectionbox)PMGroup.AddControl2(
                 SelectionID, (short)controlType, caption, (short)alignment, (int)options, tip);
 
@@ -869,8 +970,12 @@ namespace SW2URDF.URDFExport
             //Create the number box label
             //Create the link name text box label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
-            caption = "Number of child links";
-            tip = "Enter the number of child links and they will be automatically added";
+            caption = ChineseUiText.Translate(
+                "Number of child links",
+                "\u5b50 Link \u6570\u91cf");
+            tip = ChineseUiText.Translate(
+                "Enter the number of child links and they will be automatically added",
+                "\u8f93\u5165\u5b50 Link \u6570\u91cf\uff0c\u7cfb\u7edf\u5c06\u81ea\u52a8\u6dfb\u52a0");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible +
                 (int)swAddControlOptions_e.swControlOptions_Enabled;
@@ -879,7 +984,9 @@ namespace SW2URDF.URDFExport
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Numberbox;
             caption = "";
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
-            tip = "Enter the number of child links and they will be automatically added";
+            tip = ChineseUiText.Translate(
+                "Enter the number of child links and they will be automatically added",
+                "\u8f93\u5165\u5b50 Link \u6570\u91cf\uff0c\u7cfb\u7edf\u5c06\u81ea\u52a8\u6dfb\u52a0");
             options = (int)swAddControlOptions_e.swControlOptions_Enabled +
                 (int)swAddControlOptions_e.swControlOptions_Visible;
             PMNumberBoxChildCount = PMGroup.AddControl2(
@@ -890,8 +997,12 @@ namespace SW2URDF.URDFExport
 
             // Load Configuration button
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Button;
-            caption = "Load Configuration...";
-            tip = "Import values from a CSV file";
+            caption = ChineseUiText.Translate(
+                "Load Configuration...",
+                "\u52a0\u8f7d\u914d\u7f6e...");
+            tip = ChineseUiText.Translate(
+                "Import values from a CSV file",
+                "\u4ece CSV \u6587\u4ef6\u5bfc\u5165\u6570\u503c");
             alignment = 0;// (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_DoubleIndent;
             options = (int)swAddControlOptions_e.swControlOptions_Visible +
                 (int)swAddControlOptions_e.swControlOptions_Enabled;
@@ -901,7 +1012,9 @@ namespace SW2URDF.URDFExport
 
             // Loaded CSV Filename label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
-            caption = "Imported File: ";
+            caption = ChineseUiText.Translate(
+                "Imported File: ",
+                "\u5df2\u5bfc\u5165\u6587\u4ef6\uff1a");
             tip = "";
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = 0;
@@ -910,36 +1023,52 @@ namespace SW2URDF.URDFExport
 
             // Create Check Boxes to select whether to recompute values
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Checkbox;
-            caption = "Compute Mass and Inertia";
+            caption = ChineseUiText.Translate(
+                "Compute Mass and Inertia",
+                "\u8ba1\u7b97\u8d28\u91cf\u548c\u60ef\u6027");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
-            tip = "External values have been loaded. Check this box to recompute the Mass and Inertia values";
+            tip = ChineseUiText.Translate(
+                "External values have been loaded. Check this box to recompute the Mass and Inertia values",
+                "\u52fe\u9009\u540e\u5c06\u6839\u636e SolidWorks \u6a21\u578b\u91cd\u65b0\u8ba1\u7b97\u8d28\u91cf\u548c\u60ef\u6027");
             options = 0;
             PMComputeMassInertia = PMGroup.AddControl2(
                 ComputeMassInertiaID, (short)controlType, caption, (short)alignment, (int)options, tip);
             PMComputeMassInertia.Checked = true;
 
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Checkbox;
-            caption = "Compute Visual and Collision";
+            caption = ChineseUiText.Translate(
+                "Compute Visual and Collision",
+                "\u8ba1\u7b97\u53ef\u89c6\u548c\u78b0\u649e\u5c5e\u6027");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
-            tip = "External values have been loaded. Check this box to recompute the visual and collision values";
+            tip = ChineseUiText.Translate(
+                "External values have been loaded. Check this box to recompute the visual and collision values",
+                "\u52fe\u9009\u540e\u91cd\u65b0\u8ba1\u7b97\u53ef\u89c6\u548c\u78b0\u649e\u5c5e\u6027");
             options = 0;
             PMComputeVisualCollision = PMGroup.AddControl2(
                 ComputeVisualCollisionID, (short)controlType, caption, (short)alignment, (int)options, tip);
             PMComputeVisualCollision.Checked = true;
 
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Checkbox;
-            caption = "Compute Joint Kinematics";
+            caption = ChineseUiText.Translate(
+                "Compute Joint Kinematics",
+                "\u8ba1\u7b97 Joint \u8fd0\u52a8\u5b66");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
-            tip = "External values have been loaded. Check this box to recompute the joint kinematics";
+            tip = ChineseUiText.Translate(
+                "External values have been loaded. Check this box to recompute the joint kinematics",
+                "\u52fe\u9009\u540e\u91cd\u65b0\u8ba1\u7b97 Joint \u8fd0\u52a8\u5b66");
             options = 0;
             PMComputeJointKinematics = PMGroup.AddControl2(
                 ComputeJointKinematicsID, (short)controlType, caption, (short)alignment, (int)options, tip);
             PMComputeJointKinematics.Checked = true;
 
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Checkbox;
-            caption = "Compute Joint Limits";
+            caption = ChineseUiText.Translate(
+                "Compute Joint Limits",
+                "\u8ba1\u7b97 Joint \u9650\u4f4d");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
-            tip = "External values have been loaded. Check this box to recompute the joint limits";
+            tip = ChineseUiText.Translate(
+                "External values have been loaded. Check this box to recompute the joint limits",
+                "\u52fe\u9009\u540e\u91cd\u65b0\u8ba1\u7b97 Joint \u9650\u4f4d");
             options = 0;
             PMComputeJointLimits = PMGroup.AddControl2(
                 ComputeJointLimitsID, (short)controlType, caption, (short)alignment, (int)options, tip);
@@ -949,11 +1078,18 @@ namespace SW2URDF.URDFExport
                 (int)swAddControlOptions_e.swControlOptions_Enabled;
             PMButtonExport = PMGroup.AddControl2(ButtonExportID,
                 (short)swPropertyManagerPageControlType_e.swControlType_Button,
-                "Preview and Export...", 0, (int)options, "Preview the generated URDF and export to a URDF package");
+                ChineseUiText.Translate(
+                    "Preview and Export...",
+                    "\u9884\u89c8\u5e76\u5bfc\u51fa..."),
+                0,
+                (int)options,
+                ChineseUiText.Translate(
+                    "Preview the generated URDF and export to a URDF package",
+                    "\u9884\u89c8\u751f\u6210\u7684 URDF \u5e76\u5bfc\u51fa\u529f\u80fd\u5305"));
             (PMButtonExport as IPropertyManagerPageControl).Width = 200;
 
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_WindowFromHandle;
-            caption = "Link Tree";
+            caption = ChineseUiText.Translate("Link Tree", "Link \u6811");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible +
                 (int)swAddControlOptions_e.swControlOptions_Enabled;

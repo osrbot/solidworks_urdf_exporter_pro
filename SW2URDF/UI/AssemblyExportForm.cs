@@ -32,6 +32,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
+using DrawingColor = System.Drawing.Color;
 
 namespace SW2URDF.UI
 {
@@ -49,19 +50,35 @@ namespace SW2URDF.UI
         private readonly Control[] jointBoxes;
         private readonly Control[] linkBoxes;
         private readonly LinkNode BaseNode;
+        private readonly InertiaPreview inertiaPreview;
+        private bool updatingMaterialColorControls;
+        private bool meshReductionRatioEdited;
+        private double meshReductionRatioForExport;
+
+        private AssemblyExportForm()
+        {
+            InitializeComponent();
+            ChineseUiText.Apply(this);
+            textBoxIxy.TextChanged += InertiaMatrixOffDiagonalTextChanged;
+            textBoxIxz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
+            textBoxIyz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
+            UpdateInertiaMatrixMirrorBoxes();
+        }
 
         public AssemblyExportForm(SldWorks SwApp, LinkNode node, ExportHelper exporter)
+            : this()
         {
             Application.ThreadException +=
                 new ThreadExceptionEventHandler(ExceptionHandler);
             AppDomain.CurrentDomain.UnhandledException +=
                 new UnhandledExceptionEventHandler(UnhandledException);
-            InitializeComponent();
             swApp = SwApp;
             BaseNode = node;
             ActiveSWModel = swApp.ActiveDoc;
+            inertiaPreview = new InertiaPreview(swApp, ActiveSWModel);
             Exporter = exporter;
             AutoUpdatingForm = false;
+            FormClosed += AssemblyExportFormClosed;
 
             jointBoxes = new Control[] {
                 textBoxJointName, comboBoxAxis, comboBoxJointType,
@@ -141,6 +158,8 @@ namespace SW2URDF.UI
         //Joint form configuration controls
         private void AssemblyExportFormLoad(object sender, EventArgs e)
         {
+            textBoxRosPackageName.Text = URDFPackage.SanitizePackageName(Exporter.RosPackageName);
+            UpdateRosPackageNameHint();
             Exporter.UpdateReferenceGeometries();
             FillJointTree();
         }
@@ -250,8 +269,11 @@ namespace SW2URDF.UI
 
         private void FinishExport(bool exportSTL)
         {
+            ClearInertiaPreview();
             logger.Info("Completing URDF export");
-            SaveConfigTree(ActiveSWModel, BaseNode, false);
+            Exporter.RosPackageName = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
+            textBoxRosPackageName.Text = Exporter.RosPackageName;
+            UpdateRosPackageNameHint();
 
             // Saving selected node
             LinkNode node = (LinkNode)treeViewLinkProperties.SelectedNode;
@@ -259,6 +281,9 @@ namespace SW2URDF.UI
             {
                 SaveLinkDataFromPropertyBoxes(node.Link);
             }
+
+            ApplyEditedMeshReductionToExportTree();
+            SaveConfigTree(ActiveSWModel, BaseNode, false);
 
             Exporter.URDFRobot = CreateRobotFromTreeView(treeViewLinkProperties);
 
@@ -292,21 +317,21 @@ namespace SW2URDF.UI
                 }
             }
 
-            SaveFileDialog saveFileDialog1 = new SaveFileDialog
+            FolderBrowserDialog folderBrowserDialog = new FolderBrowserDialog
             {
-                RestoreDirectory = true,
-                InitialDirectory = Exporter.SavePath,
-                FileName = Exporter.PackageName
+                SelectedPath = Directory.Exists(Exporter.SavePath) ? Exporter.SavePath : "",
+                Description = ChineseUiText.Translate(
+                    "Select the export root directory for the ROS 1 and ROS 2 packages",
+                    "\u9009\u62e9 ROS 1 \u548c ROS 2 \u529f\u80fd\u5305\u7684\u5bfc\u51fa\u6839\u76ee\u5f55")
             };
 
-            bool saveResult = DialogResult.OK == saveFileDialog1.ShowDialog();
-            saveFileDialog1.Dispose();
+            bool saveResult = DialogResult.OK == folderBrowserDialog.ShowDialog();
             if (saveResult)
             {
-                Exporter.SavePath = Path.GetDirectoryName(saveFileDialog1.FileName);
-                Exporter.PackageName = Path.GetFileName(saveFileDialog1.FileName);
+                Exporter.SavePath = folderBrowserDialog.SelectedPath;
 
-                logger.Info("Saving URDF package to " + saveFileDialog1.FileName);
+                logger.Info("Saving ROS package " + Exporter.RosPackageName +
+                    " to export root " + Exporter.SavePath);
 
                 MeshExportFormat meshFormat;
                 if(radioButtonStl.Checked)
@@ -325,6 +350,20 @@ namespace SW2URDF.UI
 
                 Close();
             }
+            folderBrowserDialog.Dispose();
+        }
+
+        private void TextBoxRosPackageNameTextChanged(object sender, EventArgs e)
+        {
+            UpdateRosPackageNameHint();
+        }
+
+        private void UpdateRosPackageNameHint()
+        {
+            string sanitized = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
+            labelRosPackageNameHint.Text = ChineseUiText.Translate(
+                "Output: ROS1/" + sanitized + " and ROS2/" + sanitized,
+                "\u8f93\u51fa\uff1aROS1/" + sanitized + " \u548c ROS2/" + sanitized);
         }
 
         private string CheckLinksForErrors(Link baseLink)
@@ -349,6 +388,7 @@ namespace SW2URDF.UI
 
         private void TreeViewLinkPropertiesAfterSelect(object sender, TreeViewEventArgs e)
         {
+            ClearInertiaPreview();
             Font fontRegular = new Font(treeViewJointTree.Font, FontStyle.Regular);
             Font fontBold = new Font(treeViewJointTree.Font, FontStyle.Bold);
             if (previouslySelectedNode != null)
@@ -401,6 +441,249 @@ namespace SW2URDF.UI
         }
 
         #region Link Properties Controls Handlers
+
+        private void ButtonMaterialColorPickClick(object sender, EventArgs e)
+        {
+            if (TryGetMaterialColor(out DrawingColor currentColor))
+            {
+                colorDialogMaterial.Color = currentColor;
+            }
+
+            if (colorDialogMaterial.ShowDialog() == DialogResult.OK)
+            {
+                SetMaterialColorBoxesFromColor(colorDialogMaterial.Color);
+                UpdateMaterialColorPreview();
+            }
+        }
+
+        private void MaterialColorPreviewClick(object sender, EventArgs e)
+        {
+            ButtonMaterialColorPickClick(sender, e);
+        }
+
+        private void MaterialColorValueChanged(object sender, EventArgs e)
+        {
+            if (!updatingMaterialColorControls)
+            {
+                UpdateMaterialColorPreview();
+            }
+        }
+
+        private void SetMaterialColorBoxesFromColor(DrawingColor color)
+        {
+            updatingMaterialColorControls = true;
+            try
+            {
+                domainUpDownRed.Text = ColorChannelToText(color.R);
+                domainUpDownGreen.Text = ColorChannelToText(color.G);
+                domainUpDownBlue.Text = ColorChannelToText(color.B);
+            }
+            finally
+            {
+                updatingMaterialColorControls = false;
+            }
+        }
+
+        private void UpdateMaterialColorPreview()
+        {
+            if (TryGetMaterialColor(out DrawingColor color))
+            {
+                panelMaterialColorPreview.BackColor = color;
+            }
+        }
+
+        private bool TryGetMaterialColor(out DrawingColor color)
+        {
+            color = DrawingColor.White;
+            if (!TryGetColorChannel(domainUpDownRed.Text, out int red) ||
+                !TryGetColorChannel(domainUpDownGreen.Text, out int green) ||
+                !TryGetColorChannel(domainUpDownBlue.Text, out int blue))
+            {
+                return false;
+            }
+
+            color = DrawingColor.FromArgb(red, green, blue);
+            return true;
+        }
+
+        private static bool TryGetColorChannel(string text, out int channel)
+        {
+            channel = 0;
+            if (!double.TryParse(text, URDFAttribute.URDFNumberStyle,
+                URDFAttribute.URDFNumberFormat, out double normalized))
+            {
+                return false;
+            }
+
+            normalized = Math.Max(0.0, Math.Min(1.0, normalized));
+            channel = (int)Math.Round(normalized * 255);
+            return true;
+        }
+
+        private static string ColorChannelToText(int channel)
+        {
+            double normalized = channel / 255.0;
+            return normalized.ToString("G5", URDFAttribute.URDFNumberFormat);
+        }
+
+        private void InertiaMatrixOffDiagonalTextChanged(object sender, EventArgs e)
+        {
+            UpdateInertiaMatrixMirrorBoxes();
+        }
+
+        private void UpdateInertiaMatrixMirrorBoxes()
+        {
+            textBoxIyxMirror.Text = textBoxIxy.Text;
+            textBoxIzxMirror.Text = textBoxIxz.Text;
+            textBoxIzyMirror.Text = textBoxIyz.Text;
+        }
+
+        private void TrackBarMeshReductionScroll(object sender, EventArgs e)
+        {
+            meshReductionRatioEdited = true;
+            meshReductionRatioForExport = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
+            UpdateMeshReductionLabel();
+        }
+
+        private void ButtonShowInertiaPreviewClick(object sender, EventArgs e)
+        {
+            if (inertiaPreview.IsVisible)
+            {
+                ClearInertiaPreview();
+                return;
+            }
+
+            LinkNode node = treeViewLinkProperties.SelectedNode as LinkNode;
+            if (node == null || node.Link == null || node.Link.isFixedFrame)
+            {
+                return;
+            }
+
+            try
+            {
+                SaveLinkDataFromPropertyBoxes(node.Link);
+                MathTransform coordinateTransform =
+                    Exporter.GetCoordinateSystemTransform(node.Link.Joint.CoordinateSystemName);
+                if (inertiaPreview.Show(
+                    node.Link,
+                    coordinateTransform,
+                    out InertiaEllipsoid ellipsoid,
+                    out string error))
+                {
+                    buttonShowInertiaPreview.Text = ChineseUiText.Translate(
+                        "Hide inertia ellipsoid",
+                        "\u9690\u85cf\u60ef\u6027\u692d\u7403");
+                    labelInertiaPreviewStatus.Text = String.Format(
+                        ChineseUiText.Translate(
+                            "Semi-axes R a / G b / B c: {0:0.#}/{1:0.#}/{2:0.#} mm",
+                            "\u534a\u8f74 \u7ea2a/\u7effb/\u84ddc\uff1a{0:0.#}/{1:0.#}/{2:0.#} mm"),
+                        ellipsoid.SemiAxes[0] * 1000.0,
+                        ellipsoid.SemiAxes[1] * 1000.0,
+                        ellipsoid.SemiAxes[2] * 1000.0);
+                    logger.Info(String.Format(
+                        "Displayed inertia ellipsoid for link {0}: semi-axes {1:G6}, {2:G6}, {3:G6} m",
+                        node.Link.Name,
+                        ellipsoid.SemiAxes[0],
+                        ellipsoid.SemiAxes[1],
+                        ellipsoid.SemiAxes[2]));
+                }
+                else
+                {
+                    logger.Warn("Could not display inertia preview for link " +
+                        node.Link.Name + ": " + error);
+                    labelInertiaPreviewStatus.Text = ChineseUiText.Translate(
+                        "Invalid inertia tensor",
+                        "\u65e0\u6548\u7684\u60ef\u6027\u5f20\u91cf");
+                    MessageBox.Show(
+                        ChineseUiText.Translate(
+                            "The inertia overlay cannot be displayed:\r\n",
+                            "\u65e0\u6cd5\u663e\u793a\u60ef\u6027\u53e0\u52a0\u5c42\uff1a\r\n") + error,
+                        ChineseUiText.Translate(
+                            "Inertia validation",
+                            "\u60ef\u6027\u6821\u9a8c"));
+                }
+            }
+            catch (Exception ex)
+            {
+                ClearInertiaPreview();
+                logger.Warn("Could not display inertia preview for link " + node.Link.Name, ex);
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "SolidWorks could not display the inertia overlay:\r\n",
+                        "SolidWorks \u65e0\u6cd5\u663e\u793a\u60ef\u6027\u53e0\u52a0\u5c42\uff1a\r\n") + ex.Message,
+                    ChineseUiText.Translate(
+                        "Inertia preview",
+                        "\u60ef\u6027\u9884\u89c8"));
+            }
+        }
+
+        private void ClearInertiaPreview()
+        {
+            inertiaPreview.Hide();
+            buttonShowInertiaPreview.Text = ChineseUiText.Translate(
+                "Show inertia ellipsoid",
+                "\u663e\u793a\u60ef\u6027\u692d\u7403");
+            labelInertiaPreviewStatus.Text = ChineseUiText.Translate(
+                "R a / G b / B c: principal semi-axes",
+                "\u7ea2a / \u7effb / \u84ddc\uff1a\u4e3b\u60ef\u6027\u534a\u8f74");
+        }
+
+        private void AssemblyExportFormClosed(object sender, FormClosedEventArgs e)
+        {
+            inertiaPreview.Dispose();
+        }
+
+        private void UpdateMeshReductionLabel()
+        {
+            double ratio = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
+            labelMeshReductionValue.Text = ratio.ToString("0.00", URDFAttribute.URDFNumberFormat);
+            labelEstimatedMeshSize.Text = ChineseUiText.Translate(
+                "Rough STL estimate: logged on export",
+                "\u7c97\u7565 STL \u4f30\u7b97\uff1a\u5bfc\u51fa\u65f6\u5199\u5165\u65e5\u5fd7");
+        }
+
+        private static int MeshReductionRatioToTrackBarValue(double ratio)
+        {
+            ratio = Math.Max(0.0, Math.Min(1.0, ratio));
+            return (int)Math.Round(ratio * 100.0);
+        }
+
+        private static double TrackBarValueToMeshReductionRatio(int value)
+        {
+            return Math.Max(0.0, Math.Min(1.0, value / 100.0));
+        }
+
+        private void ApplyEditedMeshReductionToExportTree()
+        {
+            if (!meshReductionRatioEdited)
+            {
+                return;
+            }
+
+            ApplyMeshReductionToTree(BaseNode, meshReductionRatioForExport);
+            logger.Info(String.Format(
+                "Applying STL mesh reduction ratio {0:0.00} to every link for this export",
+                meshReductionRatioForExport));
+        }
+
+        internal static void ApplyMeshReductionToTree(LinkNode node, double ratio)
+        {
+            if (node == null)
+            {
+                return;
+            }
+
+            ratio = Math.Max(0.0, Math.Min(1.0, ratio));
+            if (node.Link != null && !node.Link.isFixedFrame)
+            {
+                node.Link.MeshReductionRatio = ratio;
+            }
+
+            foreach (LinkNode child in node.Nodes)
+            {
+                ApplyMeshReductionToTree(child, ratio);
+            }
+        }
 
         private void ButtonTextureBrowseClick(object sender, EventArgs e)
         {
