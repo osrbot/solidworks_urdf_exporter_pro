@@ -174,6 +174,43 @@ namespace SW2URDF.Test
             Directory.Delete(tempDirectory, true);
         }
 
+        [Fact]
+        public void TestRos2PackageCopiesNestedMeshDirectories()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            string visualMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "visual");
+            string collisionMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "collision");
+            Directory.CreateDirectory(visualMeshDirectory);
+            Directory.CreateDirectory(collisionMeshDirectory);
+            File.WriteAllText(Path.Combine(visualMeshDirectory, "base_link.STL"), "visual");
+            File.WriteAllText(Path.Combine(collisionMeshDirectory, "base_link.STL"), "collision");
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(
+                ros1Urdf,
+                "<?xml version=\"1.0\"?><robot name=\"robot_900001\">" +
+                "<link name=\"base_link\"><visual><geometry><mesh filename=\"package://rover_description/meshes/visual/base_link.STL\" /></geometry></visual>" +
+                "<collision><geometry><mesh filename=\"package://rover_description/meshes/collision/base_link.STL\" /></geometry></collision></link></robot>",
+                new UTF8Encoding(false));
+
+            pkg.CreateRos2Package(ros1Urdf);
+
+            Assert.True(File.Exists(Path.Combine(pkg.WindowsRos2MeshesDirectory, "visual", "base_link.STL")));
+            Assert.True(File.Exists(Path.Combine(pkg.WindowsRos2MeshesDirectory, "collision", "base_link.STL")));
+            string setupPy = File.ReadAllText(Path.Combine(pkg.WindowsRos2PackageDirectory, "setup.py"));
+            Assert.Contains("package_files('meshes')", setupPy);
+            Assert.Contains("glob(os.path.join(directory, '**', '*'), recursive=True)", setupPy);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
         [Theory]
         [InlineData("osracer_blue.SLDASM", "osracer_blue")]
         [InlineData("OSRacer Blue.SLDPRT", "osracer_blue")]

@@ -238,9 +238,18 @@ namespace SW2URDF.URDFExport
             using (StreamWriter file = new StreamWriter(path, false, new UTF8Encoding(false)))
             {
                 file.WriteLine("from glob import glob");
+                file.WriteLine("import os");
                 file.WriteLine("from setuptools import setup");
                 file.WriteLine("");
                 file.WriteLine("package_name = '" + ros2Name + "'");
+                file.WriteLine("");
+                file.WriteLine("def package_files(directory):");
+                file.WriteLine("    data_files = []");
+                file.WriteLine("    for path in glob(os.path.join(directory, '**', '*'), recursive=True):");
+                file.WriteLine("        if os.path.isfile(path):");
+                file.WriteLine("            install_dir = os.path.join('share', package_name, os.path.dirname(path))");
+                file.WriteLine("            data_files.append((install_dir, [path]))");
+                file.WriteLine("    return data_files");
                 file.WriteLine("");
                 file.WriteLine("setup(");
                 file.WriteLine("    name=package_name,");
@@ -251,10 +260,7 @@ namespace SW2URDF.URDFExport
                 file.WriteLine("        ('share/' + package_name, ['package.xml']),");
                 file.WriteLine("        ('share/' + package_name + '/launch', glob('launch/*.py')),");
                 file.WriteLine("        ('share/' + package_name + '/urdf', glob('urdf/*')),");
-                file.WriteLine("        ('share/' + package_name + '/meshes', glob('meshes/*')),");
-                file.WriteLine("        ('share/' + package_name + '/textures', glob('textures/*')),");
-                file.WriteLine("        ('share/' + package_name + '/config', glob('config/*')),");
-                file.WriteLine("    ],");
+                file.WriteLine("    ] + package_files('meshes') + package_files('textures') + package_files('config'),");
                 file.WriteLine("    install_requires=['setuptools'],");
                 file.WriteLine("    zip_safe=True,");
                 file.WriteLine("    maintainer='TODO',");
@@ -331,6 +337,10 @@ namespace SW2URDF.URDFExport
             foreach (string file in Directory.GetFiles(source))
             {
                 CopyFileWithRetry(file, Path.Combine(destination, Path.GetFileName(file)));
+            }
+            foreach (string directory in Directory.GetDirectories(source))
+            {
+                CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
             }
         }
 
