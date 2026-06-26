@@ -30,6 +30,7 @@ using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows;
@@ -292,13 +293,16 @@ namespace SW2URDF.URDFExport
                 ellipsoid.SemiAxes[2]));
         }
 
-        private void LogInertialValidation(Link link)
+        private void LogInertialValidation(Link link, string csvFileName)
         {
+            List<InertialValidationRecord> records = new List<InertialValidationRecord>();
             logger.Info("Validating URDF inertial values against SolidWorks mass properties");
-            LogLinkInertialValidation(link);
+            LogLinkInertialValidation(link, records);
+            WriteInertialValidationCsv(csvFileName, records);
+            logger.Info("Wrote inertial validation CSV with " + records.Count + " rows to " + csvFileName);
         }
 
-        private void LogLinkInertialValidation(Link link)
+        private void LogLinkInertialValidation(Link link, List<InertialValidationRecord> records)
         {
             if (link == null)
             {
@@ -307,7 +311,7 @@ namespace SW2URDF.URDFExport
 
             try
             {
-                LogSingleLinkInertialValidation(link);
+                LogSingleLinkInertialValidation(link, records);
             }
             catch (Exception e)
             {
@@ -316,11 +320,11 @@ namespace SW2URDF.URDFExport
 
             foreach (Link child in link.Children)
             {
-                LogLinkInertialValidation(child);
+                LogLinkInertialValidation(child, records);
             }
         }
 
-        private void LogSingleLinkInertialValidation(Link link)
+        private void LogSingleLinkInertialValidation(Link link, List<InertialValidationRecord> records)
         {
             if (link.SWComponents == null || link.SWComponents.Count == 0)
             {
@@ -369,6 +373,14 @@ namespace SW2URDF.URDFExport
                 new InertialValidationRow("izz", "kg*m^2", expectedMoment[5], urdfMoment[5])
             };
 
+            foreach (InertialValidationRow row in rows)
+            {
+                records.Add(new InertialValidationRecord(
+                    link.Name,
+                    link.Joint.CoordinateSystemName,
+                    row));
+            }
+
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("Inertial validation for link '" + link.Name + "'");
             builder.AppendLine("Coordinate system: " + link.Joint.CoordinateSystemName);
@@ -416,6 +428,72 @@ namespace SW2URDF.URDFExport
             }
         }
 
+        private static void WriteInertialValidationCsv(
+            string csvFileName,
+            IEnumerable<InertialValidationRecord> records)
+        {
+            string directory = Path.GetDirectoryName(csvFileName);
+            if (!String.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(
+                csvFileName,
+                BuildInertialValidationCsv(records),
+                new UTF8Encoding(false));
+        }
+
+        internal static string BuildInertialValidationCsv(IEnumerable<InertialValidationRecord> records)
+        {
+            StringBuilder builder = new StringBuilder();
+            builder.AppendLine(
+                "link,coordinate_system,quantity,unit,solidworks_expected,urdf_value,absolute_error,relative_error_percent,status");
+            foreach (InertialValidationRecord record in records)
+            {
+                InertialValidationRow row = record.Row;
+                builder.AppendLine(String.Join(",", new[]
+                {
+                    CsvField(record.LinkName),
+                    CsvField(record.CoordinateSystemName),
+                    CsvField(row.Quantity),
+                    CsvField(row.Unit),
+                    FormatCsvNumber(row.SolidWorksExpected),
+                    FormatCsvNumber(row.UrdfValue),
+                    FormatCsvNumber(row.AbsoluteError),
+                    FormatCsvPercent(row.RelativeErrorPercent),
+                    row.Passed ? "PASS" : "FAIL"
+                }));
+            }
+
+            return builder.ToString();
+        }
+
+        private static string FormatCsvNumber(double value)
+        {
+            return value.ToString("G17", CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatCsvPercent(double? value)
+        {
+            return value.HasValue ? FormatCsvNumber(value.Value) : "";
+        }
+
+        private static string CsvField(string value)
+        {
+            if (value == null)
+            {
+                return "";
+            }
+
+            if (value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) < 0)
+            {
+                return value;
+            }
+
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        }
+
         internal static double[] ConvertSolidWorksMomentToUrdfConvention(double[] solidWorksMoment)
         {
             return new double[]
@@ -442,6 +520,25 @@ namespace SW2URDF.URDFExport
             }
 
             return FormatValidationNumber(value.Value);
+        }
+
+        internal class InertialValidationRecord
+        {
+            public InertialValidationRecord(
+                string linkName,
+                string coordinateSystemName,
+                InertialValidationRow row)
+            {
+                LinkName = linkName;
+                CoordinateSystemName = coordinateSystemName;
+                Row = row;
+            }
+
+            public string LinkName { get; private set; }
+
+            public string CoordinateSystemName { get; private set; }
+
+            public InertialValidationRow Row { get; private set; }
         }
 
         internal class InertialValidationRow

@@ -187,6 +187,8 @@ namespace SW2URDF.URDFExport
             URDFRobot.Name = PackageName;
             string windowsURDFFileName = package.WindowsRobotsDirectory + URDFRobot.Name + ".urdf";
             string windowsCSVFileName = package.WindowsRobotsDirectory + URDFRobot.Name + ".csv";
+            string windowsInertialValidationCsvFileName =
+                Path.Combine(package.WindowsConfigDirectory, "inertial_validation.csv");
             string windowsPackageXMLFileName = package.WindowsPackageDirectory + "package.xml";
 
             //Create CMakeLists
@@ -264,7 +266,7 @@ namespace SW2URDF.URDFExport
                 return;
             }
 
-            LogInertialValidation(URDFRobot.BaseLink);
+            LogInertialValidation(URDFRobot.BaseLink, windowsInertialValidationCsvFileName);
 
             UpdateProgressTitle("Writing URDF file", "\u6b63\u5728\u5199\u5165 URDF \u6587\u4ef6");
             logger.Info("Writing URDF file to " + windowsURDFFileName);

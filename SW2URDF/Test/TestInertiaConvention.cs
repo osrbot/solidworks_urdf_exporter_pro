@@ -63,5 +63,30 @@ namespace SW2URDF.Test
 
             Assert.False(row.Passed);
         }
+
+        [Fact]
+        public void TestInertialValidationCsvEscapesFieldsAndKeepsErrors()
+        {
+            ExportHelper.InertialValidationRow row =
+                new ExportHelper.InertialValidationRow(
+                    "mass",
+                    "kg",
+                    1.25,
+                    1.5);
+            ExportHelper.InertialValidationRecord record =
+                new ExportHelper.InertialValidationRecord(
+                    "base,link",
+                    "Origin \"global\"",
+                    row);
+
+            string csv = ExportHelper.BuildInertialValidationCsv(new[] { record });
+
+            Assert.Contains(
+                "link,coordinate_system,quantity,unit,solidworks_expected,urdf_value,absolute_error,relative_error_percent,status",
+                csv);
+            Assert.Contains(
+                "\"base,link\",\"Origin \"\"global\"\"\",mass,kg,1.25,1.5,0.25,20,FAIL",
+                csv);
+        }
     }
 }
