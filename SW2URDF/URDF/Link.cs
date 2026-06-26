@@ -1,4 +1,5 @@
 using SolidWorks.Interop.sldworks;
+using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
@@ -168,8 +169,23 @@ namespace SW2URDF.URDF
             string componentNamesStr = string.Join(";", componentNames);
             string componentsContext = "Link.SWComponents";
             dictionary.Add(componentsContext, componentNamesStr);
+            dictionary.Add("Link.CollisionMeshStrategy", CollisionMeshStrategy.ToString());
 
             base.AppendToCSVDictionary(context, dictionary);
+        }
+
+        public override void SetElementFromData(List<string> context, StringDictionary dictionary)
+        {
+            base.SetElementFromData(context, dictionary);
+
+            if (dictionary.ContainsKey("Link.CollisionMeshStrategy"))
+            {
+                CollisionMeshStrategy strategy;
+                if (Enum.TryParse(dictionary["Link.CollisionMeshStrategy"], true, out strategy))
+                {
+                    CollisionMeshStrategy = strategy;
+                }
+            }
         }
 
         public override void SetElement(URDFElement externalElement)

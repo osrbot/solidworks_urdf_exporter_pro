@@ -547,6 +547,9 @@ namespace SW2URDF.URDFExport
             public MeshExportRecord(
                 string linkName,
                 string collisionStrategy,
+                string collisionEffectiveStrategy,
+                string collisionGeometryType,
+                string collisionNotes,
                 string meshFormat,
                 string visualUri,
                 string collisionUri,
@@ -561,6 +564,9 @@ namespace SW2URDF.URDFExport
             {
                 LinkName = linkName;
                 CollisionStrategy = collisionStrategy;
+                CollisionEffectiveStrategy = collisionEffectiveStrategy;
+                CollisionGeometryType = collisionGeometryType;
+                CollisionNotes = collisionNotes;
                 MeshFormat = meshFormat;
                 VisualUri = visualUri;
                 CollisionUri = collisionUri;
@@ -577,6 +583,12 @@ namespace SW2URDF.URDFExport
             public string LinkName { get; private set; }
 
             public string CollisionStrategy { get; private set; }
+
+            public string CollisionEffectiveStrategy { get; private set; }
+
+            public string CollisionGeometryType { get; private set; }
+
+            public string CollisionNotes { get; private set; }
 
             public string MeshFormat { get; private set; }
 
@@ -599,6 +611,38 @@ namespace SW2URDF.URDFExport
             public uint? VisualTriangles { get; private set; }
 
             public uint? CollisionTriangles { get; private set; }
+        }
+
+        internal class CollisionMeshExportResult
+        {
+            public CollisionMeshExportResult(
+                CollisionMeshStrategy requestedStrategy,
+                CollisionMeshStrategy effectiveStrategy,
+                string geometryType,
+                string notes)
+            {
+                RequestedStrategy = requestedStrategy;
+                EffectiveStrategy = effectiveStrategy;
+                GeometryType = geometryType;
+                Notes = notes;
+            }
+
+            public CollisionMeshStrategy RequestedStrategy { get; private set; }
+
+            public CollisionMeshStrategy EffectiveStrategy { get; private set; }
+
+            public string GeometryType { get; private set; }
+
+            public string Notes { get; private set; }
+
+            public static CollisionMeshExportResult NotExported(CollisionMeshStrategy requestedStrategy)
+            {
+                return new CollisionMeshExportResult(
+                    requestedStrategy,
+                    requestedStrategy,
+                    "not_exported",
+                    "mesh_export_disabled");
+            }
         }
 
         internal class InertialValidationRow

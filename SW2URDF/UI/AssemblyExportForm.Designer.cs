@@ -79,6 +79,8 @@
             this.textBoxRosPackageName = new System.Windows.Forms.TextBox();
             this.labelRosPackageNameHint = new System.Windows.Forms.Label();
             this.groupBox4 = new System.Windows.Forms.GroupBox();
+            this.comboBoxCollisionStrategy = new System.Windows.Forms.ComboBox();
+            this.labelCollisionStrategy = new System.Windows.Forms.Label();
             this.labelEstimatedMeshSize = new System.Windows.Forms.Label();
             this.labelMeshReductionValue = new System.Windows.Forms.Label();
             this.trackBarMeshReduction = new System.Windows.Forms.TrackBar();
@@ -685,6 +687,8 @@
             // groupBox4
             //
             this.groupBox4.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.groupBox4.Controls.Add(this.comboBoxCollisionStrategy);
+            this.groupBox4.Controls.Add(this.labelCollisionStrategy);
             this.groupBox4.Controls.Add(this.labelEstimatedMeshSize);
             this.groupBox4.Controls.Add(this.labelMeshReductionValue);
             this.groupBox4.Controls.Add(this.trackBarMeshReduction);
@@ -728,6 +732,25 @@
             this.groupBox4.Size = new System.Drawing.Size(568, 305);
             this.groupBox4.TabIndex = 72;
             this.groupBox4.TabStop = false;
+            //
+            // comboBoxCollisionStrategy
+            //
+            this.comboBoxCollisionStrategy.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.comboBoxCollisionStrategy.DropDownWidth = 210;
+            this.comboBoxCollisionStrategy.FormattingEnabled = true;
+            this.comboBoxCollisionStrategy.Location = new System.Drawing.Point(230, 52);
+            this.comboBoxCollisionStrategy.Name = "comboBoxCollisionStrategy";
+            this.comboBoxCollisionStrategy.Size = new System.Drawing.Size(132, 20);
+            this.comboBoxCollisionStrategy.TabIndex = 80;
+            //
+            // labelCollisionStrategy
+            //
+            this.labelCollisionStrategy.AutoSize = true;
+            this.labelCollisionStrategy.Location = new System.Drawing.Point(230, 30);
+            this.labelCollisionStrategy.Name = "labelCollisionStrategy";
+            this.labelCollisionStrategy.Size = new System.Drawing.Size(91, 12);
+            this.labelCollisionStrategy.TabIndex = 79;
+            this.labelCollisionStrategy.Text = "Collision strategy";
             //
             // labelEstimatedMeshSize
             //
@@ -1977,6 +2000,8 @@
         private System.Windows.Forms.TextBox textBoxRosPackageName;
         private System.Windows.Forms.Label labelRosPackageNameHint;
         private System.Windows.Forms.GroupBox groupBox4;
+        private System.Windows.Forms.ComboBox comboBoxCollisionStrategy;
+        private System.Windows.Forms.Label labelCollisionStrategy;
         private System.Windows.Forms.Label labelEstimatedMeshSize;
         private System.Windows.Forms.Label labelMeshReductionValue;
         private System.Windows.Forms.TrackBar trackBarMeshReduction;

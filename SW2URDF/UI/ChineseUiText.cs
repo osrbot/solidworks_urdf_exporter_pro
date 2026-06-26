@@ -11,6 +11,7 @@ namespace SW2URDF.UI
         private static readonly Dictionary<string, string> AssemblyTexts = new Dictionary<string, string>
         {
             { "buttonShowInertiaPreview", "\u663e\u793a\u60ef\u6027\u692d\u7403" },
+            { "labelCollisionStrategy", "\u78b0\u649e\u7b56\u7565" },
             { "labelInertiaPreviewStatus", "\u7ea2a / \u7effb / \u84ddc\uff1a\u4e3b\u60ef\u6027\u534a\u8f74" },
             { "labelRosPackageName", "ROS \u529f\u80fd\u5305\u540d\u79f0" },
             { "buttonLinksExportUrdfOnly", "仅导出 URDF..." },

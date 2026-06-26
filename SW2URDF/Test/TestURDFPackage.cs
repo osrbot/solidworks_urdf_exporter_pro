@@ -272,7 +272,10 @@ namespace SW2URDF.Test
             ExportHelper.MeshExportRecord meshRecord =
                 new ExportHelper.MeshExportRecord(
                     "base_link",
-                    "Original",
+                    "VisualMesh",
+                    "VisualMesh",
+                    "visual_mesh_copy",
+                    "ok",
                     "STL",
                     "package://rover_description/meshes/visual/base_link.STL",
                     "package://rover_description/meshes/collision/base_link.STL",
@@ -306,6 +309,9 @@ namespace SW2URDF.Test
             Assert.Contains("ROS 2 setup.py | OK", report);
             Assert.Contains("Inertial validation rows: 1", report);
             Assert.Contains("Mesh manifest rows: 1", report);
+            Assert.Contains("Requested collision strategies: VisualMesh=1", report);
+            Assert.Contains("Effective collision strategies: VisualMesh=1", report);
+            Assert.Contains("Collision strategy fallbacks: 0", report);
             Assert.DoesNotContain("FAIL:", report);
 
             Directory.Delete(tempDirectory, true);

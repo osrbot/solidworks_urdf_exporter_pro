@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.IO;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
@@ -176,6 +178,33 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestCollisionStrategyWritesToCsvDictionary()
+        {
+            Link link = new Link
+            {
+                Name = "base_link",
+                CollisionMeshStrategy = CollisionMeshStrategy.Primitive
+            };
+            OrderedDictionary dictionary = new OrderedDictionary();
+
+            link.AppendToCSVDictionary(new List<string>(), dictionary);
+
+            Assert.Equal("Primitive", dictionary["Link.CollisionMeshStrategy"]);
+        }
+
+        [Fact]
+        public void TestCollisionStrategyLoadsFromCsvDictionary()
+        {
+            Link link = new Link();
+            StringDictionary dictionary = new StringDictionary();
+            dictionary["Link.CollisionMeshStrategy"] = "ConvexHull";
+
+            link.SetElementFromData(new List<string>(), dictionary);
+
+            Assert.Equal(CollisionMeshStrategy.ConvexHull, link.CollisionMeshStrategy);
+        }
+
+        [Fact]
         public void TestPrimitiveBoxStlWritesTwelveBinaryTriangles()
         {
             string tempFile = Path.Combine(
@@ -239,6 +268,9 @@ namespace SW2URDF.Test
                 new ExportHelper.MeshExportRecord(
                     "base,link",
                     "Primitive",
+                    "Primitive",
+                    "box_primitive",
+                    "ok",
                     "STL",
                     "package://robot/meshes/visual/base_link.STL",
                     "package://robot/meshes/collision/base_link.STL",
@@ -253,9 +285,9 @@ namespace SW2URDF.Test
 
             string csv = ExportHelper.BuildMeshManifestCsv(new[] { record });
 
-            Assert.Contains("link,collision_strategy,mesh_format,visual_uri,collision_uri", csv);
+            Assert.Contains("link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,visual_uri,collision_uri", csv);
             Assert.Contains(
-                "\"base,link\",Primitive,STL,package://robot/meshes/visual/base_link.STL,package://robot/meshes/collision/base_link.STL",
+                "\"base,link\",Primitive,Primitive,box_primitive,ok,STL,package://robot/meshes/visual/base_link.STL,package://robot/meshes/collision/base_link.STL",
                 csv);
             Assert.Contains(",true,true,184,84,2,0", csv);
         }

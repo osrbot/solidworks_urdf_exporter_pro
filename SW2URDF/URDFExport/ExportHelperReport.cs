@@ -138,6 +138,16 @@ namespace SW2URDF.URDFExport
             }
             foreach (MeshExportRecord record in meshList)
             {
+                if (!String.Equals(
+                    record.CollisionStrategy,
+                    record.CollisionEffectiveStrategy,
+                    StringComparison.Ordinal))
+                {
+                    findings.Add("WARN: Collision strategy for link " + record.LinkName +
+                        " requested " + record.CollisionStrategy +
+                        " but exported " + record.CollisionEffectiveStrategy +
+                        " (" + record.CollisionNotes + ").");
+                }
                 if (!record.VisualExists)
                 {
                     findings.Add((exportMeshes ? "FAIL: " : "WARN: ") +
@@ -359,6 +369,15 @@ namespace SW2URDF.URDFExport
             builder.AppendLine("- Collision mesh bytes: " + collisionBytes.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Visual STL triangles: " + visualTriangles.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Collision STL triangles: " + collisionTriangles.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Requested collision strategies: " +
+                FormatGroupCounts(rows.Select(r => r.CollisionStrategy)));
+            builder.AppendLine("- Effective collision strategies: " +
+                FormatGroupCounts(rows.Select(r => r.CollisionEffectiveStrategy)));
+            builder.AppendLine("- Collision strategy fallbacks: " +
+                rows.Count(r => !String.Equals(
+                    r.CollisionStrategy,
+                    r.CollisionEffectiveStrategy,
+                    StringComparison.Ordinal)).ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- CSV: config/mesh_manifest.csv");
             builder.AppendLine();
         }
@@ -393,6 +412,17 @@ namespace SW2URDF.URDFExport
                 }
             }
             return sum;
+        }
+
+        private static string FormatGroupCounts(IEnumerable<string> values)
+        {
+            List<string> counts = values
+                .Where(v => !String.IsNullOrWhiteSpace(v))
+                .GroupBy(v => v)
+                .OrderBy(group => group.Key)
+                .Select(group => group.Key + "=" + group.Count().ToString(CultureInfo.InvariantCulture))
+                .ToList();
+            return counts.Count == 0 ? "none" : String.Join(", ", counts.ToArray());
         }
 
         private static string FormatBool(bool value)

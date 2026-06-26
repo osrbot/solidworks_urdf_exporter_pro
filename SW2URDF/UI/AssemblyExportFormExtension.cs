@@ -89,6 +89,7 @@ namespace SW2URDF.UI
                     : Link.MeshReductionRatio;
                 trackBarMeshReduction.Value = MeshReductionRatioToTrackBarValue(meshReductionRatio);
                 UpdateMeshReductionLabel();
+                SelectCollisionStrategy(Link.CollisionMeshStrategy);
             }
         }
 
@@ -283,6 +284,7 @@ namespace SW2URDF.UI
 
                 Link.STLQualityFine = radioButtonFine.Checked;
                 Link.MeshReductionRatio = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
+                Link.CollisionMeshStrategy = GetSelectedCollisionStrategy();
             }
         }
 
@@ -373,6 +375,64 @@ namespace SW2URDF.UI
             labelSoftUpper.Text = ChineseUiText.DynamicJointLabel(labelSoftUpper.Text);
             labelKPosition.Text = ChineseUiText.DynamicJointLabel(labelKPosition.Text);
             labelKVelocity.Text = ChineseUiText.DynamicJointLabel(labelKVelocity.Text);
+        }
+
+        private void InitializeCollisionStrategyComboBox()
+        {
+            comboBoxCollisionStrategy.Items.Clear();
+            comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
+                CollisionMeshStrategy.VisualMesh,
+                ChineseUiText.Translate("Visual STL copy", "\u590d\u7528\u53ef\u89c6 STL")));
+            comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
+                CollisionMeshStrategy.AccurateMesh,
+                ChineseUiText.Translate("Accurate STL (copy now)", "\u7cbe\u51c6 STL\uff08\u5f53\u524d\u590d\u7528\uff09")));
+            comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
+                CollisionMeshStrategy.Primitive,
+                ChineseUiText.Translate("Box primitive", "\u5305\u56f4\u76d2 primitive")));
+            comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
+                CollisionMeshStrategy.ConvexHull,
+                ChineseUiText.Translate("Convex hull (box fallback)", "\u51f8\u5305\uff08\u5305\u56f4\u76d2\u56de\u9000\uff09")));
+            comboBoxCollisionStrategy.SelectedIndex = 0;
+        }
+
+        private void SelectCollisionStrategy(CollisionMeshStrategy strategy)
+        {
+            foreach (object item in comboBoxCollisionStrategy.Items)
+            {
+                CollisionStrategyChoice choice = item as CollisionStrategyChoice;
+                if (choice != null && choice.Strategy == strategy)
+                {
+                    comboBoxCollisionStrategy.SelectedItem = choice;
+                    return;
+                }
+            }
+
+            comboBoxCollisionStrategy.SelectedIndex = 0;
+        }
+
+        private CollisionMeshStrategy GetSelectedCollisionStrategy()
+        {
+            CollisionStrategyChoice choice =
+                comboBoxCollisionStrategy.SelectedItem as CollisionStrategyChoice;
+            return choice == null ? CollisionMeshStrategy.VisualMesh : choice.Strategy;
+        }
+
+        private sealed class CollisionStrategyChoice
+        {
+            private readonly string text;
+
+            public CollisionStrategyChoice(CollisionMeshStrategy strategy, string text)
+            {
+                Strategy = strategy;
+                this.text = text;
+            }
+
+            public CollisionMeshStrategy Strategy { get; private set; }
+
+            public override string ToString()
+            {
+                return text;
+            }
         }
 
         //Fills specifically the joint TreeView

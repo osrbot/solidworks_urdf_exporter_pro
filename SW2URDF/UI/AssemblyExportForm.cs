@@ -59,6 +59,7 @@ namespace SW2URDF.UI
         {
             InitializeComponent();
             ChineseUiText.Apply(this);
+            InitializeCollisionStrategyComboBox();
             textBoxIxy.TextChanged += InertiaMatrixOffDiagonalTextChanged;
             textBoxIxz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
             textBoxIyz.TextChanged += InertiaMatrixOffDiagonalTextChanged;

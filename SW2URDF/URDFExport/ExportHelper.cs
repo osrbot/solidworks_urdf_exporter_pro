@@ -375,6 +375,9 @@ namespace SW2URDF.URDFExport
             }
 
             MeshFileNames meshFiles = CreateLinkMeshFileNames(package, link, meshFormat);
+            CollisionMeshExportResult collisionExport =
+                CollisionMeshExportResult.NotExported(link.CollisionMeshStrategy);
+
             // Export STL
             if (exportSTL)
             {
@@ -394,13 +397,13 @@ namespace SW2URDF.URDFExport
                         SaveSTL(link, meshFiles.WindowsVisualMeshFilename);
                         break;
                 }
-                ExportCollisionMesh(link, meshFiles, meshFormat);
+                collisionExport = ExportCollisionMesh(link, meshFiles, meshFormat);
             }
             link.Visual.Geometry.Mesh.Filename = meshFiles.VisualMeshFilename;
             link.Collision.Geometry.Mesh.Filename = meshFiles.CollisionMeshFilename;
             if (meshRecords != null)
             {
-                meshRecords.Add(CreateMeshExportRecord(link, meshFiles, meshFormat));
+                meshRecords.Add(CreateMeshExportRecord(link, meshFiles, meshFormat, collisionExport));
             }
         }
 
@@ -505,13 +508,16 @@ namespace SW2URDF.URDFExport
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine(
-                "link,collision_strategy,mesh_format,visual_uri,collision_uri,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles");
+                "link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,visual_uri,collision_uri,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles");
             foreach (MeshExportRecord record in records)
             {
                 builder.AppendLine(String.Join(",", new[]
                 {
                     CsvField(record.LinkName),
                     record.CollisionStrategy,
+                    record.CollisionEffectiveStrategy,
+                    record.CollisionGeometryType,
+                    CsvField(record.CollisionNotes),
                     record.MeshFormat,
                     CsvField(record.VisualUri),
                     CsvField(record.CollisionUri),
@@ -532,14 +538,20 @@ namespace SW2URDF.URDFExport
         private static MeshExportRecord CreateMeshExportRecord(
             Link link,
             MeshFileNames meshFiles,
-            MeshExportFormat meshFormat)
+            MeshExportFormat meshFormat,
+            CollisionMeshExportResult collisionExport)
         {
             bool visualExists = File.Exists(meshFiles.WindowsVisualMeshFilename);
             bool collisionExists = File.Exists(meshFiles.WindowsCollisionMeshFilename);
             bool isStl = meshFormat == MeshExportFormat.STL;
+            CollisionMeshExportResult safeCollisionExport =
+                collisionExport ?? CollisionMeshExportResult.NotExported(link.CollisionMeshStrategy);
             return new MeshExportRecord(
                 link.Name,
                 link.CollisionMeshStrategy.ToString(),
+                safeCollisionExport.EffectiveStrategy.ToString(),
+                safeCollisionExport.GeometryType,
+                safeCollisionExport.Notes,
                 meshFormat.ToString(),
                 meshFiles.VisualMeshFilename,
                 meshFiles.CollisionMeshFilename,
@@ -575,7 +587,7 @@ namespace SW2URDF.URDFExport
             return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "";
         }
 
-        private void ExportCollisionMesh(
+        private CollisionMeshExportResult ExportCollisionMesh(
             Link link,
             MeshFileNames meshFiles,
             MeshExportFormat meshFormat)
@@ -586,10 +598,21 @@ namespace SW2URDF.URDFExport
                     if (meshFormat == MeshExportFormat.STL &&
                         TryWritePrimitiveCollisionMesh(link, meshFiles.WindowsCollisionMeshFilename))
                     {
-                        return;
+                        return new CollisionMeshExportResult(
+                            CollisionMeshStrategy.Primitive,
+                            CollisionMeshStrategy.Primitive,
+                            "box_primitive",
+                            "ok");
                     }
                     logger.Warn(link.Name + ": primitive collision mesh failed; falling back to visual mesh copy");
-                    break;
+                    CopyVisualMeshToCollisionMesh(link, meshFiles);
+                    return new CollisionMeshExportResult(
+                        CollisionMeshStrategy.Primitive,
+                        CollisionMeshStrategy.VisualMesh,
+                        "visual_mesh_copy",
+                        meshFormat == MeshExportFormat.STL
+                            ? "primitive_failed_visual_mesh_fallback"
+                            : "primitive_requires_stl_visual_mesh_fallback");
 
                 case CollisionMeshStrategy.ConvexHull:
                     logger.Warn(link.Name + ": convex hull collision mesh is not implemented yet; " +
@@ -597,18 +620,37 @@ namespace SW2URDF.URDFExport
                     if (meshFormat == MeshExportFormat.STL &&
                         TryWritePrimitiveCollisionMesh(link, meshFiles.WindowsCollisionMeshFilename))
                     {
-                        return;
+                        return new CollisionMeshExportResult(
+                            CollisionMeshStrategy.ConvexHull,
+                            CollisionMeshStrategy.Primitive,
+                            "box_primitive",
+                            "convex_hull_not_implemented_box_fallback");
                     }
                     logger.Warn(link.Name + ": convex hull fallback failed; falling back to visual mesh copy");
-                    break;
+                    CopyVisualMeshToCollisionMesh(link, meshFiles);
+                    return new CollisionMeshExportResult(
+                        CollisionMeshStrategy.ConvexHull,
+                        CollisionMeshStrategy.VisualMesh,
+                        "visual_mesh_copy",
+                        "convex_hull_not_implemented_visual_mesh_fallback");
 
                 case CollisionMeshStrategy.AccurateMesh:
+                    CopyVisualMeshToCollisionMesh(link, meshFiles);
+                    return new CollisionMeshExportResult(
+                        CollisionMeshStrategy.AccurateMesh,
+                        CollisionMeshStrategy.VisualMesh,
+                        "visual_mesh_copy",
+                        "accurate_collision_mesh_not_implemented_visual_mesh_copy");
+
                 case CollisionMeshStrategy.VisualMesh:
                 default:
-                    break;
+                    CopyVisualMeshToCollisionMesh(link, meshFiles);
+                    return new CollisionMeshExportResult(
+                        link.CollisionMeshStrategy,
+                        CollisionMeshStrategy.VisualMesh,
+                        "visual_mesh_copy",
+                        "ok");
             }
-
-            CopyVisualMeshToCollisionMesh(link, meshFiles);
         }
 
         private static void CopyVisualMeshToCollisionMesh(Link link, MeshFileNames meshFiles)

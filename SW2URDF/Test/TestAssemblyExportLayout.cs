@@ -78,6 +78,10 @@ namespace SW2URDF.Test
             GroupBox meshGroup = GetControl<GroupBox>(form, "groupBox4");
             TreeView tree = GetControl<TreeView>(form, "treeViewLinkProperties");
             Button finishButton = GetControl<Button>(form, "buttonLinksFinish");
+            ComboBox collisionStrategy = GetControl<ComboBox>(form, "comboBoxCollisionStrategy");
+            Label collisionStrategyLabel = GetControl<Label>(form, "labelCollisionStrategy");
+            TextBox visualYaw = GetControl<TextBox>(form, "textBoxVisualOriginYaw");
+            DomainUpDown colorRed = GetControl<DomainUpDown>(form, "domainUpDownRed");
 
             Assert.Equal(inertiaGroup.Left, packageLabel.Left);
             Assert.True(packageHint.Right <= inertiaGroup.Right);
@@ -85,6 +89,10 @@ namespace SW2URDF.Test
             Assert.True(meshGroup.Right <= panel.ClientSize.Width);
             Assert.True(finishButton.Right <= panel.ClientSize.Width);
             Assert.True(finishButton.Bottom <= panel.ClientSize.Height);
+            Assert.Equal(ComboBoxStyle.DropDownList, collisionStrategy.DropDownStyle);
+            Assert.True(collisionStrategy.Left > visualYaw.Right);
+            Assert.True(collisionStrategy.Right < colorRed.Left);
+            Assert.True(collisionStrategyLabel.Bottom <= collisionStrategy.Top);
         }
 
         private static void AssertJointFooterGeometry(AssemblyExportForm form)
