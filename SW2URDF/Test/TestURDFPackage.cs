@@ -323,6 +323,7 @@ namespace SW2URDF.Test
             Assert.Contains("## ROS 2 URDF", report);
             Assert.Contains("ROS 2 setup.py | OK", report);
             Assert.Contains("Inertial validation rows: 1", report);
+            Assert.Contains("Warning rows: 0", report);
             Assert.Contains("Mesh manifest rows: 1", report);
             Assert.Contains("Requested collision strategies: VisualMesh=1", report);
             Assert.Contains("Effective collision strategies: VisualMesh=1", report);

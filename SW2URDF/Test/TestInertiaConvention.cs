@@ -1,5 +1,6 @@
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
+using System.Linq;
 using Xunit;
 
 namespace SW2URDF.Test
@@ -82,10 +83,76 @@ namespace SW2URDF.Test
             string csv = ExportHelper.BuildInertialValidationCsv(new[] { record });
 
             Assert.Contains(
-                "link,coordinate_system,quantity,unit,solidworks_expected,urdf_value,absolute_error,relative_error_percent,status",
+                "link,coordinate_system,quantity,unit,solidworks_expected,urdf_value,absolute_error,relative_error_percent,status,check_type,message",
                 csv);
             Assert.Contains(
-                "\"base,link\",\"Origin \"\"global\"\"\",mass,kg,1.25,1.5,0.25,20,FAIL",
+                "\"base,link\",\"Origin \"\"global\"\"\",mass,kg,1.25,1.5,0.25,20,FAIL,numeric,",
+                csv);
+        }
+
+        [Fact]
+        public void TestPhysicalInertiaDiagnosticsRejectTriangleInequality()
+        {
+            Link link = new Link();
+            link.Name = "thin_bad_link";
+            link.Inertial.Mass.Value = 1.0;
+            link.Inertial.Inertia.Ixx = 10.0;
+            link.Inertial.Inertia.Iyy = 1.0;
+            link.Inertial.Inertia.Izz = 1.0;
+
+            var rows = ExportHelper.BuildPhysicalInertiaValidationRows(link);
+
+            Assert.Contains(rows, row =>
+                row.Quantity == "inertia.positive_definite" &&
+                row.Status == "PASS");
+            Assert.Contains(rows, row =>
+                row.Quantity == "principal_moments.triangle_inequality" &&
+                row.Status == "FAIL");
+            Assert.Contains(rows, row =>
+                row.Quantity == "ellipsoid.display" &&
+                row.CheckType == "display" &&
+                row.Status == "WARN" &&
+                row.Message.Contains("physical inertia is invalid"));
+        }
+
+        [Fact]
+        public void TestPhysicalInertiaDiagnosticsWarnForMagnitudeAnomalies()
+        {
+            Link link = new Link();
+            link.Name = "tiny_mass_link";
+            link.Inertial.Mass.Value = 1e-12;
+            link.Inertial.Inertia.Ixx = 1e-12;
+            link.Inertial.Inertia.Iyy = 1e-12;
+            link.Inertial.Inertia.Izz = 1e-12;
+
+            var rows = ExportHelper.BuildPhysicalInertiaValidationRows(link);
+
+            ExportHelper.InertialValidationRow massMagnitude =
+                rows.First(row => row.Quantity == "mass.magnitude");
+            Assert.Equal("magnitude", massMagnitude.CheckType);
+            Assert.Equal("WARN", massMagnitude.Status);
+            Assert.True(massMagnitude.Passed);
+        }
+
+        [Fact]
+        public void TestInertialValidationCsvWritesDiagnosticFields()
+        {
+            ExportHelper.InertialValidationRow row =
+                ExportHelper.InertialValidationRow.Diagnostic(
+                    "ellipsoid.display",
+                    "display",
+                    "WARN",
+                    "display failed, physical inertia passed");
+            ExportHelper.InertialValidationRecord record =
+                new ExportHelper.InertialValidationRecord(
+                    "base_link",
+                    "Origin_global",
+                    row);
+
+            string csv = ExportHelper.BuildInertialValidationCsv(new[] { record });
+
+            Assert.Contains(
+                "base_link,Origin_global,ellipsoid.display,,,,,,WARN,display,\"display failed, physical inertia passed\"",
                 csv);
         }
     }

@@ -327,21 +327,107 @@ namespace SW2URDF.URDFExport
 
         private void LogSingleLinkInertialValidation(Link link, List<InertialValidationRecord> records)
         {
+            string coordinateSystemName = GetValidationCoordinateSystemName(link);
+            List<InertialValidationRow> rows = new List<InertialValidationRow>();
+
             if (link.SWComponents == null || link.SWComponents.Count == 0)
             {
-                logger.Warn("Skipping inertial validation for link " + link.Name +
+                logger.Warn("Skipping SolidWorks numeric inertial comparison for link " + link.Name +
                     " because it has no SolidWorks components");
-                return;
             }
-
-            MathTransform jointTransform = GetCoordinateSystemTransform(link.Joint.CoordinateSystemName);
-            if (jointTransform == null)
+            else
             {
-                logger.Warn("Skipping inertial validation for link " + link.Name +
-                    " because coordinate system " + link.Joint.CoordinateSystemName + " was not found");
-                return;
+                MathTransform jointTransform = GetCoordinateSystemTransform(coordinateSystemName);
+                if (jointTransform == null)
+                {
+                    logger.Warn("Skipping SolidWorks numeric inertial comparison for link " + link.Name +
+                        " because coordinate system " + coordinateSystemName + " was not found");
+                }
+                else
+                {
+                    rows.AddRange(BuildSolidWorksInertiaComparisonRows(link, jointTransform));
+                }
             }
 
+            rows.AddRange(BuildPhysicalInertiaValidationRows(link));
+
+            foreach (InertialValidationRow row in rows)
+            {
+                records.Add(new InertialValidationRecord(
+                    link.Name,
+                    coordinateSystemName,
+                    row));
+            }
+
+            StringBuilder builder = new StringBuilder();
+            builder.AppendLine("Inertial validation for link '" + link.Name + "'");
+            builder.AppendLine("Coordinate system: " + coordinateSystemName);
+            builder.AppendLine("SolidWorks source: MassProperty with selected coordinate system, COM inertia; " +
+                "off-diagonal products converted to URDF sign convention.");
+            builder.AppendLine("Units: mass kg, origin m, inertia kg*m^2. SolidWorks UI equivalent: origin m*1000, inertia kg*m^2*1e6.");
+            builder.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                "{0,-35} {1,-10} {2,-8} {3,18} {4,18} {5,18} {6,14} {7,8} {8}",
+                "quantity", "check", "unit", "sw_expected", "urdf_value", "abs_error", "rel_error_%", "status", "message"));
+
+            double maxAbsError = 0;
+            double maxRelativeErrorPercent = 0;
+            bool validationPassed = true;
+            bool validationHasWarning = false;
+            foreach (InertialValidationRow row in rows)
+            {
+                if (row.HasNumericComparison)
+                {
+                    maxAbsError = Math.Max(maxAbsError, Math.Abs(row.AbsoluteError));
+                }
+                double? relativeErrorPercent = row.RelativeErrorPercent;
+                if (relativeErrorPercent.HasValue)
+                {
+                    maxRelativeErrorPercent = Math.Max(maxRelativeErrorPercent, relativeErrorPercent.Value);
+                }
+                validationPassed &= row.Passed;
+                validationHasWarning |= row.IsWarning;
+
+                builder.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                    "{0,-35} {1,-10} {2,-8} {3,18} {4,18} {5,18} {6,14} {7,8} {8}",
+                    row.Quantity,
+                    row.CheckType,
+                    row.Unit,
+                    FormatValidationNumber(row.SolidWorksExpected),
+                    FormatValidationNumber(row.UrdfValue),
+                    FormatValidationNumber(row.AbsoluteError),
+                    FormatValidationPercent(relativeErrorPercent),
+                    row.Status,
+                    row.Message));
+            }
+
+            builder.AppendLine("Max abs error: " + FormatValidationNumber(maxAbsError) +
+                "; max relative error: " + FormatValidationNumber(maxRelativeErrorPercent) + "%");
+            builder.AppendLine("Validation result: " +
+                (validationPassed ? validationHasWarning ? "WARN" : "PASS" : "FAIL"));
+            if (validationPassed && !validationHasWarning)
+            {
+                logger.Info(builder.ToString());
+            }
+            else
+            {
+                logger.Warn(builder.ToString());
+            }
+        }
+
+        private static string GetValidationCoordinateSystemName(Link link)
+        {
+            if (link == null || link.Joint == null)
+            {
+                return "";
+            }
+
+            return link.Joint.CoordinateSystemName ?? "";
+        }
+
+        private List<InertialValidationRow> BuildSolidWorksInertiaComparisonRows(
+            Link link,
+            MathTransform jointTransform)
+        {
             List<Body2> bodies = GetBodies(link.SWComponents);
             MassProperty swMass = CreateMassProperty(bodies, jointTransform);
             double[] swCenterOfMass = swMass.CenterOfMass;
@@ -360,7 +446,7 @@ namespace SW2URDF.URDFExport
                 link.Inertial.Inertia.Izz
             };
 
-            List<InertialValidationRow> rows = new List<InertialValidationRow>
+            return new List<InertialValidationRow>
             {
                 new InertialValidationRow("mass", "kg", swMass.Mass, link.Inertial.Mass.Value),
                 new InertialValidationRow("origin.x", "m", swCenterOfMass[0], urdfOrigin[0]),
@@ -373,60 +459,275 @@ namespace SW2URDF.URDFExport
                 new InertialValidationRow("iyz", "kg*m^2", expectedMoment[4], urdfMoment[4]),
                 new InertialValidationRow("izz", "kg*m^2", expectedMoment[5], urdfMoment[5])
             };
+        }
 
-            foreach (InertialValidationRow row in rows)
+        internal static List<InertialValidationRow> BuildPhysicalInertiaValidationRows(Link link)
+        {
+            List<InertialValidationRow> rows = new List<InertialValidationRow>();
+            if (link == null || link.Inertial == null)
             {
-                records.Add(new InertialValidationRecord(
-                    link.Name,
-                    link.Joint.CoordinateSystemName,
-                    row));
+                rows.Add(InertialValidationRow.Diagnostic(
+                    "inertial.exists",
+                    "physical",
+                    "FAIL",
+                    "The link has no inertial element."));
+                return rows;
             }
 
-            StringBuilder builder = new StringBuilder();
-            builder.AppendLine("Inertial validation for link '" + link.Name + "'");
-            builder.AppendLine("Coordinate system: " + link.Joint.CoordinateSystemName);
-            builder.AppendLine("SolidWorks source: MassProperty with selected coordinate system, COM inertia; " +
-                "off-diagonal products converted to URDF sign convention.");
-            builder.AppendLine("Units: mass kg, origin m, inertia kg*m^2. SolidWorks UI equivalent: origin m*1000, inertia kg*m^2*1e6.");
-            builder.AppendLine(string.Format(CultureInfo.InvariantCulture,
-                "{0,-12} {1,-8} {2,18} {3,18} {4,18} {5,14} {6,8}",
-                "quantity", "unit", "sw_expected", "urdf_value", "abs_error", "rel_error_%", "status"));
+            double mass = link.Inertial.Mass == null ? Double.NaN : link.Inertial.Mass.Value;
+            bool massPositive = IsFinite(mass) && mass > 0.0;
+            rows.Add(InertialValidationRow.Diagnostic(
+                "mass.positive",
+                "physical",
+                massPositive ? "PASS" : "FAIL",
+                massPositive
+                    ? "Mass is positive and finite."
+                    : "Mass must be positive and finite."));
+            rows.Add(BuildMassMagnitudeDiagnostic(mass));
 
-            double maxAbsError = 0;
-            double maxRelativeErrorPercent = 0;
-            bool validationPassed = true;
-            foreach (InertialValidationRow row in rows)
+            double[] origin = link.Inertial.Origin == null ? null : link.Inertial.Origin.GetXYZ();
+            bool originFinite = origin != null && origin.Length == 3 && origin.All(IsFinite);
+            rows.Add(InertialValidationRow.Diagnostic(
+                "origin.finite",
+                "physical",
+                originFinite ? "PASS" : "FAIL",
+                originFinite
+                    ? "COM origin is finite: " + FormatDiagnosticVector(origin)
+                    : "COM origin must contain three finite values."));
+            rows.Add(BuildOriginMagnitudeDiagnostic(origin));
+
+            double[] moment = link.Inertial.Inertia == null ? null : link.Inertial.Inertia.GetMoment();
+            double[] principalMoments;
+            string principalError;
+            bool principalAvailable = TryGetPrincipalMoments(moment, out principalMoments, out principalError);
+            bool positiveDefinite = principalAvailable && principalMoments.All(value => IsFinite(value) && value > 0.0);
+            rows.Add(InertialValidationRow.Diagnostic(
+                "inertia.positive_definite",
+                "physical",
+                positiveDefinite ? "PASS" : "FAIL",
+                positiveDefinite
+                    ? "Principal moments are positive: " + FormatDiagnosticVector(principalMoments)
+                    : principalError));
+
+            bool triangleValid = positiveDefinite && PrincipalMomentsSatisfyTriangleInequality(principalMoments);
+            rows.Add(InertialValidationRow.Diagnostic(
+                "principal_moments.triangle_inequality",
+                "physical",
+                triangleValid ? "PASS" : "FAIL",
+                triangleValid
+                    ? "Principal moments satisfy Ix + Iy >= Iz, Ix + Iz >= Iy, Iy + Iz >= Ix."
+                    : "Principal moments violate the rigid-body triangle inequality: " +
+                      FormatDiagnosticVector(principalMoments)));
+            rows.Add(BuildPrincipalMagnitudeDiagnostic(principalMoments, positiveDefinite));
+            rows.Add(BuildEllipsoidDisplayDiagnostic(mass, moment, massPositive && positiveDefinite && triangleValid));
+
+            return rows;
+        }
+
+        private static InertialValidationRow BuildMassMagnitudeDiagnostic(double mass)
+        {
+            if (!IsFinite(mass) || mass <= 0.0)
             {
-                maxAbsError = Math.Max(maxAbsError, Math.Abs(row.AbsoluteError));
-                double? relativeErrorPercent = row.RelativeErrorPercent;
-                if (relativeErrorPercent.HasValue)
+                return InertialValidationRow.Diagnostic(
+                    "mass.magnitude",
+                    "magnitude",
+                    "WARN",
+                    "Mass magnitude was not checked because mass is not positive and finite.");
+            }
+
+            if (mass < 1e-9 || mass > 1e6)
+            {
+                return InertialValidationRow.Diagnostic(
+                    "mass.magnitude",
+                    "magnitude",
+                    "WARN",
+                    "Mass is outside the expected robotics export range [1e-9, 1e6] kg: " +
+                    FormatDiagnosticNumber(mass));
+            }
+
+            return InertialValidationRow.Diagnostic(
+                "mass.magnitude",
+                "magnitude",
+                "PASS",
+                "Mass magnitude is within the expected robotics export range.");
+        }
+
+        private static InertialValidationRow BuildOriginMagnitudeDiagnostic(double[] origin)
+        {
+            if (origin == null || origin.Length != 3 || !origin.All(IsFinite))
+            {
+                return InertialValidationRow.Diagnostic(
+                    "origin.magnitude",
+                    "magnitude",
+                    "WARN",
+                    "COM magnitude was not checked because origin is invalid.");
+            }
+
+            double maxAbs = origin.Select(Math.Abs).Max();
+            if (maxAbs > 1000.0)
+            {
+                return InertialValidationRow.Diagnostic(
+                    "origin.magnitude",
+                    "magnitude",
+                    "WARN",
+                    "COM origin is larger than 1000 m from the link frame: " +
+                    FormatDiagnosticVector(origin));
+            }
+
+            return InertialValidationRow.Diagnostic(
+                "origin.magnitude",
+                "magnitude",
+                "PASS",
+                "COM origin magnitude is within the expected range.");
+        }
+
+        private static InertialValidationRow BuildPrincipalMagnitudeDiagnostic(
+            double[] principalMoments,
+            bool positiveDefinite)
+        {
+            if (!positiveDefinite || principalMoments == null || principalMoments.Length != 3)
+            {
+                return InertialValidationRow.Diagnostic(
+                    "principal_moments.magnitude",
+                    "magnitude",
+                    "WARN",
+                    "Principal moment magnitude was not checked because the inertia tensor is not positive definite.");
+            }
+
+            double min = principalMoments.Min();
+            double max = principalMoments.Max();
+            if (min < 1e-18 || max > 1e6)
+            {
+                return InertialValidationRow.Diagnostic(
+                    "principal_moments.magnitude",
+                    "magnitude",
+                    "WARN",
+                    "Principal moments are outside the expected range [1e-18, 1e6] kg*m^2: " +
+                    FormatDiagnosticVector(principalMoments));
+            }
+            if (max / min > 1e12)
+            {
+                return InertialValidationRow.Diagnostic(
+                    "principal_moments.magnitude",
+                    "magnitude",
+                    "WARN",
+                    "Principal moment ratio is larger than 1e12: " +
+                    FormatDiagnosticVector(principalMoments));
+            }
+
+            return InertialValidationRow.Diagnostic(
+                "principal_moments.magnitude",
+                "magnitude",
+                "PASS",
+                "Principal moment magnitudes are within the expected range.");
+        }
+
+        private static InertialValidationRow BuildEllipsoidDisplayDiagnostic(
+            double mass,
+            double[] moment,
+            bool physicalInertiaValid)
+        {
+            InertiaEllipsoid ellipsoid;
+            string error;
+            if (InertiaEllipsoid.TryCreate(mass, moment, out ellipsoid, out error))
+            {
+                return InertialValidationRow.Diagnostic(
+                    "ellipsoid.display",
+                    "display",
+                    "PASS",
+                    "Inertia ellipsoid can be displayed.");
+            }
+
+            return InertialValidationRow.Diagnostic(
+                "ellipsoid.display",
+                "display",
+                "WARN",
+                physicalInertiaValid
+                    ? "Ellipsoid display failed although physical checks passed: " + error
+                    : "Ellipsoid display is blocked because physical inertia is invalid: " + error);
+        }
+
+        private static bool TryGetPrincipalMoments(
+            double[] moment,
+            out double[] principalMoments,
+            out string error)
+        {
+            principalMoments = new double[0];
+            error = "";
+            if (moment == null || moment.Length != 9)
+            {
+                error = "The inertia tensor must contain nine matrix values.";
+                return false;
+            }
+            if (moment.Any(value => !IsFinite(value)))
+            {
+                error = "The inertia tensor contains a non-finite value.";
+                return false;
+            }
+
+            Matrix<double> tensor = DenseMatrix.OfArray(new[,]
+            {
+                { moment[0], moment[1], moment[2] },
+                { moment[3], moment[4], moment[5] },
+                { moment[6], moment[7], moment[8] }
+            });
+            double symmetryTolerance = Math.Max(1.0, tensor.L2Norm()) * 1e-10;
+            if (Math.Abs(tensor[0, 1] - tensor[1, 0]) > symmetryTolerance ||
+                Math.Abs(tensor[0, 2] - tensor[2, 0]) > symmetryTolerance ||
+                Math.Abs(tensor[1, 2] - tensor[2, 1]) > symmetryTolerance)
+            {
+                error = "The inertia tensor is not symmetric.";
+                return false;
+            }
+
+            var decomposition = tensor.Evd(Symmetricity.Symmetric);
+            principalMoments = new double[3];
+            for (int i = 0; i < principalMoments.Length; i++)
+            {
+                if (Math.Abs(decomposition.EigenValues[i].Imaginary) > symmetryTolerance)
                 {
-                    maxRelativeErrorPercent = Math.Max(maxRelativeErrorPercent, relativeErrorPercent.Value);
+                    error = "The inertia tensor produced complex principal moments.";
+                    return false;
                 }
-                validationPassed &= row.Passed;
-
-                builder.AppendLine(string.Format(CultureInfo.InvariantCulture,
-                    "{0,-12} {1,-8} {2,18} {3,18} {4,18} {5,14} {6,8}",
-                    row.Quantity,
-                    row.Unit,
-                    FormatValidationNumber(row.SolidWorksExpected),
-                    FormatValidationNumber(row.UrdfValue),
-                    FormatValidationNumber(row.AbsoluteError),
-                    FormatValidationPercent(relativeErrorPercent),
-                    row.Passed ? "PASS" : "FAIL"));
+                principalMoments[i] = decomposition.EigenValues[i].Real;
             }
 
-            builder.AppendLine("Max abs error: " + FormatValidationNumber(maxAbsError) +
-                "; max relative error: " + FormatValidationNumber(maxRelativeErrorPercent) + "%");
-            builder.AppendLine("Validation result: " + (validationPassed ? "PASS" : "FAIL"));
-            if (validationPassed)
+            Array.Sort(principalMoments);
+            error = "Principal moments are not all positive: " + FormatDiagnosticVector(principalMoments);
+            return true;
+        }
+
+        private static bool PrincipalMomentsSatisfyTriangleInequality(double[] principalMoments)
+        {
+            if (principalMoments == null || principalMoments.Length != 3)
             {
-                logger.Info(builder.ToString());
+                return false;
             }
-            else
+
+            double[] sorted = (double[])principalMoments.Clone();
+            Array.Sort(sorted);
+            double tolerance = Math.Max(sorted[2], 1e-18) * 1e-9;
+            return sorted[2] <= sorted[0] + sorted[1] + tolerance;
+        }
+
+        private static bool IsFinite(double value)
+        {
+            return !Double.IsNaN(value) && !Double.IsInfinity(value);
+        }
+
+        private static string FormatDiagnosticVector(double[] values)
+        {
+            if (values == null || values.Length == 0)
             {
-                logger.Warn(builder.ToString());
+                return "n/a";
             }
+
+            return String.Join("/", values.Select(FormatDiagnosticNumber));
+        }
+
+        private static string FormatDiagnosticNumber(double value)
+        {
+            return IsFinite(value) ? value.ToString("0.######E+0", CultureInfo.InvariantCulture) : "n/a";
         }
 
         private static void WriteInertialValidationCsv(
@@ -449,7 +750,7 @@ namespace SW2URDF.URDFExport
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine(
-                "link,coordinate_system,quantity,unit,solidworks_expected,urdf_value,absolute_error,relative_error_percent,status");
+                "link,coordinate_system,quantity,unit,solidworks_expected,urdf_value,absolute_error,relative_error_percent,status,check_type,message");
             foreach (InertialValidationRecord record in records)
             {
                 InertialValidationRow row = record.Row;
@@ -463,7 +764,9 @@ namespace SW2URDF.URDFExport
                     FormatCsvNumber(row.UrdfValue),
                     FormatCsvNumber(row.AbsoluteError),
                     FormatCsvPercent(row.RelativeErrorPercent),
-                    row.Passed ? "PASS" : "FAIL"
+                    row.Status,
+                    CsvField(row.CheckType),
+                    CsvField(row.Message)
                 }));
             }
 
@@ -472,6 +775,11 @@ namespace SW2URDF.URDFExport
 
         private static string FormatCsvNumber(double value)
         {
+            if (!IsFinite(value))
+            {
+                return "";
+            }
+
             return value.ToString("G17", CultureInfo.InvariantCulture);
         }
 
@@ -510,6 +818,11 @@ namespace SW2URDF.URDFExport
 
         private static string FormatValidationNumber(double value)
         {
+            if (!IsFinite(value))
+            {
+                return "n/a";
+            }
+
             return value.ToString("0.#########E+0", CultureInfo.InvariantCulture);
         }
 
@@ -706,32 +1019,83 @@ namespace SW2URDF.URDFExport
         {
             private const double RelativeErrorFloor = 1e-30;
             private const double RoundedUrdfRelativeTolerance = 5e-5;
+            private readonly string manualStatus;
 
             public InertialValidationRow(string quantity, string unit, double solidWorksExpected, double urdfValue)
+                : this(quantity, unit, solidWorksExpected, urdfValue, "numeric", null, "")
+            {
+            }
+
+            private InertialValidationRow(
+                string quantity,
+                string unit,
+                double solidWorksExpected,
+                double urdfValue,
+                string checkType,
+                string manualStatus,
+                string message)
             {
                 Quantity = quantity;
                 Unit = unit;
                 SolidWorksExpected = solidWorksExpected;
                 UrdfValue = urdfValue;
+                CheckType = String.IsNullOrWhiteSpace(checkType) ? "numeric" : checkType;
+                this.manualStatus = NormalizeStatus(manualStatus);
+                Message = message ?? "";
+            }
+
+            public static InertialValidationRow Diagnostic(
+                string quantity,
+                string checkType,
+                string status,
+                string message)
+            {
+                return new InertialValidationRow(
+                    quantity,
+                    "",
+                    Double.NaN,
+                    Double.NaN,
+                    checkType,
+                    status,
+                    message);
             }
 
             public string Quantity { get; private set; }
 
             public string Unit { get; private set; }
 
+            public string CheckType { get; private set; }
+
+            public string Message { get; private set; }
+
             public double SolidWorksExpected { get; private set; }
 
             public double UrdfValue { get; private set; }
 
+            public bool HasNumericComparison
+            {
+                get
+                {
+                    return String.Equals(CheckType, "numeric", StringComparison.Ordinal) &&
+                        IsFinite(SolidWorksExpected) &&
+                        IsFinite(UrdfValue);
+                }
+            }
+
             public double AbsoluteError
             {
-                get { return UrdfValue - SolidWorksExpected; }
+                get { return HasNumericComparison ? UrdfValue - SolidWorksExpected : Double.NaN; }
             }
 
             public double? RelativeErrorPercent
             {
                 get
                 {
+                    if (!HasNumericComparison)
+                    {
+                        return null;
+                    }
+
                     if (Math.Abs(SolidWorksExpected) < RelativeErrorFloor)
                     {
                         if (Math.Abs(AbsoluteError) < RelativeErrorFloor)
@@ -746,10 +1110,38 @@ namespace SW2URDF.URDFExport
                 }
             }
 
-            public bool Passed
+            public string Status
             {
                 get
                 {
+                    if (!String.IsNullOrWhiteSpace(manualStatus))
+                    {
+                        return manualStatus;
+                    }
+
+                    return NumericPassed ? "PASS" : "FAIL";
+                }
+            }
+
+            public bool Passed
+            {
+                get { return !String.Equals(Status, "FAIL", StringComparison.Ordinal); }
+            }
+
+            public bool IsWarning
+            {
+                get { return String.Equals(Status, "WARN", StringComparison.Ordinal); }
+            }
+
+            private bool NumericPassed
+            {
+                get
+                {
+                    if (!HasNumericComparison)
+                    {
+                        return false;
+                    }
+
                     double absoluteTolerance;
                     if (Quantity == "mass")
                     {
@@ -768,6 +1160,22 @@ namespace SW2URDF.URDFExport
                     }
                     return Math.Abs(AbsoluteError) <= absoluteTolerance;
                 }
+            }
+
+            private static string NormalizeStatus(string status)
+            {
+                if (String.IsNullOrWhiteSpace(status))
+                {
+                    return null;
+                }
+
+                string normalized = status.Trim().ToUpperInvariant();
+                if (normalized == "PASS" || normalized == "WARN" || normalized == "FAIL")
+                {
+                    return normalized;
+                }
+
+                throw new ArgumentException("Unsupported inertial validation status: " + status);
             }
         }
 

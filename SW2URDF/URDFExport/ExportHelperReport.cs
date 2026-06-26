@@ -123,9 +123,16 @@ namespace SW2URDF.URDFExport
                 findings.Add("WARN: No inertial validation rows were produced.");
             }
             foreach (IGrouping<string, InertialValidationRecord> linkGroup in
-                inertialList.Where(r => !r.Row.Passed).GroupBy(r => r.LinkName))
+                inertialList.Where(r => String.Equals(r.Row.Status, "FAIL", StringComparison.Ordinal))
+                    .GroupBy(r => r.LinkName))
             {
                 findings.Add("FAIL: Inertial validation failed for link " + linkGroup.Key +
+                    " (" + linkGroup.Count() + " rows).");
+            }
+            foreach (IGrouping<string, InertialValidationRecord> linkGroup in
+                inertialList.Where(r => r.Row.IsWarning).GroupBy(r => r.LinkName))
+            {
+                findings.Add("WARN: Inertial validation warning for link " + linkGroup.Key +
                     " (" + linkGroup.Count() + " rows).");
             }
 
@@ -342,9 +349,15 @@ namespace SW2URDF.URDFExport
             IEnumerable<InertialValidationRecord> records)
         {
             List<InertialValidationRecord> rows = records.ToList();
-            int failedRows = rows.Count(r => !r.Row.Passed);
+            int failedRows = rows.Count(r => String.Equals(r.Row.Status, "FAIL", StringComparison.Ordinal));
+            int warningRows = rows.Count(r => r.Row.IsWarning);
             string failedLinks = String.Join(", ",
-                rows.Where(r => !r.Row.Passed)
+                rows.Where(r => String.Equals(r.Row.Status, "FAIL", StringComparison.Ordinal))
+                    .Select(r => r.LinkName)
+                    .Distinct()
+                    .OrderBy(v => v));
+            string warningLinks = String.Join(", ",
+                rows.Where(r => r.Row.IsWarning)
                     .Select(r => r.LinkName)
                     .Distinct()
                     .OrderBy(v => v));
@@ -353,7 +366,9 @@ namespace SW2URDF.URDFExport
             builder.AppendLine();
             builder.AppendLine("- Inertial validation rows: " + rows.Count.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Failed rows: " + failedRows.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Warning rows: " + warningRows.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Failed links: " + (String.IsNullOrWhiteSpace(failedLinks) ? "none" : failedLinks));
+            builder.AppendLine("- Warning links: " + (String.IsNullOrWhiteSpace(warningLinks) ? "none" : warningLinks));
             builder.AppendLine("- CSV: config/inertial_validation.csv");
             builder.AppendLine();
         }
