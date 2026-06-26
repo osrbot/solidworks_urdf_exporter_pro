@@ -166,8 +166,12 @@ namespace SW2URDF.URDFExport
             exportStopwatch = Stopwatch.StartNew();
             exportStageNumber = 0;
             logger.Info("Beginning the export process");
-            logger.Info("Export metadata: commit version " + Versioning.Version.GetCommitVersion() +
+            logger.Info("Export metadata: plugin version " + Versioning.Version.GetPluginVersion() +
+                ", commit version " + Versioning.Version.GetCommitVersion() +
+                ", commit hash " + Versioning.Version.GetCommitHash() +
                 ", build version " + Versioning.Version.GetBuildVersion() +
+                ", build time UTC " + Versioning.Version.GetBuildTimeUtc() +
+                ", dirty state " + Versioning.Version.GetDirtyState() +
                 ", started " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz") +
                 ", robot " + PackageName +
                 ", ROS package " + RosPackageName +

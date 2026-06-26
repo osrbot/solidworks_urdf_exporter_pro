@@ -31,12 +31,17 @@ namespace SW2URDF.URDF
         public override void WriteURDF(XmlWriter writer)
         {
             writer.WriteStartDocument();
+            string pluginVersion = Versioning.Version.GetPluginVersion();
             string buildVersion = Versioning.Version.GetBuildVersion();
             string commitVersion = Versioning.Version.GetCommitVersion();
+            string commitHash = Versioning.Version.GetCommitHash();
+            string buildTimeUtc = Versioning.Version.GetBuildTimeUtc();
 
             writer.WriteComment(" This URDF was automatically created by SolidWorks to URDF Exporter! " +
                 "Originally created by Stephen Brawner (brawner@gmail.com) \r\n" +
-                string.Format("     Commit Version: {0}  Build Version: {1}\r\n", commitVersion, buildVersion) +
+                string.Format("     Plugin Version: {0}\r\n", pluginVersion) +
+                string.Format("     Commit Version: {0}  Commit Hash: {1}\r\n", commitVersion, commitHash) +
+                string.Format("     Build Version: {0}  Build Time UTC: {1}\r\n", buildVersion, buildTimeUtc) +
                 "     For more information, please see http://wiki.ros.org/sw_urdf_exporter ");
 
             base.WriteURDF(writer);

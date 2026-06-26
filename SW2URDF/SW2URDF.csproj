@@ -529,7 +529,6 @@
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PreBuildEvent>"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File "$(SolutionDir)scripts\UpdateVersionInfo.ps1" --filename "$(ProjectDir)Versioning\VersionInfo.cs"</PreBuildEvent>
     <PostBuildEvent>
 :REGISTRATION
 IF "$(TargetFrameworkVersion)"=="v4.5.2" GOTO NET40
@@ -565,6 +564,16 @@ GOTO END
 
 </PostBuildEvent>
   </PropertyGroup>
+  <Target Name="GenerateVersionInfo" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <GeneratedVersionInfoFile>$(IntermediateOutputPath)VersionInfo.g.cs</GeneratedVersionInfoFile>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <Exec Command="&quot;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&quot; -ExecutionPolicy Bypass -File &quot;$(SolutionDir)scripts\UpdateVersionInfo.ps1&quot; -filename &quot;$(GeneratedVersionInfoFile)&quot;" />
+    <ItemGroup>
+      <Compile Include="$(GeneratedVersionInfoFile)" />
+    </ItemGroup>
+  </Target>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>

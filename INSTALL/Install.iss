@@ -9,12 +9,14 @@
 #define MainBinaryName  "SW2URDF.dll"
 #define SetupBaseName   "sw2urdfSetup_"
 #define DllLocation     AddBackslash(SourcePath + "..\SW2URDF\bin\x64\Release") + MainBinaryName
-#define BuildVersion    GetFileVersion(DllLocation)
+#define BuildVersion    GetVersionNumbersString(DllLocation)
 #define CommitVersion   GetFileProductVersion(DllLocation)
 #if CommitVersion == ""
   #define InstallerVersion BuildVersion
+  #define InstallerCommitFilePart "unknown"
 #else
   #define InstallerVersion CommitVersion
+  #define InstallerCommitFilePart CommitVersion
 #endif
 #define AVF1            Copy(BuildVersion, 1, Pos(".", BuildVersion) - 1) + "_" + Copy(BuildVersion, Pos(".", BuildVersion) + 1)
 #define AVF2            Copy(AVF1,       1, Pos(".", AVF1      ) - 1) + "_" + Copy(AVF1      , Pos(".", AVF1      ) + 1)
@@ -38,8 +40,7 @@ AppUpdatesURL={#MyAppURL}
 CreateAppDir=yes
 DisableDirPage=no
 UsePreviousAppDir=no
-OutputBaseFilename=sw2urdfSetup
-;OutputBaseFilename={#SetupBaseName + AppVersionFile}
+OutputBaseFilename={#SetupBaseName + AppVersionFile + "_" + InstallerCommitFilePart}
 Compression=lzma
 DefaultDirName="{autopf}\SolidWorks Corp\SolidWorks\URDFExporter"
 SolidCompression=no

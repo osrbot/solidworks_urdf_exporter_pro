@@ -78,12 +78,18 @@ namespace SW2URDF.URDFExport
             builder.AppendLine();
             builder.AppendLine("Status: " + status);
             builder.AppendLine("Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture));
+            builder.AppendLine("Plugin version: " + Versioning.Version.GetPluginVersion());
             builder.AppendLine("Commit version: " + Versioning.Version.GetCommitVersion());
+            builder.AppendLine("Commit hash: " + Versioning.Version.GetCommitHash());
             builder.AppendLine("Build version: " + Versioning.Version.GetBuildVersion());
+            builder.AppendLine("Build time UTC: " + Versioning.Version.GetBuildTimeUtc());
+            builder.AppendLine("Dirty state: " + Versioning.Version.GetDirtyState());
             builder.AppendLine("Robot name: " + package.RobotName);
             builder.AppendLine("ROS package: " + package.PackageName);
             builder.AppendLine("Export meshes: " + (exportMeshes ? "true" : "false"));
             builder.AppendLine("Mesh format: " + meshFormat);
+            builder.AppendLine("Export parameters: export_meshes=" + (exportMeshes ? "true" : "false") +
+                ", mesh_format=" + meshFormat);
             builder.AppendLine("Elapsed: " + Utilities.OperationHeartbeat.FormatElapsed(elapsed));
             builder.AppendLine();
 
@@ -427,6 +433,14 @@ namespace SW2URDF.URDFExport
                 estimatedVisualBytes.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Estimated visual STL triangles: " +
                 estimatedVisualTriangles.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Requested STL reduction ratios: " +
+                FormatGroupCounts(rows
+                    .Where(r => r.StlStats != null && r.StlStats.ReductionRatio.HasValue)
+                    .Select(r => FormatNullableDouble(r.StlStats.ReductionRatio))));
+            builder.AppendLine("- STL quality settings: " +
+                FormatGroupCounts(rows
+                    .Where(r => r.StlStats != null)
+                    .Select(r => r.StlStats.QualityLabel)));
             builder.AppendLine("- Average estimated STL reduction: " +
                 FormatNullablePercent(AverageNullableDouble(rows
                     .Where(r => r.StlStats != null)

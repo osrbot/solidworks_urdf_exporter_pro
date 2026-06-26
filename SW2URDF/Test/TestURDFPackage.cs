@@ -319,6 +319,11 @@ namespace SW2URDF.Test
 
             string report = File.ReadAllText(ros1Report, Encoding.UTF8);
             Assert.Contains("Status: PASS", report);
+            Assert.Contains("Plugin version: ", report);
+            Assert.Contains("Commit hash: ", report);
+            Assert.Contains("Build time UTC: ", report);
+            Assert.Contains("Dirty state: ", report);
+            Assert.Contains("Export parameters: export_meshes=true, mesh_format=STL", report);
             Assert.Contains("## ROS 1 URDF", report);
             Assert.Contains("## ROS 2 URDF", report);
             Assert.Contains("ROS 2 setup.py | OK", report);
@@ -336,6 +341,8 @@ namespace SW2URDF.Test
             Assert.Contains("Collision strategy fallbacks: 0", report);
             Assert.Contains("Baseline estimated visual STL triangles: 100", report);
             Assert.Contains("Estimated visual STL triangles: 50", report);
+            Assert.Contains("Requested STL reduction ratios: 0.5=1", report);
+            Assert.Contains("STL quality settings: custom=1", report);
             Assert.Contains("Average estimated STL reduction: 50%", report);
             Assert.Contains("Average actual STL reduction: 50%", report);
             Assert.DoesNotContain("FAIL:", report);

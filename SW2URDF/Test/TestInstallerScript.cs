@@ -15,6 +15,9 @@ namespace SW2URDF.Test
             Assert.Contains("UsePreviousAppDir=no", installerScript);
             Assert.Contains("DefaultDirName=\"{autopf}\\SolidWorks Corp\\SolidWorks\\URDFExporter\"",
                 installerScript);
+            Assert.Contains("GetVersionNumbersString(DllLocation)", installerScript);
+            Assert.Contains("OutputBaseFilename={#SetupBaseName + AppVersionFile + \"_\" + InstallerCommitFilePart}",
+                installerScript);
             Assert.Contains("Name: \"english\"", installerScript);
             Assert.Contains("Name: \"chinesesimplified\"", installerScript);
             Assert.Contains("chinesesimplified.RegisteringControls=", installerScript);

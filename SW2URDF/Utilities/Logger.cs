@@ -72,8 +72,12 @@ namespace SW2URDF.Utilities
             logger.Info("\n" + String.Concat(Enumerable.Repeat("-", 80)));
             logger.Info("Logging commencing for SW2URDF exporter");
 
+            logger.Info("Plugin version " + Versioning.Version.GetPluginVersion());
             logger.Info("Commit version " + Versioning.Version.GetCommitVersion());
+            logger.Info("Commit hash " + Versioning.Version.GetCommitHash());
             logger.Info("Build version " + Versioning.Version.GetBuildVersion());
+            logger.Info("Build time UTC " + Versioning.Version.GetBuildTimeUtc());
+            logger.Info("Dirty state " + Versioning.Version.GetDirtyState());
         }
 
         public static ILog GetLogger()
