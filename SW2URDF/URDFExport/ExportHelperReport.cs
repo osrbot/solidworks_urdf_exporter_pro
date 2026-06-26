@@ -160,6 +160,14 @@ namespace SW2URDF.URDFExport
                         "Collision mesh for link " + record.LinkName + " is missing at " +
                         record.CollisionWindowsPath);
                 }
+                if (record.StlStats != null &&
+                    record.StlStats.EstimateErrorPercent.HasValue &&
+                    Math.Abs(record.StlStats.EstimateErrorPercent.Value) > 50.0)
+                {
+                    findings.Add("WARN: STL estimate error for link " + record.LinkName +
+                        " is " + record.StlStats.EstimateErrorPercent.Value.ToString("0.##", CultureInfo.InvariantCulture) +
+                        "%.");
+                }
             }
 
             return findings;
@@ -359,6 +367,18 @@ namespace SW2URDF.URDFExport
             long collisionBytes = rows.Where(r => r.CollisionBytes.HasValue).Sum(r => r.CollisionBytes.Value);
             ulong visualTriangles = SumNullableUInt(rows.Select(r => r.VisualTriangles));
             ulong collisionTriangles = SumNullableUInt(rows.Select(r => r.CollisionTriangles));
+            long estimatedVisualBytes = rows
+                .Where(r => r.StlStats != null && r.StlStats.EstimatedBytes.HasValue)
+                .Sum(r => r.StlStats.EstimatedBytes.Value);
+            long baselineEstimatedVisualBytes = rows
+                .Where(r => r.StlStats != null && r.StlStats.BaselineEstimatedBytes.HasValue)
+                .Sum(r => r.StlStats.BaselineEstimatedBytes.Value);
+            long estimatedVisualTriangles = rows
+                .Where(r => r.StlStats != null && r.StlStats.EstimatedTriangles.HasValue)
+                .Sum(r => (long)r.StlStats.EstimatedTriangles.Value);
+            long baselineEstimatedVisualTriangles = rows
+                .Where(r => r.StlStats != null && r.StlStats.BaselineEstimatedTriangles.HasValue)
+                .Sum(r => (long)r.StlStats.BaselineEstimatedTriangles.Value);
 
             builder.AppendLine("## Mesh Manifest");
             builder.AppendLine();
@@ -369,6 +389,22 @@ namespace SW2URDF.URDFExport
             builder.AppendLine("- Collision mesh bytes: " + collisionBytes.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Visual STL triangles: " + visualTriangles.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Collision STL triangles: " + collisionTriangles.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Baseline estimated visual STL bytes: " +
+                baselineEstimatedVisualBytes.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Baseline estimated visual STL triangles: " +
+                baselineEstimatedVisualTriangles.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Estimated visual STL bytes: " +
+                estimatedVisualBytes.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Estimated visual STL triangles: " +
+                estimatedVisualTriangles.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Average estimated STL reduction: " +
+                FormatNullablePercent(AverageNullableDouble(rows
+                    .Where(r => r.StlStats != null)
+                    .Select(r => r.StlStats.EstimatedReductionPercent))));
+            builder.AppendLine("- Average actual STL reduction: " +
+                FormatNullablePercent(AverageNullableDouble(rows
+                    .Where(r => r.StlStats != null)
+                    .Select(r => r.StlStats.ActualReductionPercent))));
             builder.AppendLine("- Requested collision strategies: " +
                 FormatGroupCounts(rows.Select(r => r.CollisionStrategy)));
             builder.AppendLine("- Effective collision strategies: " +
@@ -423,6 +459,24 @@ namespace SW2URDF.URDFExport
                 .Select(group => group.Key + "=" + group.Count().ToString(CultureInfo.InvariantCulture))
                 .ToList();
             return counts.Count == 0 ? "none" : String.Join(", ", counts.ToArray());
+        }
+
+        private static double? AverageNullableDouble(IEnumerable<double?> values)
+        {
+            List<double> validValues = values.Where(v => v.HasValue).Select(v => v.Value).ToList();
+            if (validValues.Count == 0)
+            {
+                return null;
+            }
+
+            return validValues.Average();
+        }
+
+        private static string FormatNullablePercent(double? value)
+        {
+            return value.HasValue
+                ? value.Value.ToString("0.##", CultureInfo.InvariantCulture) + "%"
+                : "none";
         }
 
         private static string FormatBool(bool value)

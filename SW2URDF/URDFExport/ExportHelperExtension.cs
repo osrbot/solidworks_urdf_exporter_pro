@@ -560,7 +560,8 @@ namespace SW2URDF.URDFExport
                 long? visualBytes,
                 long? collisionBytes,
                 uint? visualTriangles,
-                uint? collisionTriangles)
+                uint? collisionTriangles,
+                StlExportStats stlStats = null)
             {
                 LinkName = linkName;
                 CollisionStrategy = collisionStrategy;
@@ -578,6 +579,7 @@ namespace SW2URDF.URDFExport
                 CollisionBytes = collisionBytes;
                 VisualTriangles = visualTriangles;
                 CollisionTriangles = collisionTriangles;
+                StlStats = stlStats ?? StlExportStats.NotExported();
             }
 
             public string LinkName { get; private set; }
@@ -611,6 +613,61 @@ namespace SW2URDF.URDFExport
             public uint? VisualTriangles { get; private set; }
 
             public uint? CollisionTriangles { get; private set; }
+
+            public StlExportStats StlStats { get; private set; }
+        }
+
+        internal class StlExportStats
+        {
+            public StlExportStats()
+            {
+                QualityLabel = "";
+            }
+
+            public string QualityLabel { get; set; }
+
+            public double? ReductionRatio { get; set; }
+
+            public bool? CustomSettings { get; set; }
+
+            public double? Deviation { get; set; }
+
+            public double? AngleTolerance { get; set; }
+
+            public int? BaselineEstimatedTriangles { get; set; }
+
+            public long? BaselineEstimatedBytes { get; set; }
+
+            public int? EstimatedTriangles { get; set; }
+
+            public long? EstimatedBytes { get; set; }
+
+            public uint? ActualTriangles { get; set; }
+
+            public long? ActualBytes { get; set; }
+
+            public double? EstimateErrorPercent { get; set; }
+
+            public double? EstimatedReductionPercent { get; set; }
+
+            public double? ActualReductionPercent { get; set; }
+
+            public static StlExportStats FromSettings(StlMeshSettings settings)
+            {
+                return new StlExportStats
+                {
+                    QualityLabel = settings == null ? "" : settings.QualityLabel,
+                    ReductionRatio = settings == null ? (double?)null : settings.ReductionRatio,
+                    CustomSettings = settings == null ? (bool?)null : settings.UseCustom,
+                    Deviation = settings == null ? (double?)null : settings.Deviation,
+                    AngleTolerance = settings == null ? (double?)null : settings.AngleTolerance
+                };
+            }
+
+            public static StlExportStats NotExported()
+            {
+                return new StlExportStats();
+            }
         }
 
         internal class CollisionMeshExportResult

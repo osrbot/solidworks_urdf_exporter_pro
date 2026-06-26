@@ -69,6 +69,24 @@ namespace SW2URDF.Test
                 5);
         }
 
+        [Theory]
+        [InlineData(100, 100, 0.0)]
+        [InlineData(50, 100, 50.0)]
+        [InlineData(150, 100, -50.0)]
+        public void TestStlReductionPercent(long reduced, long baseline, double expectedPercent)
+        {
+            Assert.Equal(
+                expectedPercent,
+                ExportHelper.CalculateReductionPercent(reduced, baseline).Value,
+                5);
+        }
+
+        [Fact]
+        public void TestStlReductionPercentReturnsNullWithoutBaseline()
+        {
+            Assert.Null(ExportHelper.CalculateReductionPercent(100, 0));
+        }
+
         [Fact]
         public void TestLinkCopyPreservesMeshReductionRatio()
         {
@@ -281,13 +299,28 @@ namespace SW2URDF.Test
                     184,
                     84,
                     2,
-                    0);
+                    0,
+                    new ExportHelper.StlExportStats
+                    {
+                        QualityLabel = "custom",
+                        ReductionRatio = 0.5,
+                        CustomSettings = true,
+                        Deviation = 0.001,
+                        AngleTolerance = 1.0,
+                        BaselineEstimatedBytes = 5084,
+                        BaselineEstimatedTriangles = 100,
+                        EstimatedBytes = 2584,
+                        EstimatedTriangles = 50,
+                        EstimateErrorPercent = 10.5,
+                        EstimatedReductionPercent = 50.0,
+                        ActualReductionPercent = 98.0
+                    });
 
             string csv = ExportHelper.BuildMeshManifestCsv(new[] { record });
 
-            Assert.Contains("link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,visual_uri,collision_uri", csv);
+            Assert.Contains("link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,stl_quality,mesh_reduction_ratio", csv);
             Assert.Contains(
-                "\"base,link\",Primitive,Primitive,box_primitive,ok,STL,package://robot/meshes/visual/base_link.STL,package://robot/meshes/collision/base_link.STL",
+                "\"base,link\",Primitive,Primitive,box_primitive,ok,STL,custom,0.5,true,0.001,1,5084,100,2584,50,10.5,50,98,package://robot/meshes/visual/base_link.STL,package://robot/meshes/collision/base_link.STL",
                 csv);
             Assert.Contains(",true,true,184,84,2,0", csv);
         }

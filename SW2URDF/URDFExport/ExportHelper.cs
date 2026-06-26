@@ -377,6 +377,7 @@ namespace SW2URDF.URDFExport
             MeshFileNames meshFiles = CreateLinkMeshFileNames(package, link, meshFormat);
             CollisionMeshExportResult collisionExport =
                 CollisionMeshExportResult.NotExported(link.CollisionMeshStrategy);
+            StlExportStats visualStlStats = StlExportStats.NotExported();
 
             // Export STL
             if (exportSTL)
@@ -386,7 +387,7 @@ namespace SW2URDF.URDFExport
                 switch (meshFormat)
                 {
                     case MeshExportFormat.STL:
-                        SaveSTL(link, meshFiles.WindowsVisualMeshFilename);
+                        visualStlStats = SaveSTL(link, meshFiles.WindowsVisualMeshFilename);
                         break;
 
                     case MeshExportFormat.THREEDXML:
@@ -394,7 +395,7 @@ namespace SW2URDF.URDFExport
                         break;
 
                     default:
-                        SaveSTL(link, meshFiles.WindowsVisualMeshFilename);
+                        visualStlStats = SaveSTL(link, meshFiles.WindowsVisualMeshFilename);
                         break;
                 }
                 collisionExport = ExportCollisionMesh(link, meshFiles, meshFormat);
@@ -403,7 +404,7 @@ namespace SW2URDF.URDFExport
             link.Collision.Geometry.Mesh.Filename = meshFiles.CollisionMeshFilename;
             if (meshRecords != null)
             {
-                meshRecords.Add(CreateMeshExportRecord(link, meshFiles, meshFormat, collisionExport));
+                meshRecords.Add(CreateMeshExportRecord(link, meshFiles, meshFormat, collisionExport, visualStlStats));
             }
         }
 
@@ -508,9 +509,10 @@ namespace SW2URDF.URDFExport
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine(
-                "link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,visual_uri,collision_uri,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles");
+                "link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,stl_quality,mesh_reduction_ratio,stl_custom,deviation_m,angle_tolerance_rad,baseline_estimated_visual_bytes,baseline_estimated_visual_triangles,estimated_visual_bytes,estimated_visual_triangles,estimate_error_percent,estimated_reduction_percent,actual_reduction_percent,visual_uri,collision_uri,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles");
             foreach (MeshExportRecord record in records)
             {
+                StlExportStats stats = record.StlStats ?? StlExportStats.NotExported();
                 builder.AppendLine(String.Join(",", new[]
                 {
                     CsvField(record.LinkName),
@@ -519,6 +521,18 @@ namespace SW2URDF.URDFExport
                     record.CollisionGeometryType,
                     CsvField(record.CollisionNotes),
                     record.MeshFormat,
+                    CsvField(stats.QualityLabel),
+                    FormatNullableDouble(stats.ReductionRatio),
+                    FormatNullableBool(stats.CustomSettings),
+                    FormatNullableDouble(stats.Deviation),
+                    FormatNullableDouble(stats.AngleTolerance),
+                    FormatNullableLong(stats.BaselineEstimatedBytes),
+                    FormatNullableInt(stats.BaselineEstimatedTriangles),
+                    FormatNullableLong(stats.EstimatedBytes),
+                    FormatNullableInt(stats.EstimatedTriangles),
+                    FormatNullableDouble(stats.EstimateErrorPercent),
+                    FormatNullableDouble(stats.EstimatedReductionPercent),
+                    FormatNullableDouble(stats.ActualReductionPercent),
                     CsvField(record.VisualUri),
                     CsvField(record.CollisionUri),
                     CsvField(record.VisualWindowsPath),
@@ -539,7 +553,8 @@ namespace SW2URDF.URDFExport
             Link link,
             MeshFileNames meshFiles,
             MeshExportFormat meshFormat,
-            CollisionMeshExportResult collisionExport)
+            CollisionMeshExportResult collisionExport,
+            StlExportStats visualStlStats)
         {
             bool visualExists = File.Exists(meshFiles.WindowsVisualMeshFilename);
             bool collisionExists = File.Exists(meshFiles.WindowsCollisionMeshFilename);
@@ -562,7 +577,8 @@ namespace SW2URDF.URDFExport
                 visualExists ? (long?)new FileInfo(meshFiles.WindowsVisualMeshFilename).Length : null,
                 collisionExists ? (long?)new FileInfo(meshFiles.WindowsCollisionMeshFilename).Length : null,
                 isStl && visualExists ? TryReadBinaryStlTriangleCount(meshFiles.WindowsVisualMeshFilename) : null,
-                isStl && collisionExists ? TryReadBinaryStlTriangleCount(meshFiles.WindowsCollisionMeshFilename) : null);
+                isStl && collisionExists ? TryReadBinaryStlTriangleCount(meshFiles.WindowsCollisionMeshFilename) : null,
+                visualStlStats);
         }
 
         private static uint? TryReadBinaryStlTriangleCount(string filename)
@@ -582,9 +598,24 @@ namespace SW2URDF.URDFExport
             return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "";
         }
 
+        private static string FormatNullableInt(int? value)
+        {
+            return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "";
+        }
+
         private static string FormatNullableUInt(uint? value)
         {
             return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "";
+        }
+
+        private static string FormatNullableDouble(double? value)
+        {
+            return value.HasValue ? value.Value.ToString("G17", CultureInfo.InvariantCulture) : "";
+        }
+
+        private static string FormatNullableBool(bool? value)
+        {
+            return value.HasValue ? (value.Value ? "true" : "false") : "";
         }
 
         private CollisionMeshExportResult ExportCollisionMesh(
@@ -1010,7 +1041,7 @@ namespace SW2URDF.URDFExport
             CommonSwOperations.HideComponents(ActiveSWModel, link.SWComponents);
         }
 
-        private bool SaveSTL(Link link, string windowsMeshFilename)
+        private StlExportStats SaveSTL(Link link, string windowsMeshFilename)
         {
             using (OperationHeartbeat.Start(logger, "STL export for link " + link.Name))
             {
@@ -1035,7 +1066,7 @@ namespace SW2URDF.URDFExport
                     (int)swSaveAsOptions_e.swSaveAsOptions_Copy;
                 StlMeshSettings meshSettings =
                     SetLinkSpecificSTLPreferences(names["geo"], link, ActiveDoc);
-                int estimatedTriangleCount = LogEstimatedBinaryStlSize(link, meshSettings);
+                StlExportStats stlStats = CreateStlExportStats(link, meshSettings);
 
                 logger.Info("Saving STL to " + windowsMeshFilename);
                 UpdateProgressTitle("SolidWorks is saving STL: " + link.Name,
@@ -1053,13 +1084,13 @@ namespace SW2URDF.URDFExport
                 UpdateProgressTitle("Finalizing STL: " + link.Name,
                     "\u6b63\u5728\u6574\u7406 STL: " + link.Name);
                 bool success = CorrectSTLMesh(windowsMeshFilename);
-                LogActualBinaryStlSize(link, windowsMeshFilename, estimatedTriangleCount);
+                LogActualBinaryStlSize(link, windowsMeshFilename, stlStats);
                 if (!success)
                 {
                     logger.Warn("There was an issue exporting the STL for " + link.Name + ". It " +
                         "may not be readable by CAD programs that aren't SolidWorks");
                 }
-                return success;
+                return stlStats;
             }
         }
 
@@ -1337,28 +1368,50 @@ namespace SW2URDF.URDFExport
             };
         }
 
-        private int LogEstimatedBinaryStlSize(Link link, StlMeshSettings settings)
+        private StlExportStats CreateStlExportStats(Link link, StlMeshSettings settings)
         {
+            StlExportStats stats = StlExportStats.FromSettings(settings);
             try
             {
+                StlMeshSettings baselineSettings = CreateStlMeshSettings(link.STLQualityFine, 0.0);
+                int baselineTriangleCount = EstimateStlTriangleCount(link, baselineSettings);
+                if (baselineTriangleCount > 0)
+                {
+                    stats.BaselineEstimatedTriangles = baselineTriangleCount;
+                    stats.BaselineEstimatedBytes = EstimateBinaryStlSizeBytes(baselineTriangleCount);
+                }
+
                 int triangleCount = EstimateStlTriangleCount(link, settings);
                 if (triangleCount <= 0)
                 {
                     logger.Info(link.Name + ": STL size estimate unavailable because tessellation returned no facets");
-                    return 0;
+                    return stats;
                 }
 
                 long estimatedBytes = EstimateBinaryStlSizeBytes(triangleCount);
+                stats.EstimatedTriangles = triangleCount;
+                stats.EstimatedBytes = estimatedBytes;
+                stats.EstimatedReductionPercent =
+                    CalculateReductionPercent(triangleCount, baselineTriangleCount);
                 logger.Info(string.Format(
                     "{0}: SolidWorks API rough STL estimate {1} ({2} triangles) before export; " +
                     "the final SaveAs tessellation can differ",
                     link.Name, FormatByteSize(estimatedBytes), triangleCount));
-                return triangleCount;
+                if (stats.EstimatedReductionPercent.HasValue)
+                {
+                    logger.Info(string.Format(
+                        "{0}: Rough STL estimated triangle reduction {1:+0.##;-0.##;0}% " +
+                        "against baseline estimate {2} triangles",
+                        link.Name,
+                        stats.EstimatedReductionPercent.Value,
+                        baselineTriangleCount));
+                }
+                return stats;
             }
             catch (Exception e)
             {
                 logger.Warn("Could not estimate STL size for link " + link.Name, e);
-                return 0;
+                return stats;
             }
         }
 
@@ -1388,18 +1441,34 @@ namespace SW2URDF.URDFExport
             return totalFacetCount;
         }
 
-        private void LogActualBinaryStlSize(Link link, string filename, int estimatedTriangleCount)
+        private void LogActualBinaryStlSize(Link link, string filename, StlExportStats stats)
         {
             try
             {
                 FileInfo fileInfo = new FileInfo(filename);
                 uint triangleCount = ReadBinaryStlTriangleCount(filename);
+                if (stats != null)
+                {
+                    stats.ActualBytes = fileInfo.Length;
+                    stats.ActualTriangles = triangleCount;
+                    stats.ActualReductionPercent = CalculateReductionPercent(
+                        triangleCount,
+                        stats.BaselineEstimatedTriangles.GetValueOrDefault());
+                }
+
                 logger.Info(string.Format("{0}: Actual binary STL size {1} ({2} triangles) at {3}",
                     link.Name, FormatByteSize(fileInfo.Length), triangleCount, filename));
 
+                int estimatedTriangleCount = stats == null
+                    ? 0
+                    : stats.EstimatedTriangles.GetValueOrDefault();
                 if (estimatedTriangleCount > 0)
                 {
                     double errorPercent = CalculateEstimateErrorPercent(estimatedTriangleCount, triangleCount);
+                    if (stats != null)
+                    {
+                        stats.EstimateErrorPercent = errorPercent;
+                    }
                     string comparison = string.Format(
                         "{0}: Rough STL estimate error {1:+0.##;-0.##;0}% " +
                         "(estimated {2} triangles, actual {3} triangles)",
@@ -1412,6 +1481,15 @@ namespace SW2URDF.URDFExport
                     {
                         logger.Info(comparison);
                     }
+                }
+                if (stats != null && stats.ActualReductionPercent.HasValue)
+                {
+                    logger.Info(string.Format(
+                        "{0}: Actual STL triangle reduction {1:+0.##;-0.##;0}% " +
+                        "against baseline estimate {2} triangles",
+                        link.Name,
+                        stats.ActualReductionPercent.Value,
+                        stats.BaselineEstimatedTriangles.GetValueOrDefault()));
                 }
             }
             catch (Exception e)
@@ -1449,6 +1527,16 @@ namespace SW2URDF.URDFExport
             }
 
             return (estimatedTriangleCount - actualTriangleCount) * 100.0 / actualTriangleCount;
+        }
+
+        internal static double? CalculateReductionPercent(long reducedTriangleCount, long baselineTriangleCount)
+        {
+            if (baselineTriangleCount <= 0)
+            {
+                return null;
+            }
+
+            return (baselineTriangleCount - reducedTriangleCount) * 100.0 / baselineTriangleCount;
         }
 
         private static string FormatByteSize(long bytes)

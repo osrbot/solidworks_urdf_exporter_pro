@@ -286,7 +286,22 @@ namespace SW2URDF.Test
                     new FileInfo(visualMesh).Length,
                     new FileInfo(collisionMesh).Length,
                     0,
-                    0);
+                    0,
+                    new ExportHelper.StlExportStats
+                    {
+                        QualityLabel = "custom",
+                        ReductionRatio = 0.5,
+                        CustomSettings = true,
+                        Deviation = 0.001,
+                        AngleTolerance = 1.0,
+                        BaselineEstimatedBytes = 5084,
+                        BaselineEstimatedTriangles = 100,
+                        EstimatedBytes = 2584,
+                        EstimatedTriangles = 50,
+                        EstimateErrorPercent = 0.0,
+                        EstimatedReductionPercent = 50.0,
+                        ActualReductionPercent = 50.0
+                    });
 
             ExportHelper.WriteExportReport(
                 pkg,
@@ -312,6 +327,10 @@ namespace SW2URDF.Test
             Assert.Contains("Requested collision strategies: VisualMesh=1", report);
             Assert.Contains("Effective collision strategies: VisualMesh=1", report);
             Assert.Contains("Collision strategy fallbacks: 0", report);
+            Assert.Contains("Baseline estimated visual STL triangles: 100", report);
+            Assert.Contains("Estimated visual STL triangles: 50", report);
+            Assert.Contains("Average estimated STL reduction: 50%", report);
+            Assert.Contains("Average actual STL reduction: 50%", report);
             Assert.DoesNotContain("FAIL:", report);
 
             Directory.Delete(tempDirectory, true);
