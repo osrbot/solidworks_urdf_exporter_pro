@@ -541,6 +541,65 @@ namespace SW2URDF.URDFExport
             public InertialValidationRow Row { get; private set; }
         }
 
+        internal class MeshExportRecord
+        {
+            public MeshExportRecord(
+                string linkName,
+                string collisionStrategy,
+                string meshFormat,
+                string visualUri,
+                string collisionUri,
+                string visualWindowsPath,
+                string collisionWindowsPath,
+                bool visualExists,
+                bool collisionExists,
+                long? visualBytes,
+                long? collisionBytes,
+                uint? visualTriangles,
+                uint? collisionTriangles)
+            {
+                LinkName = linkName;
+                CollisionStrategy = collisionStrategy;
+                MeshFormat = meshFormat;
+                VisualUri = visualUri;
+                CollisionUri = collisionUri;
+                VisualWindowsPath = visualWindowsPath;
+                CollisionWindowsPath = collisionWindowsPath;
+                VisualExists = visualExists;
+                CollisionExists = collisionExists;
+                VisualBytes = visualBytes;
+                CollisionBytes = collisionBytes;
+                VisualTriangles = visualTriangles;
+                CollisionTriangles = collisionTriangles;
+            }
+
+            public string LinkName { get; private set; }
+
+            public string CollisionStrategy { get; private set; }
+
+            public string MeshFormat { get; private set; }
+
+            public string VisualUri { get; private set; }
+
+            public string CollisionUri { get; private set; }
+
+            public string VisualWindowsPath { get; private set; }
+
+            public string CollisionWindowsPath { get; private set; }
+
+            public bool VisualExists { get; private set; }
+
+            public bool CollisionExists { get; private set; }
+
+            public long? VisualBytes { get; private set; }
+
+            public long? CollisionBytes { get; private set; }
+
+            public uint? VisualTriangles { get; private set; }
+
+            public uint? CollisionTriangles { get; private set; }
+        }
+
         internal class InertialValidationRow
         {
             private const double RelativeErrorFloor = 1e-30;

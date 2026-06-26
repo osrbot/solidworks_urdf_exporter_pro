@@ -231,5 +231,33 @@ namespace SW2URDF.Test
 
             Assert.False(row.Passed);
         }
+
+        [Fact]
+        public void TestMeshManifestCsvEscapesPathsAndKeepsSizes()
+        {
+            ExportHelper.MeshExportRecord record =
+                new ExportHelper.MeshExportRecord(
+                    "base,link",
+                    "Primitive",
+                    "STL",
+                    "package://robot/meshes/visual/base_link.STL",
+                    "package://robot/meshes/collision/base_link.STL",
+                    @"C:\robot export\visual\base_link.STL",
+                    @"C:\robot export\collision\base_link.STL",
+                    true,
+                    true,
+                    184,
+                    84,
+                    2,
+                    0);
+
+            string csv = ExportHelper.BuildMeshManifestCsv(new[] { record });
+
+            Assert.Contains("link,collision_strategy,mesh_format,visual_uri,collision_uri", csv);
+            Assert.Contains(
+                "\"base,link\",Primitive,STL,package://robot/meshes/visual/base_link.STL,package://robot/meshes/collision/base_link.STL",
+                csv);
+            Assert.Contains(",true,true,184,84,2,0", csv);
+        }
     }
 }

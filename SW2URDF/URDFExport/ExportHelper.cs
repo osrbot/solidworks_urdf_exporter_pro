@@ -32,7 +32,9 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Xml.Serialization;
@@ -189,6 +191,8 @@ namespace SW2URDF.URDFExport
             string windowsCSVFileName = package.WindowsRobotsDirectory + URDFRobot.Name + ".csv";
             string windowsInertialValidationCsvFileName =
                 Path.Combine(package.WindowsConfigDirectory, "inertial_validation.csv");
+            string windowsMeshManifestCsvFileName =
+                Path.Combine(package.WindowsConfigDirectory, "mesh_manifest.csv");
             string windowsPackageXMLFileName = package.WindowsPackageDirectory + "package.xml";
 
             //Create CMakeLists
@@ -234,10 +238,11 @@ namespace SW2URDF.URDFExport
             ActiveSWModel.HideComponent2();
 
             bool success = false;
+            List<MeshExportRecord> meshRecords = new List<MeshExportRecord>();
             try
             {
                 logger.Info("Beginning individual files export");
-                ExportFiles(URDFRobot.BaseLink, package, 0, exportSTL, meshFormat);
+                ExportFiles(URDFRobot.BaseLink, package, 0, exportSTL, meshFormat, meshRecords);
                 success = true;
             }
             catch (Exception e)
@@ -267,6 +272,9 @@ namespace SW2URDF.URDFExport
             }
 
             LogInertialValidation(URDFRobot.BaseLink, windowsInertialValidationCsvFileName);
+            WriteMeshManifestCsv(windowsMeshManifestCsvFileName, meshRecords);
+            logger.Info("Wrote mesh manifest CSV with " + meshRecords.Count + " rows to " +
+                windowsMeshManifestCsvFileName);
 
             UpdateProgressTitle("Writing URDF file", "\u6b63\u5728\u5199\u5165 URDF \u6587\u4ef6");
             logger.Info("Writing URDF file to " + windowsURDFFileName);
@@ -317,7 +325,13 @@ namespace SW2URDF.URDFExport
         }
 
         //Recursive method for exporting each link (and writing it to the URDF)
-        private void ExportFiles(Link link, URDFPackage package, int count, bool exportSTL = true, MeshExportFormat meshFormat = MeshExportFormat.STL)
+        private void ExportFiles(
+            Link link,
+            URDFPackage package,
+            int count,
+            bool exportSTL = true,
+            MeshExportFormat meshFormat = MeshExportFormat.STL,
+            List<MeshExportRecord> meshRecords = null)
         {
             progressBar.UpdateProgress(count);
             progressBar.UpdateTitle(ChineseUiText.Translate(
@@ -331,7 +345,7 @@ namespace SW2URDF.URDFExport
                 count += 1;
                 if (!child.isFixedFrame)
                 {
-                    ExportFiles(child, package, count, exportSTL, meshFormat);
+                    ExportFiles(child, package, count, exportSTL, meshFormat, meshRecords);
                 }
             }
 
@@ -373,6 +387,10 @@ namespace SW2URDF.URDFExport
             }
             link.Visual.Geometry.Mesh.Filename = meshFiles.VisualMeshFilename;
             link.Collision.Geometry.Mesh.Filename = meshFiles.CollisionMeshFilename;
+            if (meshRecords != null)
+            {
+                meshRecords.Add(CreateMeshExportRecord(link, meshFiles, meshFormat));
+            }
         }
 
         internal static void ApplyCollisionStrategyPrefix(Link link)
@@ -454,6 +472,96 @@ namespace SW2URDF.URDFExport
                 default:
                     return ".STL";
             }
+        }
+
+        private static void WriteMeshManifestCsv(
+            string csvFileName,
+            IEnumerable<MeshExportRecord> records)
+        {
+            string directory = Path.GetDirectoryName(csvFileName);
+            if (!String.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(
+                csvFileName,
+                BuildMeshManifestCsv(records),
+                new UTF8Encoding(false));
+        }
+
+        internal static string BuildMeshManifestCsv(IEnumerable<MeshExportRecord> records)
+        {
+            StringBuilder builder = new StringBuilder();
+            builder.AppendLine(
+                "link,collision_strategy,mesh_format,visual_uri,collision_uri,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles");
+            foreach (MeshExportRecord record in records)
+            {
+                builder.AppendLine(String.Join(",", new[]
+                {
+                    CsvField(record.LinkName),
+                    record.CollisionStrategy,
+                    record.MeshFormat,
+                    CsvField(record.VisualUri),
+                    CsvField(record.CollisionUri),
+                    CsvField(record.VisualWindowsPath),
+                    CsvField(record.CollisionWindowsPath),
+                    record.VisualExists ? "true" : "false",
+                    record.CollisionExists ? "true" : "false",
+                    FormatNullableLong(record.VisualBytes),
+                    FormatNullableLong(record.CollisionBytes),
+                    FormatNullableUInt(record.VisualTriangles),
+                    FormatNullableUInt(record.CollisionTriangles)
+                }));
+            }
+
+            return builder.ToString();
+        }
+
+        private static MeshExportRecord CreateMeshExportRecord(
+            Link link,
+            MeshFileNames meshFiles,
+            MeshExportFormat meshFormat)
+        {
+            bool visualExists = File.Exists(meshFiles.WindowsVisualMeshFilename);
+            bool collisionExists = File.Exists(meshFiles.WindowsCollisionMeshFilename);
+            bool isStl = meshFormat == MeshExportFormat.STL;
+            return new MeshExportRecord(
+                link.Name,
+                link.CollisionMeshStrategy.ToString(),
+                meshFormat.ToString(),
+                meshFiles.VisualMeshFilename,
+                meshFiles.CollisionMeshFilename,
+                meshFiles.WindowsVisualMeshFilename,
+                meshFiles.WindowsCollisionMeshFilename,
+                visualExists,
+                collisionExists,
+                visualExists ? (long?)new FileInfo(meshFiles.WindowsVisualMeshFilename).Length : null,
+                collisionExists ? (long?)new FileInfo(meshFiles.WindowsCollisionMeshFilename).Length : null,
+                isStl && visualExists ? TryReadBinaryStlTriangleCount(meshFiles.WindowsVisualMeshFilename) : null,
+                isStl && collisionExists ? TryReadBinaryStlTriangleCount(meshFiles.WindowsCollisionMeshFilename) : null);
+        }
+
+        private static uint? TryReadBinaryStlTriangleCount(string filename)
+        {
+            try
+            {
+                return ReadBinaryStlTriangleCount(filename);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string FormatNullableLong(long? value)
+        {
+            return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "";
+        }
+
+        private static string FormatNullableUInt(uint? value)
+        {
+            return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "";
         }
 
         private void ExportCollisionMesh(

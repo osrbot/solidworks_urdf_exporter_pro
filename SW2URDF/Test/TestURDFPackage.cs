@@ -195,6 +195,10 @@ namespace SW2URDF.Test
                 Path.Combine(pkg.WindowsConfigDirectory, "inertial_validation.csv"),
                 "link,status\r\nbase_link,PASS\r\n",
                 new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "mesh_manifest.csv"),
+                "link,visual_exists,collision_exists\r\nbase_link,true,true\r\n",
+                new UTF8Encoding(false));
 
             string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
             File.WriteAllText(
@@ -209,6 +213,7 @@ namespace SW2URDF.Test
             Assert.True(File.Exists(Path.Combine(pkg.WindowsRos2MeshesDirectory, "visual", "base_link.STL")));
             Assert.True(File.Exists(Path.Combine(pkg.WindowsRos2MeshesDirectory, "collision", "base_link.STL")));
             Assert.True(File.Exists(Path.Combine(pkg.WindowsRos2ConfigDirectory, "inertial_validation.csv")));
+            Assert.True(File.Exists(Path.Combine(pkg.WindowsRos2ConfigDirectory, "mesh_manifest.csv")));
             string setupPy = File.ReadAllText(Path.Combine(pkg.WindowsRos2PackageDirectory, "setup.py"));
             Assert.Contains("package_files('meshes')", setupPy);
             Assert.Contains("glob(os.path.join(directory, '**', '*'), recursive=True)", setupPy);
