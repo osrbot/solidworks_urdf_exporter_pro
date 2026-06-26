@@ -221,6 +221,96 @@ namespace SW2URDF.Test
             Directory.Delete(tempDirectory, true);
         }
 
+        [Fact]
+        public void TestExportReportIsWrittenToRos1AndRos2Config()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            pkg.CreateCMakeLists();
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsPackageDirectory, "package.xml"),
+                "<?xml version=\"1.0\"?><package><name>rover_description</name></package>",
+                new UTF8Encoding(false));
+
+            string visualMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "visual");
+            string collisionMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "collision");
+            Directory.CreateDirectory(visualMeshDirectory);
+            Directory.CreateDirectory(collisionMeshDirectory);
+            string visualMesh = Path.Combine(visualMeshDirectory, "base_link.STL");
+            string collisionMesh = Path.Combine(collisionMeshDirectory, "base_link.STL");
+            File.WriteAllText(visualMesh, "visual");
+            File.WriteAllText(collisionMesh, "collision");
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "inertial_validation.csv"),
+                "link,status\r\nbase_link,PASS\r\n",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "mesh_manifest.csv"),
+                "link,visual_exists,collision_exists\r\nbase_link,true,true\r\n",
+                new UTF8Encoding(false));
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(
+                ros1Urdf,
+                "<?xml version=\"1.0\"?><robot name=\"robot_900001\">" +
+                "<link name=\"base_link\"><visual><geometry><mesh filename=\"package://rover_description/meshes/visual/base_link.STL\" /></geometry></visual>" +
+                "<collision><geometry><mesh filename=\"package://rover_description/meshes/collision/base_link.STL\" /></geometry></collision></link></robot>",
+                new UTF8Encoding(false));
+            pkg.CreateRos2Package(ros1Urdf);
+
+            ExportHelper.InertialValidationRecord inertialRecord =
+                new ExportHelper.InertialValidationRecord(
+                    "base_link",
+                    "Origin_global",
+                    new ExportHelper.InertialValidationRow("mass", "kg", 1.0, 1.0));
+            ExportHelper.MeshExportRecord meshRecord =
+                new ExportHelper.MeshExportRecord(
+                    "base_link",
+                    "Original",
+                    "STL",
+                    "package://rover_description/meshes/visual/base_link.STL",
+                    "package://rover_description/meshes/collision/base_link.STL",
+                    visualMesh,
+                    collisionMesh,
+                    true,
+                    true,
+                    new FileInfo(visualMesh).Length,
+                    new FileInfo(collisionMesh).Length,
+                    0,
+                    0);
+
+            ExportHelper.WriteExportReport(
+                pkg,
+                ros1Urdf,
+                new[] { inertialRecord },
+                new[] { meshRecord },
+                true,
+                MeshExportFormat.STL,
+                TimeSpan.FromSeconds(1));
+
+            string ros1Report = Path.Combine(pkg.WindowsConfigDirectory, "export_report.md");
+            string ros2Report = Path.Combine(pkg.WindowsRos2ConfigDirectory, "export_report.md");
+            Assert.True(File.Exists(ros1Report));
+            Assert.True(File.Exists(ros2Report));
+
+            string report = File.ReadAllText(ros1Report, Encoding.UTF8);
+            Assert.Contains("Status: PASS", report);
+            Assert.Contains("## ROS 1 URDF", report);
+            Assert.Contains("## ROS 2 URDF", report);
+            Assert.Contains("ROS 2 setup.py | OK", report);
+            Assert.Contains("Inertial validation rows: 1", report);
+            Assert.Contains("Mesh manifest rows: 1", report);
+            Assert.DoesNotContain("FAIL:", report);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
         [Theory]
         [InlineData("osracer_blue.SLDASM", "osracer_blue")]
         [InlineData("OSRacer Blue.SLDPRT", "osracer_blue")]

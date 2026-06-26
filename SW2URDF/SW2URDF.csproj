@@ -379,6 +379,7 @@
     <Compile Include="URDFExport\ConfigurationSerialization.cs" />
     <Compile Include="URDFExport\ExportHelper.cs" />
     <Compile Include="URDFExport\ExportHelperExtension.cs" />
+    <Compile Include="URDFExport\ExportHelperReport.cs" />
     <Compile Include="URDFExport\InertiaEllipsoid.cs" />
     <Compile Include="UI\AssemblyExportFormExtension.cs">
       <SubType>Form</SubType>

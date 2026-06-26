@@ -293,13 +293,14 @@ namespace SW2URDF.URDFExport
                 ellipsoid.SemiAxes[2]));
         }
 
-        private void LogInertialValidation(Link link, string csvFileName)
+        private List<InertialValidationRecord> LogInertialValidation(Link link, string csvFileName)
         {
             List<InertialValidationRecord> records = new List<InertialValidationRecord>();
             logger.Info("Validating URDF inertial values against SolidWorks mass properties");
             LogLinkInertialValidation(link, records);
             WriteInertialValidationCsv(csvFileName, records);
             logger.Info("Wrote inertial validation CSV with " + records.Count + " rows to " + csvFileName);
+            return records;
         }
 
         private void LogLinkInertialValidation(Link link, List<InertialValidationRecord> records)

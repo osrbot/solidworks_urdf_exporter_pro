@@ -271,7 +271,8 @@ namespace SW2URDF.URDFExport
                 return;
             }
 
-            LogInertialValidation(URDFRobot.BaseLink, windowsInertialValidationCsvFileName);
+            List<InertialValidationRecord> inertialRecords =
+                LogInertialValidation(URDFRobot.BaseLink, windowsInertialValidationCsvFileName);
             WriteMeshManifestCsv(windowsMeshManifestCsvFileName, meshRecords);
             logger.Info("Wrote mesh manifest CSV with " + meshRecords.Count + " rows to " +
                 windowsMeshManifestCsvFileName);
@@ -287,6 +288,16 @@ namespace SW2URDF.URDFExport
             UpdateProgressTitle("Creating ROS 2 package", "\u6b63\u5728\u521b\u5efa ROS 2 \u529f\u80fd\u5305");
             logger.Info("Creating ROS 2 package at " + package.WindowsRos2PackageDirectory);
             package.CreateRos2Package(windowsURDFFileName);
+
+            UpdateProgressTitle("Writing export report", "\u6b63\u5728\u5199\u5165\u5bfc\u51fa\u4f53\u68c0\u62a5\u544a");
+            WriteExportReport(
+                package,
+                windowsURDFFileName,
+                inertialRecords,
+                meshRecords,
+                exportSTL,
+                meshFormat,
+                exportStopwatch.Elapsed);
 
             UpdateProgressTitle("Copying export log", "\u6b63\u5728\u590d\u5236\u5bfc\u51fa\u65e5\u5fd7");
             logger.Info("Copying log file");
