@@ -322,6 +322,12 @@ namespace SW2URDF.Test
             Assert.Contains("## ROS 1 URDF", report);
             Assert.Contains("## ROS 2 URDF", report);
             Assert.Contains("ROS 2 setup.py | OK", report);
+            Assert.Contains("ROS 2 display.launch.py | OK", report);
+            Assert.Contains("ROS 2 gazebo.launch.py | OK", report);
+            Assert.Contains("ROS 1 visual mesh files | OK", report);
+            Assert.Contains("ROS 1 collision mesh files | OK", report);
+            Assert.Contains("ROS 2 visual mesh files | OK", report);
+            Assert.Contains("ROS 2 collision mesh files | OK", report);
             Assert.Contains("Inertial validation rows: 1", report);
             Assert.Contains("Warning rows: 0", report);
             Assert.Contains("Mesh manifest rows: 1", report);
@@ -333,6 +339,67 @@ namespace SW2URDF.Test
             Assert.Contains("Average estimated STL reduction: 50%", report);
             Assert.Contains("Average actual STL reduction: 50%", report);
             Assert.DoesNotContain("FAIL:", report);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
+        [Fact]
+        public void TestExportReportFailsWhenMeshDirectoriesAreEmpty()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            pkg.CreateCMakeLists();
+            Directory.CreateDirectory(Path.Combine(pkg.WindowsMeshesDirectory, "visual"));
+            Directory.CreateDirectory(Path.Combine(pkg.WindowsMeshesDirectory, "collision"));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsPackageDirectory, "package.xml"),
+                "<?xml version=\"1.0\"?><package><name>rover_description</name></package>",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "inertial_validation.csv"),
+                "link,status\r\nbase_link,PASS\r\n",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "mesh_manifest.csv"),
+                "link,visual_exists,collision_exists\r\nbase_link,false,false\r\n",
+                new UTF8Encoding(false));
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(
+                ros1Urdf,
+                "<?xml version=\"1.0\"?><robot name=\"robot_900001\"><link name=\"base_link\" /></robot>",
+                new UTF8Encoding(false));
+            pkg.CreateRos2Package(ros1Urdf);
+
+            ExportHelper.WriteExportReport(
+                pkg,
+                ros1Urdf,
+                new[]
+                {
+                    new ExportHelper.InertialValidationRecord(
+                        "base_link",
+                        "Origin_global",
+                        new ExportHelper.InertialValidationRow("mass", "kg", 1.0, 1.0))
+                },
+                new ExportHelper.MeshExportRecord[0],
+                true,
+                MeshExportFormat.STL,
+                TimeSpan.FromSeconds(1));
+
+            string report = File.ReadAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
+                Encoding.UTF8);
+            Assert.Contains("Status: FAIL", report);
+            Assert.Contains("ROS 1 visual mesh files | MISSING", report);
+            Assert.Contains("ROS 1 collision mesh files | MISSING", report);
+            Assert.Contains("ROS 2 visual mesh files | MISSING", report);
+            Assert.Contains("ROS 2 collision mesh files | MISSING", report);
 
             Directory.Delete(tempDirectory, true);
         }

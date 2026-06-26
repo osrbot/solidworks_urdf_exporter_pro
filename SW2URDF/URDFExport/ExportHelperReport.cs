@@ -216,9 +216,12 @@ namespace SW2URDF.URDFExport
             AddFileCheck(checks, "ROS 1 CMakeLists.txt", package.WindowsCMakeLists, true);
             AddFileCheck(checks, "ROS 1 package.xml", Path.Combine(package.WindowsPackageDirectory, "package.xml"), true);
             AddFileCheck(checks, "ROS 1 URDF", ros1UrdfFileName, true);
+            AddDirectoryCheck(checks, "ROS 1 config directory", package.WindowsConfigDirectory, true);
             AddDirectoryCheck(checks, "ROS 1 meshes directory", package.WindowsMeshesDirectory, exportMeshes);
             AddDirectoryCheck(checks, "ROS 1 visual meshes directory", Path.Combine(package.WindowsMeshesDirectory, "visual"), exportMeshes);
+            AddDirectoryFilesCheck(checks, "ROS 1 visual mesh files", Path.Combine(package.WindowsMeshesDirectory, "visual"), exportMeshes);
             AddDirectoryCheck(checks, "ROS 1 collision meshes directory", Path.Combine(package.WindowsMeshesDirectory, "collision"), exportMeshes);
+            AddDirectoryFilesCheck(checks, "ROS 1 collision mesh files", Path.Combine(package.WindowsMeshesDirectory, "collision"), exportMeshes);
             AddFileCheck(checks, "ROS 1 inertial validation CSV",
                 Path.Combine(package.WindowsConfigDirectory, "inertial_validation.csv"), false);
             AddFileCheck(checks, "ROS 1 mesh manifest CSV",
@@ -230,9 +233,14 @@ namespace SW2URDF.URDFExport
             AddFileCheck(checks, "ROS 2 resource marker",
                 Path.Combine(package.WindowsRos2ResourceDirectory, package.Ros2PackageName), true);
             AddFileCheck(checks, "ROS 2 URDF", ros2UrdfFileName, true);
+            AddDirectoryCheck(checks, "ROS 2 config directory", package.WindowsRos2ConfigDirectory, true);
+            AddFileCheck(checks, "ROS 2 display.launch.py", Path.Combine(package.WindowsRos2LaunchDirectory, "display.launch.py"), true);
+            AddFileCheck(checks, "ROS 2 gazebo.launch.py", Path.Combine(package.WindowsRos2LaunchDirectory, "gazebo.launch.py"), true);
             AddDirectoryCheck(checks, "ROS 2 meshes directory", package.WindowsRos2MeshesDirectory, exportMeshes);
             AddDirectoryCheck(checks, "ROS 2 visual meshes directory", Path.Combine(package.WindowsRos2MeshesDirectory, "visual"), exportMeshes);
+            AddDirectoryFilesCheck(checks, "ROS 2 visual mesh files", Path.Combine(package.WindowsRos2MeshesDirectory, "visual"), exportMeshes);
             AddDirectoryCheck(checks, "ROS 2 collision meshes directory", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), exportMeshes);
+            AddDirectoryFilesCheck(checks, "ROS 2 collision mesh files", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), exportMeshes);
             AddFileCheck(checks, "ROS 2 inertial validation CSV",
                 Path.Combine(package.WindowsRos2ConfigDirectory, "inertial_validation.csv"), false);
             AddFileCheck(checks, "ROS 2 mesh manifest CSV",
@@ -248,6 +256,13 @@ namespace SW2URDF.URDFExport
         private static void AddDirectoryCheck(List<PackageCheck> checks, string name, string path, bool critical)
         {
             checks.Add(new PackageCheck(name, path, Directory.Exists(path), critical));
+        }
+
+        private static void AddDirectoryFilesCheck(List<PackageCheck> checks, string name, string path, bool critical)
+        {
+            bool hasFiles = Directory.Exists(path) &&
+                Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Any();
+            checks.Add(new PackageCheck(name, path, hasFiles, critical));
         }
 
         private static UrdfInspection InspectUrdfFile(
