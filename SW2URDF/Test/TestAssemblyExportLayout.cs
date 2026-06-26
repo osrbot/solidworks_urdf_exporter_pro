@@ -27,6 +27,7 @@ namespace SW2URDF.Test
                 form.PerformLayout();
                 AssertJointFooterGeometry(form);
                 AssertMimicControlsDoNotOverlapFooter(form);
+                AssertFooterButtonsFitText(form);
                 AssertInertiaMatrixMirrors(form);
 
                 form.ClientSize = new Size(1600, 900);
@@ -35,11 +36,15 @@ namespace SW2URDF.Test
                 AssertInertiaMatrixMirrors(form);
                 AssertJointFooterGeometry(form);
                 AssertMimicControlsDoNotOverlapFooter(form);
+                AssertFooterButtonsFitText(form);
 
                 form.Scale(new SizeF(1.5F, 1.5F));
                 form.PerformLayout();
                 AssertLinkPageGeometry(form);
                 AssertInertiaMatrixMirrors(form);
+                AssertJointFooterGeometry(form);
+                AssertMimicControlsDoNotOverlapFooter(form);
+                AssertFooterButtonsFitText(form);
             }
             finally
             {
@@ -127,11 +132,15 @@ namespace SW2URDF.Test
 
         private static void AssertMimicControlsDoNotOverlapFooter(AssemblyExportForm form)
         {
+            CheckBox mimicCheckBox = GetControl<CheckBox>(form, "MimicCheckBox");
+            mimicCheckBox.Checked = true;
+            form.PerformLayout();
+
             Label firstNote = GetControl<Label>(form, "label4");
             Label secondNote = GetControl<Label>(form, "label27");
             Control[] mimicControls = new Control[]
             {
-                GetControl<CheckBox>(form, "MimicCheckBox"),
+                mimicCheckBox,
                 GetControl<Label>(form, "MimicJointLabel"),
                 GetControl<ComboBox>(form, "MimicJointComboBox"),
                 GetControl<Label>(form, "MimicMultiplierLabel"),
@@ -150,6 +159,35 @@ namespace SW2URDF.Test
                 Assert.False(
                     mimicBounds.IntersectsWith(secondNote.Bounds),
                     String.Format("{0} overlaps the second footer note.", mimicControl.Name));
+                Assert.True(
+                    mimicBounds.Bottom < firstNote.Top,
+                    String.Format("{0} should stay above the footer note: {1} >= {2}.",
+                        mimicControl.Name, mimicBounds.Bottom, firstNote.Top));
+            }
+        }
+
+        private static void AssertFooterButtonsFitText(AssemblyExportForm form)
+        {
+            Button[] buttons = new Button[]
+            {
+                GetControl<Button>(form, "buttonJointCancel"),
+                GetControl<Button>(form, "buttonJointNext"),
+                GetControl<Button>(form, "buttonLinksPrevious"),
+                GetControl<Button>(form, "buttonLinksExportUrdfOnly"),
+                GetControl<Button>(form, "buttonLinksFinish")
+            };
+
+            foreach (Button button in buttons)
+            {
+                Size preferred = button.GetPreferredSize(Size.Empty);
+                Assert.True(
+                    preferred.Width <= button.Width,
+                    String.Format("{0} text is clipped horizontally: preferred {1}, actual {2}.",
+                        button.Name, preferred.Width, button.Width));
+                Assert.True(
+                    preferred.Height <= button.Height,
+                    String.Format("{0} text is clipped vertically: preferred {1}, actual {2}.",
+                        button.Name, preferred.Height, button.Height));
             }
         }
 

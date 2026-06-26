@@ -54,11 +54,15 @@ namespace SW2URDF.UI
         private bool updatingMaterialColorControls;
         private bool meshReductionRatioEdited;
         private double meshReductionRatioForExport;
+        private bool enableLayoutFixes;
+        private bool applyingLayoutFixes;
 
         private AssemblyExportForm()
         {
             InitializeComponent();
             ChineseUiText.Apply(this);
+            enableLayoutFixes = true;
+            ApplyHighDpiLayoutFixes();
             InitializeCollisionStrategyComboBox();
             textBoxIxy.TextChanged += InertiaMatrixOffDiagonalTextChanged;
             textBoxIxz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
@@ -758,6 +762,7 @@ namespace SW2URDF.UI
             textBoxMimicMultiplier.Visible = showControls;
             MimicOffsetLabel.Visible = showControls;
             textBoxMimicOffset.Visible = showControls;
+            PositionJointFooterControls();
         }
 
         private void MimicCheckBoxCheckedChanged(object sender, EventArgs e)
@@ -766,6 +771,152 @@ namespace SW2URDF.UI
             ShowMimicControls(showControls);
             textBoxMimicMultiplier.Text = "1.0";
             textBoxMimicOffset.Text = "0.0";
+        }
+
+        protected override void OnLayout(LayoutEventArgs levent)
+        {
+            base.OnLayout(levent);
+            if (enableLayoutFixes)
+            {
+                ApplyHighDpiLayoutFixes();
+            }
+        }
+
+        private void ApplyHighDpiLayoutFixes()
+        {
+            if (applyingLayoutFixes)
+            {
+                return;
+            }
+
+            applyingLayoutFixes = true;
+            try
+            {
+                EnsureMinimumClientArea();
+                ResizeButtonToText(buttonJointCancel);
+                ResizeButtonToText(buttonJointNext);
+                ResizeButtonToText(buttonLinksPrevious);
+                ResizeButtonToText(buttonLinksExportUrdfOnly);
+                ResizeButtonToText(buttonLinksFinish);
+
+                PositionJointFooterControls();
+                PositionLinkFooterButtons();
+            }
+            finally
+            {
+                applyingLayoutFixes = false;
+            }
+        }
+
+        private void EnsureMinimumClientArea()
+        {
+            const int minimumClientHeight = 660;
+            if (ClientSize.Height < minimumClientHeight)
+            {
+                ClientSize = new Size(ClientSize.Width, minimumClientHeight);
+            }
+
+            MinimumSize = new Size(
+                Math.Max(MinimumSize.Width, 1089),
+                Math.Max(MinimumSize.Height, 700));
+        }
+
+        private static void ResizeButtonToText(Button button)
+        {
+            Size preferred = button.GetPreferredSize(Size.Empty);
+            button.Size = new Size(
+                Math.Max(button.Width, preferred.Width + 8),
+                Math.Max(button.Height, preferred.Height));
+        }
+
+        private void PositionJointFooterControls()
+        {
+            const int rightMargin = 12;
+            const int bottomMargin = 4;
+            const int verticalGap = 4;
+            int buttonTop = ClientSize.Height - bottomMargin - buttonJointNext.Height;
+
+            buttonJointCancel.Top = buttonTop;
+            buttonJointNext.Top = buttonTop;
+            buttonJointNext.Left = ClientSize.Width - rightMargin - buttonJointNext.Width;
+
+            PositionJointMimicControls();
+            int mimicBottom = Math.Max(
+                Math.Max(MimicCheckBox.Bottom, MimicJointComboBox.Bottom),
+                Math.Max(
+                    Math.Max(textBoxMimicMultiplier.Bottom, textBoxMimicOffset.Bottom),
+                    MimicEquationLabel.Bottom));
+            int label4Top = Math.Max(
+                mimicBottom + 5,
+                buttonTop - label27.Height - label4.Height - 4);
+            int label27Top = label4Top + label4.Height + 1;
+            if (label27Top + label27.Height >= buttonTop)
+            {
+                label27Top = buttonTop - label27.Height - 1;
+                label4Top = label27Top - label4.Height - 1;
+            }
+
+            label27.Left = treeViewJointTree.Right + 24;
+            label4.Left = label27.Left;
+            label4.Top = label4Top;
+            label27.Top = label27Top;
+
+            treeViewJointTree.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
+            treeViewJointTree.Height = Math.Max(
+                200,
+                label4.Top - treeViewJointTree.Top - verticalGap);
+        }
+
+        private void PositionLinkFooterButtons()
+        {
+            const int rightMargin = 12;
+            const int bottomMargin = 4;
+            const int horizontalGap = 8;
+            int maxHeight = Math.Max(
+                buttonLinksPrevious.Height,
+                Math.Max(buttonLinksExportUrdfOnly.Height, buttonLinksFinish.Height));
+            int buttonTop = panelLinkProperties.ClientSize.Height - bottomMargin - maxHeight;
+
+            buttonLinksFinish.Top = buttonTop;
+            buttonLinksExportUrdfOnly.Top = buttonTop;
+            buttonLinksPrevious.Top = buttonTop;
+            buttonLinksFinish.Left = panelLinkProperties.ClientSize.Width - rightMargin - buttonLinksFinish.Width;
+            buttonLinksExportUrdfOnly.Left = buttonLinksFinish.Left - horizontalGap - buttonLinksExportUrdfOnly.Width;
+            buttonLinksPrevious.Left = Math.Min(
+                buttonLinksPrevious.Left,
+                buttonLinksExportUrdfOnly.Left - horizontalGap - buttonLinksPrevious.Width);
+        }
+
+        private void PositionJointMimicControls()
+        {
+            const int left = 530;
+            const int horizontalGap = 8;
+            int rowOneTop = textBoxKVelocity.Bottom + 2;
+            int rowTwoTop = rowOneTop + Math.Max(MimicJointComboBox.Height, MimicCheckBox.Height) + 2;
+
+            MimicCheckBox.Left = left;
+            MimicCheckBox.Top = rowOneTop + Math.Max(0, (MimicJointComboBox.Height - MimicCheckBox.Height) / 2);
+            MimicJointLabel.Left = MimicCheckBox.Right + 18;
+            MimicJointLabel.Top = rowOneTop + 3;
+            MimicJointComboBox.Left = MimicJointLabel.Right + horizontalGap;
+            MimicJointComboBox.Top = rowOneTop;
+
+            MimicMultiplierLabel.Left = left;
+            MimicMultiplierLabel.Top = rowTwoTop + 3;
+            textBoxMimicMultiplier.Left = MimicMultiplierLabel.Right + horizontalGap;
+            textBoxMimicMultiplier.Top = rowTwoTop;
+            MimicOffsetLabel.Left = textBoxMimicMultiplier.Right + 16;
+            MimicOffsetLabel.Top = rowTwoTop + 3;
+            textBoxMimicOffset.Left = MimicOffsetLabel.Right + horizontalGap;
+            textBoxMimicOffset.Top = rowTwoTop;
+            MimicEquationLabel.Left = textBoxMimicOffset.Right + 18;
+            MimicEquationLabel.Top = rowTwoTop + 3;
+
+            int maxRight = ClientSize.Width - 12;
+            if (MimicEquationLabel.Right > maxRight)
+            {
+                MimicEquationLabel.Left = maxRight - MimicEquationLabel.Width;
+            }
         }
     }
 }
