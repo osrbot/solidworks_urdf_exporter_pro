@@ -319,6 +319,17 @@ namespace SW2URDF.Test
 
             string report = File.ReadAllText(ros1Report, Encoding.UTF8);
             Assert.Contains("Status: PASS", report);
+            Assert.Contains("## Health Summary", report);
+            Assert.Contains("| Check | Status | Detail |", report);
+            Assert.Contains("| Overall | PASS | failures=0, warnings=0 |", report);
+            Assert.Contains("| ROS 1 URDF | PASS | links=1, joints=0, mesh_refs=2, missing_mesh_refs=0 |", report);
+            Assert.Contains("| ROS 2 URDF | PASS | links=1, joints=0, mesh_refs=2, missing_mesh_refs=0 |", report);
+            Assert.Contains("| ROS package completeness | PASS | critical_missing=0, optional_missing=0 |", report);
+            Assert.Contains("| ROS package parity | PASS | critical_mismatches=0, optional_mismatches=0 |", report);
+            Assert.Contains("| Inertial validation | PASS | rows=1, failures=0, warnings=0 |", report);
+            Assert.Contains("| Mesh manifest paths | PASS | rows=1, missing_visual=0, missing_collision=0 |", report);
+            Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=VisualMesh=1, effective=VisualMesh=1 |", report);
+            Assert.Contains("| STL reduction | PASS | stats_rows=1, high_estimate_errors=0, ratios=0.5=1 |", report);
             Assert.Contains("Plugin version: ", report);
             Assert.Contains("Commit hash: ", report);
             Assert.Contains("Build time UTC: ", report);
@@ -476,6 +487,8 @@ namespace SW2URDF.Test
                 Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
                 Encoding.UTF8);
             Assert.Contains("Status: FAIL", report);
+            Assert.Contains("| ROS 2 URDF | FAIL | links=1, joints=0, mesh_refs=2, missing_mesh_refs=2 |", report);
+            Assert.Contains("| ROS package parity | FAIL | critical_mismatches=2, optional_mismatches=0 |", report);
             Assert.Contains("ROS 2 visual mesh files | MISSING", report);
             Assert.Contains("ROS 2 collision mesh files | MISSING", report);
             Assert.Contains("## ROS Package Parity", report);
@@ -545,6 +558,7 @@ namespace SW2URDF.Test
                 Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
                 Encoding.UTF8);
             Assert.Contains("Status: WARN", report);
+            Assert.Contains("| Inertial validation | WARN | rows=1, failures=0, warnings=1 |", report);
             Assert.Contains("Warning rows: 1", report);
             Assert.Contains("Magnitude warnings: 1", report);
             Assert.Contains("Warning links: tiny_mass_link", report);

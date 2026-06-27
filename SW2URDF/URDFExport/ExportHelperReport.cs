@@ -101,6 +101,18 @@ namespace SW2URDF.URDFExport
             builder.AppendLine("Elapsed: " + Utilities.OperationHeartbeat.FormatElapsed(elapsed));
             builder.AppendLine();
 
+            AppendHealthSummarySection(
+                builder,
+                status,
+                ros1Urdf,
+                ros2Urdf,
+                packageChecks,
+                packageParityChecks,
+                inertialRows,
+                meshRows,
+                findings,
+                exportMeshes,
+                meshFormat);
             AppendExportParametersSection(
                 builder,
                 package,
@@ -439,6 +451,231 @@ namespace SW2URDF.URDFExport
         private static string NormalizeReportPath(string path)
         {
             return (path ?? "").Replace('\\', '/');
+        }
+
+        private static void AppendHealthSummarySection(
+            StringBuilder builder,
+            string overallStatus,
+            UrdfInspection ros1Urdf,
+            UrdfInspection ros2Urdf,
+            IEnumerable<PackageCheck> packageChecks,
+            IEnumerable<PackageParityCheck> packageParityChecks,
+            IEnumerable<InertialValidationRecord> inertialRecords,
+            IEnumerable<MeshExportRecord> meshRecords,
+            IEnumerable<string> findings,
+            bool exportMeshes,
+            MeshExportFormat meshFormat)
+        {
+            List<PackageCheck> packageRows = packageChecks.ToList();
+            List<PackageParityCheck> parityRows = packageParityChecks.ToList();
+            List<InertialValidationRecord> inertialRows = inertialRecords.ToList();
+            List<MeshExportRecord> meshRows = meshRecords.ToList();
+            List<string> findingRows = findings.ToList();
+
+            builder.AppendLine("## Health Summary");
+            builder.AppendLine();
+            builder.AppendLine("| Check | Status | Detail |");
+            builder.AppendLine("| --- | --- | --- |");
+            AppendHealthRow(
+                builder,
+                "Overall",
+                overallStatus,
+                "failures=" + CountFindings(findingRows, "FAIL:").ToString(CultureInfo.InvariantCulture) +
+                ", warnings=" + CountFindings(findingRows, "WARN:").ToString(CultureInfo.InvariantCulture));
+            AppendUrdfHealthRow(builder, ros1Urdf, exportMeshes);
+            AppendUrdfHealthRow(builder, ros2Urdf, exportMeshes);
+            AppendPackageCompletenessHealthRow(builder, packageRows);
+            AppendPackageParityHealthRow(builder, parityRows);
+            AppendInertialHealthRow(builder, inertialRows);
+            AppendMeshHealthRow(builder, meshRows, exportMeshes);
+            AppendCollisionStrategyHealthRow(builder, meshRows, exportMeshes);
+            AppendStlReductionHealthRow(builder, meshRows, exportMeshes, meshFormat);
+            builder.AppendLine();
+        }
+
+        private static int CountFindings(IEnumerable<string> findings, string prefix)
+        {
+            return findings.Count(f => f.StartsWith(prefix, StringComparison.Ordinal));
+        }
+
+        private static void AppendUrdfHealthRow(
+            StringBuilder builder,
+            UrdfInspection inspection,
+            bool exportMeshes)
+        {
+            int missingMeshReferences = inspection.MeshReferences.Count(r => !r.Exists);
+            string status;
+            if (!inspection.Exists || !inspection.XmlValid || !inspection.RootIsRobot)
+            {
+                status = "FAIL";
+            }
+            else if (missingMeshReferences > 0)
+            {
+                status = exportMeshes ? "FAIL" : "WARN";
+            }
+            else
+            {
+                status = "PASS";
+            }
+
+            AppendHealthRow(
+                builder,
+                inspection.Label + " URDF",
+                status,
+                "links=" + inspection.LinkCount.ToString(CultureInfo.InvariantCulture) +
+                ", joints=" + inspection.JointCount.ToString(CultureInfo.InvariantCulture) +
+                ", mesh_refs=" + inspection.MeshReferences.Count.ToString(CultureInfo.InvariantCulture) +
+                ", missing_mesh_refs=" + missingMeshReferences.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void AppendPackageCompletenessHealthRow(
+            StringBuilder builder,
+            IEnumerable<PackageCheck> checks)
+        {
+            List<PackageCheck> rows = checks.ToList();
+            int missingCritical = rows.Count(r => r.Critical && !r.Exists);
+            int missingOptional = rows.Count(r => !r.Critical && !r.Exists);
+            string status = missingCritical > 0 ? "FAIL" : missingOptional > 0 ? "WARN" : "PASS";
+            AppendHealthRow(
+                builder,
+                "ROS package completeness",
+                status,
+                "critical_missing=" + missingCritical.ToString(CultureInfo.InvariantCulture) +
+                ", optional_missing=" + missingOptional.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void AppendPackageParityHealthRow(
+            StringBuilder builder,
+            IEnumerable<PackageParityCheck> checks)
+        {
+            List<PackageParityCheck> rows = checks.ToList();
+            int criticalMismatches = rows.Count(r => r.Critical && !r.Matches);
+            int optionalMismatches = rows.Count(r => !r.Critical && !r.Matches);
+            string status = criticalMismatches > 0 ? "FAIL" : optionalMismatches > 0 ? "WARN" : "PASS";
+            AppendHealthRow(
+                builder,
+                "ROS package parity",
+                status,
+                "critical_mismatches=" + criticalMismatches.ToString(CultureInfo.InvariantCulture) +
+                ", optional_mismatches=" + optionalMismatches.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void AppendInertialHealthRow(
+            StringBuilder builder,
+            IEnumerable<InertialValidationRecord> records)
+        {
+            List<InertialValidationRecord> rows = records.ToList();
+            int failures = rows.Count(r => String.Equals(r.Row.Status, "FAIL", StringComparison.Ordinal));
+            int warnings = rows.Count(r => r.Row.IsWarning);
+            string status = failures > 0 ? "FAIL" : warnings > 0 || rows.Count == 0 ? "WARN" : "PASS";
+            AppendHealthRow(
+                builder,
+                "Inertial validation",
+                status,
+                "rows=" + rows.Count.ToString(CultureInfo.InvariantCulture) +
+                ", failures=" + failures.ToString(CultureInfo.InvariantCulture) +
+                ", warnings=" + warnings.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void AppendMeshHealthRow(
+            StringBuilder builder,
+            IEnumerable<MeshExportRecord> records,
+            bool exportMeshes)
+        {
+            List<MeshExportRecord> rows = records.ToList();
+            int missingVisual = rows.Count(r => !r.VisualExists);
+            int missingCollision = rows.Count(r => !r.CollisionExists);
+            string status;
+            if (!exportMeshes)
+            {
+                status = "SKIP";
+            }
+            else if (missingVisual > 0 || missingCollision > 0)
+            {
+                status = "FAIL";
+            }
+            else if (rows.Count == 0)
+            {
+                status = "WARN";
+            }
+            else
+            {
+                status = "PASS";
+            }
+
+            AppendHealthRow(
+                builder,
+                "Mesh manifest paths",
+                status,
+                "rows=" + rows.Count.ToString(CultureInfo.InvariantCulture) +
+                ", missing_visual=" + missingVisual.ToString(CultureInfo.InvariantCulture) +
+                ", missing_collision=" + missingCollision.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void AppendCollisionStrategyHealthRow(
+            StringBuilder builder,
+            IEnumerable<MeshExportRecord> records,
+            bool exportMeshes)
+        {
+            List<MeshExportRecord> rows = records.ToList();
+            int fallbacks = rows.Count(r => !String.Equals(
+                r.CollisionStrategy,
+                r.CollisionEffectiveStrategy,
+                StringComparison.Ordinal));
+            string status = !exportMeshes ? "SKIP" : fallbacks > 0 ? "WARN" : "PASS";
+            AppendHealthRow(
+                builder,
+                "Collision strategy",
+                status,
+                "fallbacks=" + fallbacks.ToString(CultureInfo.InvariantCulture) +
+                ", requested=" + FormatRequestedCollisionStrategies(rows) +
+                ", effective=" + FormatEffectiveCollisionStrategies(rows));
+        }
+
+        private static void AppendStlReductionHealthRow(
+            StringBuilder builder,
+            IEnumerable<MeshExportRecord> records,
+            bool exportMeshes,
+            MeshExportFormat meshFormat)
+        {
+            List<MeshExportRecord> rows = records.ToList();
+            int statsRows = rows.Count(r => r.StlStats != null && r.StlStats.ReductionRatio.HasValue);
+            int highEstimateErrors = rows.Count(r =>
+                r.StlStats != null &&
+                r.StlStats.EstimateErrorPercent.HasValue &&
+                Math.Abs(r.StlStats.EstimateErrorPercent.Value) > 50.0);
+            string status;
+            if (!exportMeshes || meshFormat != MeshExportFormat.STL)
+            {
+                status = "SKIP";
+            }
+            else if (highEstimateErrors > 0 || statsRows == 0)
+            {
+                status = "WARN";
+            }
+            else
+            {
+                status = "PASS";
+            }
+
+            AppendHealthRow(
+                builder,
+                "STL reduction",
+                status,
+                "stats_rows=" + statsRows.ToString(CultureInfo.InvariantCulture) +
+                ", high_estimate_errors=" + highEstimateErrors.ToString(CultureInfo.InvariantCulture) +
+                ", ratios=" + FormatStlReductionRatios(rows));
+        }
+
+        private static void AppendHealthRow(
+            StringBuilder builder,
+            string check,
+            string status,
+            string detail)
+        {
+            builder.AppendLine("| " + MarkdownCell(check) +
+                " | " + MarkdownCell(status) +
+                " | " + MarkdownCell(detail) + " |");
         }
 
         private static void AddFileCheck(List<PackageCheck> checks, string name, string path, bool critical)
