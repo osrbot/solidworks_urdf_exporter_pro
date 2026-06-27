@@ -397,6 +397,9 @@ namespace SW2URDF.Test
             Assert.Contains("Display failed after valid physics: 0", report);
             Assert.Contains("Magnitude warning links: none", report);
             Assert.Contains("Display failure links: none", report);
+            Assert.Contains("### Inertial Link Summary", report);
+            Assert.Contains("| Link | Coordinate system | Status | Rows | Numeric | Physical failures | Magnitude warnings | Display warnings | Max abs error | Max relative error | Failed quantities | Warning quantities |", report);
+            Assert.Contains("| base_link | Origin_global | PASS | 1 | 1 | 0 | 0 | 0 | 0 | 0% | none | none |", report);
             Assert.Contains("Mesh manifest rows: 1", report);
             Assert.Contains("Requested collision strategies: VisualMesh=1", report);
             Assert.Contains("Effective collision strategies: VisualMesh=1", report);
@@ -692,6 +695,7 @@ namespace SW2URDF.Test
             Assert.Contains("Magnitude warnings: 1", report);
             Assert.Contains("Warning links: tiny_mass_link", report);
             Assert.Contains("Magnitude warning links: tiny_mass_link", report);
+            Assert.Contains("| tiny_mass_link | Origin_global | WARN | 1 | 0 | 0 | 1 | 0 | none | none | none | mass.magnitude |", report);
             Assert.Contains("WARN: Inertial validation warning for link tiny_mass_link (1 rows).", report);
 
             Directory.Delete(tempDirectory, true);
@@ -749,6 +753,7 @@ namespace SW2URDF.Test
             Assert.Contains("Display blocked by invalid physics: 0", report);
             Assert.Contains("Display failed after valid physics: 1", report);
             Assert.Contains("Display failure links: display_link", report);
+            Assert.Contains("| display_link | Origin_global | WARN | 1 | 0 | 0 | 0 | 1 | none | none | none | ellipsoid.display |", report);
             Assert.Contains("WARN: Inertial validation warning for link display_link (1 rows).", report);
 
             Directory.Delete(tempDirectory, true);

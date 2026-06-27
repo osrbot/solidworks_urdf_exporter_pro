@@ -945,6 +945,59 @@ namespace SW2URDF.URDFExport
                 (String.IsNullOrWhiteSpace(displayFailureLinks) ? "none" : displayFailureLinks));
             builder.AppendLine("- CSV: config/inertial_validation.csv");
             builder.AppendLine();
+
+            builder.AppendLine("### Inertial Link Summary");
+            builder.AppendLine();
+            builder.AppendLine("| Link | Coordinate system | Status | Rows | Numeric | Physical failures | Magnitude warnings | Display warnings | Max abs error | Max relative error | Failed quantities | Warning quantities |");
+            builder.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+            foreach (IGrouping<string, InertialValidationRecord> linkGroup in
+                rows.GroupBy(r => r.LinkName).OrderBy(group => group.Key))
+            {
+                List<InertialValidationRecord> linkRows = linkGroup.ToList();
+                int linkFailures = linkRows.Count(r => String.Equals(r.Row.Status, "FAIL", StringComparison.Ordinal));
+                int linkWarnings = linkRows.Count(r => r.Row.IsWarning);
+                string linkStatus = linkFailures > 0 ? "FAIL" : linkWarnings > 0 ? "WARN" : "PASS";
+                int numericRows = linkRows.Count(r => r.Row.HasNumericComparison);
+                int linkPhysicalFailures = linkRows.Count(r =>
+                    String.Equals(r.Row.CheckType, "physical", StringComparison.Ordinal) &&
+                    String.Equals(r.Row.Status, "FAIL", StringComparison.Ordinal));
+                int linkMagnitudeWarnings = linkRows.Count(r =>
+                    String.Equals(r.Row.CheckType, "magnitude", StringComparison.Ordinal) &&
+                    r.Row.IsWarning);
+                int linkDisplayWarnings = linkRows.Count(r =>
+                    String.Equals(r.Row.CheckType, "display", StringComparison.Ordinal) &&
+                    !String.Equals(r.Row.Status, "PASS", StringComparison.Ordinal));
+                double? maxAbsError = MaxNullableDouble(linkRows
+                    .Where(r => r.Row.HasNumericComparison)
+                    .Select(r => Math.Abs(r.Row.AbsoluteError)));
+                double? maxRelativeError = MaxNullableDouble(linkRows
+                    .Select(r => r.Row.RelativeErrorPercent));
+                string failedQuantities = FormatQuantityList(linkRows
+                    .Where(r => String.Equals(r.Row.Status, "FAIL", StringComparison.Ordinal))
+                    .Select(r => r.Row.Quantity));
+                string warningQuantities = FormatQuantityList(linkRows
+                    .Where(r => r.Row.IsWarning)
+                    .Select(r => r.Row.Quantity));
+                string coordinateSystems = FormatQuantityList(linkRows.Select(r => r.CoordinateSystemName));
+
+                builder.AppendLine("| " + MarkdownCell(linkGroup.Key) +
+                    " | " + MarkdownCell(coordinateSystems) +
+                    " | " + MarkdownCell(linkStatus) +
+                    " | " + linkRows.Count.ToString(CultureInfo.InvariantCulture) +
+                    " | " + numericRows.ToString(CultureInfo.InvariantCulture) +
+                    " | " + linkPhysicalFailures.ToString(CultureInfo.InvariantCulture) +
+                    " | " + linkMagnitudeWarnings.ToString(CultureInfo.InvariantCulture) +
+                    " | " + linkDisplayWarnings.ToString(CultureInfo.InvariantCulture) +
+                    " | " + FormatNullableNumber(maxAbsError) +
+                    " | " + FormatNullablePercent(maxRelativeError) +
+                    " | " + MarkdownCell(failedQuantities) +
+                    " | " + MarkdownCell(warningQuantities) + " |");
+            }
+            if (rows.Count == 0)
+            {
+                builder.AppendLine("| none | none | WARN | 0 | 0 | 0 | 0 | 0 | none | none | none | none |");
+            }
+            builder.AppendLine();
         }
 
         private static void AppendMeshSection(StringBuilder builder, IEnumerable<MeshExportRecord> records)
@@ -1204,6 +1257,43 @@ namespace SW2URDF.URDFExport
             }
 
             return validValues.Average();
+        }
+
+        private static double? MaxNullableDouble(IEnumerable<double?> values)
+        {
+            List<double> validValues = values.Where(v => v.HasValue).Select(v => v.Value).ToList();
+            if (validValues.Count == 0)
+            {
+                return null;
+            }
+
+            return validValues.Max();
+        }
+
+        private static double? MaxNullableDouble(IEnumerable<double> values)
+        {
+            List<double> validValues = values.ToList();
+            if (validValues.Count == 0)
+            {
+                return null;
+            }
+
+            return validValues.Max();
+        }
+
+        private static string FormatNullableNumber(double? value)
+        {
+            return value.HasValue ? FormatNullableDouble(value) : "none";
+        }
+
+        private static string FormatQuantityList(IEnumerable<string> values)
+        {
+            List<string> distinctValues = values
+                .Where(v => !String.IsNullOrWhiteSpace(v))
+                .Distinct()
+                .OrderBy(v => v)
+                .ToList();
+            return distinctValues.Count == 0 ? "none" : String.Join(", ", distinctValues.ToArray());
         }
 
         private static string FormatNullablePercent(double? value)
