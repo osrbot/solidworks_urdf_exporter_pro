@@ -297,6 +297,15 @@ namespace SW2URDF.URDFExport
                 true);
             AddPackageParityFileCheck(
                 checks,
+                "build",
+                "ROS1 CMakeLists.txt / ROS2 setup.py",
+                package.WindowsPackageDirectory,
+                "CMakeLists.txt",
+                package.WindowsRos2PackageDirectory,
+                "setup.py",
+                true);
+            AddPackageParityFileCheck(
+                checks,
                 "urdf",
                 package.RobotName + ".urdf",
                 package.WindowsRobotsDirectory,
@@ -348,11 +357,32 @@ namespace SW2URDF.URDFExport
             string ros2Root,
             bool critical)
         {
-            string ros1Path = Path.Combine(ros1Root, relativePath);
-            string ros2Path = Path.Combine(ros2Root, relativePath);
+            AddPackageParityFileCheck(
+                checks,
+                category,
+                relativePath,
+                ros1Root,
+                relativePath,
+                ros2Root,
+                relativePath,
+                critical);
+        }
+
+        private static void AddPackageParityFileCheck(
+            List<PackageParityCheck> checks,
+            string category,
+            string reportRelativePath,
+            string ros1Root,
+            string ros1RelativePath,
+            string ros2Root,
+            string ros2RelativePath,
+            bool critical)
+        {
+            string ros1Path = Path.Combine(ros1Root, ros1RelativePath);
+            string ros2Path = Path.Combine(ros2Root, ros2RelativePath);
             checks.Add(new PackageParityCheck(
                 category,
-                NormalizeReportPath(relativePath),
+                NormalizeReportPath(reportRelativePath),
                 ros1Path,
                 ros2Path,
                 File.Exists(ros1Path),
