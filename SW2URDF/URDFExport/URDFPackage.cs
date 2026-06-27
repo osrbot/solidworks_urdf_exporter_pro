@@ -173,11 +173,19 @@ namespace SW2URDF.URDFExport
             logger.Info("Creating ROS 2 package at " + WindowsRos2PackageDirectory);
             CreateRos2Directories();
             logger.Info("Copying ROS 2 meshes from " + WindowsMeshesDirectory + " to " + WindowsRos2MeshesDirectory);
-            CopyDirectory(WindowsMeshesDirectory, WindowsRos2MeshesDirectory);
+            int copiedMeshFiles = CopyDirectory(WindowsMeshesDirectory, WindowsRos2MeshesDirectory);
+            if (copiedMeshFiles == 0)
+            {
+                logger.Warn("ROS 2 mesh copy produced no files from " + WindowsMeshesDirectory);
+            }
             logger.Info("Copying ROS 2 textures from " + WindowsTexturesDirectory + " to " + WindowsRos2TexturesDirectory);
             CopyDirectory(WindowsTexturesDirectory, WindowsRos2TexturesDirectory);
             logger.Info("Copying ROS 2 config from " + WindowsConfigDirectory + " to " + WindowsRos2ConfigDirectory);
-            CopyDirectory(WindowsConfigDirectory, WindowsRos2ConfigDirectory);
+            int copiedConfigFiles = CopyDirectory(WindowsConfigDirectory, WindowsRos2ConfigDirectory);
+            if (copiedConfigFiles == 0)
+            {
+                logger.Warn("ROS 2 config copy produced no files from " + WindowsConfigDirectory);
+            }
 
             string ros2URDFFileName = WindowsRos2RobotsDirectory + RobotName + ".urdf";
             logger.Info("Creating ROS 2 URDF at " + ros2URDFFileName);
@@ -326,22 +334,27 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private static void CopyDirectory(string source, string destination)
+        private static int CopyDirectory(string source, string destination)
         {
             if (!Directory.Exists(source))
             {
-                return;
+                logger.Warn("Directory copy skipped because source does not exist: " + source);
+                return 0;
             }
 
+            int copiedFiles = 0;
             Directory.CreateDirectory(destination);
             foreach (string file in Directory.GetFiles(source))
             {
                 CopyFileWithRetry(file, Path.Combine(destination, Path.GetFileName(file)));
+                copiedFiles += 1;
             }
             foreach (string directory in Directory.GetDirectories(source))
             {
-                CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
+                copiedFiles += CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
             }
+
+            return copiedFiles;
         }
 
         private static void CopyFileWithRetry(string source, string destination)

@@ -351,6 +351,104 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestExportReportFailsWhenRos2MeshReferencesAreMissing()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            pkg.CreateCMakeLists();
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsPackageDirectory, "package.xml"),
+                "<?xml version=\"1.0\"?><package><name>rover_description</name></package>",
+                new UTF8Encoding(false));
+
+            string visualMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "visual");
+            string collisionMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "collision");
+            Directory.CreateDirectory(visualMeshDirectory);
+            Directory.CreateDirectory(collisionMeshDirectory);
+            string visualMesh = Path.Combine(visualMeshDirectory, "base_link.STL");
+            string collisionMesh = Path.Combine(collisionMeshDirectory, "base_link.STL");
+            File.WriteAllText(visualMesh, "visual");
+            File.WriteAllText(collisionMesh, "collision");
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "inertial_validation.csv"),
+                "link,status\r\nbase_link,PASS\r\n",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "mesh_manifest.csv"),
+                "link,visual_exists,collision_exists\r\nbase_link,true,true\r\n",
+                new UTF8Encoding(false));
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(
+                ros1Urdf,
+                "<?xml version=\"1.0\"?><robot name=\"robot_900001\">" +
+                "<link name=\"base_link\"><visual><geometry><mesh filename=\"package://rover_description/meshes/visual/base_link.STL\" /></geometry></visual>" +
+                "<collision><geometry><mesh filename=\"package://rover_description/meshes/collision/base_link.STL\" /></geometry></collision></link></robot>",
+                new UTF8Encoding(false));
+            pkg.CreateRos2Package(ros1Urdf);
+
+            Directory.Delete(pkg.WindowsRos2MeshesDirectory, true);
+            Directory.CreateDirectory(Path.Combine(pkg.WindowsRos2MeshesDirectory, "visual"));
+            Directory.CreateDirectory(Path.Combine(pkg.WindowsRos2MeshesDirectory, "collision"));
+
+            ExportHelper.MeshExportRecord meshRecord =
+                new ExportHelper.MeshExportRecord(
+                    "base_link",
+                    "VisualMesh",
+                    "VisualMesh",
+                    "visual_mesh_copy",
+                    "ok",
+                    "STL",
+                    "package://rover_description/meshes/visual/base_link.STL",
+                    "package://rover_description/meshes/collision/base_link.STL",
+                    visualMesh,
+                    collisionMesh,
+                    true,
+                    true,
+                    new FileInfo(visualMesh).Length,
+                    new FileInfo(collisionMesh).Length,
+                    0,
+                    0,
+                    ExportHelper.StlExportStats.NotExported());
+
+            ExportHelper.WriteExportReport(
+                pkg,
+                ros1Urdf,
+                new[]
+                {
+                    new ExportHelper.InertialValidationRecord(
+                        "base_link",
+                        "Origin_global",
+                        new ExportHelper.InertialValidationRow("mass", "kg", 1.0, 1.0))
+                },
+                new[] { meshRecord },
+                true,
+                MeshExportFormat.STL,
+                TimeSpan.FromSeconds(1));
+
+            string report = File.ReadAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
+                Encoding.UTF8);
+            Assert.Contains("Status: FAIL", report);
+            Assert.Contains("ROS 2 visual mesh files | MISSING", report);
+            Assert.Contains("ROS 2 collision mesh files | MISSING", report);
+            Assert.Contains(
+                "FAIL: ROS 2 mesh reference is unresolved: package://rover_description/meshes/visual/base_link.STL",
+                report);
+            Assert.Contains(
+                "FAIL: ROS 2 mesh reference is unresolved: package://rover_description/meshes/collision/base_link.STL",
+                report);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
+        [Fact]
         public void TestExportReportFailsWhenMeshDirectoriesAreEmpty()
         {
             string tempDirectory = CreateRandomTempDirectory();
