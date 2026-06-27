@@ -213,6 +213,19 @@ namespace SW2URDF.URDFExport
                         "Collision mesh for link " + record.LinkName + " is missing at " +
                         record.CollisionWindowsPath);
                 }
+                if (String.Equals(record.MeshFormat, MeshExportFormat.STL.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    if (record.VisualExists && !record.VisualTriangles.HasValue)
+                    {
+                        findings.Add("WARN: Visual STL triangle count for link " + record.LinkName +
+                            " could not be read at " + record.VisualWindowsPath + ".");
+                    }
+                    if (record.CollisionExists && !record.CollisionTriangles.HasValue)
+                    {
+                        findings.Add("WARN: Collision STL triangle count for link " + record.LinkName +
+                            " could not be read at " + record.CollisionWindowsPath + ".");
+                    }
+                }
                 if (record.StlStats != null &&
                     record.StlStats.EstimateErrorPercent.HasValue &&
                     Math.Abs(record.StlStats.EstimateErrorPercent.Value) > 50.0)

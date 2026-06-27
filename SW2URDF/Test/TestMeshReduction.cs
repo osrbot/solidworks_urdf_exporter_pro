@@ -512,6 +512,91 @@ namespace SW2URDF.Test
             Assert.Contains(",true,true,184,84,2,0", csv);
         }
 
+        [Fact]
+        public void TestStlTriangleCounterAcceptsValidatedBinaryStl()
+        {
+            string tempFile = Path.Combine(
+                Path.GetTempPath(),
+                "sw2urdf-binary-count-" + Guid.NewGuid() + ".STL");
+            ExportHelper.LinkLocalBoundingBox box = new ExportHelper.LinkLocalBoundingBox();
+            box.Include(-0.5, -0.5, -0.5);
+            box.Include(0.5, 0.5, 0.5);
+
+            try
+            {
+                ExportHelper.WriteBoxPrimitiveStl(tempFile, box);
+
+                uint? triangleCount = ExportHelper.TryReadStlTriangleCount(tempFile);
+
+                Assert.True(triangleCount.HasValue);
+                Assert.Equal((uint)12, triangleCount.Value);
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                {
+                    File.Delete(tempFile);
+                }
+            }
+        }
+
+        [Fact]
+        public void TestStlTriangleCounterAcceptsAsciiStl()
+        {
+            string tempFile = Path.Combine(
+                Path.GetTempPath(),
+                "sw2urdf-ascii-count-" + Guid.NewGuid() + ".STL");
+            string asciiStl =
+                "solid ascii_test\n" +
+                "facet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\n" +
+                "facet normal 0 0 1\nouter loop\nvertex 1 0 0\nvertex 1 1 0\nvertex 0 1 0\nendloop\nendfacet\n" +
+                "endsolid ascii_test\n";
+
+            try
+            {
+                File.WriteAllText(tempFile, asciiStl, Encoding.ASCII);
+
+                uint? triangleCount = ExportHelper.TryReadStlTriangleCount(tempFile);
+
+                Assert.True(triangleCount.HasValue);
+                Assert.Equal((uint)2, triangleCount.Value);
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                {
+                    File.Delete(tempFile);
+                }
+            }
+        }
+
+        [Fact]
+        public void TestStlTriangleCounterRejectsInvalidBinaryLength()
+        {
+            string tempFile = Path.Combine(
+                Path.GetTempPath(),
+                "sw2urdf-invalid-count-" + Guid.NewGuid() + ".STL");
+
+            try
+            {
+                using (BinaryWriter writer = new BinaryWriter(File.OpenWrite(tempFile)))
+                {
+                    writer.Write(new byte[80]);
+                    writer.Write((uint)12);
+                    writer.Write(new byte[10]);
+                }
+
+                Assert.Null(ExportHelper.TryReadStlTriangleCount(tempFile));
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                {
+                    File.Delete(tempFile);
+                }
+            }
+        }
+
         private static string WriteGeometryXml(Geometry geometry)
         {
             StringBuilder builder = new StringBuilder();

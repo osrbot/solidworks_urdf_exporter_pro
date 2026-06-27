@@ -633,8 +633,8 @@ namespace SW2URDF.URDFExport
                 collisionExists,
                 visualExists ? (long?)new FileInfo(meshFiles.WindowsVisualMeshFilename).Length : null,
                 collisionExists ? (long?)new FileInfo(meshFiles.WindowsCollisionMeshFilename).Length : null,
-                isStl && visualExists ? TryReadBinaryStlTriangleCount(meshFiles.WindowsVisualMeshFilename) : null,
-                isStl && collisionExists ? TryReadBinaryStlTriangleCount(meshFiles.WindowsCollisionMeshFilename) : null,
+                isStl && visualExists ? TryReadStlTriangleCount(meshFiles.WindowsVisualMeshFilename) : null,
+                isStl && collisionExists ? TryReadStlTriangleCount(meshFiles.WindowsCollisionMeshFilename) : null,
                 visualStlStats,
                 BuildCollisionUrdfReference(safeCollisionExport, meshFiles.CollisionMeshFilename));
         }
@@ -664,11 +664,11 @@ namespace SW2URDF.URDFExport
             return meshCollisionUri;
         }
 
-        private static uint? TryReadBinaryStlTriangleCount(string filename)
+        internal static uint? TryReadStlTriangleCount(string filename)
         {
             try
             {
-                return ReadBinaryStlTriangleCount(filename);
+                return ReadStlTriangleCount(filename);
             }
             catch
             {
@@ -2373,25 +2373,31 @@ namespace SW2URDF.URDFExport
             try
             {
                 FileInfo fileInfo = new FileInfo(filename);
-                uint triangleCount = ReadBinaryStlTriangleCount(filename);
+                uint? triangleCount = TryReadStlTriangleCount(filename);
+                if (!triangleCount.HasValue)
+                {
+                    logger.Warn(link.Name + ": Could not read exported STL triangle count at " + filename);
+                    return;
+                }
+
                 if (stats != null)
                 {
                     stats.ActualBytes = fileInfo.Length;
-                    stats.ActualTriangles = triangleCount;
+                    stats.ActualTriangles = triangleCount.Value;
                     stats.ActualReductionPercent = CalculateReductionPercent(
-                        triangleCount,
+                        triangleCount.Value,
                         stats.BaselineEstimatedTriangles.GetValueOrDefault());
                 }
 
-                logger.Info(string.Format("{0}: Actual binary STL size {1} ({2} triangles) at {3}",
-                    link.Name, FormatByteSize(fileInfo.Length), triangleCount, filename));
+                logger.Info(string.Format("{0}: Actual STL size {1} ({2} triangles) at {3}",
+                    link.Name, FormatByteSize(fileInfo.Length), triangleCount.Value, filename));
 
                 int estimatedTriangleCount = stats == null
                     ? 0
                     : stats.EstimatedTriangles.GetValueOrDefault();
                 if (estimatedTriangleCount > 0)
                 {
-                    double errorPercent = CalculateEstimateErrorPercent(estimatedTriangleCount, triangleCount);
+                    double errorPercent = CalculateEstimateErrorPercent(estimatedTriangleCount, triangleCount.Value);
                     if (stats != null)
                     {
                         stats.EstimateErrorPercent = errorPercent;
@@ -2399,7 +2405,7 @@ namespace SW2URDF.URDFExport
                     string comparison = string.Format(
                         "{0}: Rough STL estimate error {1:+0.##;-0.##;0}% " +
                         "(estimated {2} triangles, actual {3} triangles)",
-                        link.Name, errorPercent, estimatedTriangleCount, triangleCount);
+                        link.Name, errorPercent, estimatedTriangleCount, triangleCount.Value);
                     if (Math.Abs(errorPercent) > 50.0)
                     {
                         logger.Warn(comparison);
@@ -2439,6 +2445,87 @@ namespace SW2URDF.URDFExport
                 fileStream.Read(triangleCountBytes, 0, triangleCountBytes.Length);
                 return BitConverter.ToUInt32(triangleCountBytes, 0);
             }
+        }
+
+        private static uint ReadStlTriangleCount(string filename)
+        {
+            uint? binaryTriangles = TryReadValidatedBinaryStlTriangleCount(filename);
+            if (binaryTriangles.HasValue)
+            {
+                return binaryTriangles.Value;
+            }
+
+            uint? asciiTriangles = TryReadAsciiStlTriangleCount(filename);
+            if (asciiTriangles.HasValue)
+            {
+                return asciiTriangles.Value;
+            }
+
+            throw new InvalidDataException("STL is neither valid binary STL nor recognizable ASCII STL.");
+        }
+
+        private static uint? TryReadValidatedBinaryStlTriangleCount(string filename)
+        {
+            using (FileStream fileStream = OpenFileWithRetry(filename, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                if (fileStream.Length < 84)
+                {
+                    return null;
+                }
+
+                fileStream.Seek(80, SeekOrigin.Begin);
+                byte[] triangleCountBytes = new byte[4];
+                if (fileStream.Read(triangleCountBytes, 0, triangleCountBytes.Length) != triangleCountBytes.Length)
+                {
+                    return null;
+                }
+
+                uint triangleCount = BitConverter.ToUInt32(triangleCountBytes, 0);
+                long expectedLength = 84L + 50L * triangleCount;
+                return expectedLength == fileStream.Length ? (uint?)triangleCount : null;
+            }
+        }
+
+        private static uint? TryReadAsciiStlTriangleCount(string filename)
+        {
+            bool sawSolid = false;
+            bool sawEndSolid = false;
+            uint facets = 0;
+
+            using (StreamReader reader = new StreamReader(filename, Encoding.ASCII, true))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    string trimmed = line.TrimStart();
+                    if (!sawSolid &&
+                        trimmed.StartsWith("solid", StringComparison.OrdinalIgnoreCase))
+                    {
+                        sawSolid = true;
+                    }
+
+                    if (trimmed.StartsWith("facet normal", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (facets == UInt32.MaxValue)
+                        {
+                            throw new InvalidDataException("ASCII STL facet count exceeds UInt32.MaxValue.");
+                        }
+                        facets++;
+                    }
+
+                    if (trimmed.StartsWith("endsolid", StringComparison.OrdinalIgnoreCase))
+                    {
+                        sawEndSolid = true;
+                    }
+                }
+            }
+
+            if (sawSolid && (facets > 0 || sawEndSolid))
+            {
+                return facets;
+            }
+
+            return null;
         }
 
         internal static long EstimateBinaryStlSizeBytes(int triangleCount)
