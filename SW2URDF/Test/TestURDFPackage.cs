@@ -345,6 +345,14 @@ namespace SW2URDF.Test
             Assert.Contains("ROS 1 collision mesh files | OK", report);
             Assert.Contains("ROS 2 visual mesh files | OK", report);
             Assert.Contains("ROS 2 collision mesh files | OK", report);
+            Assert.Contains("## ROS Package Parity", report);
+            Assert.Contains("Parity mismatches: 0", report);
+            Assert.Contains("| package | package.xml | yes | yes | yes |", report);
+            Assert.Contains("| urdf | robot_900001.urdf | yes | yes | yes |", report);
+            Assert.Contains("| config | inertial_validation.csv | yes | yes | no |", report);
+            Assert.Contains("| config | mesh_manifest.csv | yes | yes | no |", report);
+            Assert.Contains("| meshes/visual | base_link.STL | yes | yes | yes |", report);
+            Assert.Contains("| meshes/collision | base_link.STL | yes | yes | yes |", report);
             Assert.Contains("Inertial validation rows: 1", report);
             Assert.Contains("Warning rows: 0", report);
             Assert.Contains("Physical inertia failures: 0", report);
@@ -453,6 +461,16 @@ namespace SW2URDF.Test
             Assert.Contains("Status: FAIL", report);
             Assert.Contains("ROS 2 visual mesh files | MISSING", report);
             Assert.Contains("ROS 2 collision mesh files | MISSING", report);
+            Assert.Contains("## ROS Package Parity", report);
+            Assert.Contains("Parity mismatches: 2", report);
+            Assert.Contains("| meshes/visual | base_link.STL | yes | no | yes |", report);
+            Assert.Contains("| meshes/collision | base_link.STL | yes | no | yes |", report);
+            Assert.Contains(
+                "FAIL: ROS package parity mismatch for meshes/visual/base_link.STL: ROS1=true, ROS2=false",
+                report);
+            Assert.Contains(
+                "FAIL: ROS package parity mismatch for meshes/collision/base_link.STL: ROS1=true, ROS2=false",
+                report);
             Assert.Contains(
                 "FAIL: ROS 2 mesh reference is unresolved: package://rover_description/meshes/visual/base_link.STL",
                 report);

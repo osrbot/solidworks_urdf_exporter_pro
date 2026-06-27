@@ -67,7 +67,15 @@ namespace SW2URDF.URDFExport
                 package.Ros2PackageName,
                 package.WindowsRos2PackageDirectory);
             List<PackageCheck> packageChecks = BuildPackageChecks(package, ros1UrdfFileName, ros2UrdfFileName, exportMeshes);
-            List<string> findings = BuildExportFindings(ros1Urdf, ros2Urdf, packageChecks, inertialRows, meshRows, exportMeshes);
+            List<PackageParityCheck> packageParityChecks = BuildPackageParityChecks(package, exportMeshes);
+            List<string> findings = BuildExportFindings(
+                ros1Urdf,
+                ros2Urdf,
+                packageChecks,
+                packageParityChecks,
+                inertialRows,
+                meshRows,
+                exportMeshes);
 
             bool hasFailure = findings.Any(f => f.StartsWith("FAIL:", StringComparison.Ordinal));
             bool hasWarning = findings.Any(f => f.StartsWith("WARN:", StringComparison.Ordinal));
@@ -105,6 +113,7 @@ namespace SW2URDF.URDFExport
             AppendUrdfSection(builder, ros1Urdf);
             AppendUrdfSection(builder, ros2Urdf);
             AppendPackageSection(builder, packageChecks);
+            AppendPackageParitySection(builder, packageParityChecks);
             AppendInertialSection(builder, inertialRows);
             AppendMeshSection(builder, meshRows);
             AppendFindingsSection(builder, findings);
@@ -116,6 +125,7 @@ namespace SW2URDF.URDFExport
             UrdfInspection ros1Urdf,
             UrdfInspection ros2Urdf,
             IEnumerable<PackageCheck> packageChecks,
+            IEnumerable<PackageParityCheck> packageParityChecks,
             IEnumerable<InertialValidationRecord> inertialRows,
             IEnumerable<MeshExportRecord> meshRows,
             bool exportMeshes)
@@ -129,6 +139,16 @@ namespace SW2URDF.URDFExport
                 if (!check.Exists)
                 {
                     findings.Add((check.Critical ? "FAIL: " : "WARN: ") + check.Name + " is missing at " + check.Path);
+                }
+            }
+            foreach (PackageParityCheck check in packageParityChecks)
+            {
+                if (!check.Matches)
+                {
+                    findings.Add((check.Critical ? "FAIL: " : "WARN: ") +
+                        "ROS package parity mismatch for " + check.Category + "/" + check.RelativePath +
+                        ": ROS1=" + FormatBool(check.Ros1Exists) +
+                        ", ROS2=" + FormatBool(check.Ros2Exists));
                 }
             }
 
@@ -261,6 +281,132 @@ namespace SW2URDF.URDFExport
             AddFileCheck(checks, "ROS 2 mesh manifest CSV",
                 Path.Combine(package.WindowsRos2ConfigDirectory, "mesh_manifest.csv"), false);
             return checks;
+        }
+
+        private static List<PackageParityCheck> BuildPackageParityChecks(
+            URDFPackage package,
+            bool exportMeshes)
+        {
+            List<PackageParityCheck> checks = new List<PackageParityCheck>();
+            AddPackageParityFileCheck(
+                checks,
+                "package",
+                "package.xml",
+                package.WindowsPackageDirectory,
+                package.WindowsRos2PackageDirectory,
+                true);
+            AddPackageParityFileCheck(
+                checks,
+                "urdf",
+                package.RobotName + ".urdf",
+                package.WindowsRobotsDirectory,
+                package.WindowsRos2RobotsDirectory,
+                true);
+            AddPackageParityFileCheck(
+                checks,
+                "config",
+                "inertial_validation.csv",
+                package.WindowsConfigDirectory,
+                package.WindowsRos2ConfigDirectory,
+                false);
+            AddPackageParityFileCheck(
+                checks,
+                "config",
+                "mesh_manifest.csv",
+                package.WindowsConfigDirectory,
+                package.WindowsRos2ConfigDirectory,
+                false);
+            if (exportMeshes)
+            {
+                AddPackageParityDirectoryChecks(
+                    checks,
+                    "meshes/visual",
+                    Path.Combine(package.WindowsMeshesDirectory, "visual"),
+                    Path.Combine(package.WindowsRos2MeshesDirectory, "visual"),
+                    true);
+                AddPackageParityDirectoryChecks(
+                    checks,
+                    "meshes/collision",
+                    Path.Combine(package.WindowsMeshesDirectory, "collision"),
+                    Path.Combine(package.WindowsRos2MeshesDirectory, "collision"),
+                    true);
+            }
+            AddPackageParityDirectoryChecks(
+                checks,
+                "textures",
+                package.WindowsTexturesDirectory,
+                package.WindowsRos2TexturesDirectory,
+                false);
+            return checks;
+        }
+
+        private static void AddPackageParityFileCheck(
+            List<PackageParityCheck> checks,
+            string category,
+            string relativePath,
+            string ros1Root,
+            string ros2Root,
+            bool critical)
+        {
+            string ros1Path = Path.Combine(ros1Root, relativePath);
+            string ros2Path = Path.Combine(ros2Root, relativePath);
+            checks.Add(new PackageParityCheck(
+                category,
+                NormalizeReportPath(relativePath),
+                ros1Path,
+                ros2Path,
+                File.Exists(ros1Path),
+                File.Exists(ros2Path),
+                critical));
+        }
+
+        private static void AddPackageParityDirectoryChecks(
+            List<PackageParityCheck> checks,
+            string category,
+            string ros1Root,
+            string ros2Root,
+            bool critical)
+        {
+            SortedSet<string> relativePaths = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string relativePath in EnumerateRelativeFiles(ros1Root))
+            {
+                relativePaths.Add(relativePath);
+            }
+            foreach (string relativePath in EnumerateRelativeFiles(ros2Root))
+            {
+                relativePaths.Add(relativePath);
+            }
+
+            foreach (string relativePath in relativePaths)
+            {
+                string ros1Path = Path.Combine(ros1Root, relativePath);
+                string ros2Path = Path.Combine(ros2Root, relativePath);
+                checks.Add(new PackageParityCheck(
+                    category,
+                    NormalizeReportPath(relativePath),
+                    ros1Path,
+                    ros2Path,
+                    File.Exists(ros1Path),
+                    File.Exists(ros2Path),
+                    critical));
+            }
+        }
+
+        private static IEnumerable<string> EnumerateRelativeFiles(string root)
+        {
+            if (!Directory.Exists(root))
+            {
+                return Enumerable.Empty<string>();
+            }
+
+            return Directory
+                .EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                .Select(path => path.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        }
+
+        private static string NormalizeReportPath(string path)
+        {
+            return (path ?? "").Replace('\\', '/');
         }
 
         private static void AddFileCheck(List<PackageCheck> checks, string name, string path, bool critical)
@@ -417,6 +563,30 @@ namespace SW2URDF.URDFExport
                     " | " + (check.Exists ? "OK" : "MISSING") +
                     " | " + (check.Critical ? "yes" : "no") +
                     " | " + MarkdownCell(check.Path) + " |");
+            }
+            builder.AppendLine();
+        }
+
+        private static void AppendPackageParitySection(
+            StringBuilder builder,
+            IEnumerable<PackageParityCheck> checks)
+        {
+            List<PackageParityCheck> rows = checks.ToList();
+            int mismatches = rows.Count(r => !r.Matches);
+            builder.AppendLine("## ROS Package Parity");
+            builder.AppendLine();
+            builder.AppendLine("- Parity rows: " + rows.Count.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Parity mismatches: " + mismatches.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine();
+            builder.AppendLine("| Category | Relative path | ROS 1 | ROS 2 | Required |");
+            builder.AppendLine("| --- | --- | --- | --- | --- |");
+            foreach (PackageParityCheck check in rows)
+            {
+                builder.AppendLine("| " + MarkdownCell(check.Category) +
+                    " | " + MarkdownCell(check.RelativePath) +
+                    " | " + (check.Ros1Exists ? "yes" : "no") +
+                    " | " + (check.Ros2Exists ? "yes" : "no") +
+                    " | " + (check.Critical ? "yes" : "no") + " |");
             }
             builder.AppendLine();
         }
@@ -710,6 +880,46 @@ namespace SW2URDF.URDFExport
             public bool Exists { get; private set; }
 
             public bool Critical { get; private set; }
+        }
+
+        private class PackageParityCheck
+        {
+            public PackageParityCheck(
+                string category,
+                string relativePath,
+                string ros1Path,
+                string ros2Path,
+                bool ros1Exists,
+                bool ros2Exists,
+                bool critical)
+            {
+                Category = category;
+                RelativePath = relativePath;
+                Ros1Path = ros1Path;
+                Ros2Path = ros2Path;
+                Ros1Exists = ros1Exists;
+                Ros2Exists = ros2Exists;
+                Critical = critical;
+            }
+
+            public string Category { get; private set; }
+
+            public string RelativePath { get; private set; }
+
+            public string Ros1Path { get; private set; }
+
+            public string Ros2Path { get; private set; }
+
+            public bool Ros1Exists { get; private set; }
+
+            public bool Ros2Exists { get; private set; }
+
+            public bool Critical { get; private set; }
+
+            public bool Matches
+            {
+                get { return Ros1Exists == Ros2Exists; }
+            }
         }
     }
 }
