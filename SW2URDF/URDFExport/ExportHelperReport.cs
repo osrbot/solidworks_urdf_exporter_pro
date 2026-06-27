@@ -266,6 +266,9 @@ namespace SW2URDF.URDFExport
             AddFileCheck(checks, "ROS 1 package.xml", Path.Combine(package.WindowsPackageDirectory, "package.xml"), true);
             AddFileCheck(checks, "ROS 1 URDF", ros1UrdfFileName, true);
             AddDirectoryCheck(checks, "ROS 1 config directory", package.WindowsConfigDirectory, true);
+            AddDirectoryCheck(checks, "ROS 1 launch directory", package.WindowsLaunchDirectory, true);
+            AddFileCheck(checks, "ROS 1 display.launch", Path.Combine(package.WindowsLaunchDirectory, "display.launch"), true);
+            AddFileCheck(checks, "ROS 1 gazebo.launch", Path.Combine(package.WindowsLaunchDirectory, "gazebo.launch"), true);
             AddDirectoryCheck(checks, "ROS 1 meshes directory", package.WindowsMeshesDirectory, exportMeshes);
             AddDirectoryCheck(checks, "ROS 1 visual meshes directory", Path.Combine(package.WindowsMeshesDirectory, "visual"), exportMeshes);
             AddDirectoryFilesCheck(checks, "ROS 1 visual mesh files", Path.Combine(package.WindowsMeshesDirectory, "visual"), exportMeshes);
@@ -324,6 +327,24 @@ namespace SW2URDF.URDFExport
                 package.RobotName + ".urdf",
                 package.WindowsRobotsDirectory,
                 package.WindowsRos2RobotsDirectory,
+                true);
+            AddPackageParityFileCheck(
+                checks,
+                "launch",
+                "ROS1 display.launch / ROS2 display.launch.py",
+                package.WindowsLaunchDirectory,
+                "display.launch",
+                package.WindowsRos2LaunchDirectory,
+                "display.launch.py",
+                true);
+            AddPackageParityFileCheck(
+                checks,
+                "launch",
+                "ROS1 gazebo.launch / ROS2 gazebo.launch.py",
+                package.WindowsLaunchDirectory,
+                "gazebo.launch",
+                package.WindowsRos2LaunchDirectory,
+                "gazebo.launch.py",
                 true);
             AddPackageParityFileCheck(
                 checks,
