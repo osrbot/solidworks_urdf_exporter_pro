@@ -21,6 +21,7 @@ THE SOFTWARE.
 */
 
 using SW2URDF.UI;
+using SW2URDF.URDF;
 using SW2URDF.Utilities;
 using System;
 using System.IO;
@@ -224,7 +225,8 @@ namespace SW2URDF.URDFExport
                 file.WriteLine("  <name>" + Ros2PackageName + "</name>");
                 file.WriteLine("  <version>1.0.0</version>");
                 file.WriteLine("  <description>ROS 2 URDF description package for " + PackageName + "</description>");
-                file.WriteLine("  <maintainer email=\"TODO\">TODO</maintainer>");
+                file.WriteLine("  <maintainer email=\"" + PackageXML.DefaultMaintainerEmail + "\">" +
+                    PackageXML.DefaultMaintainerName + "</maintainer>");
                 file.WriteLine("  <license>BSD</license>");
                 file.WriteLine("  <buildtool_depend>ament_python</buildtool_depend>");
                 file.WriteLine("  <exec_depend>joint_state_publisher_gui</exec_depend>");
@@ -271,8 +273,8 @@ namespace SW2URDF.URDFExport
                 file.WriteLine("    ] + package_files('meshes') + package_files('textures') + package_files('config'),");
                 file.WriteLine("    install_requires=['setuptools'],");
                 file.WriteLine("    zip_safe=True,");
-                file.WriteLine("    maintainer='TODO',");
-                file.WriteLine("    maintainer_email='TODO',");
+                file.WriteLine("    maintainer='" + PackageXML.DefaultMaintainerName + "',");
+                file.WriteLine("    maintainer_email='" + PackageXML.DefaultMaintainerEmail + "',");
                 file.WriteLine("    description='ROS 2 URDF description package for " + PackageName + "',");
                 file.WriteLine("    license='BSD',");
                 file.WriteLine(")");

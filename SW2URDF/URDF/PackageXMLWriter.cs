@@ -31,6 +31,9 @@ namespace SW2URDF.URDF
     //Top level class for the package XML file.
     public class PackageXML : PackageElement
     {
+        public const string DefaultMaintainerName = "OSRBot";
+        public const string DefaultMaintainerEmail = "support@osrbot.com";
+
         public Description description;
         public Dependencies dependencies;
         public Author author;
@@ -45,7 +48,7 @@ namespace SW2URDF.URDF
                 new string[] {
                     "roslaunch", "robot_state_publisher", "rviz", "joint_state_publisher_gui", "gazebo" });
 
-            author = new Author("TODO");
+            author = new Author(DefaultMaintainerName, DefaultMaintainerEmail);
 
             license = new License("BSD");
         }
@@ -149,10 +152,12 @@ namespace SW2URDF.URDF
     public class Author : PackageElement
     {
         private readonly string name;
+        private readonly string email;
 
-        public Author(string name)
+        public Author(string name, string email)
         {
             this.name = name;
+            this.email = email;
         }
 
         public void WriteElement(XmlWriter writer)
@@ -162,7 +167,8 @@ namespace SW2URDF.URDF
             writer.WriteEndElement();
 
             writer.WriteStartElement("maintainer");
-            writer.WriteAttributeString("email", name + "@email.com");
+            writer.WriteAttributeString("email", email);
+            writer.WriteString(name);
             writer.WriteEndElement();
         }
     }

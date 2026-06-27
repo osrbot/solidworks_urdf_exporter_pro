@@ -1,5 +1,6 @@
 ﻿using Moq;
 using SW2URDF.UI;
+using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
 using System.IO;
@@ -109,6 +110,56 @@ namespace SW2URDF.Test
             Assert.True(Directory.Exists(pkg.WindowsTexturesDirectory));
             Assert.True(Directory.Exists(pkg.WindowsLaunchDirectory));
             Assert.True(Directory.Exists(pkg.WindowsConfigDirectory));
+
+            Directory.Delete(tempDirectory, true);
+        }
+
+        [Fact]
+        public void TestGeneratedPackageMetadataHasMaintainer()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("metadata_robot", tempDirectory);
+
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+            pkg.CreateDirectories();
+
+            string ros1PackageXml = Path.Combine(pkg.WindowsPackageDirectory, "package.xml");
+            PackageXMLWriter packageXmlWriter = new PackageXMLWriter(ros1PackageXml);
+            PackageXML packageXml = new PackageXML(pkg.PackageName);
+            packageXml.WriteElement(packageXmlWriter);
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(
+                ros1Urdf,
+                "<?xml version=\"1.0\"?><robot name=\"metadata_robot\"><link name=\"base_link\" /></robot>",
+                new UTF8Encoding(false));
+            CreateRos1LaunchFiles(pkg);
+            pkg.CreateRos2Package(ros1Urdf);
+
+            string ros1Package = File.ReadAllText(ros1PackageXml, Encoding.UTF8);
+            string ros2Package = File.ReadAllText(
+                Path.Combine(pkg.WindowsRos2PackageDirectory, "package.xml"),
+                Encoding.UTF8);
+            string ros2Setup = File.ReadAllText(
+                Path.Combine(pkg.WindowsRos2PackageDirectory, "setup.py"),
+                Encoding.UTF8);
+
+            Assert.DoesNotContain("TODO", ros1Package);
+            Assert.DoesNotContain("TODO", ros2Package);
+            Assert.DoesNotContain("TODO", ros2Setup);
+            Assert.Contains(
+                "<maintainer email=\"" + PackageXML.DefaultMaintainerEmail + "\">" +
+                PackageXML.DefaultMaintainerName + "</maintainer>",
+                ros1Package);
+            Assert.Contains(
+                "<maintainer email=\"" + PackageXML.DefaultMaintainerEmail + "\">" +
+                PackageXML.DefaultMaintainerName + "</maintainer>",
+                ros2Package);
+            Assert.Contains("maintainer='" + PackageXML.DefaultMaintainerName + "'", ros2Setup);
+            Assert.Contains("maintainer_email='" + PackageXML.DefaultMaintainerEmail + "'", ros2Setup);
 
             Directory.Delete(tempDirectory, true);
         }
