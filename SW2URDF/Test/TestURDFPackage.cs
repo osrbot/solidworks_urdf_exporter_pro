@@ -378,6 +378,13 @@ namespace SW2URDF.Test
             Assert.Contains("STL quality settings: custom=1", report);
             Assert.Contains("Average estimated STL reduction: 50%", report);
             Assert.Contains("Average actual STL reduction: 50%", report);
+            Assert.Contains("## STL Reduction Details", report);
+            Assert.Contains("| Link | Quality | Ratio | Custom | Deviation (m) | Angle tolerance (rad) | Baseline est. bytes | Baseline est. triangles | Estimated bytes | Estimated triangles | Actual visual bytes | Actual visual triangles | Estimate error | Estimated reduction | Actual reduction |", report);
+            Assert.Contains(
+                "| base_link | custom | 0.5 | true | 0.001 | 1 | 5084 | 100 | 2584 | 50 | " +
+                new FileInfo(visualMesh).Length.ToString() +
+                " | 0 | 0% | 50% | 50% |",
+                report);
             Assert.DoesNotContain("FAIL:", report);
 
             Directory.Delete(tempDirectory, true);

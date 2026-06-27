@@ -116,6 +116,7 @@ namespace SW2URDF.URDFExport
             AppendPackageParitySection(builder, packageParityChecks);
             AppendInertialSection(builder, inertialRows);
             AppendMeshSection(builder, meshRows);
+            AppendStlReductionSection(builder, meshRows);
             AppendCollisionStrategySection(builder, meshRows);
             AppendFindingsSection(builder, findings);
 
@@ -738,6 +739,41 @@ namespace SW2URDF.URDFExport
                     r.CollisionEffectiveStrategy,
                     StringComparison.Ordinal)).ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- CSV: config/mesh_manifest.csv");
+            builder.AppendLine();
+        }
+
+        private static void AppendStlReductionSection(
+            StringBuilder builder,
+            IEnumerable<MeshExportRecord> records)
+        {
+            List<MeshExportRecord> rows = records.ToList();
+            builder.AppendLine("## STL Reduction Details");
+            builder.AppendLine();
+            builder.AppendLine("| Link | Quality | Ratio | Custom | Deviation (m) | Angle tolerance (rad) | Baseline est. bytes | Baseline est. triangles | Estimated bytes | Estimated triangles | Actual visual bytes | Actual visual triangles | Estimate error | Estimated reduction | Actual reduction |");
+            builder.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+            foreach (MeshExportRecord row in rows)
+            {
+                StlExportStats stats = row.StlStats ?? StlExportStats.NotExported();
+                builder.AppendLine("| " + MarkdownCell(row.LinkName) +
+                    " | " + MarkdownCell(stats.QualityLabel) +
+                    " | " + FormatNullableDouble(stats.ReductionRatio) +
+                    " | " + FormatNullableBool(stats.CustomSettings) +
+                    " | " + FormatNullableDouble(stats.Deviation) +
+                    " | " + FormatNullableDouble(stats.AngleTolerance) +
+                    " | " + FormatNullableLong(stats.BaselineEstimatedBytes) +
+                    " | " + FormatNullableInt(stats.BaselineEstimatedTriangles) +
+                    " | " + FormatNullableLong(stats.EstimatedBytes) +
+                    " | " + FormatNullableInt(stats.EstimatedTriangles) +
+                    " | " + FormatNullableLong(row.VisualBytes) +
+                    " | " + FormatNullableUInt(row.VisualTriangles) +
+                    " | " + FormatNullablePercent(stats.EstimateErrorPercent) +
+                    " | " + FormatNullablePercent(stats.EstimatedReductionPercent) +
+                    " | " + FormatNullablePercent(stats.ActualReductionPercent) + " |");
+            }
+            if (rows.Count == 0)
+            {
+                builder.AppendLine("| none |  |  |  |  |  |  |  |  |  |  |  | none | none | none |");
+            }
             builder.AppendLine();
         }
 
