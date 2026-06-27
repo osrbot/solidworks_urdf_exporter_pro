@@ -116,6 +116,7 @@ namespace SW2URDF.URDFExport
             AppendPackageParitySection(builder, packageParityChecks);
             AppendInertialSection(builder, inertialRows);
             AppendMeshSection(builder, meshRows);
+            AppendCollisionStrategySection(builder, meshRows);
             AppendFindingsSection(builder, findings);
 
             return builder.ToString();
@@ -737,6 +738,34 @@ namespace SW2URDF.URDFExport
                     r.CollisionEffectiveStrategy,
                     StringComparison.Ordinal)).ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- CSV: config/mesh_manifest.csv");
+            builder.AppendLine();
+        }
+
+        private static void AppendCollisionStrategySection(
+            StringBuilder builder,
+            IEnumerable<MeshExportRecord> records)
+        {
+            List<MeshExportRecord> rows = records.ToList();
+            builder.AppendLine("## Collision Strategies");
+            builder.AppendLine();
+            builder.AppendLine("| Link | Requested | Effective | Geometry | Notes | Collision exists | Collision bytes | Collision triangles | Collision URI |");
+            builder.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+            foreach (MeshExportRecord row in rows)
+            {
+                builder.AppendLine("| " + MarkdownCell(row.LinkName) +
+                    " | " + MarkdownCell(row.CollisionStrategy) +
+                    " | " + MarkdownCell(row.CollisionEffectiveStrategy) +
+                    " | " + MarkdownCell(row.CollisionGeometryType) +
+                    " | " + MarkdownCell(row.CollisionNotes) +
+                    " | " + FormatBool(row.CollisionExists) +
+                    " | " + FormatNullableLong(row.CollisionBytes) +
+                    " | " + FormatNullableUInt(row.CollisionTriangles) +
+                    " | " + MarkdownCell(row.CollisionUri) + " |");
+            }
+            if (rows.Count == 0)
+            {
+                builder.AppendLine("| none | none | none | none | none | false |  |  |  |");
+            }
             builder.AppendLine();
         }
 

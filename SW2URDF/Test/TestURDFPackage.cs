@@ -365,6 +365,13 @@ namespace SW2URDF.Test
             Assert.Contains("Requested collision strategies: VisualMesh=1", report);
             Assert.Contains("Effective collision strategies: VisualMesh=1", report);
             Assert.Contains("Collision strategy fallbacks: 0", report);
+            Assert.Contains("## Collision Strategies", report);
+            Assert.Contains("| Link | Requested | Effective | Geometry | Notes | Collision exists | Collision bytes | Collision triangles | Collision URI |", report);
+            Assert.Contains(
+                "| base_link | VisualMesh | VisualMesh | visual_mesh_copy | ok | true | " +
+                new FileInfo(collisionMesh).Length.ToString() +
+                " | 0 | package://rover_description/meshes/collision/base_link.STL |",
+                report);
             Assert.Contains("Baseline estimated visual STL triangles: 100", report);
             Assert.Contains("Estimated visual STL triangles: 50", report);
             Assert.Contains("Requested STL reduction ratios: 0.5=1", report);
