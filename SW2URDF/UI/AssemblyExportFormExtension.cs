@@ -401,6 +401,9 @@ namespace SW2URDF.UI
             comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
                 CollisionMeshStrategy.ConvexHull,
                 ChineseUiText.Translate("Convex hull STL", "\u51f8\u5305 STL")));
+            comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
+                CollisionMeshStrategy.ComponentBoxes,
+                ChineseUiText.Translate("Component box set", "\u7ec4\u4ef6\u5305\u56f4\u76d2\u7ec4\u5408")));
             comboBoxCollisionStrategy.SelectedIndex = 0;
         }
 

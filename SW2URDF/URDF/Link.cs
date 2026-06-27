@@ -17,7 +17,8 @@ namespace SW2URDF.URDF
         BoxPrimitive,
         CylinderPrimitive,
         SpherePrimitive,
-        ConvexHull
+        ConvexHull,
+        ComponentBoxes
     }
 
     //The link class, it contains many other elements not found in the URDF.
@@ -47,6 +48,8 @@ namespace SW2URDF.URDF
 
         [DataMember]
         public Collision Collision;
+
+        public List<Collision> AdditionalCollisions;
 
         [DataMember]
         public Joint Joint;
@@ -87,6 +90,7 @@ namespace SW2URDF.URDF
             Inertial = new Inertial();
             Visual = new Visual();
             Collision = new Collision();
+            AdditionalCollisions = new List<Collision>();
             Joint = new Joint();
 
             isFixedFrame = false;
@@ -124,6 +128,7 @@ namespace SW2URDF.URDF
             Inertial = new Inertial();
             Visual = new Visual();
             Collision = new Collision();
+            AdditionalCollisions = new List<Collision>();
             Joint = new Joint();
 
             isFixedFrame = false;
@@ -154,6 +159,16 @@ namespace SW2URDF.URDF
             {
                 Collision.WriteURDF(writer);
             }
+            if (AdditionalCollisions != null)
+            {
+                foreach (Collision collision in AdditionalCollisions)
+                {
+                    if (collision != null)
+                    {
+                        collision.WriteURDF(writer);
+                    }
+                }
+            }
 
             writer.WriteEndElement();
             if (Joint.ElementContainsData())
@@ -165,6 +180,32 @@ namespace SW2URDF.URDF
             {
                 child.WriteURDF(writer);
             }
+        }
+
+        public void ClearAdditionalCollisions()
+        {
+            if (AdditionalCollisions == null)
+            {
+                AdditionalCollisions = new List<Collision>();
+                return;
+            }
+
+            AdditionalCollisions.Clear();
+        }
+
+        public void AddAdditionalCollision(Collision collision)
+        {
+            if (collision == null)
+            {
+                return;
+            }
+
+            if (AdditionalCollisions == null)
+            {
+                AdditionalCollisions = new List<Collision>();
+            }
+
+            AdditionalCollisions.Add(collision);
         }
 
         public override void AppendToCSVDictionary(List<string> context, OrderedDictionary dictionary)
@@ -223,6 +264,7 @@ namespace SW2URDF.URDF
             STLQualityFine = externalLink.STLQualityFine;
             MeshReductionRatio = externalLink.MeshReductionRatio;
             CollisionMeshStrategy = externalLink.CollisionMeshStrategy;
+            AdditionalCollisions = new List<Collision>();
             isFixedFrame = externalLink.isFixedFrame;
         }
 

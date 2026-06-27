@@ -172,6 +172,7 @@ namespace SW2URDF.Test
         [InlineData("!cyl_lidar", "lidar", CollisionMeshStrategy.CylinderPrimitive)]
         [InlineData("!sph_ball", "ball", CollisionMeshStrategy.SpherePrimitive)]
         [InlineData("!cxh_chassis", "chassis", CollisionMeshStrategy.ConvexHull)]
+        [InlineData("!cbb_chassis", "chassis", CollisionMeshStrategy.ComponentBoxes)]
         [InlineData("!PRI_uppercase", "uppercase", CollisionMeshStrategy.Primitive)]
         public void TestCollisionStrategyPrefixesAreParsed(
             string inputName,
@@ -255,6 +256,27 @@ namespace SW2URDF.Test
             Assert.DoesNotContain("<sphere", xml);
         }
 
+        [Fact]
+        public void TestLinkCanWriteMultipleBoxCollisionElements()
+        {
+            Link link = new Link { Name = "base_link" };
+            link.Inertial = null;
+            link.Visual = null;
+            link.Collision.Geometry.UseBox(1.0, 2.0, 3.0);
+
+            Collision extraCollision = new Collision();
+            extraCollision.Origin.SetXYZ(new[] { 1.0, 2.0, 3.0 });
+            extraCollision.Geometry.UseBox(0.1, 0.2, 0.3);
+            link.AdditionalCollisions.Add(extraCollision);
+
+            string xml = WriteLinkXml(link);
+
+            Assert.Equal(2, CountOccurrences(xml, "<collision>"));
+            Assert.Contains("size=\"1 2 3\"", xml);
+            Assert.Contains("xyz=\"1 2 3\"", xml);
+            Assert.Contains("size=\"0.10000000000000001 0.20000000000000001 0.29999999999999999\"", xml);
+        }
+
         [Theory]
         [InlineData(0, 0.0, 1.5707963267948966, 0.0)]
         [InlineData(1, -1.5707963267948966, 0.0, 0.0)]
@@ -293,6 +315,38 @@ namespace SW2URDF.Test
                     reader.ReadBytes(80);
                     Assert.Equal((uint)12, reader.ReadUInt32());
                 }
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                {
+                    File.Delete(tempFile);
+                }
+            }
+        }
+
+        [Fact]
+        public void TestComponentBoxStlWritesOneBoxPerComponent()
+        {
+            string tempFile = Path.Combine(
+                Path.GetTempPath(),
+                "sw2urdf-component-boxes-" + Guid.NewGuid() + ".STL");
+            ExportHelper.LinkLocalBoundingBox firstBox = new ExportHelper.LinkLocalBoundingBox();
+            firstBox.Include(-0.5, -1.0, -1.5);
+            firstBox.Include(0.5, 1.0, 1.5);
+            ExportHelper.LinkLocalBoundingBox secondBox = new ExportHelper.LinkLocalBoundingBox();
+            secondBox.Include(1.0, 2.0, 3.0);
+            secondBox.Include(1.5, 2.5, 3.5);
+
+            try
+            {
+                ExportHelper.WriteComponentBoxPrimitiveStl(
+                    tempFile,
+                    new[] { firstBox, secondBox });
+
+                Assert.True(File.Exists(tempFile));
+                Assert.Equal((uint)24, ReadBinaryStlTriangleCount(tempFile));
+                Assert.Equal(ExportHelper.EstimateBinaryStlSizeBytes(24), new FileInfo(tempFile).Length);
             }
             finally
             {
@@ -471,6 +525,36 @@ namespace SW2URDF.Test
             }
 
             return builder.ToString();
+        }
+
+        private static string WriteLinkXml(Link link)
+        {
+            StringBuilder builder = new StringBuilder();
+            XmlWriterSettings settings = new XmlWriterSettings
+            {
+                OmitXmlDeclaration = true,
+                Indent = false
+            };
+
+            using (XmlWriter writer = XmlWriter.Create(builder, settings))
+            {
+                link.WriteURDF(writer);
+            }
+
+            return builder.ToString();
+        }
+
+        private static int CountOccurrences(string value, string pattern)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = value.IndexOf(pattern, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += pattern.Length;
+            }
+
+            return count;
         }
 
         private static uint ReadBinaryStlTriangleCount(string filename)

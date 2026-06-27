@@ -72,6 +72,21 @@ namespace SW2URDF.URDFExport
         private UserProgressBar progressBar;
         private Stopwatch exportStopwatch;
         private int exportStageNumber;
+        private static readonly int[][] BoxTriangleIndices = new[]
+        {
+            new[] { 0, 2, 1 },
+            new[] { 0, 3, 2 },
+            new[] { 4, 5, 6 },
+            new[] { 4, 6, 7 },
+            new[] { 0, 1, 5 },
+            new[] { 0, 5, 4 },
+            new[] { 3, 6, 2 },
+            new[] { 3, 7, 6 },
+            new[] { 0, 4, 7 },
+            new[] { 0, 7, 3 },
+            new[] { 1, 2, 6 },
+            new[] { 1, 6, 5 }
+        };
 
         [XmlIgnore]
         public ModelDoc2 ActiveSWModel;
@@ -408,6 +423,7 @@ namespace SW2URDF.URDFExport
             link.Visual.Geometry.UseMesh(meshFiles.VisualMeshFilename);
             if (!UsesUrdfPrimitiveCollision(collisionExport))
             {
+                link.ClearAdditionalCollisions();
                 link.Collision.Geometry.UseMesh(meshFiles.CollisionMeshFilename);
             }
             if (meshRecords != null)
@@ -485,6 +501,12 @@ namespace SW2URDF.URDFExport
             {
                 strategy = CollisionMeshStrategy.ConvexHull;
                 return linkName.Substring("!cxh_".Length);
+            }
+            if (linkName.StartsWith("!cbb_", StringComparison.OrdinalIgnoreCase) &&
+                linkName.Length > "!cbb_".Length)
+            {
+                strategy = CollisionMeshStrategy.ComponentBoxes;
+                return linkName.Substring("!cbb_".Length);
             }
 
             return linkName;
@@ -731,6 +753,31 @@ namespace SW2URDF.URDFExport
                             ? "sphere_primitive_failed_visual_mesh_fallback"
                             : "sphere_primitive_requires_stl_visual_mesh_fallback");
 
+                case CollisionMeshStrategy.ComponentBoxes:
+                    IList<LinkLocalBoundingBox> componentBoxes;
+                    if (meshFormat == MeshExportFormat.STL &&
+                        TryWriteComponentBoxCollisionMesh(
+                            link,
+                            meshFiles.WindowsCollisionMeshFilename,
+                            out componentBoxes))
+                    {
+                        UseComponentBoxCollisionGeometry(link, componentBoxes);
+                        return new CollisionMeshExportResult(
+                            CollisionMeshStrategy.ComponentBoxes,
+                            CollisionMeshStrategy.ComponentBoxes,
+                            "urdf_component_box_set",
+                            "ok");
+                    }
+                    logger.Warn(link.Name + ": component box collision mesh failed; falling back to visual mesh copy");
+                    CopyVisualMeshToCollisionMesh(link, meshFiles);
+                    return new CollisionMeshExportResult(
+                        CollisionMeshStrategy.ComponentBoxes,
+                        CollisionMeshStrategy.VisualMesh,
+                        "visual_mesh_copy",
+                        meshFormat == MeshExportFormat.STL
+                            ? "component_boxes_failed_visual_mesh_fallback"
+                            : "component_boxes_requires_stl_visual_mesh_fallback");
+
                 case CollisionMeshStrategy.ConvexHull:
                     if (meshFormat == MeshExportFormat.STL &&
                         TryWriteConvexHullCollisionMesh(link, meshFiles.WindowsCollisionMeshFilename))
@@ -847,6 +894,7 @@ namespace SW2URDF.URDFExport
                 case CollisionMeshStrategy.BoxPrimitive:
                 case CollisionMeshStrategy.CylinderPrimitive:
                 case CollisionMeshStrategy.SpherePrimitive:
+                case CollisionMeshStrategy.ComponentBoxes:
                     return result.Notes == "ok";
 
                 default:
@@ -856,6 +904,7 @@ namespace SW2URDF.URDFExport
 
         private static void UseBoxCollisionGeometry(Link link, LinkLocalBoundingBox box)
         {
+            link.ClearAdditionalCollisions();
             link.Collision.Geometry.UseBox(box.Width, box.Depth, box.Height);
             SetCollisionPrimitiveOrigin(link, box.Center, new[] { 0.0, 0.0, 0.0 });
         }
@@ -869,14 +918,35 @@ namespace SW2URDF.URDFExport
             double length = box.GetDimension(axis);
 
             link.Collision.Geometry.UseCylinder(radius, length);
+            link.ClearAdditionalCollisions();
             SetCollisionPrimitiveOrigin(link, box.Center, GetCylinderPrimitiveRpy(axis));
         }
 
         private static void UseSphereCollisionGeometry(Link link, LinkLocalBoundingBox box)
         {
             double radius = Math.Max(box.Width, Math.Max(box.Depth, box.Height)) / 2.0;
+            link.ClearAdditionalCollisions();
             link.Collision.Geometry.UseSphere(radius);
             SetCollisionPrimitiveOrigin(link, box.Center, new[] { 0.0, 0.0, 0.0 });
+        }
+
+        private static void UseComponentBoxCollisionGeometry(Link link, IList<LinkLocalBoundingBox> boxes)
+        {
+            link.ClearAdditionalCollisions();
+            for (int i = 0; i < boxes.Count; i++)
+            {
+                SW2URDF.URDF.Collision collision = i == 0
+                    ? link.Collision
+                    : new SW2URDF.URDF.Collision();
+                collision.Geometry.UseBox(boxes[i].Width, boxes[i].Depth, boxes[i].Height);
+                collision.Origin.SetXYZ(boxes[i].Center);
+                collision.Origin.SetRPY(new[] { 0.0, 0.0, 0.0 });
+
+                if (i > 0)
+                {
+                    link.AddAdditionalCollision(collision);
+                }
+            }
         }
 
         private static void SetCollisionPrimitiveOrigin(Link link, double[] center, double[] rpy)
@@ -1008,6 +1078,34 @@ namespace SW2URDF.URDFExport
             }
         }
 
+        private bool TryWriteComponentBoxCollisionMesh(
+            Link link,
+            string windowsCollisionMeshFilename,
+            out IList<LinkLocalBoundingBox> boxes)
+        {
+            boxes = new List<LinkLocalBoundingBox>();
+            try
+            {
+                boxes = CreateComponentLocalBoundingBoxes(link);
+                if (boxes.Count == 0)
+                {
+                    logger.Warn(link.Name + ": could not create component box collision set");
+                    return false;
+                }
+
+                WriteComponentBoxPrimitiveStl(windowsCollisionMeshFilename, boxes);
+                logger.Info(link.Name + ": wrote component box collision set " +
+                    windowsCollisionMeshFilename + " with " +
+                    boxes.Count.ToString(CultureInfo.InvariantCulture) + " boxes");
+                return true;
+            }
+            catch (Exception e)
+            {
+                logger.Warn(link.Name + ": component box collision mesh export failed: " + e.Message);
+                return false;
+            }
+        }
+
         private LinkLocalBoundingBox CreateLinkLocalBoundingBox(Link link)
         {
             LinkLocalBoundingBox box = new LinkLocalBoundingBox();
@@ -1036,6 +1134,40 @@ namespace SW2URDF.URDFExport
             }
 
             return box;
+        }
+
+        private IList<LinkLocalBoundingBox> CreateComponentLocalBoundingBoxes(Link link)
+        {
+            List<LinkLocalBoundingBox> boxes = new List<LinkLocalBoundingBox>();
+            if (link == null || link.SWComponents == null || link.SWComponents.Count == 0 ||
+                link.Joint == null || String.IsNullOrWhiteSpace(link.Joint.CoordinateSystemName))
+            {
+                return boxes;
+            }
+
+            MathTransform linkTransform = GetCoordinateSystemTransform(link.Joint.CoordinateSystemName);
+            if (linkTransform == null)
+            {
+                return boxes;
+            }
+
+            Matrix<double> globalToLink = MathOps.GetTransformation(linkTransform).Inverse();
+            foreach (Component2 comp in link.SWComponents)
+            {
+                if (comp == null)
+                {
+                    continue;
+                }
+
+                LinkLocalBoundingBox box = new LinkLocalBoundingBox();
+                IncludeTransformedBoxCorners(box, globalToLink, comp.GetBox(false, false));
+                if (box.IsUsable)
+                {
+                    boxes.Add(box);
+                }
+            }
+
+            return boxes;
         }
 
         private static void IncludeTransformedBoxCorners(
@@ -1087,28 +1219,13 @@ namespace SW2URDF.URDFExport
 
             Directory.CreateDirectory(Path.GetDirectoryName(filename));
             double[][] vertices = box.CreateCornerVertices();
-            int[][] triangles = new[]
-            {
-                new[] { 0, 2, 1 },
-                new[] { 0, 3, 2 },
-                new[] { 4, 5, 6 },
-                new[] { 4, 6, 7 },
-                new[] { 0, 1, 5 },
-                new[] { 0, 5, 4 },
-                new[] { 3, 6, 2 },
-                new[] { 3, 7, 6 },
-                new[] { 0, 4, 7 },
-                new[] { 0, 7, 3 },
-                new[] { 1, 2, 6 },
-                new[] { 1, 6, 5 }
-            };
 
             using (BinaryWriter writer = new BinaryWriter(File.Open(filename, FileMode.Create, FileAccess.Write)))
             {
                 byte[] header = new byte[80];
                 writer.Write(header);
-                writer.Write((uint)triangles.Length);
-                foreach (int[] triangle in triangles)
+                writer.Write((uint)BoxTriangleIndices.Length);
+                foreach (int[] triangle in BoxTriangleIndices)
                 {
                     WriteBinaryStlTriangle(
                         writer,
@@ -1117,6 +1234,45 @@ namespace SW2URDF.URDFExport
                         vertices[triangle[2]]);
                 }
             }
+        }
+
+        internal static void WriteComponentBoxPrimitiveStl(
+            string filename,
+            IEnumerable<LinkLocalBoundingBox> boxes)
+        {
+            if (boxes == null)
+            {
+                throw new InvalidOperationException("Component box collision set is invalid");
+            }
+
+            List<double[]> vertices = new List<double[]>();
+            List<int[]> triangles = new List<int[]>();
+            foreach (LinkLocalBoundingBox box in boxes)
+            {
+                if (box == null || !box.IsUsable)
+                {
+                    continue;
+                }
+
+                int offset = vertices.Count;
+                vertices.AddRange(box.CreateCornerVertices());
+                foreach (int[] triangle in BoxTriangleIndices)
+                {
+                    triangles.Add(new[]
+                    {
+                        triangle[0] + offset,
+                        triangle[1] + offset,
+                        triangle[2] + offset
+                    });
+                }
+            }
+
+            if (triangles.Count == 0)
+            {
+                throw new InvalidOperationException("Component box collision set has no usable boxes");
+            }
+
+            WriteBinaryStl(filename, vertices, triangles);
         }
 
         internal static void WriteCylinderPrimitiveStl(string filename, LinkLocalBoundingBox box)
