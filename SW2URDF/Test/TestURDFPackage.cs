@@ -345,7 +345,7 @@ namespace SW2URDF.Test
             Assert.Contains("| ROS package parity | PASS | critical_mismatches=0, optional_mismatches=0 |", report);
             Assert.Contains("| Inertial validation | PASS | rows=1, failures=0, warnings=0 |", report);
             Assert.Contains("| Mesh manifest paths | PASS | rows=1, missing_visual=0, missing_collision=0 |", report);
-            Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=VisualMesh=1, effective=VisualMesh=1 |", report);
+            Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=VisualMesh=1, effective=VisualMesh=1, urdf_refs=mesh=1 |", report);
             Assert.Contains("| STL reduction | PASS | stats_rows=1, high_estimate_errors=0, ratios=0.5=1 |", report);
             Assert.Contains("Plugin version: ", report);
             Assert.Contains("Commit hash: ", report);
@@ -355,6 +355,7 @@ namespace SW2URDF.Test
             Assert.Contains("inertial_validation_rows=1", report);
             Assert.Contains("mesh_manifest_rows=1", report);
             Assert.Contains("requested_collision_strategies=VisualMesh=1", report);
+            Assert.Contains("collision_urdf_refs=mesh=1", report);
             Assert.Contains("stl_reduction_ratios=0.5=1", report);
             Assert.Contains("## Export Parameters", report);
             Assert.Contains("| output_root | " + pkg.WindowsExportRootDirectory + " |", report);
@@ -363,6 +364,7 @@ namespace SW2URDF.Test
             Assert.Contains("| ros2_package_name | rover_description |", report);
             Assert.Contains("| mesh_manifest_rows | 1 |", report);
             Assert.Contains("| requested_collision_strategies | VisualMesh=1 |", report);
+            Assert.Contains("| collision_urdf_refs | mesh=1 |", report);
             Assert.Contains("| stl_reduction_ratios | 0.5=1 |", report);
             Assert.Contains("## ROS 1 URDF", report);
             Assert.Contains("## ROS 2 URDF", report);
@@ -398,6 +400,7 @@ namespace SW2URDF.Test
             Assert.Contains("Mesh manifest rows: 1", report);
             Assert.Contains("Requested collision strategies: VisualMesh=1", report);
             Assert.Contains("Effective collision strategies: VisualMesh=1", report);
+            Assert.Contains("Collision URDF refs: mesh=1", report);
             Assert.Contains("Collision strategy fallbacks: 0", report);
             Assert.Contains("## Collision Strategies", report);
             Assert.Contains("| Link | Requested | Effective | Geometry | URDF collision ref | Notes | Collision artifact exists | Collision artifact bytes | Collision artifact triangles | Collision artifact URI |", report);
@@ -418,6 +421,107 @@ namespace SW2URDF.Test
                 "| base_link | custom | 0.5 | true | 0.001 | 1 | 5084 | 100 | 2584 | 50 | " +
                 new FileInfo(visualMesh).Length.ToString() +
                 " | 0 | 0% | 50% | 50% |",
+                report);
+            Assert.DoesNotContain("FAIL:", report);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
+        [Fact]
+        public void TestExportReportDocumentsNativeCollisionReference()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            pkg.CreateCMakeLists();
+            pkg.CreateConfigYAML(new string[0]);
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsPackageDirectory, "package.xml"),
+                "<package><name>rover_description</name></package>",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "inertial_validation.csv"),
+                "link,status\r\nbase_link,PASS\r\n",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "mesh_manifest.csv"),
+                "link,visual_exists,collision_exists\r\nbase_link,true,true\r\n",
+                new UTF8Encoding(false));
+
+            string visualMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "visual");
+            string collisionMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "collision");
+            Directory.CreateDirectory(visualMeshDirectory);
+            Directory.CreateDirectory(collisionMeshDirectory);
+            string visualMesh = Path.Combine(visualMeshDirectory, "base_link.STL");
+            string collisionMesh = Path.Combine(collisionMeshDirectory, "base_link.STL");
+            File.WriteAllText(visualMesh, "visual", new UTF8Encoding(false));
+            File.WriteAllText(collisionMesh, "collision primitive artifact", new UTF8Encoding(false));
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(
+                ros1Urdf,
+                "<?xml version=\"1.0\"?><robot name=\"robot_900001\">" +
+                "<link name=\"base_link\"><visual><geometry><mesh filename=\"package://rover_description/meshes/visual/base_link.STL\" /></geometry></visual>" +
+                "<collision><geometry><box size=\"1 2 3\" /></geometry></collision></link></robot>",
+                new UTF8Encoding(false));
+            CreateRos1LaunchFiles(pkg);
+            pkg.CreateRos2Package(ros1Urdf);
+
+            ExportHelper.InertialValidationRecord inertialRecord =
+                new ExportHelper.InertialValidationRecord(
+                    "base_link",
+                    "Origin_global",
+                    new ExportHelper.InertialValidationRow("mass", "kg", 1.0, 1.0));
+            ExportHelper.MeshExportRecord meshRecord =
+                new ExportHelper.MeshExportRecord(
+                    "base_link",
+                    "Primitive",
+                    "BoxPrimitive",
+                    "urdf_box_primitive",
+                    "ok",
+                    "STL",
+                    "package://rover_description/meshes/visual/base_link.STL",
+                    "package://rover_description/meshes/collision/base_link.STL",
+                    visualMesh,
+                    collisionMesh,
+                    true,
+                    true,
+                    new FileInfo(visualMesh).Length,
+                    new FileInfo(collisionMesh).Length,
+                    0,
+                    12,
+                    ExportHelper.StlExportStats.NotExported(),
+                    "native:box");
+
+            ExportHelper.WriteExportReport(
+                pkg,
+                ros1Urdf,
+                new[] { inertialRecord },
+                new[] { meshRecord },
+                true,
+                MeshExportFormat.STL,
+                TimeSpan.FromSeconds(1));
+
+            string report = File.ReadAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
+                Encoding.UTF8);
+
+            Assert.Contains("Status: PASS", report);
+            Assert.Contains("| ROS 1 URDF | PASS | links=1, joints=0, mesh_refs=1, missing_mesh_refs=0 |", report);
+            Assert.Contains("| ROS 2 URDF | PASS | links=1, joints=0, mesh_refs=1, missing_mesh_refs=0 |", report);
+            Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=Primitive=1, effective=BoxPrimitive=1, urdf_refs=native:box=1 |", report);
+            Assert.Contains("collision_urdf_refs=native:box=1", report);
+            Assert.Contains("| collision_urdf_refs | native:box=1 |", report);
+            Assert.Contains("Collision URDF refs: native:box=1", report);
+            Assert.Contains(
+                "| base_link | Primitive | BoxPrimitive | urdf_box_primitive | native:box | ok | true | " +
+                new FileInfo(collisionMesh).Length.ToString() +
+                " | 12 | package://rover_description/meshes/collision/base_link.STL |",
                 report);
             Assert.DoesNotContain("FAIL:", report);
 

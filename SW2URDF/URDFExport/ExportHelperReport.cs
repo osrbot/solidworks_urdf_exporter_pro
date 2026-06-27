@@ -194,10 +194,7 @@ namespace SW2URDF.URDFExport
             }
             foreach (MeshExportRecord record in meshList)
             {
-                if (!String.Equals(
-                    record.CollisionStrategy,
-                    record.CollisionEffectiveStrategy,
-                    StringComparison.Ordinal))
+                if (CollisionStrategyChanged(record))
                 {
                     findings.Add("WARN: Collision strategy for link " + record.LinkName +
                         " requested " + record.CollisionStrategy +
@@ -639,10 +636,7 @@ namespace SW2URDF.URDFExport
             bool exportMeshes)
         {
             List<MeshExportRecord> rows = records.ToList();
-            int fallbacks = rows.Count(r => !String.Equals(
-                r.CollisionStrategy,
-                r.CollisionEffectiveStrategy,
-                StringComparison.Ordinal));
+            int fallbacks = rows.Count(CollisionStrategyChanged);
             string status = !exportMeshes ? "SKIP" : fallbacks > 0 ? "WARN" : "PASS";
             AppendHealthRow(
                 builder,
@@ -650,7 +644,8 @@ namespace SW2URDF.URDFExport
                 status,
                 "fallbacks=" + fallbacks.ToString(CultureInfo.InvariantCulture) +
                 ", requested=" + FormatRequestedCollisionStrategies(rows) +
-                ", effective=" + FormatEffectiveCollisionStrategies(rows));
+                ", effective=" + FormatEffectiveCollisionStrategies(rows) +
+                ", urdf_refs=" + FormatCollisionUrdfReferenceKinds(rows));
         }
 
         private static void AppendStlReductionHealthRow(
@@ -807,6 +802,8 @@ namespace SW2URDF.URDFExport
                 FormatRequestedCollisionStrategies(meshRows));
             AppendParameterRow(builder, "effective_collision_strategies",
                 FormatEffectiveCollisionStrategies(meshRows));
+            AppendParameterRow(builder, "collision_urdf_refs",
+                FormatCollisionUrdfReferenceKinds(meshRows));
             AppendParameterRow(builder, "stl_reduction_ratios",
                 FormatStlReductionRatios(meshRows));
             AppendParameterRow(builder, "stl_quality_settings",
@@ -1005,11 +1002,10 @@ namespace SW2URDF.URDFExport
                 FormatRequestedCollisionStrategies(rows));
             builder.AppendLine("- Effective collision strategies: " +
                 FormatEffectiveCollisionStrategies(rows));
+            builder.AppendLine("- Collision URDF refs: " +
+                FormatCollisionUrdfReferenceKinds(rows));
             builder.AppendLine("- Collision strategy fallbacks: " +
-                rows.Count(r => !String.Equals(
-                    r.CollisionStrategy,
-                    r.CollisionEffectiveStrategy,
-                    StringComparison.Ordinal)).ToString(CultureInfo.InvariantCulture));
+                rows.Count(CollisionStrategyChanged).ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- CSV: config/mesh_manifest.csv");
             builder.AppendLine();
         }
@@ -1111,6 +1107,7 @@ namespace SW2URDF.URDFExport
                 ", mesh_manifest_rows=" + meshRows.Count.ToString(CultureInfo.InvariantCulture) +
                 ", requested_collision_strategies=" + FormatRequestedCollisionStrategies(meshRows) +
                 ", effective_collision_strategies=" + FormatEffectiveCollisionStrategies(meshRows) +
+                ", collision_urdf_refs=" + FormatCollisionUrdfReferenceKinds(meshRows) +
                 ", stl_reduction_ratios=" + FormatStlReductionRatios(meshRows) +
                 ", stl_quality_settings=" + FormatStlQualitySettings(meshRows);
         }
@@ -1123,6 +1120,41 @@ namespace SW2URDF.URDFExport
         private static string FormatEffectiveCollisionStrategies(IEnumerable<MeshExportRecord> records)
         {
             return FormatGroupCounts(records.Select(r => r.CollisionEffectiveStrategy));
+        }
+
+        private static bool CollisionStrategyChanged(MeshExportRecord record)
+        {
+            if (record == null)
+            {
+                return false;
+            }
+            if (String.Equals(record.CollisionStrategy, record.CollisionEffectiveStrategy, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return !IsLegacyPrimitiveAlias(record.CollisionStrategy, record.CollisionEffectiveStrategy);
+        }
+
+        private static bool IsLegacyPrimitiveAlias(string requested, string effective)
+        {
+            return String.Equals(requested, "Primitive", StringComparison.Ordinal) &&
+                String.Equals(effective, "BoxPrimitive", StringComparison.Ordinal);
+        }
+
+        private static string FormatCollisionUrdfReferenceKinds(IEnumerable<MeshExportRecord> records)
+        {
+            return FormatGroupCounts(records.Select(r => ClassifyCollisionUrdfReference(r.CollisionUrdfReference)));
+        }
+
+        private static string ClassifyCollisionUrdfReference(string reference)
+        {
+            if (String.IsNullOrWhiteSpace(reference))
+            {
+                return "";
+            }
+
+            return reference.StartsWith("native:", StringComparison.Ordinal) ? reference : "mesh";
         }
 
         private static string FormatStlReductionRatios(IEnumerable<MeshExportRecord> records)
