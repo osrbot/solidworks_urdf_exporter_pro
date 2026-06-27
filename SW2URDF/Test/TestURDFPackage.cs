@@ -3,6 +3,7 @@ using SW2URDF.UI;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -476,6 +477,139 @@ namespace SW2URDF.Test
                 new FileInfo(visualMesh).Length.ToString() +
                 " | 0 | 0% | 50% | 50% |",
                 report);
+            Assert.DoesNotContain("FAIL:", report);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
+        [Fact]
+        public void TestExportReportHandlesRoverStyleMultiLinkPackage()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            pkg.CreateCMakeLists();
+            pkg.CreateConfigYAML(new[] { "Body_LeftMainRocket", "BogieLF_WheelLF" });
+            PackageXMLWriter packageXmlWriter =
+                new PackageXMLWriter(Path.Combine(pkg.WindowsPackageDirectory, "package.xml"));
+            new PackageXML(pkg.PackageName).WriteElement(packageXmlWriter);
+            CreateRos1LaunchFiles(pkg);
+
+            string[] linkNames =
+            {
+                "base_link",
+                "WheelLF-1",
+                "LiDAR-B",
+                "IMU",
+                "LeftMainRocket"
+            };
+            string visualMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "visual");
+            string collisionMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "collision");
+            Directory.CreateDirectory(visualMeshDirectory);
+            Directory.CreateDirectory(collisionMeshDirectory);
+
+            StringBuilder urdf = new StringBuilder();
+            urdf.Append("<?xml version=\"1.0\"?><robot name=\"robot_900001\">");
+            List<ExportHelper.InertialValidationRecord> inertialRecords =
+                new List<ExportHelper.InertialValidationRecord>();
+            List<ExportHelper.MeshExportRecord> meshRecords =
+                new List<ExportHelper.MeshExportRecord>();
+            for (int i = 0; i < linkNames.Length; i++)
+            {
+                string linkName = linkNames[i];
+                string visualMesh = Path.Combine(visualMeshDirectory, linkName + ".STL");
+                string collisionMesh = Path.Combine(collisionMeshDirectory, linkName + ".STL");
+                File.WriteAllText(visualMesh, "visual-" + linkName, new UTF8Encoding(false));
+                File.WriteAllText(collisionMesh, "collision-" + linkName, new UTF8Encoding(false));
+
+                string visualUri = "package://rover_description/meshes/visual/" + linkName + ".STL";
+                string collisionUri = "package://rover_description/meshes/collision/" + linkName + ".STL";
+                urdf.Append("<link name=\"").Append(linkName).Append("\">")
+                    .Append("<visual><geometry><mesh filename=\"").Append(visualUri)
+                    .Append("\" /></geometry></visual>")
+                    .Append("<collision><geometry><mesh filename=\"").Append(collisionUri)
+                    .Append("\" /></geometry></collision></link>");
+
+                inertialRecords.Add(new ExportHelper.InertialValidationRecord(
+                    linkName,
+                    "Origin_global",
+                    new ExportHelper.InertialValidationRow("mass", "kg", 1.0 + i, 1.0 + i)));
+                meshRecords.Add(new ExportHelper.MeshExportRecord(
+                    linkName,
+                    "VisualMesh",
+                    "VisualMesh",
+                    "visual_mesh_copy",
+                    "ok",
+                    "STL",
+                    visualUri,
+                    collisionUri,
+                    visualMesh,
+                    collisionMesh,
+                    true,
+                    true,
+                    new FileInfo(visualMesh).Length,
+                    new FileInfo(collisionMesh).Length,
+                    (uint)(10 + i),
+                    (uint)(10 + i),
+                    new ExportHelper.StlExportStats
+                    {
+                        QualityLabel = "custom",
+                        ReductionRatio = 0.35,
+                        CustomSettings = true,
+                        Deviation = 0.0005,
+                        AngleTolerance = 0.5,
+                        BaselineEstimatedBytes = 5084,
+                        BaselineEstimatedTriangles = 100,
+                        EstimatedBytes = 3334,
+                        EstimatedTriangles = 65,
+                        EstimateErrorPercent = 0.0,
+                        EstimatedReductionPercent = 35.0,
+                        ActualReductionPercent = 35.0
+                    }));
+            }
+            urdf.Append("</robot>");
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(ros1Urdf, urdf.ToString(), new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "inertial_validation.csv"),
+                ExportHelper.BuildInertialValidationCsv(inertialRecords),
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "mesh_manifest.csv"),
+                ExportHelper.BuildMeshManifestCsv(meshRecords),
+                new UTF8Encoding(false));
+
+            pkg.CreateRos2Package(ros1Urdf);
+            ExportHelper.WriteExportReport(
+                pkg,
+                ros1Urdf,
+                inertialRecords,
+                meshRecords,
+                true,
+                MeshExportFormat.STL,
+                TimeSpan.FromSeconds(2));
+
+            string report = File.ReadAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
+                Encoding.UTF8);
+            Assert.Contains("Status: PASS", report);
+            Assert.Contains("| ROS 1 URDF | PASS | links=5, joints=0, mesh_refs=10, missing_mesh_refs=0 |", report);
+            Assert.Contains("| ROS 2 URDF | PASS | links=5, joints=0, mesh_refs=10, missing_mesh_refs=0 |", report);
+            Assert.Contains("| ROS package parity | PASS | critical_mismatches=0, optional_mismatches=0 |", report);
+            Assert.Contains("| Inertial validation | PASS | rows=5, failures=0, warnings=0 |", report);
+            Assert.Contains("| Mesh manifest paths | PASS | rows=5, missing_visual=0, missing_collision=0 |", report);
+            Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=VisualMesh=5, effective=VisualMesh=5, urdf_refs=mesh=5 |", report);
+            Assert.Contains("| STL reduction | PASS | stats_rows=5, high_estimate_errors=0, ratios=0.35=5 |", report);
+            Assert.Contains("| meshes/visual | WheelLF-1.STL | yes | yes | yes |", report);
+            Assert.Contains("| meshes/collision | LiDAR-B.STL | yes | yes | yes |", report);
+            Assert.Contains("| WheelLF-1 | Origin_global | PASS | 1 | 1 | 0 | 0 | 0 | 0 | 0% | none | none |", report);
+            Assert.Contains("| LiDAR-B | VisualMesh | VisualMesh | visual_mesh_copy | package://rover_description/meshes/collision/LiDAR-B.STL | ok | true |", report);
             Assert.DoesNotContain("FAIL:", report);
 
             Directory.Delete(tempDirectory, true);

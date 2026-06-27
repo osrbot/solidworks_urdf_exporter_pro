@@ -693,7 +693,7 @@ namespace SW2URDF.URDFExport
 
         private static string FormatNullableDouble(double? value)
         {
-            return value.HasValue ? value.Value.ToString("G17", CultureInfo.InvariantCulture) : "";
+            return value.HasValue ? value.Value.ToString("G15", CultureInfo.InvariantCulture) : "";
         }
 
         private static string FormatNullableBool(bool? value)
