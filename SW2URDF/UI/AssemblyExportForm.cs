@@ -855,20 +855,24 @@ namespace SW2URDF.UI
             buttonJointNext.Top = buttonTop;
             buttonJointNext.Left = ClientSize.Width - rightMargin - buttonJointNext.Width;
 
-            PositionJointMimicControls();
-            int mimicBottom = Math.Max(
-                Math.Max(MimicCheckBox.Bottom, MimicJointComboBox.Bottom),
-                Math.Max(
-                    Math.Max(textBoxMimicMultiplier.Bottom, textBoxMimicOffset.Bottom),
-                    MimicEquationLabel.Bottom));
-            int label4Top = Math.Max(
-                mimicBottom + 5,
-                buttonTop - label27.Height - label4.Height - 4);
+            int label4Top = buttonTop - label27.Height - label4.Height - verticalGap;
             int label27Top = label4Top + label4.Height + 1;
-            if (label27Top + label27.Height >= buttonTop)
+
+            PositionJointMimicControls(label4Top - verticalGap);
+            int mimicBottom = GetMimicControlsBottom();
+            if (mimicBottom + verticalGap > label4Top)
             {
-                label27Top = buttonTop - label27.Height - 1;
-                label4Top = label27Top - label4.Height - 1;
+                int overflow = mimicBottom + verticalGap - label4Top;
+                ClientSize = new Size(ClientSize.Width, ClientSize.Height + overflow);
+
+                buttonTop = ClientSize.Height - bottomMargin - buttonJointNext.Height;
+                buttonJointCancel.Top = buttonTop;
+                buttonJointNext.Top = buttonTop;
+                buttonJointNext.Left = ClientSize.Width - rightMargin - buttonJointNext.Width;
+
+                label4Top = buttonTop - label27.Height - label4.Height - verticalGap;
+                label27Top = label4Top + label4.Height + 1;
+                PositionJointMimicControls(label4Top - verticalGap);
             }
 
             label27.Left = treeViewJointTree.Right + 24;
@@ -902,12 +906,66 @@ namespace SW2URDF.UI
                 buttonLinksExportUrdfOnly.Left - horizontalGap - buttonLinksPrevious.Width);
         }
 
-        private void PositionJointMimicControls()
+        private int GetMimicControlsBottom()
         {
-            const int left = 530;
+            int bottom = MimicCheckBox.Bottom;
+            if (MimicJointComboBox.Visible)
+            {
+                bottom = Math.Max(bottom, MimicJointComboBox.Bottom);
+            }
+
+            if (MimicJointLabel.Visible)
+            {
+                bottom = Math.Max(bottom, MimicJointLabel.Bottom);
+            }
+
+            if (MimicMultiplierLabel.Visible)
+            {
+                bottom = Math.Max(bottom, MimicMultiplierLabel.Bottom);
+            }
+
+            if (textBoxMimicMultiplier.Visible)
+            {
+                bottom = Math.Max(bottom, textBoxMimicMultiplier.Bottom);
+            }
+
+            if (MimicOffsetLabel.Visible)
+            {
+                bottom = Math.Max(bottom, MimicOffsetLabel.Bottom);
+            }
+
+            if (textBoxMimicOffset.Visible)
+            {
+                bottom = Math.Max(bottom, textBoxMimicOffset.Bottom);
+            }
+
+            if (MimicEquationLabel.Visible)
+            {
+                bottom = Math.Max(bottom, MimicEquationLabel.Bottom);
+            }
+
+            return bottom;
+        }
+
+        private void PositionJointMimicControls(int maxBottom)
+        {
             const int horizontalGap = 8;
-            int rowOneTop = textBoxKVelocity.Bottom + 2;
-            int rowTwoTop = rowOneTop + Math.Max(MimicJointComboBox.Height, MimicCheckBox.Height) + 2;
+            int left = textBoxCalibrationRising.Left;
+            int rowOneHeight = Math.Max(MimicJointComboBox.Height, MimicCheckBox.Height);
+            int rowTwoHeight = Math.Max(
+                Math.Max(textBoxMimicMultiplier.Height, textBoxMimicOffset.Height),
+                MimicEquationLabel.Height);
+            bool showDetails = MimicJointComboBox.Visible ||
+                MimicJointLabel.Visible ||
+                MimicMultiplierLabel.Visible ||
+                textBoxMimicMultiplier.Visible ||
+                MimicOffsetLabel.Visible ||
+                textBoxMimicOffset.Visible ||
+                MimicEquationLabel.Visible;
+            int mimicHeight = rowOneHeight + (showDetails ? rowTwoHeight + 4 : 0);
+            int rowOneTop = Math.Min(textBoxKVelocity.Bottom + 8, maxBottom - mimicHeight);
+            rowOneTop = Math.Max(textBoxKVelocity.Bottom + 2, rowOneTop);
+            int rowTwoTop = rowOneTop + rowOneHeight + 4;
 
             MimicCheckBox.Left = left;
             MimicCheckBox.Top = rowOneTop + Math.Max(0, (MimicJointComboBox.Height - MimicCheckBox.Height) / 2);

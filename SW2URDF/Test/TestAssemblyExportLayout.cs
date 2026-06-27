@@ -38,6 +38,14 @@ namespace SW2URDF.Test
                 AssertMimicControlsDoNotOverlapFooter(form);
                 AssertFooterButtonsFitText(form);
 
+                form.ClientSize = new Size(2560, 1440);
+                form.PerformLayout();
+                AssertLinkPageGeometry(form);
+                AssertInertiaMatrixMirrors(form);
+                AssertJointFooterGeometry(form);
+                AssertMimicControlsDoNotOverlapFooter(form);
+                AssertFooterButtonsFitText(form);
+
                 form.Scale(new SizeF(1.5F, 1.5F));
                 form.PerformLayout();
                 AssertLinkPageGeometry(form);
