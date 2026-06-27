@@ -874,7 +874,8 @@ namespace SW2URDF.URDFExport
                 long? collisionBytes,
                 uint? visualTriangles,
                 uint? collisionTriangles,
-                StlExportStats stlStats = null)
+                StlExportStats stlStats = null,
+                string collisionUrdfReference = null)
             {
                 LinkName = linkName;
                 CollisionStrategy = collisionStrategy;
@@ -884,6 +885,9 @@ namespace SW2URDF.URDFExport
                 MeshFormat = meshFormat;
                 VisualUri = visualUri;
                 CollisionUri = collisionUri;
+                CollisionUrdfReference = String.IsNullOrWhiteSpace(collisionUrdfReference)
+                    ? collisionUri
+                    : collisionUrdfReference;
                 VisualWindowsPath = visualWindowsPath;
                 CollisionWindowsPath = collisionWindowsPath;
                 VisualExists = visualExists;
@@ -910,6 +914,8 @@ namespace SW2URDF.URDFExport
             public string VisualUri { get; private set; }
 
             public string CollisionUri { get; private set; }
+
+            public string CollisionUrdfReference { get; private set; }
 
             public string VisualWindowsPath { get; private set; }
 

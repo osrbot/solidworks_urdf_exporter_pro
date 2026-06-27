@@ -499,13 +499,15 @@ namespace SW2URDF.Test
                         EstimateErrorPercent = 10.5,
                         EstimatedReductionPercent = 50.0,
                         ActualReductionPercent = 98.0
-                    });
+                    },
+                    "native:box");
 
             string csv = ExportHelper.BuildMeshManifestCsv(new[] { record });
 
             Assert.Contains("link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,stl_quality,mesh_reduction_ratio", csv);
+            Assert.Contains("visual_uri,collision_uri,collision_urdf_reference,visual_windows_path", csv);
             Assert.Contains(
-                "\"base,link\",Primitive,BoxPrimitive,urdf_box_primitive,ok,STL,custom,0.5,true,0.001,1,5084,100,2584,50,10.5,50,98,package://robot/meshes/visual/base_link.STL,package://robot/meshes/collision/base_link.STL",
+                "\"base,link\",Primitive,BoxPrimitive,urdf_box_primitive,ok,STL,custom,0.5,true,0.001,1,5084,100,2584,50,10.5,50,98,package://robot/meshes/visual/base_link.STL,package://robot/meshes/collision/base_link.STL,native:box",
                 csv);
             Assert.Contains(",true,true,184,84,2,0", csv);
         }

@@ -565,7 +565,7 @@ namespace SW2URDF.URDFExport
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine(
-                "link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,stl_quality,mesh_reduction_ratio,stl_custom,deviation_m,angle_tolerance_rad,baseline_estimated_visual_bytes,baseline_estimated_visual_triangles,estimated_visual_bytes,estimated_visual_triangles,estimate_error_percent,estimated_reduction_percent,actual_reduction_percent,visual_uri,collision_uri,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles");
+                "link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,stl_quality,mesh_reduction_ratio,stl_custom,deviation_m,angle_tolerance_rad,baseline_estimated_visual_bytes,baseline_estimated_visual_triangles,estimated_visual_bytes,estimated_visual_triangles,estimate_error_percent,estimated_reduction_percent,actual_reduction_percent,visual_uri,collision_uri,collision_urdf_reference,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles");
             foreach (MeshExportRecord record in records)
             {
                 StlExportStats stats = record.StlStats ?? StlExportStats.NotExported();
@@ -591,6 +591,7 @@ namespace SW2URDF.URDFExport
                     FormatNullableDouble(stats.ActualReductionPercent),
                     CsvField(record.VisualUri),
                     CsvField(record.CollisionUri),
+                    CsvField(record.CollisionUrdfReference),
                     CsvField(record.VisualWindowsPath),
                     CsvField(record.CollisionWindowsPath),
                     record.VisualExists ? "true" : "false",
@@ -634,7 +635,33 @@ namespace SW2URDF.URDFExport
                 collisionExists ? (long?)new FileInfo(meshFiles.WindowsCollisionMeshFilename).Length : null,
                 isStl && visualExists ? TryReadBinaryStlTriangleCount(meshFiles.WindowsVisualMeshFilename) : null,
                 isStl && collisionExists ? TryReadBinaryStlTriangleCount(meshFiles.WindowsCollisionMeshFilename) : null,
-                visualStlStats);
+                visualStlStats,
+                BuildCollisionUrdfReference(safeCollisionExport, meshFiles.CollisionMeshFilename));
+        }
+
+        private static string BuildCollisionUrdfReference(
+            CollisionMeshExportResult collisionExport,
+            string meshCollisionUri)
+        {
+            if (UsesUrdfPrimitiveCollision(collisionExport))
+            {
+                switch (collisionExport.EffectiveStrategy)
+                {
+                    case CollisionMeshStrategy.BoxPrimitive:
+                        return "native:box";
+
+                    case CollisionMeshStrategy.CylinderPrimitive:
+                        return "native:cylinder";
+
+                    case CollisionMeshStrategy.SpherePrimitive:
+                        return "native:sphere";
+
+                    case CollisionMeshStrategy.ComponentBoxes:
+                        return "native:box_set";
+                }
+            }
+
+            return meshCollisionUri;
         }
 
         private static uint? TryReadBinaryStlTriangleCount(string filename)

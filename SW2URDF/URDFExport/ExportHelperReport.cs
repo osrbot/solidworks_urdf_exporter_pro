@@ -1021,14 +1021,15 @@ namespace SW2URDF.URDFExport
             List<MeshExportRecord> rows = records.ToList();
             builder.AppendLine("## Collision Strategies");
             builder.AppendLine();
-            builder.AppendLine("| Link | Requested | Effective | Geometry | Notes | Collision exists | Collision bytes | Collision triangles | Collision URI |");
-            builder.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+            builder.AppendLine("| Link | Requested | Effective | Geometry | URDF collision ref | Notes | Collision artifact exists | Collision artifact bytes | Collision artifact triangles | Collision artifact URI |");
+            builder.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
             foreach (MeshExportRecord row in rows)
             {
                 builder.AppendLine("| " + MarkdownCell(row.LinkName) +
                     " | " + MarkdownCell(row.CollisionStrategy) +
                     " | " + MarkdownCell(row.CollisionEffectiveStrategy) +
                     " | " + MarkdownCell(row.CollisionGeometryType) +
+                    " | " + MarkdownCell(row.CollisionUrdfReference) +
                     " | " + MarkdownCell(row.CollisionNotes) +
                     " | " + FormatBool(row.CollisionExists) +
                     " | " + FormatNullableLong(row.CollisionBytes) +
@@ -1037,7 +1038,7 @@ namespace SW2URDF.URDFExport
             }
             if (rows.Count == 0)
             {
-                builder.AppendLine("| none | none | none | none | none | false |  |  |  |");
+                builder.AppendLine("| none | none | none | none | none | none | false |  |  |  |");
             }
             builder.AppendLine();
         }
