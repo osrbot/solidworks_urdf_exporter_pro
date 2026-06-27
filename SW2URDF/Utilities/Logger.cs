@@ -45,12 +45,14 @@ namespace SW2URDF.Utilities
             patternLayout.ActivateOptions();
 
             string homeDir = Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%");
+            string logFileName = Path.Combine(homeDir, "sw2urdf_logs", "sw2urdf.log");
+            PrepareFreshLogFile(logFileName);
             RollingFileAppender roller = new RollingFileAppender
             {
-                AppendToFile = false,
-                File = Path.Combine(homeDir, "sw2urdf_logs", "sw2urdf.log"),
+                AppendToFile = true,
+                File = logFileName,
                 Layout = patternLayout,
-                Encoding = new UTF8Encoding(true),
+                Encoding = new UTF8Encoding(false),
                 MaxSizeRollBackups = 5,
                 MaximumFileSize = "10MB",
                 RollingStyle = RollingFileAppender.RollingMode.Size,
@@ -78,6 +80,28 @@ namespace SW2URDF.Utilities
             logger.Info("Build version " + Versioning.Version.GetBuildVersion());
             logger.Info("Build time UTC " + Versioning.Version.GetBuildTimeUtc());
             logger.Info("Dirty state " + Versioning.Version.GetDirtyState());
+        }
+
+        private static void PrepareFreshLogFile(string filename)
+        {
+            try
+            {
+                string directory = Path.GetDirectoryName(filename);
+                if (!String.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                if (File.Exists(filename))
+                {
+                    File.Delete(filename);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
         }
 
         public static ILog GetLogger()

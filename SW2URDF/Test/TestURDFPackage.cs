@@ -324,6 +324,18 @@ namespace SW2URDF.Test
             Assert.Contains("Build time UTC: ", report);
             Assert.Contains("Dirty state: ", report);
             Assert.Contains("Export parameters: export_meshes=true, mesh_format=STL", report);
+            Assert.Contains("inertial_validation_rows=1", report);
+            Assert.Contains("mesh_manifest_rows=1", report);
+            Assert.Contains("requested_collision_strategies=VisualMesh=1", report);
+            Assert.Contains("stl_reduction_ratios=0.5=1", report);
+            Assert.Contains("## Export Parameters", report);
+            Assert.Contains("| output_root | " + pkg.WindowsExportRootDirectory + " |", report);
+            Assert.Contains("| robot_name | robot_900001 |", report);
+            Assert.Contains("| ros1_package_name | rover_description |", report);
+            Assert.Contains("| ros2_package_name | rover_description |", report);
+            Assert.Contains("| mesh_manifest_rows | 1 |", report);
+            Assert.Contains("| requested_collision_strategies | VisualMesh=1 |", report);
+            Assert.Contains("| stl_reduction_ratios | 0.5=1 |", report);
             Assert.Contains("## ROS 1 URDF", report);
             Assert.Contains("## ROS 2 URDF", report);
             Assert.Contains("ROS 2 setup.py | OK", report);

@@ -296,6 +296,8 @@ namespace SW2URDF.URDFExport
             WriteMeshManifestCsv(windowsMeshManifestCsvFileName, meshRecords);
             logger.Info("Wrote mesh manifest CSV with " + meshRecords.Count + " rows to " +
                 windowsMeshManifestCsvFileName);
+            logger.Info("Export parameter summary: " +
+                BuildExportParameterSummary(inertialRecords, meshRecords, exportSTL, meshFormat));
 
             UpdateProgressTitle("Writing URDF file", "\u6b63\u5728\u5199\u5165 URDF \u6587\u4ef6");
             logger.Info("Writing URDF file to " + windowsURDFFileName);

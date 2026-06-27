@@ -88,11 +88,20 @@ namespace SW2URDF.URDFExport
             builder.AppendLine("ROS package: " + package.PackageName);
             builder.AppendLine("Export meshes: " + (exportMeshes ? "true" : "false"));
             builder.AppendLine("Mesh format: " + meshFormat);
-            builder.AppendLine("Export parameters: export_meshes=" + (exportMeshes ? "true" : "false") +
-                ", mesh_format=" + meshFormat);
+            builder.AppendLine("Export parameters: " +
+                BuildExportParameterSummary(inertialRows, meshRows, exportMeshes, meshFormat));
             builder.AppendLine("Elapsed: " + Utilities.OperationHeartbeat.FormatElapsed(elapsed));
             builder.AppendLine();
 
+            AppendExportParametersSection(
+                builder,
+                package,
+                ros1UrdfFileName,
+                ros2UrdfFileName,
+                inertialRows,
+                meshRows,
+                exportMeshes,
+                meshFormat);
             AppendUrdfSection(builder, ros1Urdf);
             AppendUrdfSection(builder, ros2Urdf);
             AppendPackageSection(builder, packageChecks);
@@ -327,6 +336,53 @@ namespace SW2URDF.URDFExport
             return Path.Combine(packageRootDirectory, relativePath);
         }
 
+        private static void AppendExportParametersSection(
+            StringBuilder builder,
+            URDFPackage package,
+            string ros1UrdfFileName,
+            string ros2UrdfFileName,
+            IEnumerable<InertialValidationRecord> inertialRecords,
+            IEnumerable<MeshExportRecord> meshRecords,
+            bool exportMeshes,
+            MeshExportFormat meshFormat)
+        {
+            List<InertialValidationRecord> inertialRows = inertialRecords.ToList();
+            List<MeshExportRecord> meshRows = meshRecords.ToList();
+
+            builder.AppendLine("## Export Parameters");
+            builder.AppendLine();
+            builder.AppendLine("| Parameter | Value |");
+            builder.AppendLine("| --- | --- |");
+            AppendParameterRow(builder, "output_root", package.WindowsExportRootDirectory);
+            AppendParameterRow(builder, "robot_name", package.RobotName);
+            AppendParameterRow(builder, "ros1_package_name", package.PackageName);
+            AppendParameterRow(builder, "ros2_package_name", package.Ros2PackageName);
+            AppendParameterRow(builder, "ros1_package_directory", package.WindowsPackageDirectory);
+            AppendParameterRow(builder, "ros2_package_directory", package.WindowsRos2PackageDirectory);
+            AppendParameterRow(builder, "ros1_urdf", ros1UrdfFileName);
+            AppendParameterRow(builder, "ros2_urdf", ros2UrdfFileName);
+            AppendParameterRow(builder, "export_meshes", exportMeshes ? "true" : "false");
+            AppendParameterRow(builder, "mesh_format", meshFormat.ToString());
+            AppendParameterRow(builder, "inertial_validation_rows",
+                inertialRows.Count.ToString(CultureInfo.InvariantCulture));
+            AppendParameterRow(builder, "mesh_manifest_rows",
+                meshRows.Count.ToString(CultureInfo.InvariantCulture));
+            AppendParameterRow(builder, "requested_collision_strategies",
+                FormatRequestedCollisionStrategies(meshRows));
+            AppendParameterRow(builder, "effective_collision_strategies",
+                FormatEffectiveCollisionStrategies(meshRows));
+            AppendParameterRow(builder, "stl_reduction_ratios",
+                FormatStlReductionRatios(meshRows));
+            AppendParameterRow(builder, "stl_quality_settings",
+                FormatStlQualitySettings(meshRows));
+            builder.AppendLine();
+        }
+
+        private static void AppendParameterRow(StringBuilder builder, string name, string value)
+        {
+            builder.AppendLine("| " + MarkdownCell(name) + " | " + MarkdownCell(value) + " |");
+        }
+
         private static void AppendUrdfSection(StringBuilder builder, UrdfInspection inspection)
         {
             builder.AppendLine("## " + inspection.Label + " URDF");
@@ -447,13 +503,9 @@ namespace SW2URDF.URDFExport
             builder.AppendLine("- Estimated visual STL triangles: " +
                 estimatedVisualTriangles.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Requested STL reduction ratios: " +
-                FormatGroupCounts(rows
-                    .Where(r => r.StlStats != null && r.StlStats.ReductionRatio.HasValue)
-                    .Select(r => FormatNullableDouble(r.StlStats.ReductionRatio))));
+                FormatStlReductionRatios(rows));
             builder.AppendLine("- STL quality settings: " +
-                FormatGroupCounts(rows
-                    .Where(r => r.StlStats != null)
-                    .Select(r => r.StlStats.QualityLabel)));
+                FormatStlQualitySettings(rows));
             builder.AppendLine("- Average estimated STL reduction: " +
                 FormatNullablePercent(AverageNullableDouble(rows
                     .Where(r => r.StlStats != null)
@@ -463,9 +515,9 @@ namespace SW2URDF.URDFExport
                     .Where(r => r.StlStats != null)
                     .Select(r => r.StlStats.ActualReductionPercent))));
             builder.AppendLine("- Requested collision strategies: " +
-                FormatGroupCounts(rows.Select(r => r.CollisionStrategy)));
+                FormatRequestedCollisionStrategies(rows));
             builder.AppendLine("- Effective collision strategies: " +
-                FormatGroupCounts(rows.Select(r => r.CollisionEffectiveStrategy)));
+                FormatEffectiveCollisionStrategies(rows));
             builder.AppendLine("- Collision strategy fallbacks: " +
                 rows.Count(r => !String.Equals(
                     r.CollisionStrategy,
@@ -492,6 +544,48 @@ namespace SW2URDF.URDFExport
                 }
             }
             builder.AppendLine();
+        }
+
+        private static string BuildExportParameterSummary(
+            IEnumerable<InertialValidationRecord> inertialRecords,
+            IEnumerable<MeshExportRecord> meshRecords,
+            bool exportMeshes,
+            MeshExportFormat meshFormat)
+        {
+            List<InertialValidationRecord> inertialRows = inertialRecords.ToList();
+            List<MeshExportRecord> meshRows = meshRecords.ToList();
+            return "export_meshes=" + (exportMeshes ? "true" : "false") +
+                ", mesh_format=" + meshFormat +
+                ", inertial_validation_rows=" + inertialRows.Count.ToString(CultureInfo.InvariantCulture) +
+                ", mesh_manifest_rows=" + meshRows.Count.ToString(CultureInfo.InvariantCulture) +
+                ", requested_collision_strategies=" + FormatRequestedCollisionStrategies(meshRows) +
+                ", effective_collision_strategies=" + FormatEffectiveCollisionStrategies(meshRows) +
+                ", stl_reduction_ratios=" + FormatStlReductionRatios(meshRows) +
+                ", stl_quality_settings=" + FormatStlQualitySettings(meshRows);
+        }
+
+        private static string FormatRequestedCollisionStrategies(IEnumerable<MeshExportRecord> records)
+        {
+            return FormatGroupCounts(records.Select(r => r.CollisionStrategy));
+        }
+
+        private static string FormatEffectiveCollisionStrategies(IEnumerable<MeshExportRecord> records)
+        {
+            return FormatGroupCounts(records.Select(r => r.CollisionEffectiveStrategy));
+        }
+
+        private static string FormatStlReductionRatios(IEnumerable<MeshExportRecord> records)
+        {
+            return FormatGroupCounts(records
+                .Where(r => r.StlStats != null && r.StlStats.ReductionRatio.HasValue)
+                .Select(r => FormatNullableDouble(r.StlStats.ReductionRatio)));
+        }
+
+        private static string FormatStlQualitySettings(IEnumerable<MeshExportRecord> records)
+        {
+            return FormatGroupCounts(records
+                .Where(r => r.StlStats != null)
+                .Select(r => r.StlStats.QualityLabel));
         }
 
         private static ulong SumNullableUInt(IEnumerable<uint?> values)

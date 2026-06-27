@@ -47,6 +47,7 @@ namespace SW2URDF.Test
 
             Assert.NotNull(appender);
             Assert.Equal("utf-8", appender.Encoding.WebName);
+            Assert.Empty(appender.Encoding.GetPreamble());
         }
 
         [Fact]
