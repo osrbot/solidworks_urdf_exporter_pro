@@ -573,7 +573,8 @@ namespace SW2URDF.UI
                     node.Link,
                     coordinateTransform,
                     out InertiaEllipsoid ellipsoid,
-                    out string error))
+                    out string error,
+                    out InertiaPreviewFailureKind failureKind))
                 {
                     buttonShowInertiaPreview.Text = ChineseUiText.Translate(
                         "Hide inertia ellipsoid",
@@ -594,18 +595,32 @@ namespace SW2URDF.UI
                 }
                 else
                 {
-                    logger.Warn("Could not display inertia preview for link " +
-                        node.Link.Name + ": " + error);
-                    labelInertiaPreviewStatus.Text = ChineseUiText.Translate(
-                        "Invalid inertia tensor",
-                        "\u65e0\u6548\u7684\u60ef\u6027\u5f20\u91cf");
+                    logger.Warn("Inertia preview failed for link " +
+                        node.Link.Name + " [" + failureKind + "]: " + error);
+                    bool physicalInertiaInvalid =
+                        failureKind == InertiaPreviewFailureKind.InvalidPhysicalInertia;
+                    labelInertiaPreviewStatus.Text = physicalInertiaInvalid
+                        ? ChineseUiText.Translate(
+                            "Invalid physical inertia",
+                            "\u7269\u7406\u60ef\u6027\u975e\u6cd5")
+                        : ChineseUiText.Translate(
+                            "Inertia overlay display failed",
+                            "\u60ef\u6027\u53e0\u52a0\u5c42\u663e\u793a\u5931\u8d25");
                     MessageBox.Show(
-                        ChineseUiText.Translate(
-                            "The inertia overlay cannot be displayed:\r\n",
-                            "\u65e0\u6cd5\u663e\u793a\u60ef\u6027\u53e0\u52a0\u5c42\uff1a\r\n") + error,
-                        ChineseUiText.Translate(
-                            "Inertia validation",
-                            "\u60ef\u6027\u6821\u9a8c"));
+                        (physicalInertiaInvalid
+                            ? ChineseUiText.Translate(
+                                "The inertia values are physically invalid, so no ellipsoid can be computed:\r\n",
+                                "\u60ef\u6027\u53c2\u6570\u672c\u8eab\u4e0d\u6ee1\u8db3\u7269\u7406\u6761\u4ef6\uff0c\u56e0\u6b64\u65e0\u6cd5\u8ba1\u7b97\u692d\u7403\uff1a\r\n")
+                            : ChineseUiText.Translate(
+                                "The inertia values passed physical checks, but SolidWorks could not display the overlay:\r\n",
+                                "\u60ef\u6027\u53c2\u6570\u5df2\u901a\u8fc7\u7269\u7406\u68c0\u67e5\uff0c\u4f46 SolidWorks \u65e0\u6cd5\u663e\u793a\u53e0\u52a0\u5c42\uff1a\r\n")) + error,
+                        physicalInertiaInvalid
+                            ? ChineseUiText.Translate(
+                                "Inertia validation",
+                                "\u60ef\u6027\u6821\u9a8c")
+                            : ChineseUiText.Translate(
+                                "Inertia preview",
+                                "\u60ef\u6027\u9884\u89c8"));
                 }
             }
             catch (Exception ex)

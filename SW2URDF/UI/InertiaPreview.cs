@@ -12,6 +12,13 @@ using DrawingColor = System.Drawing.Color;
 
 namespace SW2URDF.UI
 {
+    internal enum InertiaPreviewFailureKind
+    {
+        None,
+        InvalidPhysicalInertia,
+        DisplayUnavailable
+    }
+
     internal sealed class InertiaPreview : IDisposable
     {
         private const double PreviewTransparency = 0.75;
@@ -41,18 +48,41 @@ namespace SW2URDF.UI
             out InertiaEllipsoid ellipsoid,
             out string error)
         {
+            InertiaPreviewFailureKind failureKind;
+            return Show(link, linkCoordinateTransform, out ellipsoid, out error, out failureKind);
+        }
+
+        public bool Show(
+            Link link,
+            MathTransform linkCoordinateTransform,
+            out InertiaEllipsoid ellipsoid,
+            out string error,
+            out InertiaPreviewFailureKind failureKind)
+        {
             Hide();
+            failureKind = InertiaPreviewFailureKind.None;
+            if (link == null || link.Inertial == null || link.Inertial.Mass == null ||
+                link.Inertial.Inertia == null)
+            {
+                ellipsoid = null;
+                error = "The link has no complete inertial element.";
+                failureKind = InertiaPreviewFailureKind.InvalidPhysicalInertia;
+                return false;
+            }
+
             if (!InertiaEllipsoid.TryCreate(
                 link.Inertial.Mass.Value,
                 link.Inertial.Inertia,
                 out ellipsoid,
                 out error))
             {
+                failureKind = InertiaPreviewFailureKind.InvalidPhysicalInertia;
                 return false;
             }
             if (linkCoordinateTransform == null)
             {
                 error = "The link coordinate system was not found.";
+                failureKind = InertiaPreviewFailureKind.DisplayUnavailable;
                 return false;
             }
 
@@ -94,12 +124,23 @@ namespace SW2URDF.UI
                 AddPrincipalAxis(modeler, center, axes[2], ellipsoid.SemiAxes[2],
                     DrawingColor.DodgerBlue);
                 model.GraphicsRedraw2();
-                return temporaryBodies.Count == 6;
+                if (temporaryBodies.Count == 6)
+                {
+                    return true;
+                }
+
+                int displayedCurveCount = temporaryBodies.Count;
+                Hide();
+                failureKind = InertiaPreviewFailureKind.DisplayUnavailable;
+                error = "SolidWorks displayed only " + displayedCurveCount +
+                    " of 6 inertia preview curves.";
+                return false;
             }
             catch (Exception e)
             {
                 Hide();
                 error = e.Message;
+                failureKind = InertiaPreviewFailureKind.DisplayUnavailable;
                 return false;
             }
         }
@@ -126,7 +167,10 @@ namespace SW2URDF.UI
             }
             temporaryBodies.Clear();
             RestoreComponentAppearances();
-            model.GraphicsRedraw2();
+            if (model != null)
+            {
+                model.GraphicsRedraw2();
+            }
         }
 
         public void Dispose()

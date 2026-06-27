@@ -335,6 +335,9 @@ namespace SW2URDF.Test
             Assert.Contains("ROS 2 collision mesh files | OK", report);
             Assert.Contains("Inertial validation rows: 1", report);
             Assert.Contains("Warning rows: 0", report);
+            Assert.Contains("Physical inertia failures: 0", report);
+            Assert.Contains("Inertia display warnings: 0", report);
+            Assert.Contains("Display blocked by invalid physics: 0", report);
             Assert.Contains("Mesh manifest rows: 1", report);
             Assert.Contains("Requested collision strategies: VisualMesh=1", report);
             Assert.Contains("Effective collision strategies: VisualMesh=1", report);

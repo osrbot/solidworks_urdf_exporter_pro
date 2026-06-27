@@ -1,4 +1,5 @@
 using SW2URDF.UI;
+using SW2URDF.URDF;
 using Xunit;
 
 namespace SW2URDF.Test
@@ -36,6 +37,54 @@ namespace SW2URDF.Test
 
             Assert.Equal(9, result.Length);
             Assert.Equal(0.75, result[7]);
+        }
+
+        [Fact]
+        public void TestShowClassifiesInvalidPhysicalInertia()
+        {
+            Link link = new Link();
+            link.Inertial.Mass.Value = 1.0;
+            link.Inertial.Inertia.Ixx = 10.0;
+            link.Inertial.Inertia.Iyy = 1.0;
+            link.Inertial.Inertia.Izz = 1.0;
+
+            using (InertiaPreview preview = new InertiaPreview(null, null))
+            {
+                bool success = preview.Show(
+                    link,
+                    null,
+                    out _,
+                    out string error,
+                    out InertiaPreviewFailureKind failureKind);
+
+                Assert.False(success);
+                Assert.Equal(InertiaPreviewFailureKind.InvalidPhysicalInertia, failureKind);
+                Assert.Contains("triangle inequality", error);
+            }
+        }
+
+        [Fact]
+        public void TestShowClassifiesMissingCoordinateSystemAsDisplayUnavailable()
+        {
+            Link link = new Link();
+            link.Inertial.Mass.Value = 1.0;
+            link.Inertial.Inertia.Ixx = 1.0;
+            link.Inertial.Inertia.Iyy = 1.0;
+            link.Inertial.Inertia.Izz = 1.0;
+
+            using (InertiaPreview preview = new InertiaPreview(null, null))
+            {
+                bool success = preview.Show(
+                    link,
+                    null,
+                    out _,
+                    out string error,
+                    out InertiaPreviewFailureKind failureKind);
+
+                Assert.False(success);
+                Assert.Equal(InertiaPreviewFailureKind.DisplayUnavailable, failureKind);
+                Assert.Contains("coordinate system", error);
+            }
         }
     }
 }
