@@ -357,8 +357,10 @@ namespace SW2URDF.Test
             Assert.Contains("Inertial validation rows: 1", report);
             Assert.Contains("Warning rows: 0", report);
             Assert.Contains("Physical inertia failures: 0", report);
+            Assert.Contains("Magnitude warnings: 0", report);
             Assert.Contains("Inertia display warnings: 0", report);
             Assert.Contains("Display blocked by invalid physics: 0", report);
+            Assert.Contains("Magnitude warning links: none", report);
             Assert.Contains("Mesh manifest rows: 1", report);
             Assert.Contains("Requested collision strategies: VisualMesh=1", report);
             Assert.Contains("Effective collision strategies: VisualMesh=1", report);
@@ -478,6 +480,62 @@ namespace SW2URDF.Test
             Assert.Contains(
                 "FAIL: ROS 2 mesh reference is unresolved: package://rover_description/meshes/collision/base_link.STL",
                 report);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
+        [Fact]
+        public void TestExportReportSummarizesInertialMagnitudeWarnings()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            pkg.CreateCMakeLists();
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsPackageDirectory, "package.xml"),
+                "<?xml version=\"1.0\"?><package><name>rover_description</name></package>",
+                new UTF8Encoding(false));
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(
+                ros1Urdf,
+                "<?xml version=\"1.0\"?><robot name=\"robot_900001\"><link name=\"tiny_mass_link\" /></robot>",
+                new UTF8Encoding(false));
+            pkg.CreateRos2Package(ros1Urdf);
+
+            ExportHelper.InertialValidationRecord magnitudeWarning =
+                new ExportHelper.InertialValidationRecord(
+                    "tiny_mass_link",
+                    "Origin_global",
+                    ExportHelper.InertialValidationRow.Diagnostic(
+                        "mass.magnitude",
+                        "magnitude",
+                        "WARN",
+                        "Mass is outside the expected robotics export range [1e-9, 1e6] kg: 1e-12"));
+
+            ExportHelper.WriteExportReport(
+                pkg,
+                ros1Urdf,
+                new[] { magnitudeWarning },
+                new ExportHelper.MeshExportRecord[0],
+                false,
+                MeshExportFormat.STL,
+                TimeSpan.FromSeconds(1));
+
+            string report = File.ReadAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
+                Encoding.UTF8);
+            Assert.Contains("Status: WARN", report);
+            Assert.Contains("Warning rows: 1", report);
+            Assert.Contains("Magnitude warnings: 1", report);
+            Assert.Contains("Warning links: tiny_mass_link", report);
+            Assert.Contains("Magnitude warning links: tiny_mass_link", report);
+            Assert.Contains("WARN: Inertial validation warning for link tiny_mass_link (1 rows).", report);
 
             Directory.Delete(tempDirectory, true);
         }
