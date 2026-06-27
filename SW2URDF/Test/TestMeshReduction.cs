@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
+using System.Text;
+using System.Xml;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using SW2URDF.UI;
@@ -164,7 +166,11 @@ namespace SW2URDF.Test
         [Theory]
         [InlineData("base_link", "base_link", CollisionMeshStrategy.VisualMesh)]
         [InlineData("!acc_base_link", "base_link", CollisionMeshStrategy.AccurateMesh)]
+        [InlineData("!sim_base_link", "base_link", CollisionMeshStrategy.SimplifiedMesh)]
+        [InlineData("!box_chassis", "chassis", CollisionMeshStrategy.BoxPrimitive)]
         [InlineData("!pri_sensor", "sensor", CollisionMeshStrategy.Primitive)]
+        [InlineData("!cyl_lidar", "lidar", CollisionMeshStrategy.CylinderPrimitive)]
+        [InlineData("!sph_ball", "ball", CollisionMeshStrategy.SpherePrimitive)]
         [InlineData("!cxh_chassis", "chassis", CollisionMeshStrategy.ConvexHull)]
         [InlineData("!PRI_uppercase", "uppercase", CollisionMeshStrategy.Primitive)]
         public void TestCollisionStrategyPrefixesAreParsed(
@@ -223,6 +229,50 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestGeometryCanWriteNativeBoxPrimitive()
+        {
+            Geometry geometry = new Geometry();
+
+            geometry.UseBox(1.0, 2.0, 3.0);
+
+            string xml = WriteGeometryXml(geometry);
+            Assert.Contains("<box", xml);
+            Assert.Contains("size=\"1 2 3\"", xml);
+            Assert.DoesNotContain("<mesh", xml);
+        }
+
+        [Fact]
+        public void TestGeometryCanSwitchPrimitiveBackToMesh()
+        {
+            Geometry geometry = new Geometry();
+
+            geometry.UseSphere(0.25);
+            geometry.UseMesh("package://robot/meshes/collision/base_link.STL");
+
+            string xml = WriteGeometryXml(geometry);
+            Assert.Contains("<mesh", xml);
+            Assert.Contains("filename=\"package://robot/meshes/collision/base_link.STL\"", xml);
+            Assert.DoesNotContain("<sphere", xml);
+        }
+
+        [Theory]
+        [InlineData(0, 0.0, 1.5707963267948966, 0.0)]
+        [InlineData(1, -1.5707963267948966, 0.0, 0.0)]
+        [InlineData(2, 0.0, 0.0, 0.0)]
+        public void TestCylinderPrimitiveRpyAlignsUrdfZToBoundingAxis(
+            int axis,
+            double expectedRoll,
+            double expectedPitch,
+            double expectedYaw)
+        {
+            double[] rpy = ExportHelper.GetCylinderPrimitiveRpy(axis);
+
+            Assert.Equal(expectedRoll, rpy[0], 12);
+            Assert.Equal(expectedPitch, rpy[1], 12);
+            Assert.Equal(expectedYaw, rpy[2], 12);
+        }
+
+        [Fact]
         public void TestPrimitiveBoxStlWritesTwelveBinaryTriangles()
         {
             string tempFile = Path.Combine(
@@ -243,6 +293,87 @@ namespace SW2URDF.Test
                     reader.ReadBytes(80);
                     Assert.Equal((uint)12, reader.ReadUInt32());
                 }
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                {
+                    File.Delete(tempFile);
+                }
+            }
+        }
+
+        [Fact]
+        public void TestPrimitiveCylinderStlWritesExpectedBinaryTriangles()
+        {
+            string tempFile = Path.Combine(
+                Path.GetTempPath(),
+                "sw2urdf-cylinder-" + Guid.NewGuid() + ".STL");
+            ExportHelper.LinkLocalBoundingBox box = new ExportHelper.LinkLocalBoundingBox();
+            box.Include(-0.5, -0.25, -1.5);
+            box.Include(0.5, 0.25, 1.5);
+
+            try
+            {
+                ExportHelper.WriteCylinderPrimitiveStl(tempFile, box);
+
+                Assert.True(File.Exists(tempFile));
+                Assert.Equal((uint)96, ReadBinaryStlTriangleCount(tempFile));
+                Assert.Equal(ExportHelper.EstimateBinaryStlSizeBytes(96), new FileInfo(tempFile).Length);
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                {
+                    File.Delete(tempFile);
+                }
+            }
+        }
+
+        [Fact]
+        public void TestPrimitiveSphereStlWritesExpectedBinaryTriangles()
+        {
+            string tempFile = Path.Combine(
+                Path.GetTempPath(),
+                "sw2urdf-sphere-" + Guid.NewGuid() + ".STL");
+            ExportHelper.LinkLocalBoundingBox box = new ExportHelper.LinkLocalBoundingBox();
+            box.Include(-0.5, -0.25, -1.5);
+            box.Include(0.5, 0.25, 1.5);
+
+            try
+            {
+                ExportHelper.WriteSpherePrimitiveStl(tempFile, box);
+
+                Assert.True(File.Exists(tempFile));
+                Assert.Equal((uint)224, ReadBinaryStlTriangleCount(tempFile));
+                Assert.Equal(ExportHelper.EstimateBinaryStlSizeBytes(224), new FileInfo(tempFile).Length);
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                {
+                    File.Delete(tempFile);
+                }
+            }
+        }
+
+        [Fact]
+        public void TestConvexHullStlTriangulatesBoundingBoxHull()
+        {
+            string tempFile = Path.Combine(
+                Path.GetTempPath(),
+                "sw2urdf-convex-" + Guid.NewGuid() + ".STL");
+            ExportHelper.LinkLocalBoundingBox box = new ExportHelper.LinkLocalBoundingBox();
+            box.Include(-0.5, -1.0, -1.5);
+            box.Include(0.5, 1.0, 1.5);
+
+            try
+            {
+                ExportHelper.WriteConvexHullPrimitiveStl(tempFile, box);
+
+                Assert.True(File.Exists(tempFile));
+                Assert.Equal((uint)12, ReadBinaryStlTriangleCount(tempFile));
+                Assert.Equal(ExportHelper.EstimateBinaryStlSizeBytes(12), new FileInfo(tempFile).Length);
             }
             finally
             {
@@ -286,8 +417,8 @@ namespace SW2URDF.Test
                 new ExportHelper.MeshExportRecord(
                     "base,link",
                     "Primitive",
-                    "Primitive",
-                    "box_primitive",
+                    "BoxPrimitive",
+                    "urdf_box_primitive",
                     "ok",
                     "STL",
                     "package://robot/meshes/visual/base_link.STL",
@@ -320,9 +451,35 @@ namespace SW2URDF.Test
 
             Assert.Contains("link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,stl_quality,mesh_reduction_ratio", csv);
             Assert.Contains(
-                "\"base,link\",Primitive,Primitive,box_primitive,ok,STL,custom,0.5,true,0.001,1,5084,100,2584,50,10.5,50,98,package://robot/meshes/visual/base_link.STL,package://robot/meshes/collision/base_link.STL",
+                "\"base,link\",Primitive,BoxPrimitive,urdf_box_primitive,ok,STL,custom,0.5,true,0.001,1,5084,100,2584,50,10.5,50,98,package://robot/meshes/visual/base_link.STL,package://robot/meshes/collision/base_link.STL",
                 csv);
             Assert.Contains(",true,true,184,84,2,0", csv);
+        }
+
+        private static string WriteGeometryXml(Geometry geometry)
+        {
+            StringBuilder builder = new StringBuilder();
+            XmlWriterSettings settings = new XmlWriterSettings
+            {
+                OmitXmlDeclaration = true,
+                Indent = false
+            };
+
+            using (XmlWriter writer = XmlWriter.Create(builder, settings))
+            {
+                geometry.WriteURDF(writer);
+            }
+
+            return builder.ToString();
+        }
+
+        private static uint ReadBinaryStlTriangleCount(string filename)
+        {
+            using (BinaryReader reader = new BinaryReader(File.OpenRead(filename)))
+            {
+                reader.ReadBytes(80);
+                return reader.ReadUInt32();
+            }
         }
     }
 }

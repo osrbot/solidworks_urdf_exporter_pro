@@ -11,8 +11,12 @@ namespace SW2URDF.URDF
     public enum CollisionMeshStrategy
     {
         VisualMesh,
+        SimplifiedMesh,
         AccurateMesh,
         Primitive,
+        BoxPrimitive,
+        CylinderPrimitive,
+        SpherePrimitive,
         ConvexHull
     }
 

@@ -34,6 +34,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Windows;
@@ -404,8 +405,11 @@ namespace SW2URDF.URDFExport
                 }
                 collisionExport = ExportCollisionMesh(link, meshFiles, meshFormat);
             }
-            link.Visual.Geometry.Mesh.Filename = meshFiles.VisualMeshFilename;
-            link.Collision.Geometry.Mesh.Filename = meshFiles.CollisionMeshFilename;
+            link.Visual.Geometry.UseMesh(meshFiles.VisualMeshFilename);
+            if (!UsesUrdfPrimitiveCollision(collisionExport))
+            {
+                link.Collision.Geometry.UseMesh(meshFiles.CollisionMeshFilename);
+            }
             if (meshRecords != null)
             {
                 meshRecords.Add(CreateMeshExportRecord(link, meshFiles, meshFormat, collisionExport, visualStlStats));
@@ -446,11 +450,35 @@ namespace SW2URDF.URDFExport
                 strategy = CollisionMeshStrategy.AccurateMesh;
                 return linkName.Substring("!acc_".Length);
             }
+            if (linkName.StartsWith("!sim_", StringComparison.OrdinalIgnoreCase) &&
+                linkName.Length > "!sim_".Length)
+            {
+                strategy = CollisionMeshStrategy.SimplifiedMesh;
+                return linkName.Substring("!sim_".Length);
+            }
+            if (linkName.StartsWith("!box_", StringComparison.OrdinalIgnoreCase) &&
+                linkName.Length > "!box_".Length)
+            {
+                strategy = CollisionMeshStrategy.BoxPrimitive;
+                return linkName.Substring("!box_".Length);
+            }
             if (linkName.StartsWith("!pri_", StringComparison.OrdinalIgnoreCase) &&
                 linkName.Length > "!pri_".Length)
             {
                 strategy = CollisionMeshStrategy.Primitive;
                 return linkName.Substring("!pri_".Length);
+            }
+            if (linkName.StartsWith("!cyl_", StringComparison.OrdinalIgnoreCase) &&
+                linkName.Length > "!cyl_".Length)
+            {
+                strategy = CollisionMeshStrategy.CylinderPrimitive;
+                return linkName.Substring("!cyl_".Length);
+            }
+            if (linkName.StartsWith("!sph_", StringComparison.OrdinalIgnoreCase) &&
+                linkName.Length > "!sph_".Length)
+            {
+                strategy = CollisionMeshStrategy.SpherePrimitive;
+                return linkName.Substring("!sph_".Length);
             }
             if (linkName.StartsWith("!cxh_", StringComparison.OrdinalIgnoreCase) &&
                 linkName.Length > "!cxh_".Length)
@@ -627,39 +655,91 @@ namespace SW2URDF.URDFExport
             MeshFileNames meshFiles,
             MeshExportFormat meshFormat)
         {
+            LinkLocalBoundingBox primitiveBox;
             switch (link.CollisionMeshStrategy)
             {
                 case CollisionMeshStrategy.Primitive:
+                case CollisionMeshStrategy.BoxPrimitive:
                     if (meshFormat == MeshExportFormat.STL &&
-                        TryWritePrimitiveCollisionMesh(link, meshFiles.WindowsCollisionMeshFilename))
+                        TryWriteBoxPrimitiveCollisionMesh(
+                            link,
+                            meshFiles.WindowsCollisionMeshFilename,
+                            out primitiveBox))
                     {
+                        UseBoxCollisionGeometry(link, primitiveBox);
                         return new CollisionMeshExportResult(
-                            CollisionMeshStrategy.Primitive,
-                            CollisionMeshStrategy.Primitive,
-                            "box_primitive",
+                            link.CollisionMeshStrategy,
+                            CollisionMeshStrategy.BoxPrimitive,
+                            "urdf_box_primitive",
                             "ok");
                     }
                     logger.Warn(link.Name + ": primitive collision mesh failed; falling back to visual mesh copy");
                     CopyVisualMeshToCollisionMesh(link, meshFiles);
                     return new CollisionMeshExportResult(
-                        CollisionMeshStrategy.Primitive,
+                        link.CollisionMeshStrategy,
                         CollisionMeshStrategy.VisualMesh,
                         "visual_mesh_copy",
                         meshFormat == MeshExportFormat.STL
                             ? "primitive_failed_visual_mesh_fallback"
                             : "primitive_requires_stl_visual_mesh_fallback");
 
-                case CollisionMeshStrategy.ConvexHull:
-                    logger.Warn(link.Name + ": convex hull collision mesh is not implemented yet; " +
-                        "falling back to primitive box collision");
+                case CollisionMeshStrategy.CylinderPrimitive:
                     if (meshFormat == MeshExportFormat.STL &&
-                        TryWritePrimitiveCollisionMesh(link, meshFiles.WindowsCollisionMeshFilename))
+                        TryWriteCylinderPrimitiveCollisionMesh(
+                            link,
+                            meshFiles.WindowsCollisionMeshFilename,
+                            out primitiveBox))
+                    {
+                        UseCylinderCollisionGeometry(link, primitiveBox);
+                        return new CollisionMeshExportResult(
+                            CollisionMeshStrategy.CylinderPrimitive,
+                            CollisionMeshStrategy.CylinderPrimitive,
+                            "urdf_cylinder_primitive",
+                            "ok");
+                    }
+                    logger.Warn(link.Name + ": cylinder primitive collision mesh failed; falling back to visual mesh copy");
+                    CopyVisualMeshToCollisionMesh(link, meshFiles);
+                    return new CollisionMeshExportResult(
+                        CollisionMeshStrategy.CylinderPrimitive,
+                        CollisionMeshStrategy.VisualMesh,
+                        "visual_mesh_copy",
+                        meshFormat == MeshExportFormat.STL
+                            ? "cylinder_primitive_failed_visual_mesh_fallback"
+                            : "cylinder_primitive_requires_stl_visual_mesh_fallback");
+
+                case CollisionMeshStrategy.SpherePrimitive:
+                    if (meshFormat == MeshExportFormat.STL &&
+                        TryWriteSpherePrimitiveCollisionMesh(
+                            link,
+                            meshFiles.WindowsCollisionMeshFilename,
+                            out primitiveBox))
+                    {
+                        UseSphereCollisionGeometry(link, primitiveBox);
+                        return new CollisionMeshExportResult(
+                            CollisionMeshStrategy.SpherePrimitive,
+                            CollisionMeshStrategy.SpherePrimitive,
+                            "urdf_sphere_primitive",
+                            "ok");
+                    }
+                    logger.Warn(link.Name + ": sphere primitive collision mesh failed; falling back to visual mesh copy");
+                    CopyVisualMeshToCollisionMesh(link, meshFiles);
+                    return new CollisionMeshExportResult(
+                        CollisionMeshStrategy.SpherePrimitive,
+                        CollisionMeshStrategy.VisualMesh,
+                        "visual_mesh_copy",
+                        meshFormat == MeshExportFormat.STL
+                            ? "sphere_primitive_failed_visual_mesh_fallback"
+                            : "sphere_primitive_requires_stl_visual_mesh_fallback");
+
+                case CollisionMeshStrategy.ConvexHull:
+                    if (meshFormat == MeshExportFormat.STL &&
+                        TryWriteConvexHullCollisionMesh(link, meshFiles.WindowsCollisionMeshFilename))
                     {
                         return new CollisionMeshExportResult(
                             CollisionMeshStrategy.ConvexHull,
-                            CollisionMeshStrategy.Primitive,
-                            "box_primitive",
-                            "convex_hull_not_implemented_box_fallback");
+                            CollisionMeshStrategy.ConvexHull,
+                            "convex_hull",
+                            "ok");
                     }
                     logger.Warn(link.Name + ": convex hull fallback failed; falling back to visual mesh copy");
                     CopyVisualMeshToCollisionMesh(link, meshFiles);
@@ -667,15 +747,49 @@ namespace SW2URDF.URDFExport
                         CollisionMeshStrategy.ConvexHull,
                         CollisionMeshStrategy.VisualMesh,
                         "visual_mesh_copy",
-                        "convex_hull_not_implemented_visual_mesh_fallback");
+                        meshFormat == MeshExportFormat.STL
+                            ? "convex_hull_failed_visual_mesh_fallback"
+                            : "convex_hull_requires_stl_visual_mesh_fallback");
+
+                case CollisionMeshStrategy.SimplifiedMesh:
+                    if (meshFormat == MeshExportFormat.STL &&
+                        TrySaveCollisionStl(link, meshFiles.WindowsCollisionMeshFilename, 1.0))
+                    {
+                        return new CollisionMeshExportResult(
+                            CollisionMeshStrategy.SimplifiedMesh,
+                            CollisionMeshStrategy.SimplifiedMesh,
+                            "simplified_stl",
+                            "ok");
+                    }
+                    logger.Warn(link.Name + ": simplified collision STL failed; falling back to visual mesh copy");
+                    CopyVisualMeshToCollisionMesh(link, meshFiles);
+                    return new CollisionMeshExportResult(
+                        CollisionMeshStrategy.SimplifiedMesh,
+                        CollisionMeshStrategy.VisualMesh,
+                        "visual_mesh_copy",
+                        meshFormat == MeshExportFormat.STL
+                            ? "simplified_stl_failed_visual_mesh_fallback"
+                            : "simplified_stl_requires_stl_visual_mesh_fallback");
 
                 case CollisionMeshStrategy.AccurateMesh:
+                    if (meshFormat == MeshExportFormat.STL &&
+                        TrySaveCollisionStl(link, meshFiles.WindowsCollisionMeshFilename, 0.0))
+                    {
+                        return new CollisionMeshExportResult(
+                            CollisionMeshStrategy.AccurateMesh,
+                            CollisionMeshStrategy.AccurateMesh,
+                            "accurate_stl",
+                            "ok");
+                    }
+                    logger.Warn(link.Name + ": accurate collision STL failed; falling back to visual mesh copy");
                     CopyVisualMeshToCollisionMesh(link, meshFiles);
                     return new CollisionMeshExportResult(
                         CollisionMeshStrategy.AccurateMesh,
                         CollisionMeshStrategy.VisualMesh,
                         "visual_mesh_copy",
-                        "accurate_collision_mesh_not_implemented_visual_mesh_copy");
+                        meshFormat == MeshExportFormat.STL
+                            ? "accurate_stl_failed_visual_mesh_fallback"
+                            : "accurate_stl_requires_stl_visual_mesh_fallback");
 
                 case CollisionMeshStrategy.VisualMesh:
                 default:
@@ -707,11 +821,94 @@ namespace SW2URDF.URDFExport
                 meshFiles.WindowsCollisionMeshFilename);
         }
 
-        private bool TryWritePrimitiveCollisionMesh(Link link, string windowsCollisionMeshFilename)
+        private bool TrySaveCollisionStl(Link link, string windowsCollisionMeshFilename, double reductionRatio)
         {
             try
             {
-                LinkLocalBoundingBox box = CreateLinkLocalBoundingBox(link);
+                SaveSTL(link, windowsCollisionMeshFilename, reductionRatio);
+                return File.Exists(windowsCollisionMeshFilename);
+            }
+            catch (Exception e)
+            {
+                logger.Warn(link.Name + ": collision STL export failed: " + e.Message);
+                return false;
+            }
+        }
+
+        private static bool UsesUrdfPrimitiveCollision(CollisionMeshExportResult result)
+        {
+            if (result == null)
+            {
+                return false;
+            }
+
+            switch (result.EffectiveStrategy)
+            {
+                case CollisionMeshStrategy.BoxPrimitive:
+                case CollisionMeshStrategy.CylinderPrimitive:
+                case CollisionMeshStrategy.SpherePrimitive:
+                    return result.Notes == "ok";
+
+                default:
+                    return false;
+            }
+        }
+
+        private static void UseBoxCollisionGeometry(Link link, LinkLocalBoundingBox box)
+        {
+            link.Collision.Geometry.UseBox(box.Width, box.Depth, box.Height);
+            SetCollisionPrimitiveOrigin(link, box.Center, new[] { 0.0, 0.0, 0.0 });
+        }
+
+        private static void UseCylinderCollisionGeometry(Link link, LinkLocalBoundingBox box)
+        {
+            int axis = box.LongestAxisIndex;
+            int uAxis = (axis + 1) % 3;
+            int vAxis = (axis + 2) % 3;
+            double radius = Math.Max(box.GetDimension(uAxis), box.GetDimension(vAxis)) / 2.0;
+            double length = box.GetDimension(axis);
+
+            link.Collision.Geometry.UseCylinder(radius, length);
+            SetCollisionPrimitiveOrigin(link, box.Center, GetCylinderPrimitiveRpy(axis));
+        }
+
+        private static void UseSphereCollisionGeometry(Link link, LinkLocalBoundingBox box)
+        {
+            double radius = Math.Max(box.Width, Math.Max(box.Depth, box.Height)) / 2.0;
+            link.Collision.Geometry.UseSphere(radius);
+            SetCollisionPrimitiveOrigin(link, box.Center, new[] { 0.0, 0.0, 0.0 });
+        }
+
+        private static void SetCollisionPrimitiveOrigin(Link link, double[] center, double[] rpy)
+        {
+            link.Collision.Origin.SetXYZ(new[] { center[0], center[1], center[2] });
+            link.Collision.Origin.SetRPY(rpy);
+        }
+
+        internal static double[] GetCylinderPrimitiveRpy(int axis)
+        {
+            switch (axis)
+            {
+                case 0:
+                    return new[] { 0.0, Math.PI / 2.0, 0.0 };
+
+                case 1:
+                    return new[] { -Math.PI / 2.0, 0.0, 0.0 };
+
+                default:
+                    return new[] { 0.0, 0.0, 0.0 };
+            }
+        }
+
+        private bool TryWriteBoxPrimitiveCollisionMesh(
+            Link link,
+            string windowsCollisionMeshFilename,
+            out LinkLocalBoundingBox box)
+        {
+            box = null;
+            try
+            {
+                box = CreateLinkLocalBoundingBox(link);
                 if (!box.IsUsable)
                 {
                     logger.Warn(link.Name + ": could not create primitive collision box");
@@ -727,6 +924,86 @@ namespace SW2URDF.URDFExport
             catch (Exception e)
             {
                 logger.Warn(link.Name + ": primitive collision mesh export failed: " + e.Message);
+                return false;
+            }
+        }
+
+        private bool TryWriteCylinderPrimitiveCollisionMesh(
+            Link link,
+            string windowsCollisionMeshFilename,
+            out LinkLocalBoundingBox box)
+        {
+            box = null;
+            try
+            {
+                box = CreateLinkLocalBoundingBox(link);
+                if (!box.IsUsable)
+                {
+                    logger.Warn(link.Name + ": could not create cylinder primitive collision mesh");
+                    return false;
+                }
+
+                WriteCylinderPrimitiveStl(windowsCollisionMeshFilename, box);
+                logger.Info(link.Name + ": wrote cylinder primitive collision mesh " +
+                    windowsCollisionMeshFilename + " with bounding dimensions " +
+                    box.Width + " x " + box.Depth + " x " + box.Height + " m");
+                return true;
+            }
+            catch (Exception e)
+            {
+                logger.Warn(link.Name + ": cylinder primitive collision mesh export failed: " + e.Message);
+                return false;
+            }
+        }
+
+        private bool TryWriteSpherePrimitiveCollisionMesh(
+            Link link,
+            string windowsCollisionMeshFilename,
+            out LinkLocalBoundingBox box)
+        {
+            box = null;
+            try
+            {
+                box = CreateLinkLocalBoundingBox(link);
+                if (!box.IsUsable)
+                {
+                    logger.Warn(link.Name + ": could not create sphere primitive collision mesh");
+                    return false;
+                }
+
+                WriteSpherePrimitiveStl(windowsCollisionMeshFilename, box);
+                logger.Info(link.Name + ": wrote sphere primitive collision mesh " +
+                    windowsCollisionMeshFilename + " with bounding dimensions " +
+                    box.Width + " x " + box.Depth + " x " + box.Height + " m");
+                return true;
+            }
+            catch (Exception e)
+            {
+                logger.Warn(link.Name + ": sphere primitive collision mesh export failed: " + e.Message);
+                return false;
+            }
+        }
+
+        private bool TryWriteConvexHullCollisionMesh(Link link, string windowsCollisionMeshFilename)
+        {
+            try
+            {
+                LinkLocalBoundingBox box = CreateLinkLocalBoundingBox(link);
+                if (!box.IsUsable)
+                {
+                    logger.Warn(link.Name + ": could not create convex hull collision mesh");
+                    return false;
+                }
+
+                WriteConvexHullPrimitiveStl(windowsCollisionMeshFilename, box);
+                logger.Info(link.Name + ": wrote convex hull collision mesh " +
+                    windowsCollisionMeshFilename + " from " +
+                    box.Points.Count.ToString(CultureInfo.InvariantCulture) + " local bounding points");
+                return true;
+            }
+            catch (Exception e)
+            {
+                logger.Warn(link.Name + ": convex hull collision mesh export failed: " + e.Message);
                 return false;
             }
         }
@@ -842,6 +1119,411 @@ namespace SW2URDF.URDFExport
             }
         }
 
+        internal static void WriteCylinderPrimitiveStl(string filename, LinkLocalBoundingBox box)
+        {
+            if (box == null || !box.IsUsable)
+            {
+                throw new InvalidOperationException("Primitive collision cylinder is invalid");
+            }
+
+            const int segments = 24;
+            Directory.CreateDirectory(Path.GetDirectoryName(filename));
+            int axis = box.LongestAxisIndex;
+            int uAxis = (axis + 1) % 3;
+            int vAxis = (axis + 2) % 3;
+            double[] center = box.Center;
+            double halfHeight = box.GetDimension(axis) / 2.0;
+            double radius = Math.Max(box.GetDimension(uAxis), box.GetDimension(vAxis)) / 2.0;
+
+            using (BinaryWriter writer = new BinaryWriter(File.Open(filename, FileMode.Create, FileAccess.Write)))
+            {
+                byte[] header = new byte[80];
+                writer.Write(header);
+                writer.Write((uint)(segments * 4));
+                for (int i = 0; i < segments; i++)
+                {
+                    double a0 = 2.0 * Math.PI * i / segments;
+                    double a1 = 2.0 * Math.PI * (i + 1) / segments;
+                    double[] bottom0 = CreateAxisPoint(center, axis, uAxis, vAxis, -halfHeight, radius, a0);
+                    double[] bottom1 = CreateAxisPoint(center, axis, uAxis, vAxis, -halfHeight, radius, a1);
+                    double[] top0 = CreateAxisPoint(center, axis, uAxis, vAxis, halfHeight, radius, a0);
+                    double[] top1 = CreateAxisPoint(center, axis, uAxis, vAxis, halfHeight, radius, a1);
+                    double[] bottomCenter = CreateAxisPoint(center, axis, uAxis, vAxis, -halfHeight, 0.0, 0.0);
+                    double[] topCenter = CreateAxisPoint(center, axis, uAxis, vAxis, halfHeight, 0.0, 0.0);
+
+                    WriteBinaryStlTriangle(writer, bottom0, bottom1, top1);
+                    WriteBinaryStlTriangle(writer, bottom0, top1, top0);
+                    WriteBinaryStlTriangle(writer, bottomCenter, bottom0, bottom1);
+                    WriteBinaryStlTriangle(writer, topCenter, top1, top0);
+                }
+            }
+        }
+
+        internal static void WriteSpherePrimitiveStl(string filename, LinkLocalBoundingBox box)
+        {
+            if (box == null || !box.IsUsable)
+            {
+                throw new InvalidOperationException("Primitive collision sphere is invalid");
+            }
+
+            const int latitudeBands = 8;
+            const int longitudeBands = 16;
+            Directory.CreateDirectory(Path.GetDirectoryName(filename));
+            double[] center = box.Center;
+            double radius = Math.Max(box.Width, Math.Max(box.Depth, box.Height)) / 2.0;
+            List<double[]> vertices = new List<double[]>();
+            for (int lat = 0; lat <= latitudeBands; lat++)
+            {
+                double theta = Math.PI * lat / latitudeBands;
+                double sinTheta = Math.Sin(theta);
+                double cosTheta = Math.Cos(theta);
+                for (int lon = 0; lon < longitudeBands; lon++)
+                {
+                    double phi = 2.0 * Math.PI * lon / longitudeBands;
+                    vertices.Add(new[]
+                    {
+                        center[0] + radius * sinTheta * Math.Cos(phi),
+                        center[1] + radius * sinTheta * Math.Sin(phi),
+                        center[2] + radius * cosTheta
+                    });
+                }
+            }
+
+            List<int[]> triangles = new List<int[]>();
+            for (int lat = 0; lat < latitudeBands; lat++)
+            {
+                for (int lon = 0; lon < longitudeBands; lon++)
+                {
+                    int nextLon = (lon + 1) % longitudeBands;
+                    int current = lat * longitudeBands + lon;
+                    int currentNext = lat * longitudeBands + nextLon;
+                    int below = (lat + 1) * longitudeBands + lon;
+                    int belowNext = (lat + 1) * longitudeBands + nextLon;
+                    if (lat > 0)
+                    {
+                        triangles.Add(new[] { current, below, currentNext });
+                    }
+                    if (lat < latitudeBands - 1)
+                    {
+                        triangles.Add(new[] { currentNext, below, belowNext });
+                    }
+                }
+            }
+
+            WriteBinaryStl(filename, vertices, triangles);
+        }
+
+        internal static void WriteConvexHullPrimitiveStl(string filename, LinkLocalBoundingBox box)
+        {
+            if (box == null || !box.IsUsable)
+            {
+                throw new InvalidOperationException("Convex hull collision mesh is invalid");
+            }
+
+            IEnumerable<double[]> hullSource = box.Points.Count >= 4
+                ? (IEnumerable<double[]>)box.Points
+                : box.CreateCornerVertices();
+            List<double[]> sourcePoints = UniquePoints(hullSource);
+            if (sourcePoints.Count < 4)
+            {
+                sourcePoints = UniquePoints(box.CreateCornerVertices());
+            }
+
+            List<int[]> triangles = BuildConvexHullTriangles(sourcePoints);
+            if (triangles.Count == 0)
+            {
+                sourcePoints = UniquePoints(box.CreateCornerVertices());
+                triangles = BuildConvexHullTriangles(sourcePoints);
+            }
+
+            WriteBinaryStl(filename, sourcePoints, triangles);
+        }
+
+        private static double[] CreateAxisPoint(
+            double[] center,
+            int axis,
+            int uAxis,
+            int vAxis,
+            double axisOffset,
+            double radius,
+            double angle)
+        {
+            double[] point = new[] { center[0], center[1], center[2] };
+            point[axis] += axisOffset;
+            point[uAxis] += radius * Math.Cos(angle);
+            point[vAxis] += radius * Math.Sin(angle);
+            return point;
+        }
+
+        private static void WriteBinaryStl(string filename, IList<double[]> vertices, IList<int[]> triangles)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(filename));
+            using (BinaryWriter writer = new BinaryWriter(File.Open(filename, FileMode.Create, FileAccess.Write)))
+            {
+                byte[] header = new byte[80];
+                writer.Write(header);
+                writer.Write((uint)triangles.Count);
+                foreach (int[] triangle in triangles)
+                {
+                    WriteBinaryStlTriangle(
+                        writer,
+                        vertices[triangle[0]],
+                        vertices[triangle[1]],
+                        vertices[triangle[2]]);
+                }
+            }
+        }
+
+        private static List<double[]> UniquePoints(IEnumerable<double[]> points)
+        {
+            List<double[]> unique = new List<double[]>();
+            foreach (double[] point in points)
+            {
+                if (point == null || point.Length < 3)
+                {
+                    continue;
+                }
+                if (!unique.Any(existing => DistanceSquared(existing, point) < 1e-18))
+                {
+                    unique.Add(new[] { point[0], point[1], point[2] });
+                }
+            }
+            return unique;
+        }
+
+        private static List<int[]> BuildConvexHullTriangles(IList<double[]> points)
+        {
+            List<int[]> triangles = new List<int[]>();
+            if (points == null || points.Count < 4)
+            {
+                return triangles;
+            }
+
+            double tolerance = EstimatePointTolerance(points);
+            Dictionary<string, HullPlane> planes = new Dictionary<string, HullPlane>();
+            for (int i = 0; i < points.Count - 2; i++)
+            {
+                for (int j = i + 1; j < points.Count - 1; j++)
+                {
+                    for (int k = j + 1; k < points.Count; k++)
+                    {
+                        double[] normal = CalculateTriangleNormal(points[i], points[j], points[k]);
+                        if (VectorLengthSquared(normal) <= 0.0)
+                        {
+                            continue;
+                        }
+
+                        int positive = 0;
+                        int negative = 0;
+                        for (int p = 0; p < points.Count; p++)
+                        {
+                            double signed = SignedDistance(normal, points[i], points[p]);
+                            if (signed > tolerance)
+                            {
+                                positive++;
+                            }
+                            else if (signed < -tolerance)
+                            {
+                                negative++;
+                            }
+                            if (positive > 0 && negative > 0)
+                            {
+                                break;
+                            }
+                        }
+
+                        if (positive > 0 && negative > 0)
+                        {
+                            continue;
+                        }
+                        if (positive > 0)
+                        {
+                            normal = new[] { -normal[0], -normal[1], -normal[2] };
+                        }
+
+                        double offset = -Dot(normal, points[i]);
+                        string key = BuildPlaneKey(normal, offset, tolerance);
+                        if (!planes.ContainsKey(key))
+                        {
+                            planes.Add(key, new HullPlane(normal, offset));
+                        }
+                    }
+                }
+            }
+
+            foreach (HullPlane plane in planes.Values)
+            {
+                List<int> planePoints = new List<int>();
+                for (int i = 0; i < points.Count; i++)
+                {
+                    if (Math.Abs(Dot(plane.Normal, points[i]) + plane.Offset) <= tolerance * 2.0)
+                    {
+                        planePoints.Add(i);
+                    }
+                }
+
+                triangles.AddRange(TriangulateHullPlane(points, planePoints, plane.Normal));
+            }
+
+            return triangles;
+        }
+
+        private static IEnumerable<int[]> TriangulateHullPlane(
+            IList<double[]> points,
+            IList<int> planePointIndexes,
+            double[] normal)
+        {
+            if (planePointIndexes.Count < 3)
+            {
+                yield break;
+            }
+
+            double[] centroid = new[] { 0.0, 0.0, 0.0 };
+            foreach (int index in planePointIndexes)
+            {
+                centroid[0] += points[index][0];
+                centroid[1] += points[index][1];
+                centroid[2] += points[index][2];
+            }
+            centroid[0] /= planePointIndexes.Count;
+            centroid[1] /= planePointIndexes.Count;
+            centroid[2] /= planePointIndexes.Count;
+
+            double[] u = FindPlaneBasisU(points, planePointIndexes, centroid);
+            double[] v = Cross(normal, u);
+            NormalizeInPlace(v);
+
+            List<int> ordered = planePointIndexes
+                .OrderBy(index =>
+                {
+                    double[] delta = Subtract(points[index], centroid);
+                    return Math.Atan2(Dot(delta, v), Dot(delta, u));
+                })
+                .ToList();
+
+            for (int i = 1; i < ordered.Count - 1; i++)
+            {
+                int[] triangle = new[] { ordered[0], ordered[i], ordered[i + 1] };
+                double[] triangleNormal = CalculateTriangleNormal(
+                    points[triangle[0]],
+                    points[triangle[1]],
+                    points[triangle[2]]);
+                if (Dot(triangleNormal, normal) < 0.0)
+                {
+                    triangle = new[] { ordered[0], ordered[i + 1], ordered[i] };
+                }
+                yield return triangle;
+            }
+        }
+
+        private static double[] FindPlaneBasisU(
+            IList<double[]> points,
+            IEnumerable<int> planePointIndexes,
+            double[] centroid)
+        {
+            foreach (int index in planePointIndexes)
+            {
+                double[] candidate = Subtract(points[index], centroid);
+                if (VectorLengthSquared(candidate) > 1e-18)
+                {
+                    NormalizeInPlace(candidate);
+                    return candidate;
+                }
+            }
+            return new[] { 1.0, 0.0, 0.0 };
+        }
+
+        private static double EstimatePointTolerance(IList<double[]> points)
+        {
+            double maxDistance = 0.0;
+            for (int i = 0; i < points.Count; i++)
+            {
+                for (int j = i + 1; j < points.Count; j++)
+                {
+                    maxDistance = Math.Max(maxDistance, Math.Sqrt(DistanceSquared(points[i], points[j])));
+                }
+            }
+            return Math.Max(maxDistance, 1e-9) * 1e-8;
+        }
+
+        private static string BuildPlaneKey(double[] normal, double offset, double tolerance)
+        {
+            double scale = Math.Max(tolerance * 10.0, 1e-9);
+            return RoundForKey(normal[0], scale) + "|" +
+                RoundForKey(normal[1], scale) + "|" +
+                RoundForKey(normal[2], scale) + "|" +
+                RoundForKey(offset, scale);
+        }
+
+        private static string RoundForKey(double value, double scale)
+        {
+            return Math.Round(value / scale).ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static double SignedDistance(double[] normal, double[] pointOnPlane, double[] point)
+        {
+            return Dot(normal, Subtract(point, pointOnPlane));
+        }
+
+        private static double[] Subtract(double[] lhs, double[] rhs)
+        {
+            return new[] { lhs[0] - rhs[0], lhs[1] - rhs[1], lhs[2] - rhs[2] };
+        }
+
+        private static double Dot(double[] lhs, double[] rhs)
+        {
+            return lhs[0] * rhs[0] + lhs[1] * rhs[1] + lhs[2] * rhs[2];
+        }
+
+        private static double[] Cross(double[] lhs, double[] rhs)
+        {
+            return new[]
+            {
+                lhs[1] * rhs[2] - lhs[2] * rhs[1],
+                lhs[2] * rhs[0] - lhs[0] * rhs[2],
+                lhs[0] * rhs[1] - lhs[1] * rhs[0]
+            };
+        }
+
+        private static void NormalizeInPlace(double[] vector)
+        {
+            double length = Math.Sqrt(VectorLengthSquared(vector));
+            if (length <= 0.0)
+            {
+                return;
+            }
+
+            vector[0] /= length;
+            vector[1] /= length;
+            vector[2] /= length;
+        }
+
+        private static double DistanceSquared(double[] lhs, double[] rhs)
+        {
+            double dx = lhs[0] - rhs[0];
+            double dy = lhs[1] - rhs[1];
+            double dz = lhs[2] - rhs[2];
+            return dx * dx + dy * dy + dz * dz;
+        }
+
+        private static double VectorLengthSquared(double[] vector)
+        {
+            return vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2];
+        }
+
+        private sealed class HullPlane
+        {
+            public HullPlane(double[] normal, double offset)
+            {
+                Normal = normal;
+                Offset = offset;
+            }
+
+            public double[] Normal { get; private set; }
+
+            public double Offset { get; private set; }
+        }
+
         private static void WriteBinaryStlTriangle(
             BinaryWriter writer,
             double[] p0,
@@ -888,6 +1570,7 @@ namespace SW2URDF.URDFExport
         {
             private const double MinimumDimension = 1e-9;
             private bool hasPoint;
+            private readonly List<double[]> points = new List<double[]>();
 
             public double MinX { get; private set; }
             public double MinY { get; private set; }
@@ -899,6 +1582,24 @@ namespace SW2URDF.URDFExport
             public double Width => MaxX - MinX;
             public double Depth => MaxY - MinY;
             public double Height => MaxZ - MinZ;
+            public IReadOnlyList<double[]> Points => points;
+            public double[] Center => new[]
+            {
+                (MinX + MaxX) / 2.0,
+                (MinY + MaxY) / 2.0,
+                (MinZ + MaxZ) / 2.0
+            };
+            public int LongestAxisIndex
+            {
+                get
+                {
+                    if (Width >= Depth && Width >= Height)
+                    {
+                        return 0;
+                    }
+                    return Depth >= Height ? 1 : 2;
+                }
+            }
 
             public bool IsUsable =>
                 hasPoint &&
@@ -918,6 +1619,7 @@ namespace SW2URDF.URDFExport
                 {
                     return;
                 }
+                points.Add(new[] { x, y, z });
 
                 if (!hasPoint)
                 {
@@ -949,6 +1651,24 @@ namespace SW2URDF.URDFExport
                     new[] { MaxX, MaxY, MaxZ },
                     new[] { MinX, MaxY, MaxZ }
                 };
+            }
+
+            public double GetDimension(int axis)
+            {
+                switch (axis)
+                {
+                    case 0:
+                        return Width;
+
+                    case 1:
+                        return Depth;
+
+                    case 2:
+                        return Height;
+
+                    default:
+                        throw new ArgumentOutOfRangeException("axis");
+                }
             }
 
             private static bool IsFinite(double value)
@@ -1047,6 +1767,11 @@ namespace SW2URDF.URDFExport
 
         private StlExportStats SaveSTL(Link link, string windowsMeshFilename)
         {
+            return SaveSTL(link, windowsMeshFilename, null);
+        }
+
+        private StlExportStats SaveSTL(Link link, string windowsMeshFilename, double? reductionRatioOverride)
+        {
             using (OperationHeartbeat.Start(logger, "STL export for link " + link.Name))
             {
                 int errors = 0;
@@ -1069,7 +1794,7 @@ namespace SW2URDF.URDFExport
                 int saveOptions = (int)swSaveAsOptions_e.swSaveAsOptions_Silent |
                     (int)swSaveAsOptions_e.swSaveAsOptions_Copy;
                 StlMeshSettings meshSettings =
-                    SetLinkSpecificSTLPreferences(names["geo"], link, ActiveDoc);
+                    SetLinkSpecificSTLPreferences(names["geo"], link, ActiveDoc, reductionRatioOverride);
                 StlExportStats stlStats = CreateStlExportStats(link, meshSettings);
 
                 logger.Info("Saving STL to " + windowsMeshFilename);
@@ -1144,8 +1869,8 @@ namespace SW2URDF.URDFExport
             {
                 logger.Warn("Exporting part STL failed with error " + errors + " or warnings " + warnings);
             }
-            URDFRobot.BaseLink.Visual.Geometry.Mesh.Filename = meshFileName;
-            URDFRobot.BaseLink.Collision.Geometry.Mesh.Filename = meshFileName;
+            URDFRobot.BaseLink.Visual.Geometry.UseMesh(meshFileName);
+            URDFRobot.BaseLink.Collision.Geometry.UseMesh(meshFileName);
 
             URDFRobot.BaseLink.Visual.Material.Texture.Filename =
                 package.TexturesDirectory + Path.GetFileName(URDFRobot.BaseLink.Visual.Material.Texture.wFilename);
@@ -1323,9 +2048,22 @@ namespace SW2URDF.URDFExport
         //If the user selected something specific for a particular link, that is handled here.
         private StlMeshSettings SetLinkSpecificSTLPreferences(string CoordinateSystemName, Link link, ModelDoc2 doc)
         {
+            return SetLinkSpecificSTLPreferences(CoordinateSystemName, link, doc, null);
+        }
+
+        //If the user selected something specific for a particular link, that is handled here.
+        private StlMeshSettings SetLinkSpecificSTLPreferences(
+            string CoordinateSystemName,
+            Link link,
+            ModelDoc2 doc,
+            double? reductionRatioOverride)
+        {
             doc.Extension.SetUserPreferenceString((int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem,
                 (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified, CoordinateSystemName);
-            StlMeshSettings settings = CreateStlMeshSettings(link.STLQualityFine, link.MeshReductionRatio);
+            double reductionRatio = reductionRatioOverride.HasValue
+                ? reductionRatioOverride.Value
+                : link.MeshReductionRatio;
+            StlMeshSettings settings = CreateStlMeshSettings(link.STLQualityFine, reductionRatio);
             if (settings.UseCustom)
             {
                 iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality,

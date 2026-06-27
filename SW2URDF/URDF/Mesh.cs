@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Runtime.Serialization;
 
 namespace SW2URDF.URDF
@@ -20,6 +22,21 @@ namespace SW2URDF.URDF
             FilenameAttribute = new URDFAttribute("filename", true, null);
 
             Attributes.Add(FilenameAttribute);
+        }
+
+        public void Clear()
+        {
+            FilenameAttribute.Value = null;
+        }
+
+        public override void AppendToCSVDictionary(List<string> context, OrderedDictionary dictionary)
+        {
+            if (!ElementContainsData())
+            {
+                return;
+            }
+
+            base.AppendToCSVDictionary(context, dictionary);
         }
     }
 }

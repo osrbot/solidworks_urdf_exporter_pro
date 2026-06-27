@@ -384,19 +384,33 @@ namespace SW2URDF.UI
                 CollisionMeshStrategy.VisualMesh,
                 ChineseUiText.Translate("Visual STL copy", "\u590d\u7528\u53ef\u89c6 STL")));
             comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
-                CollisionMeshStrategy.AccurateMesh,
-                ChineseUiText.Translate("Accurate STL (copy now)", "\u7cbe\u51c6 STL\uff08\u5f53\u524d\u590d\u7528\uff09")));
+                CollisionMeshStrategy.SimplifiedMesh,
+                ChineseUiText.Translate("Simplified collision STL", "\u7b80\u5316 collision STL")));
             comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
-                CollisionMeshStrategy.Primitive,
+                CollisionMeshStrategy.AccurateMesh,
+                ChineseUiText.Translate("Accurate collision STL", "\u7cbe\u51c6 collision STL")));
+            comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
+                CollisionMeshStrategy.BoxPrimitive,
                 ChineseUiText.Translate("Box primitive", "\u5305\u56f4\u76d2 primitive")));
             comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
+                CollisionMeshStrategy.CylinderPrimitive,
+                ChineseUiText.Translate("Cylinder primitive", "\u5706\u67f1 primitive")));
+            comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
+                CollisionMeshStrategy.SpherePrimitive,
+                ChineseUiText.Translate("Sphere primitive", "\u7403\u4f53 primitive")));
+            comboBoxCollisionStrategy.Items.Add(new CollisionStrategyChoice(
                 CollisionMeshStrategy.ConvexHull,
-                ChineseUiText.Translate("Convex hull (box fallback)", "\u51f8\u5305\uff08\u5305\u56f4\u76d2\u56de\u9000\uff09")));
+                ChineseUiText.Translate("Convex hull STL", "\u51f8\u5305 STL")));
             comboBoxCollisionStrategy.SelectedIndex = 0;
         }
 
         private void SelectCollisionStrategy(CollisionMeshStrategy strategy)
         {
+            if (strategy == CollisionMeshStrategy.Primitive)
+            {
+                strategy = CollisionMeshStrategy.BoxPrimitive;
+            }
+
             foreach (object item in comboBoxCollisionStrategy.Items)
             {
                 CollisionStrategyChoice choice = item as CollisionStrategyChoice;
