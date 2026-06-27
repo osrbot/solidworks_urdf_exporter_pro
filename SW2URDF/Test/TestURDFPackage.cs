@@ -348,6 +348,7 @@ namespace SW2URDF.Test
             Assert.Contains("## ROS Package Parity", report);
             Assert.Contains("Parity mismatches: 0", report);
             Assert.Contains("| package | package.xml | yes | yes | yes |", report);
+            Assert.Contains("| build | ROS1 CMakeLists.txt / ROS2 setup.py | yes | yes | yes |", report);
             Assert.Contains("| urdf | robot_900001.urdf | yes | yes | yes |", report);
             Assert.Contains("| config | inertial_validation.csv | yes | yes | no |", report);
             Assert.Contains("| config | mesh_manifest.csv | yes | yes | no |", report);
@@ -476,6 +477,80 @@ namespace SW2URDF.Test
                 report);
             Assert.Contains(
                 "FAIL: ROS 2 mesh reference is unresolved: package://rover_description/meshes/collision/base_link.STL",
+                report);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
+        [Fact]
+        public void TestExportReportFailsWhenRos2BuildFileIsMissing()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            pkg.CreateCMakeLists();
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsPackageDirectory, "package.xml"),
+                "<?xml version=\"1.0\"?><package><name>rover_description</name></package>",
+                new UTF8Encoding(false));
+
+            string visualMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "visual");
+            string collisionMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "collision");
+            Directory.CreateDirectory(visualMeshDirectory);
+            Directory.CreateDirectory(collisionMeshDirectory);
+            string visualMesh = Path.Combine(visualMeshDirectory, "base_link.STL");
+            string collisionMesh = Path.Combine(collisionMeshDirectory, "base_link.STL");
+            File.WriteAllText(visualMesh, "visual");
+            File.WriteAllText(collisionMesh, "collision");
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "inertial_validation.csv"),
+                "link,status\r\nbase_link,PASS\r\n",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "mesh_manifest.csv"),
+                "link,visual_exists,collision_exists\r\nbase_link,true,true\r\n",
+                new UTF8Encoding(false));
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(
+                ros1Urdf,
+                "<?xml version=\"1.0\"?><robot name=\"robot_900001\">" +
+                "<link name=\"base_link\"><visual><geometry><mesh filename=\"package://rover_description/meshes/visual/base_link.STL\" /></geometry></visual>" +
+                "<collision><geometry><mesh filename=\"package://rover_description/meshes/collision/base_link.STL\" /></geometry></collision></link></robot>",
+                new UTF8Encoding(false));
+            pkg.CreateRos2Package(ros1Urdf);
+
+            File.Delete(Path.Combine(pkg.WindowsRos2PackageDirectory, "setup.py"));
+
+            ExportHelper.WriteExportReport(
+                pkg,
+                ros1Urdf,
+                new[]
+                {
+                    new ExportHelper.InertialValidationRecord(
+                        "base_link",
+                        "Origin_global",
+                        new ExportHelper.InertialValidationRow("mass", "kg", 1.0, 1.0))
+                },
+                new ExportHelper.MeshExportRecord[0],
+                true,
+                MeshExportFormat.STL,
+                TimeSpan.FromSeconds(1));
+
+            string report = File.ReadAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
+                Encoding.UTF8);
+            Assert.Contains("Status: FAIL", report);
+            Assert.Contains("ROS 2 setup.py | MISSING", report);
+            Assert.Contains("Parity mismatches: 1", report);
+            Assert.Contains("| build | ROS1 CMakeLists.txt / ROS2 setup.py | yes | no | yes |", report);
+            Assert.Contains(
+                "FAIL: ROS package parity mismatch for build/ROS1 CMakeLists.txt / ROS2 setup.py: ROS1=true, ROS2=false",
                 report);
 
             Directory.Delete(tempDirectory, true);
