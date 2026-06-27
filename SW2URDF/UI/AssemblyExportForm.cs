@@ -849,33 +849,56 @@ namespace SW2URDF.UI
             const int rightMargin = 12;
             const int bottomMargin = 4;
             const int verticalGap = 4;
-            int buttonTop = ClientSize.Height - bottomMargin - buttonJointNext.Height;
+            int footerLeft = treeViewJointTree.Right + 24;
+            int buttonTop = 0;
+            int label4Top = 0;
+            int label27Top = 0;
 
-            buttonJointCancel.Top = buttonTop;
-            buttonJointNext.Top = buttonTop;
-            buttonJointNext.Left = ClientSize.Width - rightMargin - buttonJointNext.Width;
-
-            int label4Top = buttonTop - label27.Height - label4.Height - verticalGap;
-            int label27Top = label4Top + label4.Height + 1;
-
-            PositionJointMimicControls(label4Top - verticalGap);
-            int mimicBottom = GetMimicControlsBottom();
-            if (mimicBottom + verticalGap > label4Top)
+            for (int attempts = 0; attempts < 4; attempts++)
             {
-                int overflow = mimicBottom + verticalGap - label4Top;
-                ClientSize = new Size(ClientSize.Width, ClientSize.Height + overflow);
-
                 buttonTop = ClientSize.Height - bottomMargin - buttonJointNext.Height;
                 buttonJointCancel.Top = buttonTop;
                 buttonJointNext.Top = buttonTop;
                 buttonJointNext.Left = ClientSize.Width - rightMargin - buttonJointNext.Width;
 
+                int footerWidth = Math.Max(120, ClientSize.Width - rightMargin - footerLeft);
+                FitLabelToWidth(label4, footerWidth);
+                FitLabelToWidth(label27, footerWidth);
+
                 label4Top = buttonTop - label27.Height - label4.Height - verticalGap;
                 label27Top = label4Top + label4.Height + 1;
                 PositionJointMimicControls(label4Top - verticalGap);
+
+                int overflow = GetMimicControlsBottom() + verticalGap - label4Top;
+                if (overflow <= 0)
+                {
+                    break;
+                }
+
+                ClientSize = new Size(ClientSize.Width, ClientSize.Height + overflow);
             }
 
-            label27.Left = treeViewJointTree.Right + 24;
+            int requiredLabelTop = GetMimicControlsBottom() + verticalGap;
+            if (requiredLabelTop > label4Top)
+            {
+                int footerShift = requiredLabelTop - label4Top;
+                label4Top += footerShift;
+                label27Top += footerShift;
+
+                int footerBottom = label27Top + label27.Height;
+                int requiredButtonTop = footerBottom + verticalGap;
+                if (requiredButtonTop > buttonTop)
+                {
+                    int growth = requiredButtonTop - buttonTop;
+                    ClientSize = new Size(ClientSize.Width, ClientSize.Height + growth);
+                    buttonTop += growth;
+                    buttonJointCancel.Top = buttonTop;
+                    buttonJointNext.Top = buttonTop;
+                    buttonJointNext.Left = ClientSize.Width - rightMargin - buttonJointNext.Width;
+                }
+            }
+
+            label27.Left = footerLeft;
             label4.Left = label27.Left;
             label4.Top = label4Top;
             label27.Top = label27Top;
@@ -909,59 +932,67 @@ namespace SW2URDF.UI
         private int GetMimicControlsBottom()
         {
             int bottom = MimicCheckBox.Bottom;
-            if (MimicJointComboBox.Visible)
+            if (!ShouldLayoutMimicDetails())
             {
-                bottom = Math.Max(bottom, MimicJointComboBox.Bottom);
+                return bottom;
             }
 
-            if (MimicJointLabel.Visible)
-            {
-                bottom = Math.Max(bottom, MimicJointLabel.Bottom);
-            }
-
-            if (MimicMultiplierLabel.Visible)
-            {
-                bottom = Math.Max(bottom, MimicMultiplierLabel.Bottom);
-            }
-
-            if (textBoxMimicMultiplier.Visible)
-            {
-                bottom = Math.Max(bottom, textBoxMimicMultiplier.Bottom);
-            }
-
-            if (MimicOffsetLabel.Visible)
-            {
-                bottom = Math.Max(bottom, MimicOffsetLabel.Bottom);
-            }
-
-            if (textBoxMimicOffset.Visible)
-            {
-                bottom = Math.Max(bottom, textBoxMimicOffset.Bottom);
-            }
-
-            if (MimicEquationLabel.Visible)
-            {
-                bottom = Math.Max(bottom, MimicEquationLabel.Bottom);
-            }
-
-            return bottom;
+            bottom = Math.Max(bottom, MimicJointComboBox.Bottom);
+            bottom = Math.Max(bottom, MimicJointLabel.Bottom);
+            bottom = Math.Max(bottom, MimicMultiplierLabel.Bottom);
+            bottom = Math.Max(bottom, textBoxMimicMultiplier.Bottom);
+            bottom = Math.Max(bottom, MimicOffsetLabel.Bottom);
+            bottom = Math.Max(bottom, textBoxMimicOffset.Bottom);
+            return Math.Max(bottom, MimicEquationLabel.Bottom);
         }
 
-        private void PositionJointMimicControls(int maxBottom)
+        private bool ShouldLayoutMimicDetails()
         {
-            const int horizontalGap = 8;
-            int left = textBoxCalibrationRising.Left;
-            int rowOneHeight = Math.Max(MimicJointComboBox.Height, MimicCheckBox.Height);
-            int rowTwoHeight = Math.Max(
-                Math.Max(textBoxMimicMultiplier.Height, textBoxMimicOffset.Height),
-                MimicEquationLabel.Height);
-            bool showDetails = MimicJointComboBox.Visible ||
+            return MimicCheckBox.Checked ||
+                MimicJointComboBox.Visible ||
                 MimicJointLabel.Visible ||
                 MimicMultiplierLabel.Visible ||
                 textBoxMimicMultiplier.Visible ||
                 MimicOffsetLabel.Visible ||
                 textBoxMimicOffset.Visible ||
                 MimicEquationLabel.Visible;
+        }
+
+        private void PositionJointMimicControls(int maxBottom)
+        {
+            const int horizontalGap = 8;
+            int left = textBoxCalibrationRising.Left;
+            bool showDetails = ShouldLayoutMimicDetails();
+
+            int rowOneHeight = Math.Max(
+                Math.Max(MimicJointComboBox.Height, MimicCheckBox.Height),
+                MimicJointLabel.Height);
+            int rowTwoControlHeight = Math.Max(
+                Math.Max(textBoxMimicMultiplier.Height, textBoxMimicOffset.Height),
+                Math.Max(MimicMultiplierLabel.Height, MimicOffsetLabel.Height));
+            int multiplierTextLeft = left + MimicMultiplierLabel.Width + horizontalGap;
+            int offsetLabelLeft = multiplierTextLeft + textBoxMimicMultiplier.Width + 16;
+            int offsetTextLeft = offsetLabelLeft + MimicOffsetLabel.Width + horizontalGap;
+            int inlineEquationLeft = offsetTextLeft + textBoxMimicOffset.Width + 18;
+            int maxRight = ClientSize.Width - 12;
+
+            MimicEquationLabel.AutoSize = true;
+            MimicEquationLabel.MaximumSize = Size.Empty;
+            int preferredEquationWidth = MimicEquationLabel.GetPreferredSize(Size.Empty).Width;
+            bool stackEquation = showDetails &&
+                inlineEquationLeft + preferredEquationWidth > maxRight;
+            int equationLeft = stackEquation ? left : inlineEquationLeft;
+            int equationWidth = Math.Max(1, maxRight - equationLeft);
+            FitLabelToWidth(MimicEquationLabel, equationWidth);
+
+            int rowTwoHeight = rowTwoControlHeight;
+            if (showDetails)
+            {
+                rowTwoHeight = stackEquation
+                    ? rowTwoControlHeight + 4 + MimicEquationLabel.Height
+                    : Math.Max(rowTwoControlHeight, MimicEquationLabel.Height);
+            }
+
             int mimicHeight = rowOneHeight + (showDetails ? rowTwoHeight + 4 : 0);
             int rowOneTop = Math.Min(textBoxKVelocity.Bottom + 8, maxBottom - mimicHeight);
             rowOneTop = Math.Max(textBoxKVelocity.Bottom + 2, rowOneTop);
@@ -976,20 +1007,31 @@ namespace SW2URDF.UI
 
             MimicMultiplierLabel.Left = left;
             MimicMultiplierLabel.Top = rowTwoTop + 3;
-            textBoxMimicMultiplier.Left = MimicMultiplierLabel.Right + horizontalGap;
+            textBoxMimicMultiplier.Left = multiplierTextLeft;
             textBoxMimicMultiplier.Top = rowTwoTop;
-            MimicOffsetLabel.Left = textBoxMimicMultiplier.Right + 16;
+            MimicOffsetLabel.Left = offsetLabelLeft;
             MimicOffsetLabel.Top = rowTwoTop + 3;
-            textBoxMimicOffset.Left = MimicOffsetLabel.Right + horizontalGap;
+            textBoxMimicOffset.Left = offsetTextLeft;
             textBoxMimicOffset.Top = rowTwoTop;
-            MimicEquationLabel.Left = textBoxMimicOffset.Right + 18;
-            MimicEquationLabel.Top = rowTwoTop + 3;
+            MimicEquationLabel.Left = equationLeft;
+            MimicEquationLabel.Top = stackEquation
+                ? rowTwoTop + rowTwoControlHeight + 4
+                : rowTwoTop + 3;
+        }
 
-            int maxRight = ClientSize.Width - 12;
-            if (MimicEquationLabel.Right > maxRight)
-            {
-                MimicEquationLabel.Left = maxRight - MimicEquationLabel.Width;
-            }
+        private static void FitLabelToWidth(Label label, int maxWidth)
+        {
+            int width = Math.Max(1, maxWidth);
+            label.AutoSize = false;
+            label.MaximumSize = new Size(width, 0);
+            Size measured = TextRenderer.MeasureText(
+                label.Text ?? "",
+                label.Font,
+                new Size(width, Int32.MaxValue),
+                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+            label.Size = new Size(
+                width,
+                Math.Max(label.Font.Height + 2, measured.Height + 2));
         }
     }
 }

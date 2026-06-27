@@ -26,6 +26,7 @@ namespace SW2URDF.Test
                 AssertBottomAnchored(GetControl<Label>(form, "label27"));
                 form.PerformLayout();
                 AssertJointFooterGeometry(form);
+                AssertJointFooterTextFits(form);
                 AssertMimicControlsDoNotOverlapFooter(form);
                 AssertFooterButtonsFitText(form);
                 AssertInertiaMatrixMirrors(form);
@@ -35,6 +36,7 @@ namespace SW2URDF.Test
                 AssertLinkPageGeometry(form);
                 AssertInertiaMatrixMirrors(form);
                 AssertJointFooterGeometry(form);
+                AssertJointFooterTextFits(form);
                 AssertMimicControlsDoNotOverlapFooter(form);
                 AssertFooterButtonsFitText(form);
 
@@ -43,6 +45,7 @@ namespace SW2URDF.Test
                 AssertLinkPageGeometry(form);
                 AssertInertiaMatrixMirrors(form);
                 AssertJointFooterGeometry(form);
+                AssertJointFooterTextFits(form);
                 AssertMimicControlsDoNotOverlapFooter(form);
                 AssertFooterButtonsFitText(form);
 
@@ -51,8 +54,40 @@ namespace SW2URDF.Test
                 AssertLinkPageGeometry(form);
                 AssertInertiaMatrixMirrors(form);
                 AssertJointFooterGeometry(form);
+                AssertJointFooterTextFits(form);
                 AssertMimicControlsDoNotOverlapFooter(form);
                 AssertFooterButtonsFitText(form);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestJointFooterWrapsLongLocalizedText()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                Label firstNote = GetControl<Label>(form, "label4");
+                Label secondNote = GetControl<Label>(form, "label27");
+                Label mimicEquation = GetControl<Label>(form, "MimicEquationLabel");
+                CheckBox mimicCheckBox = GetControl<CheckBox>(form, "MimicCheckBox");
+                firstNote.Text = "空白项不会写入 URDF。请确认坐标系、轴和惯性参数已经在 SolidWorks 中正确配置。";
+                secondNote.Text = "* 字段组为必填；如果字段过长，界面必须换行显示而不是裁切。";
+                mimicEquation.Text =
+                    "pos = multiplier * pos_other + offset; long localized mimic formula should wrap instead of covering adjacent controls";
+
+                form.ClientSize = new Size(1073, 634);
+                mimicCheckBox.Checked = true;
+                form.PerformLayout();
+
+                AssertJointFooterGeometry(form);
+                AssertJointFooterTextFits(form);
+                AssertMimicControlsDoNotOverlapFooter(form);
             }
             finally
             {
@@ -138,6 +173,32 @@ namespace SW2URDF.Test
                     secondNote.Bottom, form.ClientSize.Height));
         }
 
+        private static void AssertJointFooterTextFits(AssemblyExportForm form)
+        {
+            Label firstNote = GetControl<Label>(form, "label4");
+            Label secondNote = GetControl<Label>(form, "label27");
+
+            AssertWrappedLabelFits(firstNote, form.ClientSize.Width - 12);
+            AssertWrappedLabelFits(secondNote, form.ClientSize.Width - 12);
+        }
+
+        private static void AssertWrappedLabelFits(Label label, int maxRight)
+        {
+            Size measured = TextRenderer.MeasureText(
+                label.Text ?? "",
+                label.Font,
+                new Size(label.Width, Int32.MaxValue),
+                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+            Assert.True(
+                label.Right <= maxRight,
+                String.Format("{0} is clipped horizontally: right {1}, max {2}.",
+                    label.Name, label.Right, maxRight));
+            Assert.True(
+                measured.Height <= label.Height,
+                String.Format("{0} is clipped vertically: preferred {1}, actual {2}.",
+                    label.Name, measured.Height, label.Height));
+        }
+
         private static void AssertMimicControlsDoNotOverlapFooter(AssemblyExportForm form)
         {
             CheckBox mimicCheckBox = GetControl<CheckBox>(form, "MimicCheckBox");
@@ -163,15 +224,33 @@ namespace SW2URDF.Test
                 Rectangle mimicBounds = mimicControl.Bounds;
                 Assert.False(
                     mimicBounds.IntersectsWith(firstNote.Bounds),
-                    String.Format("{0} overlaps the first footer note.", mimicControl.Name));
+                    String.Format("{0} overlaps the first footer note: visible={1}, mimic={2}, footer={3}.",
+                        mimicControl.Name,
+                        mimicControl.Visible,
+                        mimicBounds,
+                        firstNote.Bounds));
                 Assert.False(
                     mimicBounds.IntersectsWith(secondNote.Bounds),
-                    String.Format("{0} overlaps the second footer note.", mimicControl.Name));
+                    String.Format("{0} overlaps the second footer note: visible={1}, mimic={2}, footer={3}.",
+                        mimicControl.Name,
+                        mimicControl.Visible,
+                        mimicBounds,
+                        secondNote.Bounds));
                 Assert.True(
                     mimicBounds.Bottom < firstNote.Top,
                     String.Format("{0} should stay above the footer note: {1} >= {2}.",
                         mimicControl.Name, mimicBounds.Bottom, firstNote.Top));
             }
+
+            TextBox offsetBox = GetControl<TextBox>(form, "textBoxMimicOffset");
+            Label equation = GetControl<Label>(form, "MimicEquationLabel");
+            Assert.True(
+                equation.Left >= offsetBox.Right || equation.Top >= offsetBox.Bottom,
+                String.Format(
+                    "Mimic equation overlaps offset input: equation={0}, offset={1}.",
+                    equation.Bounds,
+                    offsetBox.Bounds));
+            AssertWrappedLabelFits(equation, form.ClientSize.Width - 12);
         }
 
         private static void AssertFooterButtonsFitText(AssemblyExportForm form)
