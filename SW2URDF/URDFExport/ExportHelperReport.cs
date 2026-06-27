@@ -879,6 +879,9 @@ namespace SW2URDF.URDFExport
             int displayBlockedByInvalidPhysics = rows.Count(r =>
                 String.Equals(r.Row.Quantity, "ellipsoid.display", StringComparison.Ordinal) &&
                 r.Row.Message.IndexOf("physical inertia is invalid", StringComparison.OrdinalIgnoreCase) >= 0);
+            int displayFailedAfterValidPhysics = rows.Count(r =>
+                String.Equals(r.Row.Quantity, "ellipsoid.display", StringComparison.Ordinal) &&
+                r.Row.Message.IndexOf("although physical checks passed", StringComparison.OrdinalIgnoreCase) >= 0);
             string failedLinks = String.Join(", ",
                 rows.Where(r => String.Equals(r.Row.Status, "FAIL", StringComparison.Ordinal))
                     .Select(r => r.LinkName)
@@ -896,6 +899,13 @@ namespace SW2URDF.URDFExport
                     .Select(r => r.LinkName)
                     .Distinct()
                     .OrderBy(v => v));
+            string displayFailureLinks = String.Join(", ",
+                rows.Where(r =>
+                        String.Equals(r.Row.Quantity, "ellipsoid.display", StringComparison.Ordinal) &&
+                        r.Row.Message.IndexOf("although physical checks passed", StringComparison.OrdinalIgnoreCase) >= 0)
+                    .Select(r => r.LinkName)
+                    .Distinct()
+                    .OrderBy(v => v));
 
             builder.AppendLine("## Inertial Validation");
             builder.AppendLine();
@@ -907,10 +917,14 @@ namespace SW2URDF.URDFExport
             builder.AppendLine("- Inertia display warnings: " + displayWarnings.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Display blocked by invalid physics: " +
                 displayBlockedByInvalidPhysics.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Display failed after valid physics: " +
+                displayFailedAfterValidPhysics.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Failed links: " + (String.IsNullOrWhiteSpace(failedLinks) ? "none" : failedLinks));
             builder.AppendLine("- Warning links: " + (String.IsNullOrWhiteSpace(warningLinks) ? "none" : warningLinks));
             builder.AppendLine("- Magnitude warning links: " +
                 (String.IsNullOrWhiteSpace(magnitudeWarningLinks) ? "none" : magnitudeWarningLinks));
+            builder.AppendLine("- Display failure links: " +
+                (String.IsNullOrWhiteSpace(displayFailureLinks) ? "none" : displayFailureLinks));
             builder.AppendLine("- CSV: config/inertial_validation.csv");
             builder.AppendLine();
         }

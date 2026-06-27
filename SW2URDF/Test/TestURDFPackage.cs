@@ -371,7 +371,9 @@ namespace SW2URDF.Test
             Assert.Contains("Magnitude warnings: 0", report);
             Assert.Contains("Inertia display warnings: 0", report);
             Assert.Contains("Display blocked by invalid physics: 0", report);
+            Assert.Contains("Display failed after valid physics: 0", report);
             Assert.Contains("Magnitude warning links: none", report);
+            Assert.Contains("Display failure links: none", report);
             Assert.Contains("Mesh manifest rows: 1", report);
             Assert.Contains("Requested collision strategies: VisualMesh=1", report);
             Assert.Contains("Effective collision strategies: VisualMesh=1", report);
@@ -564,6 +566,62 @@ namespace SW2URDF.Test
             Assert.Contains("Warning links: tiny_mass_link", report);
             Assert.Contains("Magnitude warning links: tiny_mass_link", report);
             Assert.Contains("WARN: Inertial validation warning for link tiny_mass_link (1 rows).", report);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
+        [Fact]
+        public void TestExportReportDistinguishesDisplayFailureFromInvalidPhysics()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            pkg.CreateCMakeLists();
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsPackageDirectory, "package.xml"),
+                "<?xml version=\"1.0\"?><package><name>rover_description</name></package>",
+                new UTF8Encoding(false));
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(
+                ros1Urdf,
+                "<?xml version=\"1.0\"?><robot name=\"robot_900001\"><link name=\"display_link\" /></robot>",
+                new UTF8Encoding(false));
+            pkg.CreateRos2Package(ros1Urdf);
+
+            ExportHelper.InertialValidationRecord displayWarning =
+                new ExportHelper.InertialValidationRecord(
+                    "display_link",
+                    "Origin_global",
+                    ExportHelper.InertialValidationRow.Diagnostic(
+                        "ellipsoid.display",
+                        "display",
+                        "WARN",
+                        "Ellipsoid display failed although physical checks passed: SolidWorks could not display the inertia preview curve."));
+
+            ExportHelper.WriteExportReport(
+                pkg,
+                ros1Urdf,
+                new[] { displayWarning },
+                new ExportHelper.MeshExportRecord[0],
+                false,
+                MeshExportFormat.STL,
+                TimeSpan.FromSeconds(1));
+
+            string report = File.ReadAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
+                Encoding.UTF8);
+            Assert.Contains("Status: WARN", report);
+            Assert.Contains("Inertia display warnings: 1", report);
+            Assert.Contains("Display blocked by invalid physics: 0", report);
+            Assert.Contains("Display failed after valid physics: 1", report);
+            Assert.Contains("Display failure links: display_link", report);
+            Assert.Contains("WARN: Inertial validation warning for link display_link (1 rows).", report);
 
             Directory.Delete(tempDirectory, true);
         }
