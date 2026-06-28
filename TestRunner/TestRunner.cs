@@ -1,6 +1,8 @@
 ﻿using SolidWorks.Interop.sldworks;
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Reflection;
 using System.Threading;
 using Xunit.Abstractions;
 using Xunit.Runners;
@@ -21,18 +23,28 @@ namespace TestRunner
 
         static string TestNameFilter = "";
 
+        [SuppressMessage(
+            "Design",
+            "CA1031:Do not catch general exception types",
+            Justification = "The test runner entry point must print startup failures instead of crashing silently.")]
         public static int Main(string[] args)
         {
-            string solutionDir =
-                Path.GetDirectoryName( // sw2urdf
-                Path.GetDirectoryName( // TestRunner
-                Path.GetDirectoryName( // bin
-                Path.GetDirectoryName( // x64
-                Path.GetDirectoryName( // net452
-                    AppDomain.CurrentDomain.BaseDirectory // Debug
-                )))));
+            try
+            {
+                return Run(args);
+            }
+            catch (Exception ex)
+            {
+                PrintException(ex, "");
+                return 1;
+            }
+        }
 
-            string testAssembly = Path.Combine(solutionDir, "SW2URDF\\bin\\x64\\Debug\\SW2URDF.dll");
+        private static int Run(string[] args)
+        {
+            string solutionDir = FindSolutionDirectory(AppDomain.CurrentDomain.BaseDirectory);
+
+            string testAssembly = Path.Combine(solutionDir, "SW2URDF", "bin", "x64", "Debug", "SW2URDF.dll");
             string typeName = null;
 
             using (var runner = AssemblyRunner.WithAppDomain(testAssembly))
@@ -53,6 +65,61 @@ namespace TestRunner
                 finished.WaitOne();
                 finished.Dispose();
                 return result;
+            }
+        }
+
+        private static string FindSolutionDirectory(string startDirectory)
+        {
+            string directory = Path.GetFullPath(startDirectory);
+            for (int i = 0; i < 12 && !String.IsNullOrWhiteSpace(directory); i++)
+            {
+                if (File.Exists(Path.Combine(directory, "SW2URDF.sln")))
+                {
+                    return directory;
+                }
+
+                DirectoryInfo parent = Directory.GetParent(
+                    directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (parent == null)
+                {
+                    break;
+                }
+                directory = parent.FullName;
+            }
+
+            throw new DirectoryNotFoundException(
+                "Could not find SW2URDF.sln above " + startDirectory);
+        }
+
+        private static void PrintException(Exception ex, string indent)
+        {
+            if (ex == null)
+            {
+                return;
+            }
+
+            Console.Error.WriteLine(indent + "Unhandled exception type: " + ex.GetType().FullName);
+            Console.Error.WriteLine(indent + "Message: " + ex.Message);
+            if (!String.IsNullOrWhiteSpace(ex.StackTrace))
+            {
+                Console.Error.WriteLine(indent + "Stack:");
+                Console.Error.WriteLine(ex.StackTrace);
+            }
+
+            ReflectionTypeLoadException loaderException = ex as ReflectionTypeLoadException;
+            if (loaderException != null && loaderException.LoaderExceptions != null)
+            {
+                for (int i = 0; i < loaderException.LoaderExceptions.Length; i++)
+                {
+                    Console.Error.WriteLine(indent + "Loader exception " + i + ":");
+                    PrintException(loaderException.LoaderExceptions[i], indent + "  ");
+                }
+            }
+
+            if (ex.InnerException != null)
+            {
+                Console.Error.WriteLine(indent + "Inner exception:");
+                PrintException(ex.InnerException, indent + "  ");
             }
         }
 
