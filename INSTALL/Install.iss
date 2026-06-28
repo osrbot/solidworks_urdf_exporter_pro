@@ -13,14 +13,17 @@
 #define CommitVersion   GetFileProductVersion(DllLocation)
 #if CommitVersion == ""
   #define InstallerVersion BuildVersion
-  #define InstallerCommitFilePart "unknown"
+  #define DefaultInstallerCommit "unknown"
 #else
   #define InstallerVersion CommitVersion
-  #define InstallerCommitFilePart CommitVersion
+  #define DefaultInstallerCommit CommitVersion
 #endif
-#define AVF1            Copy(BuildVersion, 1, Pos(".", BuildVersion) - 1) + "_" + Copy(BuildVersion, Pos(".", BuildVersion) + 1)
-#define AVF2            Copy(AVF1,       1, Pos(".", AVF1      ) - 1) + "_" + Copy(AVF1      , Pos(".", AVF1      ) + 1)
-#define AppVersionFile  Copy(AVF2,       1, Pos(".", AVF2      ) - 1) + "_" + Copy(AVF2      , Pos(".", AVF2      ) + 1)
+#ifndef InstallerDate
+  #define InstallerDate "unknown_date"
+#endif
+#ifndef InstallerCommit
+  #define InstallerCommit DefaultInstallerCommit
+#endif
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.
@@ -40,7 +43,7 @@ AppUpdatesURL={#MyAppURL}
 CreateAppDir=yes
 DisableDirPage=no
 UsePreviousAppDir=no
-OutputBaseFilename={#SetupBaseName + AppVersionFile + "_" + InstallerCommitFilePart}
+OutputBaseFilename={#SetupBaseName + InstallerDate + "_" + InstallerCommit}
 Compression=lzma
 DefaultDirName="{autopf}\SolidWorks Corp\SolidWorks\URDFExporter"
 SolidCompression=no

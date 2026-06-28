@@ -16,12 +16,23 @@ namespace SW2URDF.Test
             Assert.Contains("DefaultDirName=\"{autopf}\\SolidWorks Corp\\SolidWorks\\URDFExporter\"",
                 installerScript);
             Assert.Contains("GetVersionNumbersString(DllLocation)", installerScript);
-            Assert.Contains("OutputBaseFilename={#SetupBaseName + AppVersionFile + \"_\" + InstallerCommitFilePart}",
+            Assert.Contains("OutputBaseFilename={#SetupBaseName + InstallerDate + \"_\" + InstallerCommit}",
                 installerScript);
             Assert.Contains("Name: \"english\"", installerScript);
             Assert.Contains("Name: \"chinesesimplified\"", installerScript);
             Assert.Contains("chinesesimplified.RegisteringControls=", installerScript);
             Assert.Contains("chinesesimplified.UnregisteringControls=", installerScript);
+        }
+
+        [Fact]
+        public void TestBuildInstallerUsesDateAndCommitOutputName()
+        {
+            string buildScript = ReadRepositoryFile("scripts", "BuildInstaller.ps1");
+
+            Assert.Contains("Get-Date -Format \"yyyyMMdd\"", buildScript);
+            Assert.Contains("rev-parse --short=7 HEAD", buildScript);
+            Assert.Contains("\"/DInstallerDate=$InstallerDate\"", buildScript);
+            Assert.Contains("\"/DInstallerCommit=$InstallerCommit\"", buildScript);
         }
 
         [Fact]

@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
+$SafeRepoRoot = $RepoRoot -replace "\\", "/"
 $Solution = Join-Path $RepoRoot "SW2URDF.sln"
 $PackagesConfig = Join-Path $RepoRoot "SW2URDF\packages.config"
 $PackagesDirectory = Join-Path $RepoRoot "packages"
@@ -24,6 +25,11 @@ if ([string]::IsNullOrWhiteSpace($WindowsDir)) {
     $WindowsDir = "C:\Windows"
 }
 $FrameworkMSBuild = Join-Path $WindowsDir "Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
+$InstallerDate = Get-Date -Format "yyyyMMdd"
+$InstallerCommit = & git -c "safe.directory=$SafeRepoRoot" -C $RepoRoot rev-parse --short=7 HEAD 2>$null
+if ([string]::IsNullOrWhiteSpace($InstallerCommit)) {
+    $InstallerCommit = "unknown"
+}
 
 if (Test-Path $VsWhere) {
     $MSBuild = & $VsWhere -latest -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
@@ -65,7 +71,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "MSBuild failed with exit code $LASTEXITCODE."
 }
 
-& $ISCC $InstallerScript
+& $ISCC "/DInstallerDate=$InstallerDate" "/DInstallerCommit=$InstallerCommit" $InstallerScript
 if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup compiler failed with exit code $LASTEXITCODE."
 }
