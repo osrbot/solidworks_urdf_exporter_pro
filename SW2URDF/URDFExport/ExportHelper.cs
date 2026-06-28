@@ -565,7 +565,7 @@ namespace SW2URDF.URDFExport
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine(
-                "link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,stl_quality,mesh_reduction_ratio,stl_custom,deviation_m,angle_tolerance_rad,baseline_estimated_visual_bytes,baseline_estimated_visual_triangles,estimated_visual_bytes,estimated_visual_triangles,estimate_error_percent,estimated_reduction_percent,actual_reduction_percent,visual_uri,collision_uri,collision_urdf_reference,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles");
+                "link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,stl_quality,mesh_reduction_ratio,stl_custom,deviation_m,angle_tolerance_rad,baseline_estimated_visual_bytes,baseline_estimated_visual_triangles,estimated_visual_bytes,estimated_visual_triangles,estimate_error_percent,estimated_reduction_percent,actual_reduction_percent,visual_uri,collision_uri,collision_urdf_reference,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles,collision_vs_visual_bytes_reduction_percent,collision_vs_visual_triangles_reduction_percent");
             foreach (MeshExportRecord record in records)
             {
                 StlExportStats stats = record.StlStats ?? StlExportStats.NotExported();
@@ -599,11 +599,33 @@ namespace SW2URDF.URDFExport
                     FormatNullableLong(record.VisualBytes),
                     FormatNullableLong(record.CollisionBytes),
                     FormatNullableUInt(record.VisualTriangles),
-                    FormatNullableUInt(record.CollisionTriangles)
+                    FormatNullableUInt(record.CollisionTriangles),
+                    FormatNullableDouble(CalculateCollisionBytesReductionPercent(record)),
+                    FormatNullableDouble(CalculateCollisionTrianglesReductionPercent(record))
                 }));
             }
 
             return builder.ToString();
+        }
+
+        private static double? CalculateCollisionBytesReductionPercent(MeshExportRecord record)
+        {
+            if (record == null || !record.CollisionBytes.HasValue || !record.VisualBytes.HasValue)
+            {
+                return null;
+            }
+
+            return CalculateReductionPercent(record.CollisionBytes.Value, record.VisualBytes.Value);
+        }
+
+        private static double? CalculateCollisionTrianglesReductionPercent(MeshExportRecord record)
+        {
+            if (record == null || !record.CollisionTriangles.HasValue || !record.VisualTriangles.HasValue)
+            {
+                return null;
+            }
+
+            return CalculateReductionPercent(record.CollisionTriangles.Value, record.VisualTriangles.Value);
         }
 
         private static MeshExportRecord CreateMeshExportRecord(

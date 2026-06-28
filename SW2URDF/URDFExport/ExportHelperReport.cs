@@ -1044,6 +1044,10 @@ namespace SW2URDF.URDFExport
             builder.AppendLine("- Collision mesh bytes: " + collisionBytes.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Visual STL triangles: " + visualTriangles.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Collision STL triangles: " + collisionTriangles.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Average collision mesh byte reduction vs visual: " +
+                FormatNullablePercent(AverageNullableDouble(rows.Select(CalculateCollisionBytesReductionPercent))));
+            builder.AppendLine("- Average collision mesh triangle reduction vs visual: " +
+                FormatNullablePercent(AverageNullableDouble(rows.Select(CalculateCollisionTrianglesReductionPercent))));
             builder.AppendLine("- Baseline estimated visual STL bytes: " +
                 baselineEstimatedVisualBytes.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Baseline estimated visual STL triangles: " +
@@ -1118,8 +1122,8 @@ namespace SW2URDF.URDFExport
             List<MeshExportRecord> rows = records.ToList();
             builder.AppendLine("## Collision Strategies");
             builder.AppendLine();
-            builder.AppendLine("| Link | Requested | Effective | Geometry | URDF collision ref | Notes | Collision artifact exists | Collision artifact bytes | Collision artifact triangles | Collision artifact URI |");
-            builder.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+            builder.AppendLine("| Link | Requested | Effective | Geometry | URDF collision ref | Notes | Collision artifact exists | Collision artifact bytes | Collision artifact triangles | Byte reduction vs visual | Triangle reduction vs visual | Collision artifact URI |");
+            builder.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
             foreach (MeshExportRecord row in rows)
             {
                 builder.AppendLine("| " + MarkdownCell(row.LinkName) +
@@ -1131,11 +1135,13 @@ namespace SW2URDF.URDFExport
                     " | " + FormatBool(row.CollisionExists) +
                     " | " + FormatNullableLong(row.CollisionBytes) +
                     " | " + FormatNullableUInt(row.CollisionTriangles) +
+                    " | " + FormatNullablePercent(CalculateCollisionBytesReductionPercent(row)) +
+                    " | " + FormatNullablePercent(CalculateCollisionTrianglesReductionPercent(row)) +
                     " | " + MarkdownCell(row.CollisionUri) + " |");
             }
             if (rows.Count == 0)
             {
-                builder.AppendLine("| none | none | none | none | none | none | false |  |  |  |");
+                builder.AppendLine("| none | none | none | none | none | none | false |  |  | none | none |  |");
             }
             builder.AppendLine();
         }

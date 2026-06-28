@@ -453,17 +453,20 @@ namespace SW2URDF.Test
             Assert.Contains("| Link | Coordinate system | Status | Rows | Numeric | Physical failures | Magnitude warnings | Display warnings | Max abs error | Max relative error | Failed quantities | Warning quantities |", report);
             Assert.Contains("| base_link | Origin_global | PASS | 1 | 1 | 0 | 0 | 0 | 0 | 0% | none | none |", report);
             Assert.Contains("Mesh manifest rows: 1", report);
+            Assert.Contains("Average collision mesh byte reduction vs visual: ", report);
+            Assert.Contains("Average collision mesh triangle reduction vs visual: none", report);
             Assert.Contains("Requested collision strategies: VisualMesh=1", report);
             Assert.Contains("Effective collision strategies: VisualMesh=1", report);
             Assert.Contains("Collision URDF refs: mesh=1", report);
             Assert.Contains("Collision strategy fallbacks: 0", report);
             Assert.Contains("## Collision Strategies", report);
-            Assert.Contains("| Link | Requested | Effective | Geometry | URDF collision ref | Notes | Collision artifact exists | Collision artifact bytes | Collision artifact triangles | Collision artifact URI |", report);
+            Assert.Contains("| Link | Requested | Effective | Geometry | URDF collision ref | Notes | Collision artifact exists | Collision artifact bytes | Collision artifact triangles | Byte reduction vs visual | Triangle reduction vs visual | Collision artifact URI |", report);
             Assert.Contains(
                 "| base_link | VisualMesh | VisualMesh | visual_mesh_copy | package://rover_description/meshes/collision/base_link.STL | ok | true | " +
                 new FileInfo(collisionMesh).Length.ToString() +
-                " | 0 | package://rover_description/meshes/collision/base_link.STL |",
+                " | 0 | ",
                 report);
+            Assert.Contains(" | none | package://rover_description/meshes/collision/base_link.STL |", report);
             Assert.Contains("Baseline estimated visual STL triangles: 100", report);
             Assert.Contains("Estimated visual STL triangles: 50", report);
             Assert.Contains("Requested STL reduction ratios: 0.5=1", report);
@@ -709,8 +712,9 @@ namespace SW2URDF.Test
             Assert.Contains(
                 "| base_link | Primitive | BoxPrimitive | urdf_box_primitive | native:box | ok | true | " +
                 new FileInfo(collisionMesh).Length.ToString() +
-                " | 12 | package://rover_description/meshes/collision/base_link.STL |",
+                " | 12 | ",
                 report);
+            Assert.Contains(" | none | package://rover_description/meshes/collision/base_link.STL |", report);
             Assert.DoesNotContain("FAIL:", report);
 
             Directory.Delete(tempDirectory, true);
