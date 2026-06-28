@@ -130,6 +130,53 @@ namespace SW2URDF.Test
             }
         }
 
+        [Fact]
+        public void TestMimicToggleLayoutIsIdempotent()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                form.PerformLayout();
+
+                CheckBox mimicCheckBox = GetControl<CheckBox>(form, "MimicCheckBox");
+                ComboBox mimicJointComboBox = GetControl<ComboBox>(form, "MimicJointComboBox");
+                Label mimicJointLabel = GetControl<Label>(form, "MimicJointLabel");
+                Button cancelButton = GetControl<Button>(form, "buttonJointCancel");
+                Button nextButton = GetControl<Button>(form, "buttonJointNext");
+
+                mimicCheckBox.Checked = true;
+                form.PerformLayout();
+                Rectangle comboBounds = mimicJointComboBox.Bounds;
+                Rectangle labelBounds = mimicJointLabel.Bounds;
+                Rectangle cancelBounds = cancelButton.Bounds;
+                Rectangle nextBounds = nextButton.Bounds;
+
+                for (int i = 0; i < 20; i++)
+                {
+                    mimicCheckBox.Checked = false;
+                    form.PerformLayout();
+                    mimicCheckBox.Checked = true;
+                    form.PerformLayout();
+                }
+
+                Assert.Equal(comboBounds, mimicJointComboBox.Bounds);
+                Assert.Equal(labelBounds, mimicJointLabel.Bounds);
+                Assert.Equal(cancelBounds.Width, cancelButton.Width);
+                Assert.Equal(cancelBounds.Left, cancelButton.Left);
+                Assert.Equal(nextBounds.Width, nextButton.Width);
+                Assert.Equal(nextBounds.Right, nextButton.Right);
+                AssertMimicControlsDoNotOverlapFooter(form);
+                AssertFooterButtonsFitText(form);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
         private static T GetControl<T>(AssemblyExportForm form, string fieldName)
             where T : Control
         {

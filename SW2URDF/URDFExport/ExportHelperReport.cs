@@ -256,6 +256,14 @@ namespace SW2URDF.URDFExport
             {
                 findings.Add("FAIL: " + inspection.Label + " URDF root element is not robot.");
             }
+            foreach (string name in inspection.DuplicateLinkNames)
+            {
+                findings.Add("FAIL: " + inspection.Label + " URDF contains duplicate link name: " + name);
+            }
+            foreach (string name in inspection.DuplicateJointNames)
+            {
+                findings.Add("FAIL: " + inspection.Label + " URDF contains duplicate joint name: " + name);
+            }
 
             foreach (MeshReference reference in inspection.MeshReferences.Where(r => !r.Exists))
             {
@@ -540,6 +548,10 @@ namespace SW2URDF.URDFExport
             {
                 status = "FAIL";
             }
+            else if (inspection.DuplicateLinkNames.Count > 0 || inspection.DuplicateJointNames.Count > 0)
+            {
+                status = "FAIL";
+            }
             else if (missingMeshReferences > 0)
             {
                 status = exportMeshes ? "FAIL" : "WARN";
@@ -556,7 +568,9 @@ namespace SW2URDF.URDFExport
                 "links=" + inspection.LinkCount.ToString(CultureInfo.InvariantCulture) +
                 ", joints=" + inspection.JointCount.ToString(CultureInfo.InvariantCulture) +
                 ", mesh_refs=" + inspection.MeshReferences.Count.ToString(CultureInfo.InvariantCulture) +
-                ", missing_mesh_refs=" + missingMeshReferences.ToString(CultureInfo.InvariantCulture));
+                ", missing_mesh_refs=" + missingMeshReferences.ToString(CultureInfo.InvariantCulture) +
+                ", duplicate_links=" + inspection.DuplicateLinkNames.Count.ToString(CultureInfo.InvariantCulture) +
+                ", duplicate_joints=" + inspection.DuplicateJointNames.Count.ToString(CultureInfo.InvariantCulture));
         }
 
         private static void AppendPackageCompletenessHealthRow(
@@ -744,8 +758,20 @@ namespace SW2URDF.URDFExport
                 inspection.XmlValid = true;
                 inspection.RootIsRobot = root != null && root.Name.LocalName == "robot";
                 inspection.RobotName = root == null ? "" : (string)root.Attribute("name") ?? "";
+                List<string> linkNames = document.Descendants()
+                    .Where(e => e.Name.LocalName == "link")
+                    .Select(e => (string)e.Attribute("name"))
+                    .Where(v => !String.IsNullOrWhiteSpace(v))
+                    .ToList();
+                List<string> jointNames = document.Descendants()
+                    .Where(e => e.Name.LocalName == "joint")
+                    .Select(e => (string)e.Attribute("name"))
+                    .Where(v => !String.IsNullOrWhiteSpace(v))
+                    .ToList();
                 inspection.LinkCount = document.Descendants().Count(e => e.Name.LocalName == "link");
                 inspection.JointCount = document.Descendants().Count(e => e.Name.LocalName == "joint");
+                inspection.DuplicateLinkNames.AddRange(FindDuplicateNames(linkNames));
+                inspection.DuplicateJointNames.AddRange(FindDuplicateNames(jointNames));
                 foreach (string meshUri in document.Descendants()
                     .Where(e => e.Name.LocalName == "mesh")
                     .Select(e => (string)e.Attribute("filename"))
@@ -765,6 +791,16 @@ namespace SW2URDF.URDFExport
             }
 
             return inspection;
+        }
+
+        private static IEnumerable<string> FindDuplicateNames(IEnumerable<string> names)
+        {
+            return names
+                .GroupBy(name => name, StringComparer.Ordinal)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
         }
 
         private static string ResolvePackageUri(string uri, string packageName, string packageRootDirectory)
@@ -844,6 +880,10 @@ namespace SW2URDF.URDFExport
             builder.AppendLine("- Robot name: " + inspection.RobotName);
             builder.AppendLine("- Links: " + inspection.LinkCount.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Joints: " + inspection.JointCount.ToString(CultureInfo.InvariantCulture));
+            builder.AppendLine("- Duplicate link names: " +
+                FormatNameList(inspection.DuplicateLinkNames));
+            builder.AppendLine("- Duplicate joint names: " +
+                FormatNameList(inspection.DuplicateJointNames));
             builder.AppendLine("- Mesh references: " +
                 inspection.MeshReferences.Count.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Missing mesh references: " +
@@ -1315,6 +1355,15 @@ namespace SW2URDF.URDFExport
             return distinctValues.Count == 0 ? "none" : String.Join(", ", distinctValues.ToArray());
         }
 
+        private static string FormatNameList(IEnumerable<string> names)
+        {
+            List<string> values = names
+                .Where(v => !String.IsNullOrWhiteSpace(v))
+                .OrderBy(v => v, StringComparer.Ordinal)
+                .ToList();
+            return values.Count == 0 ? "none" : String.Join(", ", values.ToArray());
+        }
+
         private static string FormatNullablePercent(double? value)
         {
             return value.HasValue
@@ -1344,6 +1393,8 @@ namespace SW2URDF.URDFExport
                 Label = label;
                 FileName = fileName;
                 MeshReferences = new List<MeshReference>();
+                DuplicateLinkNames = new List<string>();
+                DuplicateJointNames = new List<string>();
                 RobotName = "";
                 ParseError = "";
             }
@@ -1367,6 +1418,10 @@ namespace SW2URDF.URDFExport
             public string ParseError { get; set; }
 
             public List<MeshReference> MeshReferences { get; private set; }
+
+            public List<string> DuplicateLinkNames { get; private set; }
+
+            public List<string> DuplicateJointNames { get; private set; }
         }
 
         private class MeshReference

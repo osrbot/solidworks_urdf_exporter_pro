@@ -610,7 +610,7 @@ namespace SW2URDF.URDFExport
             }
             foreach (LinkNode child in node.Nodes)
             {
-                CheckIfLinkNamesAreUnique(child, jointName, conflict);
+                CheckIfJointNamesAreUnique(child, jointName, conflict);
             }
         }
 

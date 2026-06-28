@@ -29,6 +29,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
@@ -56,11 +57,13 @@ namespace SW2URDF.UI
         private double meshReductionRatioForExport;
         private bool enableLayoutFixes;
         private bool applyingLayoutFixes;
+        private readonly Dictionary<string, Size> buttonDesignSizes;
 
         private AssemblyExportForm()
         {
             InitializeComponent();
             ChineseUiText.Apply(this);
+            buttonDesignSizes = CaptureButtonDesignSizes();
             enableLayoutFixes = true;
             ApplyHighDpiLayoutFixes();
             InitializeCollisionStrategyComboBox();
@@ -180,7 +183,7 @@ namespace SW2URDF.UI
             string errors = CheckJointsForErrors();
             if (!string.IsNullOrWhiteSpace(errors))
             {
-                string message = "The following joints are missing required fields, please " +
+                string message = "The following joints contain invalid or missing fields, please " +
                     "address them before continuing\r\n\r\n" + errors;
                 MessageBox.Show(message, "URDF Joint Errors");
                 return;
@@ -206,6 +209,18 @@ namespace SW2URDF.UI
             {
                 CheckJointsForErrors(child, builder);
             }
+            AppendDuplicateJointNameErrors(treeViewJointTree.Nodes, builder);
+            return builder.ToString();
+        }
+
+        private string CheckJointsForErrors(LinkNode root)
+        {
+            StringBuilder builder = new StringBuilder();
+            foreach (LinkNode child in root.Nodes)
+            {
+                CheckJointsForErrors(child, builder);
+            }
+            AppendDuplicateJointNameErrors(root.Nodes, builder);
             return builder.ToString();
         }
 
@@ -221,6 +236,40 @@ namespace SW2URDF.UI
                 CheckJointsForErrors(child, builder);
             }
             return builder;
+        }
+
+        private void AppendDuplicateJointNameErrors(TreeNodeCollection nodes, StringBuilder builder)
+        {
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<string> duplicates = new HashSet<string>(StringComparer.Ordinal);
+            foreach (LinkNode child in nodes)
+            {
+                CollectDuplicateJointNames(child, seen, duplicates);
+            }
+
+            foreach (string duplicate in duplicates.OrderBy(n => n, StringComparer.Ordinal))
+            {
+                builder.Append("Duplicate joint name: ").Append(duplicate).Append("\r\n");
+            }
+        }
+
+        private void CollectDuplicateJointNames(
+            LinkNode node,
+            HashSet<string> seen,
+            HashSet<string> duplicates)
+        {
+            string jointName = node.Link == null || node.Link.Joint == null
+                ? ""
+                : node.Link.Joint.Name;
+            if (!String.IsNullOrWhiteSpace(jointName) && !seen.Add(jointName))
+            {
+                duplicates.Add(jointName);
+            }
+
+            foreach (LinkNode child in node.Nodes)
+            {
+                CollectDuplicateJointNames(child, seen, duplicates);
+            }
         }
 
         private void Button_Joint_Cancel_Click(object sender, EventArgs e)
@@ -291,6 +340,16 @@ namespace SW2URDF.UI
             SaveConfigTree(ActiveSWModel, BaseNode, false);
 
             Exporter.URDFRobot = CreateRobotFromTreeView(treeViewLinkProperties);
+            string jointErrors = CheckJointsForErrors(BaseNode);
+            if (!string.IsNullOrWhiteSpace(jointErrors))
+            {
+                logger.Info("Joint errors encountered:\n " + jointErrors);
+
+                string message = "The following joints contain invalid or duplicate " +
+                    "properties. Please address before continuing\r\n\r\n" + jointErrors;
+                MessageBox.Show(message, "URDF Joint Errors");
+                return;
+            }
 
             // The UI should prevent these sorts of errors, but just in case
             string errors = CheckLinksForErrors(Exporter.URDFRobot.BaseLink);
@@ -837,12 +896,38 @@ namespace SW2URDF.UI
                 Math.Max(MinimumSize.Height, 700));
         }
 
-        private static void ResizeButtonToText(Button button)
+        private Dictionary<string, Size> CaptureButtonDesignSizes()
         {
-            Size preferred = button.GetPreferredSize(Size.Empty);
+            Button[] buttons = new Button[]
+            {
+                buttonJointCancel,
+                buttonJointNext,
+                buttonLinksCancel,
+                buttonLinksPrevious,
+                buttonLinksExportUrdfOnly,
+                buttonLinksFinish
+            };
+            Dictionary<string, Size> sizes = new Dictionary<string, Size>(StringComparer.Ordinal);
+            foreach (Button button in buttons)
+            {
+                sizes[button.Name] = button.Size;
+            }
+            return sizes;
+        }
+
+        private void ResizeButtonToText(Button button)
+        {
+            Size designSize;
+            if (!buttonDesignSizes.TryGetValue(button.Name, out designSize))
+            {
+                designSize = button.Size;
+            }
+
+            Size preferred = TextRenderer.MeasureText(button.Text ?? "", button.Font);
+            Size controlPreferred = button.GetPreferredSize(Size.Empty);
             button.Size = new Size(
-                Math.Max(button.Width, preferred.Width + 8),
-                Math.Max(button.Height, preferred.Height));
+                Math.Max(designSize.Width, preferred.Width + 18),
+                Math.Max(designSize.Height, Math.Max(controlPreferred.Height, preferred.Height + 10)));
         }
 
         private void PositionJointFooterControls()
@@ -855,10 +940,14 @@ namespace SW2URDF.UI
             int label4Top = 0;
             int label27Top = 0;
 
+            ResizeButtonToText(buttonJointCancel);
+            ResizeButtonToText(buttonJointNext);
+
             for (int attempts = 0; attempts < 4; attempts++)
             {
                 buttonTop = ClientSize.Height - bottomMargin - buttonJointNext.Height;
                 buttonJointCancel.Top = buttonTop;
+                buttonJointCancel.Left = rightMargin;
                 buttonJointNext.Top = buttonTop;
                 buttonJointNext.Left = ClientSize.Width - rightMargin - buttonJointNext.Width;
 
@@ -894,6 +983,7 @@ namespace SW2URDF.UI
                     ClientSize = new Size(ClientSize.Width, ClientSize.Height + growth);
                     buttonTop += growth;
                     buttonJointCancel.Top = buttonTop;
+                    buttonJointCancel.Left = rightMargin;
                     buttonJointNext.Top = buttonTop;
                     buttonJointNext.Left = ClientSize.Width - rightMargin - buttonJointNext.Width;
                 }
@@ -916,6 +1006,11 @@ namespace SW2URDF.UI
             const int bottomMargin = 4;
             const int horizontalGap = 8;
             const int verticalGap = 12;
+            ResizeButtonToText(buttonLinksCancel);
+            ResizeButtonToText(buttonLinksPrevious);
+            ResizeButtonToText(buttonLinksExportUrdfOnly);
+            ResizeButtonToText(buttonLinksFinish);
+
             int maxHeight = Math.Max(
                 Math.Max(buttonLinksCancel.Height, buttonLinksPrevious.Height),
                 Math.Max(buttonLinksExportUrdfOnly.Height, buttonLinksFinish.Height));
@@ -937,14 +1032,13 @@ namespace SW2URDF.UI
             buttonLinksFinish.Top = buttonTop;
             buttonLinksExportUrdfOnly.Top = buttonTop;
             buttonLinksPrevious.Top = buttonTop;
+            buttonLinksCancel.Left = rightMargin;
             treeViewLinkProperties.Height = Math.Max(
                 200,
                 buttonTop - treeViewLinkProperties.Top - 8);
             buttonLinksFinish.Left = panelLinkProperties.ClientSize.Width - rightMargin - buttonLinksFinish.Width;
             buttonLinksExportUrdfOnly.Left = buttonLinksFinish.Left - horizontalGap - buttonLinksExportUrdfOnly.Width;
-            buttonLinksPrevious.Left = Math.Min(
-                buttonLinksPrevious.Left,
-                buttonLinksExportUrdfOnly.Left - horizontalGap - buttonLinksPrevious.Width);
+            buttonLinksPrevious.Left = buttonLinksExportUrdfOnly.Left - horizontalGap - buttonLinksPrevious.Width;
         }
 
         private int GetMimicControlsBottom()
@@ -981,6 +1075,17 @@ namespace SW2URDF.UI
             const int horizontalGap = 8;
             int left = textBoxCalibrationRising.Left;
             bool showDetails = ShouldLayoutMimicDetails();
+            int maxRight = ClientSize.Width - 12;
+            int mimicCheckWidth = Math.Min(170, MimicCheckBox.GetPreferredSize(Size.Empty).Width);
+            int mimicJointLabelWidth = Math.Min(180, MimicJointLabel.GetPreferredSize(Size.Empty).Width);
+            MimicCheckBox.AutoSize = false;
+            MimicJointLabel.AutoSize = false;
+            MimicCheckBox.Size = new Size(mimicCheckWidth, MimicCheckBox.Height);
+            MimicJointLabel.Size = new Size(mimicJointLabelWidth, MimicJointLabel.Height);
+            int mimicJointLabelLeft = left + Math.Max(150, mimicCheckWidth + 18);
+            int mimicJointComboLeft = Math.Min(
+                mimicJointLabelLeft + mimicJointLabelWidth + horizontalGap,
+                maxRight - MimicJointComboBox.Width);
 
             int rowOneHeight = Math.Max(
                 Math.Max(MimicJointComboBox.Height, MimicCheckBox.Height),
@@ -992,7 +1097,6 @@ namespace SW2URDF.UI
             int offsetLabelLeft = multiplierTextLeft + textBoxMimicMultiplier.Width + 16;
             int offsetTextLeft = offsetLabelLeft + MimicOffsetLabel.Width + horizontalGap;
             int inlineEquationLeft = offsetTextLeft + textBoxMimicOffset.Width + 18;
-            int maxRight = ClientSize.Width - 12;
 
             MimicEquationLabel.AutoSize = true;
             MimicEquationLabel.MaximumSize = Size.Empty;
@@ -1018,9 +1122,9 @@ namespace SW2URDF.UI
 
             MimicCheckBox.Left = left;
             MimicCheckBox.Top = rowOneTop + Math.Max(0, (MimicJointComboBox.Height - MimicCheckBox.Height) / 2);
-            MimicJointLabel.Left = MimicCheckBox.Right + 18;
+            MimicJointLabel.Left = mimicJointLabelLeft;
             MimicJointLabel.Top = rowOneTop + 3;
-            MimicJointComboBox.Left = MimicJointLabel.Right + horizontalGap;
+            MimicJointComboBox.Left = mimicJointComboLeft;
             MimicJointComboBox.Top = rowOneTop;
 
             MimicMultiplierLabel.Left = left;

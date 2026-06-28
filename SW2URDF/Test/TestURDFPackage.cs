@@ -218,6 +218,23 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestBaseLinkEmptyJointNameIsNotExportedToControllerConfig()
+        {
+            Link baseLink = new Link(null);
+            baseLink.Name = "base_link";
+            baseLink.Joint.Name = "";
+            baseLink.Joint.Type = "";
+
+            Link childLink = new Link(baseLink);
+            childLink.Name = "wheel";
+            childLink.Joint.Name = "base_wheel";
+            childLink.Joint.Type = "continuous";
+            baseLink.Children.Add(childLink);
+
+            Assert.Equal(new[] { "base_wheel" }, baseLink.GetJointNames(false));
+        }
+
+        [Fact]
         public void TestChinesePathPackageGeneration()
         {
             string tempDirectory = CreateRandomTempDirectory();
@@ -404,8 +421,8 @@ namespace SW2URDF.Test
             Assert.Contains("## Health Summary", report);
             Assert.Contains("| Check | Status | Detail |", report);
             Assert.Contains("| Overall | PASS | failures=0, warnings=0 |", report);
-            Assert.Contains("| ROS 1 URDF | PASS | links=1, joints=0, mesh_refs=2, missing_mesh_refs=0 |", report);
-            Assert.Contains("| ROS 2 URDF | PASS | links=1, joints=0, mesh_refs=2, missing_mesh_refs=0 |", report);
+            Assert.Contains("| ROS 1 URDF | PASS | links=1, joints=0, mesh_refs=2, missing_mesh_refs=0, duplicate_links=0, duplicate_joints=0 |", report);
+            Assert.Contains("| ROS 2 URDF | PASS | links=1, joints=0, mesh_refs=2, missing_mesh_refs=0, duplicate_links=0, duplicate_joints=0 |", report);
             Assert.Contains("| ROS package completeness | PASS | critical_missing=0, optional_missing=0 |", report);
             Assert.Contains("| ROS package parity | PASS | critical_mismatches=0, optional_mismatches=0 |", report);
             Assert.Contains("| Inertial validation | PASS | rows=1, failures=0, warnings=0 |", report);
@@ -615,8 +632,8 @@ namespace SW2URDF.Test
                 Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
                 Encoding.UTF8);
             Assert.Contains("Status: PASS", report);
-            Assert.Contains("| ROS 1 URDF | PASS | links=5, joints=0, mesh_refs=10, missing_mesh_refs=0 |", report);
-            Assert.Contains("| ROS 2 URDF | PASS | links=5, joints=0, mesh_refs=10, missing_mesh_refs=0 |", report);
+            Assert.Contains("| ROS 1 URDF | PASS | links=5, joints=0, mesh_refs=10, missing_mesh_refs=0, duplicate_links=0, duplicate_joints=0 |", report);
+            Assert.Contains("| ROS 2 URDF | PASS | links=5, joints=0, mesh_refs=10, missing_mesh_refs=0, duplicate_links=0, duplicate_joints=0 |", report);
             Assert.Contains("| ROS package parity | PASS | critical_mismatches=0, optional_mismatches=0 |", report);
             Assert.Contains("| Inertial validation | PASS | rows=5, failures=0, warnings=0 |", report);
             Assert.Contains("| Mesh manifest paths | PASS | rows=5, missing_visual=0, missing_collision=0 |", report);
@@ -627,6 +644,57 @@ namespace SW2URDF.Test
             Assert.Contains("| WheelLF-1 | Origin_global | PASS | 1 | 1 | 0 | 0 | 0 | 0 | 0% | none | none |", report);
             Assert.Contains("| LiDAR-B | VisualMesh | VisualMesh | visual_mesh_copy | package://rover_description/meshes/collision/LiDAR-B.STL | ok | true |", report);
             Assert.DoesNotContain("FAIL:", report);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
+        [Fact]
+        public void TestExportReportFailsDuplicateJointNames()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            pkg.CreateCMakeLists();
+            pkg.CreateConfigYAML(new[] { "dup", "dup" });
+            PackageXMLWriter packageXmlWriter =
+                new PackageXMLWriter(Path.Combine(pkg.WindowsPackageDirectory, "package.xml"));
+            new PackageXML(pkg.PackageName).WriteElement(packageXmlWriter);
+            CreateRos1LaunchFiles(pkg);
+
+            string urdf =
+                "<?xml version=\"1.0\"?><robot name=\"robot_900001\">" +
+                "<link name=\"base_link\" />" +
+                "<link name=\"front_left_a\" />" +
+                "<link name=\"front_left_b\" />" +
+                "<joint name=\"dup\" type=\"fixed\"><parent link=\"base_link\" /><child link=\"front_left_a\" /></joint>" +
+                "<joint name=\"dup\" type=\"fixed\"><parent link=\"front_left_a\" /><child link=\"front_left_b\" /></joint>" +
+                "</robot>";
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(ros1Urdf, urdf, new UTF8Encoding(false));
+            pkg.CreateRos2Package(ros1Urdf);
+
+            ExportHelper.WriteExportReport(
+                pkg,
+                ros1Urdf,
+                new ExportHelper.InertialValidationRecord[0],
+                new ExportHelper.MeshExportRecord[0],
+                false,
+                MeshExportFormat.STL,
+                TimeSpan.FromSeconds(1));
+
+            string report = File.ReadAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
+                Encoding.UTF8);
+            Assert.Contains("Status: FAIL", report);
+            Assert.Contains("| ROS 1 URDF | FAIL | links=3, joints=2, mesh_refs=0, missing_mesh_refs=0, duplicate_links=0, duplicate_joints=1 |", report);
+            Assert.Contains("| ROS 2 URDF | FAIL | links=3, joints=2, mesh_refs=0, missing_mesh_refs=0, duplicate_links=0, duplicate_joints=1 |", report);
+            Assert.Contains("- Duplicate joint names: dup", report);
+            Assert.Contains("FAIL: ROS 1 URDF contains duplicate joint name: dup", report);
 
             Directory.Delete(tempDirectory, true);
         }
@@ -716,8 +784,8 @@ namespace SW2URDF.Test
                 Encoding.UTF8);
 
             Assert.Contains("Status: PASS", report);
-            Assert.Contains("| ROS 1 URDF | PASS | links=1, joints=0, mesh_refs=1, missing_mesh_refs=0 |", report);
-            Assert.Contains("| ROS 2 URDF | PASS | links=1, joints=0, mesh_refs=1, missing_mesh_refs=0 |", report);
+            Assert.Contains("| ROS 1 URDF | PASS | links=1, joints=0, mesh_refs=1, missing_mesh_refs=0, duplicate_links=0, duplicate_joints=0 |", report);
+            Assert.Contains("| ROS 2 URDF | PASS | links=1, joints=0, mesh_refs=1, missing_mesh_refs=0, duplicate_links=0, duplicate_joints=0 |", report);
             Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=Primitive=1, effective=BoxPrimitive=1, urdf_refs=native:box=1 |", report);
             Assert.Contains("collision_urdf_refs=native:box=1", report);
             Assert.Contains("| collision_urdf_refs | native:box=1 |", report);
@@ -917,7 +985,7 @@ namespace SW2URDF.Test
                 Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
                 Encoding.UTF8);
             Assert.Contains("Status: FAIL", report);
-            Assert.Contains("| ROS 2 URDF | FAIL | links=1, joints=0, mesh_refs=2, missing_mesh_refs=2 |", report);
+            Assert.Contains("| ROS 2 URDF | FAIL | links=1, joints=0, mesh_refs=2, missing_mesh_refs=2, duplicate_links=0, duplicate_joints=0 |", report);
             Assert.Contains("| ROS package parity | FAIL | critical_mismatches=2, optional_mismatches=0 |", report);
             Assert.Contains("ROS 2 visual mesh files | MISSING", report);
             Assert.Contains("ROS 2 collision mesh files | MISSING", report);
