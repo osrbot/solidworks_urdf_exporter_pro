@@ -328,6 +328,7 @@
     <Compile Include="UI\ChineseUiText.cs" />
     <Compile Include="UI\InertiaPreview.cs" />
     <Compile Include="UI\MessageBoxHelper.cs" />
+    <Compile Include="UI\UsageGuideForm.cs" />
     <Compile Include="Test\SW2URDFTest.cs" />
     <Compile Include="Test\SWTestFixture.cs" />
     <Compile Include="Test\TestCommon.cs" />

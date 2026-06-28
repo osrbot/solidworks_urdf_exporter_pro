@@ -177,6 +177,52 @@ namespace SW2URDF.Test
             }
         }
 
+        [Fact]
+        public void TestUsageGuideButtonAndMaterialNamesAreAvailable()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                form.PerformLayout();
+
+                Button guideButton = GetControl<Button>(form, "buttonUsageGuide");
+                ComboBox materials = GetControl<ComboBox>(form, "comboBoxMaterials");
+
+                Assert.True(form.Controls.Contains(guideButton));
+                Assert.True(guideButton.Enabled);
+                Assert.True(guideButton.Right <= form.ClientSize.Width - 12);
+                Assert.True(guideButton.Top >= 8);
+                Assert.True(guideButton.Text == "Guide" || guideButton.Text == "使用说明");
+                Assert.True(materials.Items.Contains("aluminum"));
+                Assert.True(materials.Items.Contains("rubber_black"));
+                Assert.True(materials.Items.Contains("transparent_blue"));
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestUsageGuideDocumentsMvpChoices()
+        {
+            string guide = UsageGuideForm.BuildGuideText(false);
+
+            Assert.Contains("Recommended default: ComponentBoxes", guide);
+            Assert.Contains("CylinderPrimitive", guide);
+            Assert.Contains("export_report.md", guide);
+            Assert.Contains("mesh_manifest.csv", guide);
+            Assert.Contains("aluminum", guide);
+            Assert.Contains("rubber_black", guide);
+            Assert.Equal(
+                "https://github.com/osrbot/solidworks_urdf_exporter_pro",
+                UsageGuideForm.ProjectUrl);
+            Assert.Equal("kitso666 <kitso@osrbot.com>", UsageGuideForm.VersionMaintainer);
+        }
+
         private static T GetControl<T>(AssemblyExportForm form, string fieldName)
             where T : Control
         {

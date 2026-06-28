@@ -58,11 +58,14 @@ namespace SW2URDF.UI
         private bool enableLayoutFixes;
         private bool applyingLayoutFixes;
         private readonly Dictionary<string, Size> buttonDesignSizes;
+        private Button buttonUsageGuide;
 
         private AssemblyExportForm()
         {
             InitializeComponent();
             ChineseUiText.Apply(this);
+            InitializeUsageGuideButton();
+            InitializeCommonMaterialNames();
             buttonDesignSizes = CaptureButtonDesignSizes();
             enableLayoutFixes = true;
             ApplyHighDpiLayoutFixes();
@@ -71,6 +74,40 @@ namespace SW2URDF.UI
             textBoxIxz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
             textBoxIyz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
             UpdateInertiaMatrixMirrorBoxes();
+        }
+
+        private void InitializeUsageGuideButton()
+        {
+            buttonUsageGuide = new Button
+            {
+                Name = "buttonUsageGuide",
+                Text = ChineseUiText.Translate("Guide", "使用说明"),
+                UseVisualStyleBackColor = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                TabIndex = 300
+            };
+            buttonUsageGuide.Font = Font;
+            buttonUsageGuide.Click += ButtonUsageGuideClick;
+            Controls.Add(buttonUsageGuide);
+        }
+
+        private void InitializeCommonMaterialNames()
+        {
+            foreach (string materialName in UsageGuideForm.CommonMaterialNames)
+            {
+                if (!comboBoxMaterials.Items.Contains(materialName))
+                {
+                    comboBoxMaterials.Items.Add(materialName);
+                }
+            }
+        }
+
+        private void ButtonUsageGuideClick(object sender, EventArgs e)
+        {
+            using (UsageGuideForm guideForm = new UsageGuideForm())
+            {
+                guideForm.ShowDialog(this);
+            }
         }
 
         public AssemblyExportForm(SldWorks SwApp, LinkNode node, ExportHelper exporter)
@@ -876,11 +913,30 @@ namespace SW2URDF.UI
 
                 PositionJointFooterControls();
                 PositionLinkFooterButtons();
+                PositionUsageGuideButton();
             }
             finally
             {
                 applyingLayoutFixes = false;
             }
+        }
+
+        private void PositionUsageGuideButton()
+        {
+            if (buttonUsageGuide == null)
+            {
+                return;
+            }
+
+            const int rightMargin = 12;
+            const int topMargin = 8;
+            Size preferred = TextRenderer.MeasureText(buttonUsageGuide.Text ?? "", buttonUsageGuide.Font);
+            buttonUsageGuide.Size = new Size(
+                Math.Max(86, preferred.Width + 18),
+                Math.Max(26, preferred.Height + 10));
+            buttonUsageGuide.Left = ClientSize.Width - rightMargin - buttonUsageGuide.Width;
+            buttonUsageGuide.Top = topMargin;
+            buttonUsageGuide.BringToFront();
         }
 
         private void EnsureMinimumClientArea()
