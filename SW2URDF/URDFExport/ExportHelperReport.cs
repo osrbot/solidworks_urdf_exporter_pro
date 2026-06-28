@@ -285,9 +285,9 @@ namespace SW2URDF.URDFExport
             AddDirectoryCheck(checks, "ROS 1 collision meshes directory", Path.Combine(package.WindowsMeshesDirectory, "collision"), exportMeshes);
             AddDirectoryFilesCheck(checks, "ROS 1 collision mesh files", Path.Combine(package.WindowsMeshesDirectory, "collision"), exportMeshes);
             AddFileCheck(checks, "ROS 1 inertial validation CSV",
-                Path.Combine(package.WindowsConfigDirectory, "inertial_validation.csv"), false);
+                Path.Combine(package.WindowsConfigDirectory, "inertial_validation.csv"), true);
             AddFileCheck(checks, "ROS 1 mesh manifest CSV",
-                Path.Combine(package.WindowsConfigDirectory, "mesh_manifest.csv"), false);
+                Path.Combine(package.WindowsConfigDirectory, "mesh_manifest.csv"), true);
 
             AddDirectoryCheck(checks, "ROS 2 package directory", package.WindowsRos2PackageDirectory, true);
             AddFileCheck(checks, "ROS 2 package.xml", Path.Combine(package.WindowsRos2PackageDirectory, "package.xml"), true);
@@ -304,9 +304,9 @@ namespace SW2URDF.URDFExport
             AddDirectoryCheck(checks, "ROS 2 collision meshes directory", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), exportMeshes);
             AddDirectoryFilesCheck(checks, "ROS 2 collision mesh files", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), exportMeshes);
             AddFileCheck(checks, "ROS 2 inertial validation CSV",
-                Path.Combine(package.WindowsRos2ConfigDirectory, "inertial_validation.csv"), false);
+                Path.Combine(package.WindowsRos2ConfigDirectory, "inertial_validation.csv"), true);
             AddFileCheck(checks, "ROS 2 mesh manifest CSV",
-                Path.Combine(package.WindowsRos2ConfigDirectory, "mesh_manifest.csv"), false);
+                Path.Combine(package.WindowsRos2ConfigDirectory, "mesh_manifest.csv"), true);
             return checks;
         }
 
@@ -362,14 +362,14 @@ namespace SW2URDF.URDFExport
                 "inertial_validation.csv",
                 package.WindowsConfigDirectory,
                 package.WindowsRos2ConfigDirectory,
-                false);
+                true);
             AddPackageParityFileCheck(
                 checks,
                 "config",
                 "mesh_manifest.csv",
                 package.WindowsConfigDirectory,
                 package.WindowsRos2ConfigDirectory,
-                false);
+                true);
             if (exportMeshes)
             {
                 AddPackageParityDirectoryChecks(

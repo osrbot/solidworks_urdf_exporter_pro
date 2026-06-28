@@ -34,6 +34,19 @@ namespace SW2URDF.Test
                 new UTF8Encoding(false));
         }
 
+        private static void CreateRos1ConfigCsvFiles(URDFPackage pkg)
+        {
+            Directory.CreateDirectory(pkg.WindowsConfigDirectory);
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "inertial_validation.csv"),
+                "link,status\r\nbase_link,PASS\r\n",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "mesh_manifest.csv"),
+                "link,visual_exists,collision_exists\r\n",
+                new UTF8Encoding(false));
+        }
+
         [Fact]
         public void TestRos1AndRos2PackageDirectories()
         {
@@ -436,8 +449,8 @@ namespace SW2URDF.Test
             Assert.Contains("| urdf | robot_900001.urdf | yes | yes | yes |", report);
             Assert.Contains("| launch | ROS1 display.launch / ROS2 display.launch.py | yes | yes | yes |", report);
             Assert.Contains("| launch | ROS1 gazebo.launch / ROS2 gazebo.launch.py | yes | yes | yes |", report);
-            Assert.Contains("| config | inertial_validation.csv | yes | yes | no |", report);
-            Assert.Contains("| config | mesh_manifest.csv | yes | yes | no |", report);
+            Assert.Contains("| config | inertial_validation.csv | yes | yes | yes |", report);
+            Assert.Contains("| config | mesh_manifest.csv | yes | yes | yes |", report);
             Assert.Contains("| meshes/visual | base_link.STL | yes | yes | yes |", report);
             Assert.Contains("| meshes/collision | base_link.STL | yes | yes | yes |", report);
             Assert.Contains("Inertial validation rows: 1", report);
@@ -951,6 +964,7 @@ namespace SW2URDF.Test
                 "<?xml version=\"1.0\"?><robot name=\"robot_900001\"><link name=\"tiny_mass_link\" /></robot>",
                 new UTF8Encoding(false));
             CreateRos1LaunchFiles(pkg);
+            CreateRos1ConfigCsvFiles(pkg);
             pkg.CreateRos2Package(ros1Urdf);
 
             ExportHelper.InertialValidationRecord magnitudeWarning =
@@ -1010,6 +1024,7 @@ namespace SW2URDF.Test
                 "<?xml version=\"1.0\"?><robot name=\"robot_900001\"><link name=\"display_link\" /></robot>",
                 new UTF8Encoding(false));
             CreateRos1LaunchFiles(pkg);
+            CreateRos1ConfigCsvFiles(pkg);
             pkg.CreateRos2Package(ros1Urdf);
 
             ExportHelper.InertialValidationRecord displayWarning =
@@ -1179,6 +1194,71 @@ namespace SW2URDF.Test
             Assert.Contains("| launch | ROS1 display.launch / ROS2 display.launch.py | yes | no | yes |", report);
             Assert.Contains(
                 "FAIL: ROS package parity mismatch for launch/ROS1 display.launch / ROS2 display.launch.py: ROS1=true, ROS2=false",
+                report);
+
+            Directory.Delete(tempDirectory, true);
+        }
+
+        [Fact]
+        public void TestExportReportFailsWhenRos2ConfigCsvIsMissing()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
+            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
+            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
+                .Returns(MessageBoxResult.OK);
+            URDFPackage.MessageBox = messageBoxMock.Object;
+
+            pkg.CreateDirectories();
+            pkg.CreateCMakeLists();
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsPackageDirectory, "package.xml"),
+                "<?xml version=\"1.0\"?><package><name>rover_description</name></package>",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "inertial_validation.csv"),
+                "link,status\r\nbase_link,PASS\r\n",
+                new UTF8Encoding(false));
+            File.WriteAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "mesh_manifest.csv"),
+                "link,visual_exists,collision_exists\r\n",
+                new UTF8Encoding(false));
+
+            string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+            File.WriteAllText(
+                ros1Urdf,
+                "<?xml version=\"1.0\"?><robot name=\"robot_900001\"><link name=\"base_link\" /></robot>",
+                new UTF8Encoding(false));
+            CreateRos1LaunchFiles(pkg);
+            pkg.CreateRos2Package(ros1Urdf);
+
+            File.Delete(Path.Combine(pkg.WindowsRos2ConfigDirectory, "mesh_manifest.csv"));
+
+            ExportHelper.WriteExportReport(
+                pkg,
+                ros1Urdf,
+                new[]
+                {
+                    new ExportHelper.InertialValidationRecord(
+                        "base_link",
+                        "Origin_global",
+                        new ExportHelper.InertialValidationRow("mass", "kg", 1.0, 1.0))
+                },
+                new ExportHelper.MeshExportRecord[0],
+                false,
+                MeshExportFormat.STL,
+                TimeSpan.FromSeconds(1));
+
+            string report = File.ReadAllText(
+                Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
+                Encoding.UTF8);
+            Assert.Contains("Status: FAIL", report);
+            Assert.Contains("ROS 2 mesh manifest CSV | MISSING", report);
+            Assert.Contains("| ROS package completeness | FAIL | critical_missing=1,", report);
+            Assert.Contains("| ROS package parity | FAIL | critical_mismatches=1, optional_mismatches=0 |", report);
+            Assert.Contains("| config | mesh_manifest.csv | yes | no | yes |", report);
+            Assert.Contains(
+                "FAIL: ROS package parity mismatch for config/mesh_manifest.csv: ROS1=true, ROS2=false",
                 report);
 
             Directory.Delete(tempDirectory, true);
