@@ -1,0 +1,110 @@
+name: Publish installer release
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - "INSTALL/OUTPUT/sw2urdfSetup_*.exe"
+      - ".github/workflows/publish-installer-release.yml"
+  workflow_dispatch:
+    inputs:
+      installer:
+        description: "Installer path, for example INSTALL/OUTPUT/sw2urdfSetup_20260629_598c7dd.exe. Leave empty to publish the newest installer."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-installer:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select installer
+        id: installer
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          input_installer="${{ github.event.inputs.installer }}"
+          installer=""
+
+          if [[ -n "$input_installer" ]]; then
+            installer="$input_installer"
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            mapfile -t changed_installers < <(
+              git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- "INSTALL/OUTPUT/sw2urdfSetup_*.exe" |
+              sort
+            )
+            if [[ "${#changed_installers[@]}" -gt 0 ]]; then
+              installer="${changed_installers[-1]}"
+            fi
+          fi
+
+          if [[ -z "$installer" ]]; then
+            installer="$(
+              find INSTALL/OUTPUT -maxdepth 1 -type f -name "sw2urdfSetup_*.exe" -printf "%T@ %p\n" |
+              sort -nr |
+              awk 'NR == 1 {print $2}'
+            )"
+          fi
+
+          if [[ -z "$installer" || ! -f "$installer" ]]; then
+            echo "No installer artifact found." >&2
+            exit 1
+          fi
+
+          filename="$(basename "$installer")"
+          if [[ ! "$filename" =~ ^sw2urdfSetup_([0-9]{8})_([0-9A-Za-z._-]+)\.exe$ ]]; then
+            echo "Installer filename must match sw2urdfSetup_YYYYMMDD_<commit>.exe: $filename" >&2
+            exit 1
+          fi
+
+          release_date="${BASH_REMATCH[1]}"
+          release_commit="${BASH_REMATCH[2]}"
+          release_tag="v${release_date}"
+
+          {
+            echo "path=$installer"
+            echo "filename=$filename"
+            echo "date=$release_date"
+            echo "commit=$release_commit"
+            echo "tag=$release_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.installer.outputs.tag }}
+          RELEASE_DATE: ${{ steps.installer.outputs.date }}
+          INSTALLER_PATH: ${{ steps.installer.outputs.path }}
+          INSTALLER_FILE: ${{ steps.installer.outputs.filename }}
+        run: |
+          set -euo pipefail
+
+          notes="$(mktemp)"
+          {
+            echo "SW2URDF installer build ${RELEASE_DATE}."
+            echo
+            echo "- Asset: \`${INSTALLER_FILE}\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo
+            echo "This release is created automatically from committed installer artifacts under \`INSTALL/OUTPUT\`."
+          } > "$notes"
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$INSTALLER_PATH" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$INSTALLER_PATH" \
+              --title "SW2URDF installer ${RELEASE_DATE}" \
+              --notes-file "$notes"
+          fi

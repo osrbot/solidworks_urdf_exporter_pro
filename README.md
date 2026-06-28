@@ -2,7 +2,36 @@
 
 Authored and maintained by [Stephen Brawner](brawner@gmail.com). Past supporters include [PickNik Consulting](https://picknik.ai), Verb Surgical, Open Robotics, and Willow Garage. 
 
+## OSRBot Maintained Fork
+
+This fork is maintained at <https://github.com/osrbot/solidworks_urdf_exporter_pro>.
+
+Current version maintainer: `kitso666 <kitso@osrbot.com>`.
+
+The OSRBot-maintained build keeps the original SolidWorks add-in workflow and adds:
+
+- ROS1 and ROS2 package output from the same export flow.
+- SolidWorks mass-property based inertia export and per-link validation logs.
+- Collision strategy selection for visual mesh, simplified mesh, accurate mesh, primitive boxes/cylinders/spheres, component boxes, and convex hulls.
+- STL mesh reduction ratio control for lighter exported mesh packages.
+- Chinese UI localization and safer UTF-8 English export logs.
+- Built-in usage guide with collision strategy recommendations, common URDF material names, project URL, and maintainer information.
+
 ## Latest Release
+
+For the OSRBot fork, use the latest GitHub Release asset named:
+
+```text
+sw2urdfSetup_YYYYMMDD_<commit>.exe
+```
+
+Example:
+
+```text
+INSTALL/OUTPUT/sw2urdfSetup_20260629_598c7dd.exe
+```
+
+Release tags use the installer date: `vYYYYMMDD`. If multiple installers are published on the same day, the release tag stays the same and the installer filename commit suffix identifies the build.
 
 **SolidWorks 2021**
 
@@ -24,6 +53,18 @@ https://github.com/ros/solidworks_urdf_exporter/releases/tag/1.5.1
 
 See the [ROS Wiki](http://wiki.ros.org/sw_urdf_exporter) and associated [tutorials](http://wiki.ros.org/sw_urdf_exporter/Tutorials).
 
+### Collision Strategy Quick Guide
+
+Use `ComponentBoxes` as the default collision strategy for robotics simulation. It is usually much lighter and more stable than detailed mesh collision.
+
+Use `BoxPrimitive` for box-like chassis, batteries, plates, and brackets. Use `CylinderPrimitive` for wheels, tubes, shafts, and lidar barrels. Use `SpherePrimitive` for spherical sensors or markers.
+
+Use `ConvexHull` when the link is too complex for one primitive but still needs a single simple collision approximation.
+
+Use `SimplifiedMesh` when primitives do not fit and the collision STL still needs to be smaller. Use `AccurateMesh` only when full collision detail matters more than simulator performance. Use `VisualMesh` mostly for viewer compatibility or when collision accuracy is not important.
+
+Common material names available in the exporter include `black`, `white`, `gray`, `dark_gray`, `red`, `green`, `blue`, `yellow`, `orange`, `silver`, `aluminum`, `steel`, `plastic_black`, `rubber_black`, and `transparent_blue`.
+
 ## Development
 
 1. Install Visual Studio 2017
@@ -39,6 +80,46 @@ See the [ROS Wiki](http://wiki.ros.org/sw_urdf_exporter) and associated [tutoria
     1. Click the `Debug` Tab
     1. Ensure `Configuration:` is set to `Debug`
     1. Ensure `Start external program:` is pointing to the SolidWorks executable. For example `C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SLDWORKS.exe`
+
+### Build Installer
+
+From the repository root:
+
+```powershell
+.\scripts\BuildInstaller.ps1
+```
+
+The installer is written to `INSTALL\OUTPUT` and should be named `sw2urdfSetup_YYYYMMDD_<commit>.exe`.
+
+### Tests
+
+Build Debug first, then run the local test runner:
+
+```powershell
+TestRunner\bin\x64\Debug\net452\TestRunner.exe
+```
+
+To run a focused subset:
+
+```powershell
+TestRunner\bin\x64\Debug\net452\TestRunner.exe TestAssemblyExportLayout
+```
+
+### Release Automation
+
+The workflow `.github/workflows/publish-installer-release.yml` publishes committed installer artifacts to the GitHub Releases page.
+
+Trigger:
+
+- Push to `master` or `main` with a changed `INSTALL/OUTPUT/sw2urdfSetup_*.exe`.
+- Push to `master` or `main` with a changed release workflow file, which publishes the newest committed installer.
+- Manual `workflow_dispatch`, optionally passing an installer path.
+
+Behavior:
+
+- Parses the date from `sw2urdfSetup_YYYYMMDD_<commit>.exe`.
+- Creates or updates release tag `vYYYYMMDD`.
+- Uploads the installer as a release asset. Existing assets with the same name are replaced.
 
 ## Converting mesh format from 3dxml to dae
 
