@@ -304,7 +304,7 @@
             this.labelRosPackageName.Name = "labelRosPackageName";
             this.labelRosPackageName.Size = new System.Drawing.Size(104, 12);
             this.labelRosPackageName.TabIndex = 95;
-            this.labelRosPackageName.Text = "ROS package name";
+            this.labelRosPackageName.Text = "ROS package";
             // 
             // textBoxRosPackageName
             // 
@@ -321,9 +321,9 @@
             this.labelRosPackageNameHint.AutoSize = true;
             this.labelRosPackageNameHint.Location = new System.Drawing.Point(815, 55);
             this.labelRosPackageNameHint.Name = "labelRosPackageNameHint";
-            this.labelRosPackageNameHint.Size = new System.Drawing.Size(239, 12);
+            this.labelRosPackageNameHint.Size = new System.Drawing.Size(173, 12);
             this.labelRosPackageNameHint.TabIndex = 97;
-            this.labelRosPackageNameHint.Text = "Output: ROS1/robot and ROS2/robot";
+            this.labelRosPackageNameHint.Text = "ROS1/robot | ROS2/robot";
             // 
             // groupBox5
             // 

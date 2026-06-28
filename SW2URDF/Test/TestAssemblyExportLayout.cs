@@ -131,6 +131,53 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestLinkFooterLayoutDoesNotCreateStaleScrollBar()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                Panel panel = GetControl<Panel>(form, "panelLinkProperties");
+                Button finishButton = GetControl<Button>(form, "buttonLinksFinish");
+                Label packageLabel = GetControl<Label>(form, "labelRosPackageName");
+                Label packageHint = GetControl<Label>(form, "labelRosPackageNameHint");
+                TextBox packageName = GetControl<TextBox>(form, "textBoxRosPackageName");
+
+                form.ClientSize = new Size(1344, 812);
+                form.PerformLayout();
+                int buttonTop = finishButton.Top;
+                Size scrollMinSize = panel.AutoScrollMinSize;
+
+                for (int i = 0; i < 20; i++)
+                {
+                    form.PerformLayout();
+                }
+
+                Assert.Equal(buttonTop, finishButton.Top);
+                Assert.Equal(scrollMinSize, panel.AutoScrollMinSize);
+                Assert.True(
+                    panel.AutoScrollMinSize.Height == 0 ||
+                    panel.AutoScrollMinSize.Height <= panel.ClientSize.Height,
+                    String.Format("Link page kept stale scroll height {0} for client height {1}.",
+                        panel.AutoScrollMinSize.Height,
+                        panel.ClientSize.Height));
+
+                packageName.Text = "rover_description";
+                Assert.Equal("ROS1/rover_description | ROS2/rover_description", packageHint.Text);
+                Assert.DoesNotContain("and", packageHint.Text);
+                Assert.DoesNotContain("\u548c", packageHint.Text);
+                Assert.True(
+                    packageLabel.Text == "ROS package" ||
+                    packageLabel.Text == "ROS \u5305\u540d");
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
         public void TestMimicToggleLayoutIsIdempotent()
         {
             AssemblyExportForm form = (AssemblyExportForm)
@@ -285,12 +332,16 @@ namespace SW2URDF.Test
             GroupBox meshGroup = GetControl<GroupBox>(form, "groupBox4");
             TreeView tree = GetControl<TreeView>(form, "treeViewLinkProperties");
             Button finishButton = GetControl<Button>(form, "buttonLinksFinish");
-            int contentBottom = Math.Max(Math.Max(tree.Bottom, inertiaGroup.Bottom), meshGroup.Bottom);
+            int contentBottom = Math.Max(inertiaGroup.Bottom, meshGroup.Bottom);
 
             Assert.True(
                 contentBottom + 8 <= finishButton.Top,
                 String.Format("Link footer overlaps content: content bottom {0}, footer top {1}.",
                     contentBottom, finishButton.Top));
+            Assert.True(
+                tree.Bottom + 8 <= finishButton.Top,
+                String.Format("Link footer overlaps tree: tree bottom {0}, footer top {1}.",
+                    tree.Bottom, finishButton.Top));
         }
 
         private static void AssertJointFooterGeometry(AssemblyExportForm form)

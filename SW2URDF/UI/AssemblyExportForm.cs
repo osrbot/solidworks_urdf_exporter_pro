@@ -236,6 +236,7 @@ namespace SW2URDF.UI
 
             FillLinkTree();
             panelLinkProperties.Visible = true;
+            ResetLinkPanelScroll();
             Focus();
         }
 
@@ -462,9 +463,7 @@ namespace SW2URDF.UI
         private void UpdateRosPackageNameHint()
         {
             string sanitized = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
-            labelRosPackageNameHint.Text = ChineseUiText.Translate(
-                "Output: ROS1/" + sanitized + " and ROS2/" + sanitized,
-                "\u8f93\u51fa\uff1aROS1/" + sanitized + " \u548c ROS2/" + sanitized);
+            labelRosPackageNameHint.Text = "ROS1/" + sanitized + " | ROS2/" + sanitized;
         }
 
         private string CheckLinksForErrors(Link baseLink)
@@ -1070,18 +1069,17 @@ namespace SW2URDF.UI
             int maxHeight = Math.Max(
                 Math.Max(buttonLinksCancel.Height, buttonLinksPrevious.Height),
                 Math.Max(buttonLinksExportUrdfOnly.Height, buttonLinksFinish.Height));
-            int contentBottom = Math.Max(
-                Math.Max(treeViewLinkProperties.Bottom, groupBox5.Bottom),
-                groupBox4.Bottom);
+            int contentBottom = Math.Max(groupBox5.Bottom, groupBox4.Bottom);
             int visibleButtonTop = panelLinkProperties.ClientSize.Height - bottomMargin - maxHeight;
             int buttonTop = Math.Max(visibleButtonTop, contentBottom + verticalGap);
             int requiredScrollHeight = buttonTop + maxHeight + bottomMargin;
-
-            if (panelLinkProperties.AutoScrollMinSize.Height < requiredScrollHeight)
+            int scrollHeight = requiredScrollHeight > panelLinkProperties.ClientSize.Height
+                ? requiredScrollHeight
+                : 0;
+            panelLinkProperties.AutoScrollMinSize = new Size(0, scrollHeight);
+            if (scrollHeight == 0 && panelLinkProperties.AutoScrollPosition != Point.Empty)
             {
-                panelLinkProperties.AutoScrollMinSize = new Size(
-                    panelLinkProperties.AutoScrollMinSize.Width,
-                    requiredScrollHeight);
+                ResetLinkPanelScroll();
             }
 
             buttonLinksCancel.Top = buttonTop;
@@ -1095,6 +1093,11 @@ namespace SW2URDF.UI
             buttonLinksFinish.Left = panelLinkProperties.ClientSize.Width - rightMargin - buttonLinksFinish.Width;
             buttonLinksExportUrdfOnly.Left = buttonLinksFinish.Left - horizontalGap - buttonLinksExportUrdfOnly.Width;
             buttonLinksPrevious.Left = buttonLinksExportUrdfOnly.Left - horizontalGap - buttonLinksPrevious.Width;
+        }
+
+        private void ResetLinkPanelScroll()
+        {
+            panelLinkProperties.AutoScrollPosition = Point.Empty;
         }
 
         private int GetMimicControlsBottom()
