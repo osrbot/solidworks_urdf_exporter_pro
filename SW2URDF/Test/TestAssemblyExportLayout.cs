@@ -80,6 +80,12 @@ namespace SW2URDF.Test
                 secondNote.Text = "* 字段组为必填；如果字段过长，界面必须换行显示而不是裁切。";
                 mimicEquation.Text =
                     "pos = multiplier * pos_other + offset; long localized mimic formula should wrap instead of covering adjacent controls";
+                firstNote.Text =
+                    "\u7a7a\u767d\u9879\u4e0d\u4f1a\u5199\u5165 URDF\u3002" +
+                    "\u8bf7\u786e\u8ba4\u5750\u6807\u7cfb\u3001\u8f74\u548c\u60ef\u6027\u53c2\u6570\u5df2\u7ecf\u5728 SolidWorks \u4e2d\u6b63\u786e\u914d\u7f6e\u3002";
+                secondNote.Text =
+                    "* \u5b57\u6bb5\u7ec4\u4e3a\u5fc5\u586b\uff1b\u5982\u679c\u5b57\u6bb5\u8fc7\u957f\uff0c" +
+                    "\u754c\u9762\u5fc5\u987b\u6362\u884c\u663e\u793a\u800c\u4e0d\u662f\u88c1\u5207\u3002";
 
                 form.ClientSize = new Size(1073, 634);
                 mimicCheckBox.Checked = true;
@@ -88,6 +94,35 @@ namespace SW2URDF.Test
                 AssertJointFooterGeometry(form);
                 AssertJointFooterTextFits(form);
                 AssertMimicControlsDoNotOverlapFooter(form);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestLinkFooterScrollsBelowExpandedLocalizedContent()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                Panel panel = GetControl<Panel>(form, "panelLinkProperties");
+                GroupBox meshGroup = GetControl<GroupBox>(form, "groupBox4");
+
+                form.ClientSize = new Size(1073, 634);
+                meshGroup.Height += 90;
+                form.PerformLayout();
+
+                AssertLinkPageGeometry(form);
+                AssertLinkFooterBelowContent(form);
+                Assert.True(
+                    panel.AutoScrollMinSize.Height >= GetControl<Button>(form, "buttonLinksFinish").Bottom + 4,
+                    String.Format("Link panel scroll height {0} does not include the footer button row ending at {1}.",
+                        panel.AutoScrollMinSize.Height,
+                        GetControl<Button>(form, "buttonLinksFinish").Bottom));
             }
             finally
             {
@@ -125,22 +160,44 @@ namespace SW2URDF.Test
             GroupBox inertiaGroup = GetControl<GroupBox>(form, "groupBox5");
             GroupBox meshGroup = GetControl<GroupBox>(form, "groupBox4");
             TreeView tree = GetControl<TreeView>(form, "treeViewLinkProperties");
+            Button cancelButton = GetControl<Button>(form, "buttonLinksCancel");
+            Button previousButton = GetControl<Button>(form, "buttonLinksPrevious");
+            Button exportUrdfOnlyButton = GetControl<Button>(form, "buttonLinksExportUrdfOnly");
             Button finishButton = GetControl<Button>(form, "buttonLinksFinish");
             ComboBox collisionStrategy = GetControl<ComboBox>(form, "comboBoxCollisionStrategy");
             Label collisionStrategyLabel = GetControl<Label>(form, "labelCollisionStrategy");
             TextBox visualYaw = GetControl<TextBox>(form, "textBoxVisualOriginYaw");
             DomainUpDown colorRed = GetControl<DomainUpDown>(form, "domainUpDownRed");
+            int scrollBottom = Math.Max(panel.ClientSize.Height, panel.AutoScrollMinSize.Height);
 
             Assert.Equal(inertiaGroup.Left, packageLabel.Left);
             Assert.True(packageHint.Right <= inertiaGroup.Right);
             Assert.True(tree.Right < inertiaGroup.Left);
             Assert.True(meshGroup.Right <= panel.ClientSize.Width);
             Assert.True(finishButton.Right <= panel.ClientSize.Width);
-            Assert.True(finishButton.Bottom <= panel.ClientSize.Height);
+            Assert.True(finishButton.Bottom <= scrollBottom);
+            Assert.Equal(cancelButton.Top, previousButton.Top);
+            Assert.Equal(cancelButton.Top, exportUrdfOnlyButton.Top);
+            Assert.Equal(cancelButton.Top, finishButton.Top);
+            AssertLinkFooterBelowContent(form);
             Assert.Equal(ComboBoxStyle.DropDownList, collisionStrategy.DropDownStyle);
             Assert.True(collisionStrategy.Left > visualYaw.Right);
             Assert.True(collisionStrategy.Right < colorRed.Left);
             Assert.True(collisionStrategyLabel.Bottom <= collisionStrategy.Top);
+        }
+
+        private static void AssertLinkFooterBelowContent(AssemblyExportForm form)
+        {
+            GroupBox inertiaGroup = GetControl<GroupBox>(form, "groupBox5");
+            GroupBox meshGroup = GetControl<GroupBox>(form, "groupBox4");
+            TreeView tree = GetControl<TreeView>(form, "treeViewLinkProperties");
+            Button finishButton = GetControl<Button>(form, "buttonLinksFinish");
+            int contentBottom = Math.Max(Math.Max(tree.Bottom, inertiaGroup.Bottom), meshGroup.Bottom);
+
+            Assert.True(
+                contentBottom + 8 <= finishButton.Top,
+                String.Format("Link footer overlaps content: content bottom {0}, footer top {1}.",
+                    contentBottom, finishButton.Top));
         }
 
         private static void AssertJointFooterGeometry(AssemblyExportForm form)
@@ -259,6 +316,7 @@ namespace SW2URDF.Test
             {
                 GetControl<Button>(form, "buttonJointCancel"),
                 GetControl<Button>(form, "buttonJointNext"),
+                GetControl<Button>(form, "buttonLinksCancel"),
                 GetControl<Button>(form, "buttonLinksPrevious"),
                 GetControl<Button>(form, "buttonLinksExportUrdfOnly"),
                 GetControl<Button>(form, "buttonLinksFinish")

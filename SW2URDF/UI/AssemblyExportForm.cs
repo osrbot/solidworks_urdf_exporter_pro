@@ -810,6 +810,7 @@ namespace SW2URDF.UI
                 EnsureMinimumClientArea();
                 ResizeButtonToText(buttonJointCancel);
                 ResizeButtonToText(buttonJointNext);
+                ResizeButtonToText(buttonLinksCancel);
                 ResizeButtonToText(buttonLinksPrevious);
                 ResizeButtonToText(buttonLinksExportUrdfOnly);
                 ResizeButtonToText(buttonLinksFinish);
@@ -914,14 +915,31 @@ namespace SW2URDF.UI
             const int rightMargin = 12;
             const int bottomMargin = 4;
             const int horizontalGap = 8;
+            const int verticalGap = 12;
             int maxHeight = Math.Max(
-                buttonLinksPrevious.Height,
+                Math.Max(buttonLinksCancel.Height, buttonLinksPrevious.Height),
                 Math.Max(buttonLinksExportUrdfOnly.Height, buttonLinksFinish.Height));
-            int buttonTop = panelLinkProperties.ClientSize.Height - bottomMargin - maxHeight;
+            int contentBottom = Math.Max(
+                Math.Max(treeViewLinkProperties.Bottom, groupBox5.Bottom),
+                groupBox4.Bottom);
+            int visibleButtonTop = panelLinkProperties.ClientSize.Height - bottomMargin - maxHeight;
+            int buttonTop = Math.Max(visibleButtonTop, contentBottom + verticalGap);
+            int requiredScrollHeight = buttonTop + maxHeight + bottomMargin;
 
+            if (panelLinkProperties.AutoScrollMinSize.Height < requiredScrollHeight)
+            {
+                panelLinkProperties.AutoScrollMinSize = new Size(
+                    panelLinkProperties.AutoScrollMinSize.Width,
+                    requiredScrollHeight);
+            }
+
+            buttonLinksCancel.Top = buttonTop;
             buttonLinksFinish.Top = buttonTop;
             buttonLinksExportUrdfOnly.Top = buttonTop;
             buttonLinksPrevious.Top = buttonTop;
+            treeViewLinkProperties.Height = Math.Max(
+                200,
+                buttonTop - treeViewLinkProperties.Top - 8);
             buttonLinksFinish.Left = panelLinkProperties.ClientSize.Width - rightMargin - buttonLinksFinish.Width;
             buttonLinksExportUrdfOnly.Left = buttonLinksFinish.Left - horizontalGap - buttonLinksExportUrdfOnly.Width;
             buttonLinksPrevious.Left = Math.Min(
