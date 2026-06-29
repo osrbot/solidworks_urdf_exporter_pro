@@ -14,6 +14,8 @@ The OSRBot-maintained build keeps the original SolidWorks add-in workflow and ad
 - SolidWorks mass-property based inertia export and per-link validation logs.
 - Collision strategy selection for visual mesh, simplified mesh, accurate mesh, primitive boxes/cylinders/spheres, component boxes, and convex hulls.
 - STL mesh reduction ratio control for lighter exported mesh packages.
+- Automatic Link tree configuration loading from the SolidWorks assembly feature `URDF Export Configuration (v1.4)`.
+- CSV configuration loading and merge support through `Load Configuration...` for reusing old project values.
 - Chinese UI localization and safer UTF-8 English export logs.
 - Built-in usage guide with collision strategy recommendations, common URDF material names, project URL, and maintainer information.
 
@@ -52,6 +54,20 @@ https://github.com/ros/solidworks_urdf_exporter/releases/tag/1.5.1
 ## Usage
 
 See the [ROS Wiki](http://wiki.ros.org/sw_urdf_exporter) and associated [tutorials](http://wiki.ros.org/sw_urdf_exporter/Tutorials).
+
+### User-Friendly Workflow Features
+
+The exporter stores the Link tree configuration inside the SolidWorks assembly as `URDF Export Configuration (v1.4)`. When the same assembly is opened again, the plugin loads the saved Link/Joint tree, names, parent-child structure, and saved link properties automatically. This is the normal path for iterative robot modeling: configure once, reopen, adjust, and export again.
+
+When a saved tree is loaded, SolidWorks component references are reconnected from stored component PIDs. If a part was deleted, replaced, or saved as a new file and can no longer be resolved, the exporter warns which links need inspection before export.
+
+`Load Configuration...` is a different feature. It imports values from a CSV export and opens a merge window. Use it when you want to reuse values from an old robot project, such as mass/inertia, visual/collision settings, joint kinematics, or other joint parameters. It is useful after a CAD redesign where the tree shape is similar but some values should come from a previous export.
+
+For fast review after export, check:
+
+- `config/export_report.md`: human-readable export summary, fallback warnings, and effective strategies.
+- `config/inertial_validation.csv`: per-link SolidWorks vs URDF mass, COM, inertia tensor, and error values.
+- `config/mesh_manifest.csv`: per-link mesh strategy, estimated mesh size, and generated mesh records.
 
 ### Collision Strategy Quick Guide
 

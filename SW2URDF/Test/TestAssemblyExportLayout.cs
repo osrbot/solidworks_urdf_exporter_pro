@@ -259,6 +259,10 @@ namespace SW2URDF.Test
             string guide = UsageGuideForm.BuildGuideText(false);
 
             Assert.Contains("Recommended default: ComponentBoxes", guide);
+            Assert.Contains("Automatic Link tree loading", guide);
+            Assert.Contains("URDF Export Configuration (v1.4)", guide);
+            Assert.Contains("Load Configuration...", guide);
+            Assert.Contains("config/inertial_validation.csv", guide);
             Assert.Contains("CylinderPrimitive", guide);
             Assert.Contains("export_report.md", guide);
             Assert.Contains("mesh_manifest.csv", guide);

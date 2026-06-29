@@ -9,6 +9,7 @@ All notable OSRBot-maintained changes to this fork are documented here.
 - Added a built-in exporter guide window with collision strategy guidance, common material names, the project URL, and the current maintainer contact.
 - Added common material name presets for exported URDF materials, including `aluminum`, `steel`, `rubber_black`, and `transparent_blue`.
 - Added GitHub Actions release publishing for installer artifacts named `INSTALL/OUTPUT/sw2urdfSetup_YYYYMMDD_<commit>.exe`.
+- Added user-facing documentation for automatic Link tree configuration loading, CSV configuration merge, and export report files.
 
 ### Changed
 

@@ -105,13 +105,29 @@ namespace SW2URDF.UI
         private static string BuildChineseGuideText()
         {
             StringBuilder builder = new StringBuilder();
+            builder.AppendLine("快速功能索引");
+            builder.AppendLine();
+            builder.AppendLine("- 自动加载 Link 树配置: 如果装配体里存在 SolidWorks 特征 URDF Export Configuration (v1.4)，插件启动导出时会恢复上次保存的 Link/Joint 树、命名、父子关系和已保存属性。");
+            builder.AppendLine("- 保存配置: 导出或关闭配置页时，插件会提示是否保存变化；保存后配置写回当前装配体文件，而不是单独散落在外部目录。");
+            builder.AppendLine("- 组件重连: 加载旧配置时会用保存的 SolidWorks component PID 重新关联零件；如果某些零件被删除、替换或另存导致 PID 失效，会弹窗列出需要人工检查的 link。");
+            builder.AppendLine("- Load Configuration...: 从 CSV 导入旧 URDF 配置，并通过合并窗口选择是否采用 CSV 里的质量/惯性、视觉/碰撞、Joint 运动学和其他 Joint 参数。适合复用旧项目参数，不等同于自动加载装配体内置配置。");
+            builder.AppendLine("- 导出报告: 导出后查看 config/export_report.md、config/inertial_validation.csv 和 config/mesh_manifest.csv，可快速确认惯性误差、网格大小、fallback 和最终碰撞策略。");
+            builder.AppendLine();
+            builder.AppendLine("推荐使用流程");
+            builder.AppendLine();
+            builder.AppendLine("1. 首次导出时，先在 SolidWorks 里建好 Origin_global、各 Joint 坐标系和 Axis。");
+            builder.AppendLine("2. 在配置树里整理 Link/Joint 层级，命名尽量保持 ROS 友好: 小写、下划线、无空格。");
+            builder.AppendLine("3. 需要复用旧项目参数时，先点 Load Configuration... 导入 CSV，再在合并窗口选择保留哪些旧值。");
+            builder.AppendLine("4. 选好碰撞策略、材质名、网格精简比例后导出。");
+            builder.AppendLine("5. 重新打开同一个装配体时，插件会优先加载保存在装配体内的 Link 树配置；不用从头重新建树。");
+            builder.AppendLine();
             builder.AppendLine("碰撞策略怎么选");
             builder.AppendLine();
-            builder.AppendLine("- 推荐默认: ComponentBoxes。复杂装配体优先用组件包围盒集合，通常比完整 STL 更稳、更快。");
+            builder.AppendLine("- 推荐默认: ComponentBoxes。复杂装配体优先用组件包围盒集合，通常比完整 STL 更稳定、更快。");
             builder.AppendLine("- 盒状机身、电池盒、支架: BoxPrimitive 或 Primitive。");
             builder.AppendLine("- 轮子、圆柱外壳、雷达桶: CylinderPrimitive。");
             builder.AppendLine("- 球形脚轮或球壳: SpherePrimitive。");
-            builder.AppendLine("- 复杂但需要单个近似体: ConvexHull。");
+            builder.AppendLine("- 复杂但只需要单个近似体: ConvexHull。");
             builder.AppendLine("- 只做模型查看或最大兼容: VisualMesh。");
             builder.AppendLine("- 必须保留完整接触细节: AccurateMesh，但文件和碰撞计算成本最高。");
             builder.AppendLine("- primitive 不合适但想减小碰撞 STL: SimplifiedMesh。");
@@ -125,19 +141,28 @@ namespace SW2URDF.UI
             builder.AppendLine("常用材质名称");
             builder.AppendLine();
             builder.AppendLine(String.Join(", ", CommonMaterialNames));
-            builder.AppendLine();
-            builder.AppendLine("最小导出流程");
-            builder.AppendLine();
-            builder.AppendLine("1. 在 Link 页面选择材质名称和颜色。材质名称只是 URDF 命名模板，不等于物理材质库。");
-            builder.AppendLine("2. 网格格式优先选 STL；需要小文件时调低 STL 精简比例。");
-            builder.AppendLine("3. 先按上面的碰撞策略建议给每个 link 选策略。");
-            builder.AppendLine("4. 导出后查看 config/export_report.md 和 config/mesh_manifest.csv，确认 fallback、mesh 大小和有效碰撞策略。");
             return builder.ToString();
         }
 
         private static string BuildEnglishGuideText()
         {
             StringBuilder builder = new StringBuilder();
+            builder.AppendLine("Quick feature index");
+            builder.AppendLine();
+            builder.AppendLine("- Automatic Link tree loading: when the assembly contains the SolidWorks feature URDF Export Configuration (v1.4), the exporter restores the saved Link/Joint tree, names, parent-child structure, and saved properties at startup.");
+            builder.AppendLine("- Save configuration: when the configuration changes, the exporter prompts to save it back into the current assembly document instead of scattering separate sidecar files.");
+            builder.AppendLine("- Component reconnect: saved SolidWorks component PIDs are resolved when an old tree is loaded. If parts were deleted, replaced, or saved as new files, the exporter reports the links that need inspection.");
+            builder.AppendLine("- Load Configuration...: imports values from a CSV export and opens a merge window. You can choose whether CSV values should override mass/inertia, visual/collision, joint kinematics, and other joint properties. This is for reusing old project data; it is separate from automatic assembly configuration loading.");
+            builder.AppendLine("- Export diagnostics: after export, check config/export_report.md, config/inertial_validation.csv, and config/mesh_manifest.csv for inertia error, mesh size, fallback, and effective collision strategy.");
+            builder.AppendLine();
+            builder.AppendLine("Recommended workflow");
+            builder.AppendLine();
+            builder.AppendLine("1. For a first export, create Origin_global, joint coordinate systems, and axes in SolidWorks.");
+            builder.AppendLine("2. Arrange the Link/Joint hierarchy in the configuration tree. Keep names ROS-friendly: lowercase, underscores, no spaces.");
+            builder.AppendLine("3. To reuse old project values, click Load Configuration..., import a CSV, and choose which loaded values to keep in the merge window.");
+            builder.AppendLine("4. Pick collision strategy, material name, color, and STL reduction ratio, then export.");
+            builder.AppendLine("5. When the same assembly is reopened, the saved Link tree configuration is loaded from the assembly so the tree does not have to be rebuilt from scratch.");
+            builder.AppendLine();
             builder.AppendLine("Choosing a collision strategy");
             builder.AppendLine();
             builder.AppendLine("- Recommended default: ComponentBoxes. Use it for complex assemblies when stable and fast simulation matters.");
@@ -158,13 +183,6 @@ namespace SW2URDF.UI
             builder.AppendLine("Common material names");
             builder.AppendLine();
             builder.AppendLine(String.Join(", ", CommonMaterialNames));
-            builder.AppendLine();
-            builder.AppendLine("Minimal export workflow");
-            builder.AppendLine();
-            builder.AppendLine("1. Pick a material name and color on the Link page. The name is a URDF naming template, not a physical material library.");
-            builder.AppendLine("2. Prefer STL mesh format; reduce the STL ratio when file size matters.");
-            builder.AppendLine("3. Select a collision strategy per link using the guidance above.");
-            builder.AppendLine("4. After export, check config/export_report.md and config/mesh_manifest.csv for fallbacks, mesh size, and effective collision strategy.");
             return builder.ToString();
         }
 
