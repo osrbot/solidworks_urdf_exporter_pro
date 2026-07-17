@@ -24,6 +24,8 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Link 树编辑器" FontWeight="SemiBold" FontSize="17" VerticalAlignment="Center" Margin="0,0,20,0" />
                     <Button x:Name="AddChildToolbarButton" Content="+ 添加子 Link" Click="AddChildClick" />
+                    <Button Content="复制" Click="CopyClick" />
+                    <Button Content="粘贴" Click="PasteClick" />
                     <Button Content="自动整理" Click="AutoLayoutClick" />
                     <Button Content="重置视图" Click="ResetViewClick" />
                     <Button Content="加载示例" Click="LoadSampleClick" />
@@ -42,6 +44,8 @@
             <Border Grid.Column="0" Margin="12" Background="#FAFBFC" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="6" ClipToBounds="True">
                 <Grid x:Name="Viewport" Background="Transparent"
                       MouseWheel="ViewportMouseWheel"
+                      PreviewMouseLeftButtonDown="ViewportLeftButtonDown"
+                      PreviewMouseLeftButtonUp="ViewportLeftButtonUp"
                       MouseRightButtonDown="ViewportRightButtonDown"
                       MouseRightButtonUp="ViewportRightButtonUp"
                       MouseMove="ViewportMouseMove">

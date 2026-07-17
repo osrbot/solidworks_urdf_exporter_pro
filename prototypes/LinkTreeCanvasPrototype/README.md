@@ -13,6 +13,9 @@ C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe LinkTreeCanvasProtot
 ## Implemented prototype interactions
 
 - Free node positioning with live directional connectors.
+- Drag-select multiple Link cards, then copy and paste with `Ctrl+C` / `Ctrl+V`.
+- Preserve relationships inside the copied group and generate unique Link/Joint names.
+- Exclude the single root Link from duplication and automatically arrange the tree after paste.
 - Mouse-wheel zoom and right-button canvas panning.
 - Add child Link from the toolbar, inspector, or node `+` button.
 - Automatic fixed Joint creation for each new child.

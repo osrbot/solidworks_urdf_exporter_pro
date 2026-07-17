@@ -28,6 +28,8 @@ namespace LinkTreeCanvasPrototype
 
         private readonly ILinkTreeCanvasHost host;
         private readonly Dictionary<Guid, Border> nodeViews = new Dictionary<Guid, Border>();
+        private readonly HashSet<Guid> selectedNodeIds = new HashSet<Guid>();
+        private readonly List<LinkTreeNode> copiedNodes = new List<LinkTreeNode>();
         private LinkTreeDocument document;
         private Guid? selectedNodeId;
         private Guid? draggingNodeId;
@@ -37,6 +39,9 @@ namespace LinkTreeCanvasPrototype
         private bool isPanning;
         private Point panStartPointer;
         private Vector panStartOffset;
+        private bool isBoxSelecting;
+        private Point boxSelectionStart;
+        private Rectangle selectionRectangle;
         private bool suppressPropertyEvents;
         private double zoom = 1.0;
 
@@ -81,7 +86,7 @@ namespace LinkTreeCanvasPrototype
                 Height = NodeHeight,
                 Background = Brushes.White,
                 BorderBrush = new SolidColorBrush(branchColor),
-                BorderThickness = selectedNodeId == node.Id ? new Thickness(3) : new Thickness(2),
+                BorderThickness = selectedNodeIds.Contains(node.Id) ? new Thickness(3) : new Thickness(2),
                 CornerRadius = new CornerRadius(6),
                 Tag = node.Id,
                 Cursor = Cursors.SizeAll,
@@ -210,11 +215,14 @@ namespace LinkTreeCanvasPrototype
                 {
                     Text = child.JointName + " / " + child.JointType,
                     FontSize = 10,
-                    Foreground = new SolidColorBrush(Color.FromRgb(71, 84, 103))
+                    Foreground = new SolidColorBrush(Color.FromRgb(71, 84, 103)),
+                    MaxWidth = 155,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    ToolTip = child.JointName + " / " + child.JointType
                 },
                 IsHitTestVisible = false
             };
-            const double labelProgress = 0.68;
+            const double labelProgress = 0.78;
             Canvas.SetLeft(label, start.X + (end.X - start.X) * labelProgress - 55);
             Canvas.SetTop(label, start.Y + (end.Y - start.Y) * labelProgress - 23);
             Panel.SetZIndex(label, 3);
@@ -255,7 +263,7 @@ namespace LinkTreeCanvasPrototype
         {
             Border card = (Border)sender;
             Guid id = (Guid)card.Tag;
-            SelectNode(id);
+            SelectNode(id, (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control);
             if (e.ClickCount == 2)
             {
                 LinkNameTextBox.Focus();
@@ -389,10 +397,45 @@ namespace LinkTreeCanvasPrototype
             return true;
         }
 
-        private void SelectNode(Guid id)
+        private void SelectNode(Guid id, bool additive = false)
         {
+            if (!additive)
+            {
+                selectedNodeIds.Clear();
+            }
+            if (additive && selectedNodeIds.Contains(id))
+            {
+                selectedNodeIds.Remove(id);
+                selectedNodeId = selectedNodeIds.Count == 0 ? (Guid?)null : selectedNodeIds.Last();
+                RefreshSelectionPanel();
+                RenderDocument();
+                return;
+            }
+            selectedNodeIds.Add(id);
             selectedNodeId = id;
-            LinkTreeNode node = document.Find(id);
+            RefreshSelectionPanel();
+            RenderDocument();
+        }
+
+        private void RefreshSelectionPanel()
+        {
+            if (selectedNodeIds.Count != 1 || !selectedNodeId.HasValue)
+            {
+                suppressPropertyEvents = true;
+                LinkNameTextBox.IsEnabled = false;
+                LinkNameTextBox.Text = selectedNodeIds.Count > 1 ? selectedNodeIds.Count + " 个 Link 已选中" : string.Empty;
+                JointNameTextBox.IsEnabled = false;
+                JointNameTextBox.Text = string.Empty;
+                JointTypeComboBox.IsEnabled = false;
+                JointTypeComboBox.SelectedIndex = -1;
+                ParentNameText.Text = selectedNodeIds.Count > 1 ? "多选" : string.Empty;
+                NameValidationText.Text = string.Empty;
+                suppressPropertyEvents = false;
+                SelectionText.Text = selectedNodeIds.Count > 0 ? "已选择 " + selectedNodeIds.Count + " 个 Link" : "未选择节点";
+                return;
+            }
+
+            LinkTreeNode node = document.Find(selectedNodeId.Value);
             suppressPropertyEvents = true;
             LinkNameTextBox.IsEnabled = true;
             LinkNameTextBox.Text = node.Name;
@@ -404,7 +447,6 @@ namespace LinkTreeCanvasPrototype
             NameValidationText.Text = string.Empty;
             suppressPropertyEvents = false;
             SelectionText.Text = "当前：" + node.Name;
-            RenderDocument();
         }
 
         private void SelectJointType(string jointType)
@@ -617,7 +659,7 @@ namespace LinkTreeCanvasPrototype
             int row = 0;
             LayoutSubtree(document.Root, 0, ref row);
             RenderDocument();
-            ResetView();
+            FitDocumentToViewport();
             UpdateStatus("已按层级自动整理");
         }
 
@@ -657,6 +699,7 @@ namespace LinkTreeCanvasPrototype
         private void LoadSampleClick(object sender, RoutedEventArgs e)
         {
             document = LinkTreeDocument.CreateSample();
+            selectedNodeIds.Clear();
             RenderDocument();
             SelectNode(document.Root.Id);
             ResetView();
@@ -677,6 +720,29 @@ namespace LinkTreeCanvasPrototype
             ZoomLabel.Text = "100%";
         }
 
+        private void FitDocumentToViewport()
+        {
+            if (document.Nodes.Count == 0 || Viewport.ActualWidth <= 0 || Viewport.ActualHeight <= 0)
+            {
+                ResetView();
+                return;
+            }
+            double minX = document.Nodes.Min(node => node.X);
+            double minY = document.Nodes.Min(node => node.Y);
+            double maxX = document.Nodes.Max(node => node.X + NodeWidth);
+            double maxY = document.Nodes.Max(node => node.Y + NodeHeight);
+            double contentWidth = Math.Max(1, maxX - minX);
+            double contentHeight = Math.Max(1, maxY - minY);
+            double availableWidth = Math.Max(1, Viewport.ActualWidth - 60);
+            double availableHeight = Math.Max(1, Viewport.ActualHeight - 60);
+            zoom = Math.Max(0.45, Math.Min(1.0, Math.Min(availableWidth / contentWidth, availableHeight / contentHeight)));
+            ZoomTransform.ScaleX = zoom;
+            ZoomTransform.ScaleY = zoom;
+            PanTransform.X = 30 - minX * zoom;
+            PanTransform.Y = 30 - minY * zoom;
+            ZoomLabel.Text = Math.Round(zoom * 100) + "%";
+        }
+
         private void ViewportMouseWheel(object sender, MouseWheelEventArgs e)
         {
             zoom = Math.Max(0.45, Math.Min(1.8, zoom + (e.Delta > 0 ? 0.1 : -0.1)));
@@ -684,6 +750,90 @@ namespace LinkTreeCanvasPrototype
             ZoomTransform.ScaleY = zoom;
             ZoomLabel.Text = Math.Round(zoom * 100) + "%";
             e.Handled = true;
+        }
+
+        private void ViewportLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed || FindNodeCard(e.OriginalSource as DependencyObject) != null)
+            {
+                return;
+            }
+
+            isBoxSelecting = true;
+            boxSelectionStart = e.GetPosition(Workspace);
+            if ((Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control)
+            {
+                selectedNodeIds.Clear();
+                selectedNodeId = null;
+            }
+            selectionRectangle = new Rectangle
+            {
+                Stroke = new SolidColorBrush(Color.FromRgb(31, 132, 255)),
+                StrokeThickness = 1.5,
+                StrokeDashArray = new DoubleCollection { 4, 3 },
+                Fill = new SolidColorBrush(Color.FromArgb(32, 31, 132, 255)),
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(selectionRectangle, boxSelectionStart.X);
+            Canvas.SetTop(selectionRectangle, boxSelectionStart.Y);
+            Panel.SetZIndex(selectionRectangle, 100);
+            Workspace.Children.Add(selectionRectangle);
+            Viewport.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private static Border FindNodeCard(DependencyObject source)
+        {
+            DependencyObject current = source;
+            while (current != null)
+            {
+                Border border = current as Border;
+                if (border != null && border.Tag is Guid)
+                {
+                    return border;
+                }
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
+        }
+
+        private void ViewportLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!isBoxSelecting)
+            {
+                return;
+            }
+            CompleteBoxSelection(e.GetPosition(Workspace));
+            e.Handled = true;
+        }
+
+        private void CompleteBoxSelection(Point end)
+        {
+            Rect selection = RectFromPoints(boxSelectionStart, end);
+            foreach (LinkTreeNode node in document.Nodes)
+            {
+                Rect nodeBounds = new Rect(node.X, node.Y, NodeWidth, NodeHeight);
+                if (selection.IntersectsWith(nodeBounds))
+                {
+                    selectedNodeIds.Add(node.Id);
+                }
+            }
+            selectedNodeId = selectedNodeIds.Count == 0 ? (Guid?)null : selectedNodeIds.Last();
+            isBoxSelecting = false;
+            selectionRectangle = null;
+            Viewport.ReleaseMouseCapture();
+            RefreshSelectionPanel();
+            RenderDocument();
+            UpdateStatus(selectedNodeIds.Count == 0 ? "框选未命中节点" : "已框选 " + selectedNodeIds.Count + " 个 Link");
+        }
+
+        private static Rect RectFromPoints(Point first, Point second)
+        {
+            return new Rect(
+                Math.Min(first.X, second.X),
+                Math.Min(first.Y, second.Y),
+                Math.Abs(second.X - first.X),
+                Math.Abs(second.Y - first.Y));
         }
 
         private void ViewportRightButtonDown(object sender, MouseButtonEventArgs e)
@@ -704,6 +854,15 @@ namespace LinkTreeCanvasPrototype
 
         private void ViewportMouseMove(object sender, MouseEventArgs e)
         {
+            if (isBoxSelecting && e.LeftButton == MouseButtonState.Pressed && selectionRectangle != null)
+            {
+                Rect rect = RectFromPoints(boxSelectionStart, e.GetPosition(Workspace));
+                Canvas.SetLeft(selectionRectangle, rect.Left);
+                Canvas.SetTop(selectionRectangle, rect.Top);
+                selectionRectangle.Width = rect.Width;
+                selectionRectangle.Height = rect.Height;
+                return;
+            }
             if (!isPanning || e.RightButton != MouseButtonState.Pressed)
             {
                 return;
@@ -726,7 +885,17 @@ namespace LinkTreeCanvasPrototype
 
         private void WindowKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Delete && !(Keyboard.FocusedElement is TextBox))
+            if (e.Key == Key.C && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                CopySelected();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                PasteCopied();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Delete && !(Keyboard.FocusedElement is TextBox))
             {
                 DeleteSelected();
             }
@@ -735,6 +904,80 @@ namespace LinkTreeCanvasPrototype
                 LinkNameTextBox.Focus();
                 LinkNameTextBox.SelectAll();
             }
+        }
+
+        private void CopyClick(object sender, RoutedEventArgs e)
+        {
+            CopySelected();
+        }
+
+        private void PasteClick(object sender, RoutedEventArgs e)
+        {
+            PasteCopied();
+        }
+
+        private void CopySelected()
+        {
+            copiedNodes.Clear();
+            copiedNodes.AddRange(document.Nodes
+                .Where(node => node.ParentId.HasValue && selectedNodeIds.Contains(node.Id))
+                .Select(node => node.Clone()));
+            UpdateStatus(copiedNodes.Count == 0 ? "请先框选需要复制的 Link" : "已复制 " + copiedNodes.Count + " 个 Link");
+        }
+
+        private void PasteCopied()
+        {
+            if (copiedNodes.Count == 0)
+            {
+                UpdateStatus("没有可粘贴的 Link");
+                return;
+            }
+
+            HashSet<Guid> copiedIds = new HashSet<Guid>(copiedNodes.Select(node => node.Id));
+            Dictionary<Guid, LinkTreeNode> copies = new Dictionary<Guid, LinkTreeNode>();
+            foreach (LinkTreeNode source in copiedNodes)
+            {
+                LinkTreeNode copy = source.Clone();
+                copy.Id = Guid.NewGuid();
+                copy.Name = MakeUniqueLinkName(source.Name + "_copy");
+                copy.X = source.X + 70;
+                copy.Y = source.Y + 70;
+                copies[source.Id] = copy;
+            }
+
+            foreach (LinkTreeNode source in copiedNodes)
+            {
+                LinkTreeNode copy = copies[source.Id];
+                if (source.ParentId.HasValue && copiedIds.Contains(source.ParentId.Value))
+                {
+                    copy.ParentId = copies[source.ParentId.Value].Id;
+                }
+                else
+                {
+                    copy.ParentId = source.ParentId;
+                }
+
+                if (copy.ParentId.HasValue)
+                {
+                    LinkTreeNode parent = document.Find(copy.ParentId.Value) ?? copies.Values.FirstOrDefault(node => node.Id == copy.ParentId.Value);
+                    string parentName = parent == null ? "link" : parent.Name;
+                    copy.JointName = MakeUniqueJointName(parentName + "_" + copy.Name + "_joint", copy.Id);
+                }
+                document.Nodes.Add(copy);
+            }
+
+            selectedNodeIds.Clear();
+            foreach (LinkTreeNode copy in copies.Values)
+            {
+                selectedNodeIds.Add(copy.Id);
+            }
+            selectedNodeId = selectedNodeIds.Last();
+            int layoutRow = 0;
+            LayoutSubtree(document.Root, 0, ref layoutRow);
+            RefreshSelectionPanel();
+            RenderDocument();
+            FitDocumentToViewport();
+            UpdateStatus("已粘贴 " + copies.Count + " 个 Link，名称已自动去重并整理布局");
         }
 
         private void UpdateStatus(string message)
