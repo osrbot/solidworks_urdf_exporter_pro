@@ -327,6 +327,11 @@
     <Compile Include="UI\IMessageBox.cs" />
     <Compile Include="UI\ChineseUiText.cs" />
     <Compile Include="UI\InertiaPreview.cs" />
+    <Compile Include="UI\LinkTreeCanvas\CanvasContracts.cs" />
+    <Compile Include="UI\LinkTreeCanvas\LinkTreeDocument.cs" />
+    <Compile Include="UI\LinkTreeCanvas\LinkTreeCanvasWindow.xaml.cs">
+      <DependentUpon>LinkTreeCanvasWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\MessageBoxHelper.cs" />
     <Compile Include="UI\UsageGuideForm.cs" />
     <Compile Include="Test\SW2URDFTest.cs" />
@@ -340,6 +345,7 @@
     <Compile Include="Test\TestInertiaConvention.cs" />
     <Compile Include="Test\TestInertiaPreview.cs" />
     <Compile Include="Test\TestLogger.cs" />
+    <Compile Include="Test\TestLinkTreeCanvas.cs" />
     <Compile Include="Test\TestMathOps.cs" />
     <Compile Include="Test\TestMeshReduction.cs" />
     <Compile Include="Test\TestOperationHeartbeat.cs" />
@@ -382,6 +388,7 @@
     <Compile Include="URDFExport\ExportHelperExtension.cs" />
     <Compile Include="URDFExport\ExportHelperReport.cs" />
     <Compile Include="URDFExport\InertiaEllipsoid.cs" />
+    <Compile Include="URDFExport\LinkTreeCanvasHost.cs" />
     <Compile Include="UI\AssemblyExportFormExtension.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -476,6 +483,10 @@
     <None Include="SW2URDF.ruleset" />
   </ItemGroup>
   <ItemGroup>
+    <Page Include="UI\LinkTreeCanvas\LinkTreeCanvasWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="UI\TreeMergeWPF.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>

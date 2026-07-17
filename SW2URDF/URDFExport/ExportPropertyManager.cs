@@ -62,6 +62,7 @@ namespace SW2URDF.URDFExport
         private PropertyManagerPageSelectionbox PMSelection;
         private PropertyManagerPageButton PMButtonExport;
         private PropertyManagerPageButton PMButtonLoad;
+        private PropertyManagerPageButton PMButtonEditTree;
         private PropertyManagerPageTextbox PMTextBoxLinkName;
         private PropertyManagerPageTextbox PMTextBoxJointName;
         private PropertyManagerPageNumberbox PMNumberBoxChildCount;
@@ -110,6 +111,7 @@ namespace SW2URDF.URDFExport
         private const int ComputeJointKinematicsID = 29;
         private const int ComputeJointLimitsID = 30;
         private const int LoadedCSVFilenameID = 31;
+        private const int EditLinkTreeID = 32;
 
         #endregion class variables
 
@@ -416,6 +418,10 @@ namespace SW2URDF.URDFExport
 
                 case LoadConfigurationID:
                     LoadFromCSV();
+                    break;
+
+                case EditLinkTreeID:
+                    OpenLinkTreeCanvas();
                     break;
 
                 default:
@@ -994,6 +1000,21 @@ namespace SW2URDF.URDFExport
             PMNumberBoxChildCount.SetRange2(
                 (int)swNumberboxUnitType_e.swNumberBox_UnitlessInteger, 0, int.MaxValue, true, 1, 1, 1);
             PMNumberBoxChildCount.Value = 0;
+
+            // Link tree canvas button
+            controlType = (int)swPropertyManagerPageControlType_e.swControlType_Button;
+            caption = ChineseUiText.Translate(
+                "Edit Link Tree...",
+                "编辑 Link 树...");
+            tip = ChineseUiText.Translate(
+                "Edit the Link hierarchy on a transactional canvas",
+                "在自由画布中编辑 Link 层级；仅在点击应用后提交");
+            alignment = 0;
+            options = (int)swAddControlOptions_e.swControlOptions_Visible +
+                (int)swAddControlOptions_e.swControlOptions_Enabled;
+            PMButtonEditTree = PMGroup.AddControl2(
+                EditLinkTreeID, (short)controlType, caption, (short)alignment, (int)options, tip);
+            (PMButtonEditTree as IPropertyManagerPageControl).Width = 200;
 
             // Load Configuration button
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Button;

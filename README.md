@@ -15,6 +15,7 @@ The OSRBot-maintained build keeps the original SolidWorks add-in workflow and ad
 - Collision strategy selection for visual mesh, simplified mesh, accurate mesh, primitive boxes/cylinders/spheres, component boxes, and convex hulls.
 - STL mesh reduction ratio control for lighter exported mesh packages.
 - Automatic Link tree configuration loading from the SolidWorks assembly feature `URDF Export Configuration (v1.4)`.
+- Transactional Link tree canvas for adding, renaming, moving, box-selecting, copying, and pasting Link groups before export.
 - CSV configuration loading and merge support through `Load Configuration...` for reusing old project values.
 - Chinese UI localization and safer UTF-8 English export logs.
 - Built-in usage guide with collision strategy recommendations, common URDF material names, project URL, and maintainer information.
@@ -60,6 +61,8 @@ See the [ROS Wiki](http://wiki.ros.org/sw_urdf_exporter) and associated [tutoria
 The exporter stores the Link tree configuration inside the SolidWorks assembly as `URDF Export Configuration (v1.4)`. When the same assembly is opened again, the plugin loads the saved Link/Joint tree, names, parent-child structure, and saved link properties automatically. This is the normal path for iterative robot modeling: configure once, reopen, adjust, and export again.
 
 When a saved tree is loaded, SolidWorks component references are reconnected from stored component PIDs. If a part was deleted, replaced, or saved as a new file and can no longer be resolved, the exporter warns which links need inspection before export.
+
+Use `Edit Link Tree...` to open the free canvas. The canvas edits a working copy: `Cancel` discards all structural changes, while `Apply` validates and commits them back to the existing configuration tree. Existing Link objects keep their mass, inertia, mesh settings, and SolidWorks component bindings. Newly added or pasted Links intentionally start without SolidWorks component bindings and must be assigned in the PropertyManager before export.
 
 `Load Configuration...` is a different feature. It imports values from a CSV export and opens a merge window. Use it when you want to reuse values from an old robot project, such as mass/inertia, visual/collision settings, joint kinematics, or other joint parameters. It is useful after a CAD redesign where the tree shape is similar but some values should come from a previous export.
 

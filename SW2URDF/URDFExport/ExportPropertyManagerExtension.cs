@@ -23,6 +23,7 @@ THE SOFTWARE.
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SolidWorks.Interop.swpublished;
+using SW2URDF.UI.LinkTreeCanvas;
 using SW2URDF.URDF;
 using SW2URDF.Utilities;
 using System;
@@ -34,6 +35,64 @@ namespace SW2URDF.URDFExport
 {
     public partial class ExportPropertyManager : PropertyManagerPage2Handler9
     {
+        private void OpenLinkTreeCanvas()
+        {
+            if (Tree == null || Tree.Nodes.Count == 0)
+            {
+                MessageBox.Show("Link tree is empty.");
+                return;
+            }
+
+            SaveActiveNode();
+            Link selectedLink = previouslySelectedNode == null ? null : previouslySelectedNode.Link;
+            LinkTreeCanvasHost host = new LinkTreeCanvasHost((LinkNode)Tree.Nodes[0]);
+
+            try
+            {
+                LinkTreeCanvasWindow window = new LinkTreeCanvasWindow(host);
+                bool? accepted = window.ShowDialog();
+                if (accepted != true || host.AppliedRoot == null)
+                {
+                    return;
+                }
+
+                previouslySelectedNode = null;
+                previouslySelectedLink = null;
+                AddDocMenu(host.AppliedRoot);
+                Tree.Nodes.Clear();
+                Tree.Nodes.Add(host.AppliedRoot);
+                Tree.ExpandAll();
+
+                LinkNode selectedNode = FindNodeByLink(host.AppliedRoot, selectedLink) ?? host.AppliedRoot;
+                Tree.SelectedNode = selectedNode;
+                selectedNode.EnsureVisible();
+            }
+            catch (Exception exception)
+            {
+                logger.Error("Failed to edit the Link tree on the canvas.", exception);
+                MessageBox.Show(
+                    "The Link tree editor could not be opened:\r\n" + exception.Message,
+                    "SW2URDF");
+            }
+        }
+
+        private static LinkNode FindNodeByLink(LinkNode node, Link link)
+        {
+            if (link == null || object.ReferenceEquals(node.Link, link))
+            {
+                return link == null ? null : node;
+            }
+            foreach (LinkNode child in node.Nodes)
+            {
+                LinkNode match = FindNodeByLink(child, link);
+                if (match != null)
+                {
+                    return match;
+                }
+            }
+            return null;
+        }
+
         public static readonly double ConfigurationVersion = 1.3;
         public static readonly double SoapMinVersion = 1.3;
 

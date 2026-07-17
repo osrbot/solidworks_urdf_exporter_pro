@@ -2,6 +2,19 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## 2026-07-17
+
+### Added
+
+- Added a transactional Link tree canvas to the SolidWorks PropertyManager workflow.
+- Added free node placement, drag-to-reparent, automatic layout, box selection, and structure-only group copy/paste with automatic Link and Joint name deduplication.
+- Added Link tree validation for a single root, unique ROS-compatible names, valid parents, and cycle prevention.
+
+### Changed
+
+- Existing Link objects now remain intact when canvas structure changes are applied, preserving mass, inertia, mesh settings, and SolidWorks component bindings.
+- New and pasted Links are marked incomplete and start without SolidWorks component bindings to prevent accidental reuse of components from a copied symmetric branch.
+
 ## 2026-06-29
 
 ### Added
