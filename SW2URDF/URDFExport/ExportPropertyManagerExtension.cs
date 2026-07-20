@@ -45,27 +45,18 @@ namespace SW2URDF.URDFExport
 
             SaveActiveNode();
             Link selectedLink = previouslySelectedNode == null ? null : previouslySelectedNode.Link;
-            LinkTreeCanvasHost host = new LinkTreeCanvasHost((LinkNode)Tree.Nodes[0]);
+            CommitLinkTreeProjection();
 
             try
             {
-                LinkTreeCanvasWindow window = new LinkTreeCanvasWindow(host);
+                LinkTreeCanvasWindow window = new LinkTreeCanvasWindow(linkTreeSession);
                 bool? accepted = window.ShowDialog();
-                if (accepted != true || host.AppliedRoot == null)
+                if (accepted != true)
                 {
                     return;
                 }
 
-                previouslySelectedNode = null;
-                previouslySelectedLink = null;
-                AddDocMenu(host.AppliedRoot);
-                Tree.Nodes.Clear();
-                Tree.Nodes.Add(host.AppliedRoot);
-                Tree.ExpandAll();
-
-                LinkNode selectedNode = FindNodeByLink(host.AppliedRoot, selectedLink) ?? host.AppliedRoot;
-                Tree.SelectedNode = selectedNode;
-                selectedNode.EnsureVisible();
+                RefreshLinkTreeProjection(selectedLink);
             }
             catch (Exception exception)
             {
@@ -74,6 +65,53 @@ namespace SW2URDF.URDFExport
                     "The Link tree editor could not be opened:\r\n" + exception.Message,
                     "SW2URDF");
             }
+        }
+
+        private void ReplaceLinkTreeRoot(LinkNode root, Link selectedLink = null)
+        {
+            if (root == null)
+            {
+                throw new ArgumentNullException(nameof(root));
+            }
+            linkTreeSession = new LinkTreeSession(root);
+            RefreshLinkTreeProjection(selectedLink);
+        }
+
+        private void CommitLinkTreeProjection()
+        {
+            if (Tree == null || Tree.Nodes.Count == 0)
+            {
+                return;
+            }
+            LinkNode root = (LinkNode)Tree.Nodes[0];
+            if (linkTreeSession == null)
+            {
+                linkTreeSession = new LinkTreeSession(root);
+            }
+            else
+            {
+                linkTreeSession.CaptureTree(root);
+            }
+        }
+
+        private void RefreshLinkTreeProjection(Link selectedLink = null)
+        {
+            if (linkTreeSession == null)
+            {
+                return;
+            }
+
+            LinkNode root = linkTreeSession.CreateProjection();
+            AddDocMenu(root);
+            previouslySelectedNode = null;
+            previouslySelectedLink = null;
+            Tree.Nodes.Clear();
+            Tree.Nodes.Add(root);
+            Tree.ExpandAll();
+
+            LinkNode selectedNode = FindNodeByLink(root, selectedLink) ?? root;
+            Tree.SelectedNode = selectedNode;
+            selectedNode.EnsureVisible();
         }
 
         private static LinkNode FindNodeByLink(LinkNode node, Link link)
@@ -189,6 +227,7 @@ namespace SW2URDF.URDFExport
             Tree.Height = height;
             PMTree.Height = height;
             currentNode.ExpandAll();
+            CommitLinkTreeProjection();
         }
 
         // When a new node is selected or another node is found that needs to be visited, this
@@ -509,7 +548,6 @@ namespace SW2URDF.URDFExport
         //Populates the TreeView with the organized links from the robot
         public void FillTreeViewFromRobot(Robot robot)
         {
-            Tree.Nodes.Clear();
             LinkNode baseNode = new LinkNode();
             Link baseLink = robot.BaseLink;
             baseNode.Name = baseLink.Name;
@@ -521,8 +559,7 @@ namespace SW2URDF.URDFExport
             {
                 baseNode.Nodes.Add(CreateLinkNodeFromLink(child));
             }
-            Tree.Nodes.Add(baseNode);
-            Tree.ExpandAll();
+            ReplaceLinkTreeRoot(baseNode);
         }
 
         // Similar to the AssemblyExportForm method. It creates a LinkNode from a Link object
@@ -593,12 +630,7 @@ namespace SW2URDF.URDFExport
                 }
             }
 
-            AddDocMenu(baseNode);
-
-            Tree.Nodes.Clear();
-            Tree.Nodes.Add(baseNode);
-            Tree.ExpandAll();
-            Tree.SelectedNode = Tree.Nodes[0];
+            ReplaceLinkTreeRoot(baseNode);
         }
 
         public void MoveComponentsToFolder(LinkNode node)

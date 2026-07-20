@@ -2,6 +2,19 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## 2026-07-20
+
+### Changed
+
+- Promoted the transactional Link tree adapter to a persistent export-session data source with stable node IDs and canvas positions.
+- Unified automatic configuration loading, CSV merge results, legacy TreeView edits, configuration saving, and final export through the same Link tree session boundary.
+- Removed the legacy export side effect that detached the root node from the PropertyManager TreeView before creating the robot.
+
+### Fixed
+
+- Preserved canvas node identity when reopening the editor after editing Link properties or structure in the legacy PropertyManager tree.
+- Prevented stale TreeView structure from diverging from the tree used for configuration serialization or URDF export.
+
 ## 2026-07-17
 
 ### Added

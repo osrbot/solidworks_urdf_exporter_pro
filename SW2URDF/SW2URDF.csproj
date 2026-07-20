@@ -388,7 +388,7 @@
     <Compile Include="URDFExport\ExportHelperExtension.cs" />
     <Compile Include="URDFExport\ExportHelperReport.cs" />
     <Compile Include="URDFExport\InertiaEllipsoid.cs" />
-    <Compile Include="URDFExport\LinkTreeCanvasHost.cs" />
+    <Compile Include="URDFExport\LinkTreeSession.cs" />
     <Compile Include="UI\AssemblyExportFormExtension.cs">
       <SubType>Form</SubType>
     </Compile>

@@ -27,7 +27,7 @@ namespace SW2URDF.Test
         public void HostDoesNotMutateLegacyTreeBeforeApply()
         {
             LinkNode root = CreateTree();
-            LinkTreeCanvasHost host = new LinkTreeCanvasHost(root);
+            LinkTreeSession host = new LinkTreeSession(root);
             LinkTreeDocument workingCopy = host.LoadTree();
             workingCopy.Root.Name = "renamed_base";
 
@@ -40,7 +40,7 @@ namespace SW2URDF.Test
         {
             LinkNode root = CreateTree();
             Link originalChildLink = ((LinkNode)root.Nodes[0]).Link;
-            LinkTreeCanvasHost host = new LinkTreeCanvasHost(root);
+            LinkTreeSession host = new LinkTreeSession(root);
             LinkTreeDocument document = host.LoadTree();
             LinkTreeNode child = document.Nodes.Single(node => node.Name == "sensor_link");
             child.Name = "lidar_link";
@@ -60,7 +60,7 @@ namespace SW2URDF.Test
         public void NewCanvasNodeStartsWithoutSolidWorksComponentBindings()
         {
             LinkNode root = CreateTree();
-            LinkTreeCanvasHost host = new LinkTreeCanvasHost(root);
+            LinkTreeSession host = new LinkTreeSession(root);
             LinkTreeDocument document = host.LoadTree();
             LinkTreeNode added = LinkTreeDocument.NewNode(
                 "right_sensor_link",
@@ -77,6 +77,48 @@ namespace SW2URDF.Test
                 .Single(node => node.Link.Name == "right_sensor_link");
             Assert.Empty(applied.Link.SWComponents);
             Assert.True(applied.IsIncomplete);
+        }
+
+        [Fact]
+        public void SessionPreservesNodeIdsAcrossLegacyProjectionCapture()
+        {
+            LinkTreeSession session = new LinkTreeSession(CreateTree());
+            LinkTreeDocument before = session.LoadTree();
+            LinkNode projection = session.CreateProjection();
+            ((LinkNode)projection.Nodes[0]).Link.Joint.Type = "continuous";
+
+            session.CaptureTree(projection);
+            LinkTreeDocument after = session.LoadTree();
+
+            Assert.Equal(
+                before.Nodes.OrderBy(node => node.Name).Select(node => node.Id),
+                after.Nodes.OrderBy(node => node.Name).Select(node => node.Id));
+            Assert.Equal(
+                "continuous",
+                after.Nodes.Single(node => node.Name == "sensor_link").JointType);
+        }
+
+        [Fact]
+        public void AppliedCanvasStructureRemainsCanonicalAfterProjectionRefresh()
+        {
+            LinkTreeSession session = new LinkTreeSession(CreateTree());
+            LinkTreeDocument edited = session.LoadTree();
+            LinkTreeNode added = LinkTreeDocument.NewNode(
+                "camera_link",
+                edited.Root.Id,
+                500,
+                420);
+            added.JointName = "camera_joint";
+            edited.Nodes.Add(added);
+
+            session.ApplyTree(edited);
+            LinkNode projection = session.CreateProjection();
+            session.CaptureTree(projection);
+            LinkTreeDocument captured = session.LoadTree();
+
+            Assert.Equal(3, captured.Nodes.Count);
+            Assert.Equal(added.Id, captured.Nodes.Single(node => node.Name == "camera_link").Id);
+            Assert.Equal(2, session.Revision);
         }
 
         private static LinkNode CreateTree()

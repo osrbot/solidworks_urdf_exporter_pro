@@ -53,6 +53,7 @@ namespace SW2URDF.URDFExport
         public Link previouslySelectedLink;
         public List<Link> linksToVisit;
         public LinkNode rightClickedNode;
+        private LinkTreeSession linkTreeSession;
         private readonly ContextMenuStrip docMenu;
 
         //General objects required for the PropertyManager page
@@ -203,6 +204,7 @@ namespace SW2URDF.URDFExport
         private void ExportButtonPress()
         {
             SaveActiveNode();
+            CommitLinkTreeProjection();
 
             Exporter.SetComputeInertial(PMComputeMassInertia.Checked);
             Exporter.SetComputeVisualCollision(PMComputeVisualCollision.Checked);
@@ -230,7 +232,8 @@ namespace SW2URDF.URDFExport
                 if (result == (int)swComponentResolveStatus_e.swResolveOk)
                 {
                     List<string> unresolvedComponents = new List<string>();
-                    CheckModelDocsExist((LinkNode)Tree.Nodes[0], unresolvedComponents);
+                    LinkNode baseNode = linkTreeSession.CreateProjection();
+                    CheckModelDocsExist(baseNode, unresolvedComponents);
                     if (unresolvedComponents.Count > 0)
                     {
                         string componentNames = string.Join("\r\n", unresolvedComponents);
@@ -246,14 +249,10 @@ namespace SW2URDF.URDFExport
                     }
 
                     // Builds the links and joints from the PMPage configuration
-                    LinkNode BaseNode = (LinkNode)Tree.Nodes[0];
-                    automaticallySwitched = true;
-                    Tree.Nodes.Remove(BaseNode);
-
-                    bool exportSuccess = Exporter.CreateRobotFromTreeView(BaseNode);
+                    bool exportSuccess = Exporter.CreateRobotFromTreeView(baseNode);
                     if (exportSuccess)
                     {
-                        AssemblyExportForm exportForm = new AssemblyExportForm(swApp, BaseNode, Exporter);
+                        AssemblyExportForm exportForm = new AssemblyExportForm(swApp, baseNode, Exporter);
                         exportForm.Exporter = Exporter;
                         exportForm.Show();
                     }
@@ -302,17 +301,20 @@ namespace SW2URDF.URDFExport
                 return;
             }
 
-            Tree.Nodes.Clear();
+            LinkNode mergedRoot = null;
             foreach (System.Windows.Controls.TreeViewItem item in e.MergedTree.Items)
             {
-                Tree.Nodes.Add(LinkNodeFromTreeViewItem(item));
+                if (mergedRoot != null)
+                {
+                    throw new InvalidOperationException("Merged Link tree contains more than one root.");
+                }
+                mergedRoot = LinkNodeFromTreeViewItem(item);
             }
-
-            Tree.ExpandAll();
-            if (Tree.Nodes.Count > 0)
+            if (mergedRoot == null)
             {
-                Tree.SelectedNode = Tree.Nodes[0];
+                throw new InvalidOperationException("Merged Link tree is empty.");
             }
+            ReplaceLinkTreeRoot(mergedRoot);
 
             PMComputeMassInertia.Checked = !e.UsedCSVInertial;
             PMComputeVisualCollision.Checked = !e.UsedCSVVisualCollision;
@@ -351,8 +353,9 @@ namespace SW2URDF.URDFExport
         private void LoadFromCSV()
         {
             SaveActiveNode();
+            CommitLinkTreeProjection();
 
-            LinkNode existingBaseNode = (LinkNode)Tree.Nodes[0].Clone();
+            LinkNode existingBaseNode = (LinkNode)linkTreeSession.CreateProjection().Clone();
             IPropertyManagerPageControl loadConfigurationControl = (IPropertyManagerPageControl)PMButtonLoad;
 
             if (existingBaseNode == null || !existingBaseNode.RebuildLink().AreRequiredFieldsSatisfied())
@@ -462,7 +465,8 @@ namespace SW2URDF.URDFExport
                 {
                     logger.Info("Configuration saved");
                     SaveActiveNode();
-                    SaveConfigTree(ActiveSWModel, (LinkNode)Tree.Nodes[0], false);
+                    CommitLinkTreeProjection();
+                    SaveConfigTree(ActiveSWModel, linkTreeSession.CreateProjection(), false);
                 }
             }
             catch (Exception e)
@@ -612,6 +616,7 @@ namespace SW2URDF.URDFExport
             {
                 LinkNode parent = (LinkNode)rightClickedNode.Parent;
                 parent.Nodes.Remove(rightClickedNode);
+                CommitLinkTreeProjection();
             }
             catch (Exception ex)
             {
@@ -725,6 +730,7 @@ namespace SW2URDF.URDFExport
             draggedNode.Remove();
             targetNode.Nodes.Add(draggedNode);
             targetNode.ExpandAll();
+            CommitLinkTreeProjection();
         }
 
         private void TreeDragDrop(object sender, DragEventArgs e)
@@ -1149,6 +1155,7 @@ namespace SW2URDF.URDFExport
             node.ContextMenuStrip = docMenu;
             Tree.Nodes.Add(node);
             Tree.SelectedNode = Tree.Nodes[0];
+            linkTreeSession = new LinkTreeSession(node);
             PMSelection.SetSelectionFocus();
             PMPage.SetFocus(dotNetTree);
         }
