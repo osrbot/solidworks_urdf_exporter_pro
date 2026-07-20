@@ -6,14 +6,18 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Changed
 
-- Promoted the transactional Link tree adapter to a persistent export-session data source with stable node IDs and canvas positions.
-- Unified automatic configuration loading, CSV merge results, legacy TreeView edits, configuration saving, and final export through the same Link tree session boundary.
+- Split Link tree topology, reusable URDF configuration, and SolidWorks CAD bindings into separate stores coordinated by a transactional session.
+- Changed legacy TreeView and export models into generated projections so UI edits no longer mutate the committed Link tree state indirectly.
+- Copy/paste now preserves reusable URDF configuration while intentionally clearing CAD component bindings on copied Links.
+- Changed CSV configuration merge to a modal operation so a stale merge snapshot cannot overwrite concurrent Link tree edits.
 - Removed the legacy export side effect that detached the root node from the PropertyManager TreeView before creating the robot.
 
 ### Fixed
 
 - Preserved canvas node identity when reopening the editor after editing Link properties or structure in the legacy PropertyManager tree.
 - Prevented stale TreeView structure from diverging from the tree used for configuration serialization or URDF export.
+- Migrated mimic references when a Joint is renamed and rejected deletion when surviving Joints still reference the removed name.
+- Forced Joint kinematics recomputation after drag-to-reparent so an Origin calculated for the old parent cannot be exported.
 
 ## 2026-07-17
 
@@ -25,8 +29,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Changed
 
-- Existing Link objects now remain intact when canvas structure changes are applied, preserving mass, inertia, mesh settings, and SolidWorks component bindings.
-- New and pasted Links are marked incomplete and start without SolidWorks component bindings to prevent accidental reuse of components from a copied symmetric branch.
+- Existing Link configuration values and SolidWorks bindings remain intact when canvas structure changes are applied.
+- New Links start empty; pasted Links copy reusable URDF settings but are marked incomplete and start without SolidWorks component bindings.
 
 ## 2026-06-29
 

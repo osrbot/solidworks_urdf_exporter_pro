@@ -56,6 +56,11 @@ namespace SW2URDF.URDFExport
                     return;
                 }
 
+                if (linkTreeSession.RequiresJointKinematicsRecompute)
+                {
+                    PMComputeJointKinematics.Checked = true;
+                    logger.Info("Joint topology changed; joint kinematics recomputation was enabled.");
+                }
                 RefreshLinkTreeProjection(selectedLink);
             }
             catch (Exception exception)

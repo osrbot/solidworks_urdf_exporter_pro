@@ -36,7 +36,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void HostAppliesStructureAndPreservesExistingLinkObjects()
+        public void HostAppliesStructureWithoutMutatingOriginalProjection()
         {
             LinkNode root = CreateTree();
             Link originalChildLink = ((LinkNode)root.Nodes[0]).Link;
@@ -49,7 +49,8 @@ namespace SW2URDF.Test
             host.ApplyTree(document);
 
             LinkNode appliedChild = (LinkNode)host.AppliedRoot.Nodes[0];
-            Assert.Same(originalChildLink, appliedChild.Link);
+            Assert.NotSame(originalChildLink, appliedChild.Link);
+            Assert.Equal("sensor_link", originalChildLink.Name);
             Assert.Equal("lidar_link", appliedChild.Link.Name);
             Assert.Equal("lidar_joint", appliedChild.Link.Joint.Name);
             Assert.Equal("base_link", appliedChild.Link.Joint.Parent.Name);
@@ -121,6 +122,84 @@ namespace SW2URDF.Test
             Assert.Equal(2, session.Revision);
         }
 
+        [Fact]
+        public void RenamingJointMigratesMimicReferences()
+        {
+            LinkNode root = CreateTree();
+            LinkNode follower = AddChild(root, "follower_link", "follower_joint");
+            follower.Link.Joint.Mimic.Update("sensor_joint", "1.0", "0.0");
+            LinkTreeSession session = new LinkTreeSession(root);
+            LinkTreeDocument edited = session.LoadTree();
+            edited.Nodes.Single(node => node.JointName == "sensor_joint").JointName = "renamed_joint";
+
+            session.ApplyTree(edited);
+
+            LinkNode projection = session.CreateProjection();
+            LinkNode projectedFollower = projection.Nodes
+                .Cast<LinkNode>()
+                .Single(node => node.Link.Name == "follower_link");
+            Assert.Equal("renamed_joint", projectedFollower.Link.Joint.Mimic.JointName);
+        }
+
+        [Fact]
+        public void DeletingReferencedJointRejectsWholeTransaction()
+        {
+            LinkNode root = CreateTree();
+            LinkNode follower = AddChild(root, "follower_link", "follower_joint");
+            follower.Link.Joint.Mimic.Update("sensor_joint", "1.0", "0.0");
+            LinkTreeSession session = new LinkTreeSession(root);
+            LinkTreeDocument edited = session.LoadTree();
+            LinkTreeNode target = edited.Nodes.Single(node => node.JointName == "sensor_joint");
+            edited.Nodes.Remove(target);
+
+            Assert.Throws<InvalidOperationException>(() => session.ApplyTree(edited));
+            Assert.Equal(3, session.LoadTree().Nodes.Count);
+        }
+
+        [Fact]
+        public void ReparentingRequiresJointKinematicsRecomputation()
+        {
+            LinkNode root = CreateTree();
+            AddChild(root, "mount_link", "mount_joint");
+            LinkTreeSession session = new LinkTreeSession(root);
+            LinkTreeDocument edited = session.LoadTree();
+            LinkTreeNode sensor = edited.Nodes.Single(node => node.Name == "sensor_link");
+            LinkTreeNode mount = edited.Nodes.Single(node => node.Name == "mount_link");
+            sensor.ParentId = mount.Id;
+
+            session.ApplyTree(edited);
+
+            Assert.True(session.RequiresJointKinematicsRecompute);
+        }
+
+        [Fact]
+        public void CopyKeepsUrdfConfigurationButClearsCadBindingState()
+        {
+            LinkNode root = CreateTree();
+            LinkNode sourceNode = (LinkNode)root.Nodes[0];
+            sourceNode.Link.Joint.AxisName = "sensor_axis";
+            sourceNode.Link.Joint.CoordinateSystemName = "sensor_origin";
+            LinkTreeSession session = new LinkTreeSession(root);
+            LinkTreeDocument edited = session.LoadTree();
+            LinkTreeNode source = edited.Nodes.Single(node => node.Name == "sensor_link");
+            LinkTreeNode copy = source.Clone();
+            copy.Id = Guid.NewGuid();
+            copy.CopySourceId = source.Id;
+            copy.Name = "sensor_copy_link";
+            copy.JointName = "sensor_copy_joint";
+            edited.Nodes.Add(copy);
+
+            session.ApplyTree(edited);
+
+            LinkNode projectedCopy = session.CreateProjection().Nodes
+                .Cast<LinkNode>()
+                .Single(node => node.Link.Name == "sensor_copy_link");
+            Assert.Equal("sensor_axis", projectedCopy.Link.Joint.AxisName);
+            Assert.Equal("sensor_origin", projectedCopy.Link.Joint.CoordinateSystemName);
+            Assert.Empty(projectedCopy.Link.SWComponents);
+            Assert.True(projectedCopy.IsIncomplete);
+        }
+
         private static LinkNode CreateTree()
         {
             LinkNode root = new LinkNode();
@@ -137,6 +216,18 @@ namespace SW2URDF.Test
             child.Text = child.Link.Name;
             root.Nodes.Add(child);
             return root;
+        }
+
+        private static LinkNode AddChild(LinkNode parent, string linkName, string jointName)
+        {
+            LinkNode child = new LinkNode();
+            child.Link.Name = linkName;
+            child.Link.Joint.Name = jointName;
+            child.Link.Joint.Type = "fixed";
+            child.Name = linkName;
+            child.Text = linkName;
+            parent.Nodes.Add(child);
+            return child;
         }
     }
 }

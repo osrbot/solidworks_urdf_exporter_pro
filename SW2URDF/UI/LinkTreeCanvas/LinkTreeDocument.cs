@@ -12,6 +12,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
         public string Name { get; set; }
         public string JointName { get; set; }
         public string JointType { get; set; }
+        public Guid? CopySourceId { get; set; }
         public double X { get; set; }
         public double Y { get; set; }
 

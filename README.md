@@ -62,9 +62,13 @@ The exporter stores the Link tree configuration inside the SolidWorks assembly a
 
 When a saved tree is loaded, SolidWorks component references are reconnected from stored component PIDs. If a part was deleted, replaced, or saved as a new file and can no longer be resolved, the exporter warns which links need inspection before export.
 
-Use `Edit Link Tree...` to open the free canvas. The canvas edits a working copy: `Cancel` discards all structural changes, while `Apply` validates and commits them back to the existing configuration tree. Existing Link objects keep their mass, inertia, mesh settings, and SolidWorks component bindings. Newly added or pasted Links intentionally start without SolidWorks component bindings and must be assigned in the PropertyManager before export.
+Use `Edit Link Tree...` to open the free canvas. The canvas edits a working copy: `Cancel` discards all structural changes, while `Apply` validates and commits them as one transaction. Topology, URDF configuration, and SolidWorks CAD bindings are stored separately and are combined only when the PropertyManager or exporter requests a projection.
 
-`Load Configuration...` is a different feature. It imports values from a CSV export and opens a merge window. Use it when you want to reuse values from an old robot project, such as mass/inertia, visual/collision settings, joint kinematics, or other joint parameters. It is useful after a CAD redesign where the tree shape is similar but some values should come from a previous export.
+Renaming a Joint updates existing mimic references. Deleting a Joint that is still referenced by a mimic relation is rejected. Reparenting a Link keeps its CAD component assignment but forces Joint kinematics to be recomputed before export, so an Origin calculated for the old parent cannot be exported silently.
+
+Copy/paste duplicates the selected topology and reusable URDF configuration, including Joint settings, inertia, visual, collision, and mesh options. CAD component bindings are intentionally cleared on pasted Links because assigning the same SolidWorks body to two Links would create an invalid robot model. Pasted Links are marked incomplete until their mirrored or replacement components are assigned in the PropertyManager.
+
+`Load Configuration...` is a different feature. It imports values from a CSV export and opens a modal merge window, preventing edits made against a newer Link tree from being overwritten by an older merge snapshot. Use it when you want to reuse values from an old robot project, such as mass/inertia, visual/collision settings, joint kinematics, or other joint parameters. It is useful after a CAD redesign where the tree shape is similar but some values should come from a previous export.
 
 For fast review after export, check:
 

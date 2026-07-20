@@ -706,9 +706,20 @@ namespace SW2URDF.UI.LinkTreeCanvas
                     MessageBoxImage.Warning);
                 return;
             }
-            host.ApplyTree(document);
-            DialogResult = true;
-            Close();
+            try
+            {
+                host.ApplyTree(document);
+                DialogResult = true;
+                Close();
+            }
+            catch (InvalidOperationException exception)
+            {
+                MessageBox.Show(
+                    exception.Message,
+                    "Link 树校验失败",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
         }
 
         private void CancelClick(object sender, RoutedEventArgs e)
@@ -951,6 +962,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
             {
                 LinkTreeNode copy = source.Clone();
                 copy.Id = Guid.NewGuid();
+                copy.CopySourceId = source.Id;
                 copy.Name = MakeUniqueLinkName(source.Name + "_copy");
                 copy.X = source.X + 70;
                 copy.Y = source.Y + 70;

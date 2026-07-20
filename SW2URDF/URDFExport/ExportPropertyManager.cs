@@ -206,6 +206,11 @@ namespace SW2URDF.URDFExport
             SaveActiveNode();
             CommitLinkTreeProjection();
 
+            if (linkTreeSession.RequiresJointKinematicsRecompute)
+            {
+                PMComputeJointKinematics.Checked = true;
+            }
+
             Exporter.SetComputeInertial(PMComputeMassInertia.Checked);
             Exporter.SetComputeVisualCollision(PMComputeVisualCollision.Checked);
             Exporter.SetComputeJointKinematics(PMComputeJointKinematics.Checked);
@@ -406,7 +411,7 @@ namespace SW2URDF.URDFExport
                     TreeMergeWPF wpf = new TreeMergeWPF(existingBaseLink, loadedLinks,
                         filename, assemblyTitle);
                     wpf.TreeMerged += TreeMergeCompleted;
-                    wpf.Show();
+                    wpf.ShowDialog();
                 }
             }
         }
