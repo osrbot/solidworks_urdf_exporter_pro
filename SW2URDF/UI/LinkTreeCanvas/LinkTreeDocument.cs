@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using SW2URDF.URDF;
 
 namespace SW2URDF.UI.LinkTreeCanvas
 {
@@ -13,6 +14,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
         public string JointName { get; set; }
         public string JointType { get; set; }
         public Guid? CopySourceId { get; set; }
+        public Guid? CopyBatchId { get; set; }
         public double X { get; set; }
         public double Y { get; set; }
 
@@ -25,6 +27,9 @@ namespace SW2URDF.UI.LinkTreeCanvas
     public sealed class LinkTreeDocument
     {
         private static readonly Regex RosNamePattern = new Regex("^[A-Za-z_][A-Za-z0-9_]*$");
+        private static readonly HashSet<string> SupportedJointTypes = new HashSet<string>(
+            Joint.SelectableTypes,
+            StringComparer.Ordinal);
 
         public List<LinkTreeNode> Nodes { get; private set; }
 
@@ -69,12 +74,48 @@ namespace SW2URDF.UI.LinkTreeCanvas
             return clone;
         }
 
+        public IList<string> ValidateClipboardSources(IEnumerable<LinkTreeNode> copiedNodes)
+        {
+            List<LinkTreeNode> snapshot = copiedNodes == null
+                ? new List<LinkTreeNode>()
+                : copiedNodes.ToList();
+            HashSet<Guid> copiedIds = new HashSet<Guid>(snapshot.Select(node => node.Id));
+            List<string> errors = new List<string>();
+            foreach (LinkTreeNode source in snapshot)
+            {
+                LinkTreeNode current = Find(source.Id);
+                if (current == null)
+                {
+                    errors.Add(source.Name + " 的复制源已不存在，请重新复制。");
+                }
+                else if (!string.Equals(source.Name, current.Name, StringComparison.Ordinal) ||
+                    source.ParentId != current.ParentId ||
+                    !string.Equals(source.JointName, current.JointName, StringComparison.Ordinal) ||
+                    !string.Equals(source.JointType, current.JointType, StringComparison.Ordinal))
+                {
+                    errors.Add(source.Name + " 的复制源已修改，请重新复制。");
+                }
+                if (source.ParentId.HasValue &&
+                    !copiedIds.Contains(source.ParentId.Value) &&
+                    Find(source.ParentId.Value) == null)
+                {
+                    errors.Add(source.Name + " 的原父 Link 已不存在，请重新复制。");
+                }
+            }
+            return errors.Distinct().ToList();
+        }
+
         public IList<string> Validate()
         {
             List<string> errors = new List<string>();
             if (Nodes.Count == 0)
             {
                 errors.Add("Link 树不能为空。");
+                return errors;
+            }
+            if (Nodes.GroupBy(node => node.Id).Any(group => group.Count() > 1))
+            {
+                errors.Add("Link 节点标识不能重复。");
                 return errors;
             }
 
@@ -102,6 +143,10 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 if (node.ParentId.HasValue && string.IsNullOrWhiteSpace(node.JointType))
                 {
                     errors.Add(node.Name + " 的 Joint 类型不能为空。");
+                }
+                else if (node.ParentId.HasValue && !SupportedJointTypes.Contains(node.JointType))
+                {
+                    errors.Add(node.Name + " 的 Joint 类型不受支持：" + node.JointType + "。");
                 }
             }
 
@@ -146,19 +191,20 @@ namespace SW2URDF.UI.LinkTreeCanvas
             return null;
         }
 
-        public static LinkTreeDocument CreateSample()
+        public static string BuildDefaultJointName(string parentName, string linkName)
         {
-            LinkTreeDocument document = new LinkTreeDocument();
-            LinkTreeNode root = NewNode("base_link", null, 90, 330);
-            LinkTreeNode chassis = NewNode("chassis_link", root.Id, 390, 250);
-            LinkTreeNode lidar = NewNode("lidar_link", chassis.Id, 710, 115);
-            LinkTreeNode imu = NewNode("imu_link", chassis.Id, 710, 250);
-            LinkTreeNode leftWheel = NewNode("left_wheel_link", chassis.Id, 710, 385);
-            leftWheel.JointType = "continuous";
-            LinkTreeNode rightWheel = NewNode("right_wheel_link", chassis.Id, 710, 520);
-            rightWheel.JointType = "continuous";
-            document.Nodes.AddRange(new[] { root, chassis, lidar, imu, leftWheel, rightWheel });
-            return document;
+            return parentName + "_" + linkName + "_joint";
+        }
+
+        public static bool UsesDefaultJointName(
+            string jointName,
+            string parentName,
+            string linkName)
+        {
+            return string.Equals(
+                jointName,
+                BuildDefaultJointName(parentName, linkName),
+                StringComparison.OrdinalIgnoreCase);
         }
 
         public static LinkTreeNode NewNode(string name, Guid? parentId, double x, double y)

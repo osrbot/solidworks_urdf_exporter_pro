@@ -1,12 +1,9 @@
-﻿using Moq;
-using SW2URDF.UI;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Windows;
 using Xunit;
 
 namespace SW2URDF.Test
@@ -82,10 +79,6 @@ namespace SW2URDF.Test
                 Path.Combine(tempDirectory, "ROS2", "osracer_description") + Path.DirectorySeparatorChar,
                 pkg.WindowsRos2PackageDirectory);
 
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
             pkg.CreateDirectories();
             string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
             File.WriteAllText(
@@ -112,10 +105,6 @@ namespace SW2URDF.Test
             string name = Path.GetRandomFileName();
             URDFPackage pkg = new URDFPackage(name, tempDirectory);
 
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK); //can be whatever depends on test case
-            URDFPackage.MessageBox = messageBoxMock.Object;
             pkg.CreateDirectories();
 
             Assert.True(Directory.Exists(pkg.WindowsPackageDirectory));
@@ -134,10 +123,6 @@ namespace SW2URDF.Test
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("metadata_robot", tempDirectory);
 
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
             pkg.CreateDirectories();
 
             string ros1PackageXml = Path.Combine(pkg.WindowsPackageDirectory, "package.xml");
@@ -184,10 +169,6 @@ namespace SW2URDF.Test
             string tempDirectory = CreateRandomTempDirectory();
             string name = Path.GetRandomFileName();
             URDFPackage pkg = new URDFPackage(name, tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK); //can be whatever depends on test case
-            URDFPackage.MessageBox = messageBoxMock.Object;
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
 
@@ -204,10 +185,6 @@ namespace SW2URDF.Test
             string name = Path.GetRandomFileName();
             Directory.CreateDirectory(tempDirectory);
             URDFPackage pkg = new URDFPackage(name, tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK); //can be whatever depends on test case
-            URDFPackage.MessageBox = messageBoxMock.Object;
             pkg.CreateDirectories();
             pkg.CreateConfigYAML(new string[] {"a", "b", "c"});
 
@@ -242,10 +219,6 @@ namespace SW2URDF.Test
             Directory.CreateDirectory(chineseDirectory);
 
             URDFPackage pkg = new URDFPackage("osracer_blue.SLDASM", chineseDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -276,10 +249,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             string visualMeshDirectory = Path.Combine(pkg.WindowsMeshesDirectory, "visual");
@@ -324,10 +293,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -520,10 +485,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -653,10 +614,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -704,10 +661,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -806,10 +759,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -903,10 +852,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -1014,10 +959,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -1074,10 +1015,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -1133,10 +1070,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -1208,10 +1141,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -1272,10 +1201,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();
@@ -1337,10 +1262,6 @@ namespace SW2URDF.Test
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
-            Mock<IMessageBox> messageBoxMock = new Mock<IMessageBox>();
-            messageBoxMock.Setup(m => m.Show(It.IsAny<string>()))
-                .Returns(MessageBoxResult.OK);
-            URDFPackage.MessageBox = messageBoxMock.Object;
 
             pkg.CreateDirectories();
             pkg.CreateCMakeLists();

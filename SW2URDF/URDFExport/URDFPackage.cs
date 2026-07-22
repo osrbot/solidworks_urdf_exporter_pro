@@ -20,7 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-using SW2URDF.UI;
 using SW2URDF.URDF;
 using SW2URDF.Utilities;
 using System;
@@ -35,7 +34,6 @@ namespace SW2URDF.URDFExport
     {
         private static readonly log4net.ILog logger = Logger.GetLogger();
 
-        public static IMessageBox MessageBox = new MessageBoxHelper();
         public string PackageName { get; }
         public string RobotName { get; }
 
@@ -107,8 +105,6 @@ namespace SW2URDF.URDFExport
         public void CreateDirectories()
         {
             logger.Info("Creating ROS 1 package directories at " + WindowsPackageDirectory);
-            MessageBox.Show("Creating URDF Package \"" +
-                PackageName + "\" at:\n" + WindowsPackageDirectory);
             if (!Directory.Exists(WindowsPackageDirectory))
             {
                 Directory.CreateDirectory(WindowsPackageDirectory);
@@ -383,7 +379,6 @@ namespace SW2URDF.URDFExport
                 }
 
                 Thread.Sleep(sleepMilliseconds);
-                System.Windows.Forms.Application.DoEvents();
             }
 
             throw new IOException("Timed out copying file: " + source, lastException);

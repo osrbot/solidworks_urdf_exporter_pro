@@ -83,6 +83,17 @@ namespace SW2URDF.URDF
             VelocityAttribute.SetDoubleValueFromString(boxVelocity.Text);
         }
 
+        public void ClearPositionBounds()
+        {
+            LowerAttribute.Value = null;
+            UpperAttribute.Value = null;
+        }
+
+        public bool HasPositionBounds()
+        {
+            return LowerAttribute.Value != null || UpperAttribute.Value != null;
+        }
+
         public override void SetRequired(bool required)
         {
             base.SetRequired(required);

@@ -35,7 +35,10 @@ namespace SW2URDF.URDF
             logger.Info("Building node " + link.Name);
 
             IsBaseNode = link.Parent == null;
-            IsIncomplete = true;
+            IsIncomplete = link.isIncomplete;
+            WhyIncomplete = IsIncomplete
+                ? "The saved Link configuration is incomplete."
+                : string.Empty;
             Link = link;
 
             Name = Link.Name;

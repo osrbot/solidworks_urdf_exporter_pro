@@ -44,7 +44,17 @@ namespace TestRunner
         {
             string solutionDir = FindSolutionDirectory(AppDomain.CurrentDomain.BaseDirectory);
 
-            string testAssembly = Path.Combine(solutionDir, "SW2URDF", "bin", "x64", "Debug", "SW2URDF.dll");
+            string configuredAssembly = System.Environment.GetEnvironmentVariable(
+                "SW2URDF_TEST_ASSEMBLY");
+            string testAssembly = String.IsNullOrWhiteSpace(configuredAssembly)
+                ? Path.Combine(solutionDir, "SW2URDF", "bin", "x64", "Debug", "SW2URDF.dll")
+                : Path.GetFullPath(configuredAssembly);
+            if (!File.Exists(testAssembly))
+            {
+                throw new FileNotFoundException(
+                    "The SW2URDF test assembly was not found.",
+                    testAssembly);
+            }
             string typeName = null;
 
             using (var runner = AssemblyRunner.WithAppDomain(testAssembly))
@@ -57,7 +67,9 @@ namespace TestRunner
                 runner.OnDiscoveryComplete = OnDiscoveryComplete;
                 runner.OnExecutionComplete = OnExecutionComplete;
                 runner.OnTestFailed = OnTestFailed;
+                runner.OnTestFinished = OnTestFinished;
                 runner.OnTestSkipped = OnTestSkipped;
+                runner.OnTestStarting = OnTestStarting;
 
                 Console.WriteLine("Discovering...");
                 runner.Start(typeName);
@@ -164,6 +176,18 @@ namespace TestRunner
             }
 
             result = 1;
+        }
+
+        static void OnTestStarting(TestStartingInfo info)
+        {
+            lock (consoleLock)
+                Console.WriteLine("[RUN] {0}", info.TestDisplayName);
+        }
+
+        static void OnTestFinished(TestFinishedInfo info)
+        {
+            lock (consoleLock)
+                Console.WriteLine("[DONE] {0}", info.TestDisplayName);
         }
 
         static void OnTestSkipped(TestSkippedInfo info)

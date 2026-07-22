@@ -12,7 +12,7 @@ namespace SW2URDF.Test
             string installerScript = ReadRepositoryFile("INSTALL", "Install.iss");
 
             Assert.Contains("DisableDirPage=no", installerScript);
-            Assert.Contains("UsePreviousAppDir=no", installerScript);
+            Assert.Contains("UsePreviousAppDir=yes", installerScript);
             Assert.Contains("DefaultDirName=\"{autopf}\\SolidWorks Corp\\SolidWorks\\URDFExporter\"",
                 installerScript);
             Assert.Contains("GetVersionNumbersString(DllLocation)", installerScript);
@@ -22,6 +22,13 @@ namespace SW2URDF.Test
             Assert.Contains("Name: \"chinesesimplified\"", installerScript);
             Assert.Contains("chinesesimplified.RegisteringControls=", installerScript);
             Assert.Contains("chinesesimplified.UnregisteringControls=", installerScript);
+            Assert.Contains("OSRBot / kitso666", installerScript);
+            Assert.Contains("https://github.com/osrbot/solidworks_urdf_exporter_pro", installerScript);
+            Assert.Contains("\\*.dll\"}; DestDir: {app}", installerScript);
+            Assert.Contains("\\SW2URDF.png\"}; DestDir: {app}", installerScript);
+            Assert.Contains("\\images\\*.png\"}; DestDir: {app}\\images", installerScript);
+            Assert.DoesNotContain("\\*.pdb", installerScript);
+            Assert.DoesNotContain("\\*.xml", installerScript);
         }
 
         [Fact]
@@ -33,6 +40,127 @@ namespace SW2URDF.Test
             Assert.Contains("rev-parse --short=7 HEAD", buildScript);
             Assert.Contains("\"/DInstallerDate=$InstallerDate\"", buildScript);
             Assert.Contains("\"/DInstallerCommit=$InstallerCommit\"", buildScript);
+            Assert.Contains("\"/DBuildConfiguration=$Configuration\"", buildScript);
+            Assert.Contains("\"/DBuildPlatform=$Platform\"", buildScript);
+            Assert.Contains("Refusing to package uncommitted source changes", buildScript);
+            Assert.Contains("Configuration=Release and Platform=x64", buildScript);
+            Assert.Contains("Remove-Item -LiteralPath $ResolvedBuildOutput -Recurse -Force", buildScript);
+            Assert.Contains("packages.release.config", buildScript);
+            Assert.Contains("packages.release.lock.json", buildScript);
+            Assert.Contains("NuGet.Config", buildScript);
+            Assert.Contains("Downloaded NuGet CLI does not match the pinned SHA256", buildScript);
+            Assert.Contains("NuGet package $($_.id) $($_.version) does not match", buildScript);
+            Assert.Contains("worktree add", buildScript);
+            Assert.Contains("worktree remove", buildScript);
+            Assert.Contains("local-build-from-immutable-git-worktree", buildScript);
+            Assert.Contains("$StagedSolidWorksDirectory", buildScript);
+            Assert.Contains("Inno Setup 6.3 or newer is required", buildScript);
+            Assert.Contains("Source changed during packaging. The installer was not promoted", buildScript);
+            Assert.Contains("$PostBuildChanges", buildScript);
+            Assert.Contains("$BuildStatusExitCode", buildScript);
+            Assert.Contains("$SourceStatusExitCode", buildScript);
+            Assert.Contains("$ProvenancePath", buildScript);
+            Assert.Contains("payloadInputs = $PayloadInputs", buildScript);
+            Assert.Contains("Refusing to overwrite an existing release artifact", buildScript);
+            Assert.Contains("$ResolvedIntermediateOutput", buildScript);
+            Assert.Contains("Remove-Item -LiteralPath $ResolvedIntermediateOutput -Recurse -Force", buildScript);
+            Assert.Contains("$Project = Join-Path $BuildRoot \"SW2URDF\\SW2URDF.csproj\"", buildScript);
+            Assert.Contains("\"/p:SolutionDir=$SolutionDir\"", buildScript);
+            Assert.DoesNotContain("& $MSBuild $Solution", buildScript);
+            Assert.DoesNotContain("$NuGetCommand.Source", buildScript);
+        }
+
+        [Fact]
+        public void TestReleaseBuildExcludesTestsAndTestFrameworks()
+        {
+            string project = ReadRepositoryFile("SW2URDF", "SW2URDF.csproj");
+
+            Assert.Contains("<ItemGroup Condition=\"'$(Configuration)' != 'Release'\">", project);
+            Assert.Contains("<Compile Include=\"Test\\TestLinkTreeCanvas.cs\" />", project);
+            Assert.Contains("xunit.assert", project);
+            Assert.Contains("Condition=\"'$(Configuration)' != 'Release'\"", project);
+            Assert.Contains("'$(Configuration)' != 'Release' And !Exists('..\\packages\\xunit.core", project);
+            Assert.Contains("'$(Configuration)' != 'Release' And Exists('..\\packages\\xunit.core.2.4.1\\build\\xunit.core.targets')", project);
+
+            string releasePackages = ReadRepositoryFile("SW2URDF", "packages.release.config");
+            Assert.Contains("Microsoft.Net.Compilers", releasePackages);
+            Assert.Contains("CsvHelper", releasePackages);
+            Assert.DoesNotContain("xunit", releasePackages);
+            Assert.DoesNotContain("Moq", releasePackages);
+
+            string assemblyInfo = ReadRepositoryFile("SW2URDF", "AssemblyInfo.cs");
+            Assert.Contains("AssemblyVersion(\"1.6.0.0\")", assemblyInfo);
+            Assert.Contains("AssemblyFileVersion(\"1.6.0.0\")", assemblyInfo);
+            Assert.DoesNotContain("AssemblyVersion(\"1.6.*\")", assemblyInfo);
+            Assert.Contains("<Deterministic>true</Deterministic>", project);
+            Assert.Contains("<PathMap>$(MSBuildProjectDirectory)=/_/SW2URDF</PathMap>", project);
+            Assert.Contains("<DebugType>none</DebugType>", project);
+            Assert.Contains("<VersionInfoStrictArgument Condition=", project);
+            Assert.Contains("$(VersionInfoStrictArgument)", project);
+
+            string versionScript = ReadRepositoryFile("scripts", "UpdateVersionInfo.ps1");
+            Assert.Contains("[switch]$Strict", versionScript);
+            Assert.Contains("Unable to resolve the Git commit for Release version metadata", versionScript);
+            Assert.Contains("Unable to resolve the Git commit time for Release version metadata", versionScript);
+
+            string nugetConfig = ReadRepositoryFile("NuGet.Config");
+            Assert.Contains("<clear />", nugetConfig);
+            Assert.Contains("https://api.nuget.org/v3/index.json", nugetConfig);
+            string releaseLock = ReadRepositoryFile(
+                "SW2URDF",
+                "packages.release.lock.json");
+            Assert.Contains("\"version\": \"6.11.1\"", releaseLock);
+            Assert.Contains("\"sha256\"", releaseLock);
+        }
+
+        [Fact]
+        public void TestReleaseWorkflowIgnoresDeletedInstallers()
+        {
+            string workflow = ReadRepositoryFile(
+                ".github", "workflows", "publish-installer-release.yml");
+
+            Assert.Contains("git diff --diff-filter=AMR", workflow);
+            Assert.Contains("publish=false", workflow);
+            Assert.Contains("if: steps.installer.outputs.publish == 'true'", workflow);
+            Assert.Contains("RELEASE_COMMIT", workflow);
+            Assert.Contains("git log -1 --format=%ct", workflow);
+            Assert.Contains("gh release edit", workflow);
+            Assert.Contains("group: publish-installer-release", workflow);
+            Assert.Contains("git rev-parse --verify", workflow);
+            Assert.Contains("artifact_parent", workflow);
+            Assert.Contains("Artifact commit must change only the installer and its two sidecars", workflow);
+            Assert.Contains("--target \"$RELEASE_SOURCE_SHA\"", workflow);
+            Assert.Contains("INPUT_INSTALLER: ${{ github.event.inputs.installer }}", workflow);
+            Assert.Contains("sha256sum --check", workflow);
+            Assert.Contains("installerSha256", workflow);
+            Assert.Contains("sourceTree", workflow);
+            Assert.Contains("packages.release.lock.json", workflow);
+            Assert.Contains("innoextract", workflow);
+            Assert.Contains("Installer payload does not match the provenance manifest", workflow);
+            Assert.Contains("Extracted installer payload hash mismatch", workflow);
+            Assert.Contains("--json isDraft", workflow);
+            Assert.Contains("--draft", workflow);
+            Assert.Contains("--draft=false", workflow);
+            Assert.Contains("Daily releases are immutable", workflow);
+            Assert.Contains("Removing an incomplete draft", workflow);
+            Assert.Contains("--cleanup-tag", workflow);
+            Assert.Contains(
+                "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2",
+                workflow);
+            Assert.DoesNotContain("uses: actions/checkout@v4", workflow);
+            Assert.DoesNotContain("git tag --force", workflow);
+            Assert.DoesNotContain("gh release delete-asset", workflow);
+            Assert.DoesNotContain("-printf \"%T@ %p", workflow);
+        }
+
+        [Fact]
+        public void TestToolbarImagesFollowTheSelectedInstallDirectory()
+        {
+            string addin = ReadRepositoryFile("SW2URDF", "SW", "SwAddin.cs");
+
+            Assert.Contains("Path.GetDirectoryName(typeof(SwAddin).Assembly.Location)", addin);
+            Assert.Contains("Path.Combine(imageDirectory, \"ros_logo_20x20.png\")", addin);
+            Assert.DoesNotContain("C:\\\\Program Files\\\\SOLIDWORKS Corp", addin);
         }
 
         [Fact]
@@ -57,6 +185,70 @@ namespace SW2URDF.Test
 
             Assert.Contains("LanguageName=\u7b80\u4f53\u4e2d\u6587", chineseMessages);
             Assert.Contains("\u5b89\u88c5", chineseMessages);
+        }
+
+        [Fact]
+        public void TestConfigurationPersistenceHasRollbackAndLegacyFallback()
+        {
+            string serialization = ReadRepositoryFile(
+                "SW2URDF", "URDFExport", "ConfigurationSerialization.cs");
+
+            Assert.Contains("!createdAttribute.Delete(true)", serialization);
+            Assert.Contains("SaveAttributeSnapshot.TryCapture", serialization);
+            Assert.Contains("Replacing an incomplete current URDF configuration attribute", serialization);
+            Assert.Contains("WriteSaveAttribute(", serialization);
+            Assert.Contains("Ignoring an incomplete current URDF configuration attribute", serialization);
+            Assert.Contains("IsConfigurationPayloadReadable(data, version)", serialization);
+            Assert.Contains("foreach (string configurationName in PREVIOUS_URDF_CONFIGURATION_NAMES)",
+                serialization);
+            Assert.Contains("SolidWorks did not persist the complete URDF configuration", serialization);
+            Assert.Contains("!parameter.SetStringValue2", serialization);
+            Assert.Contains("!versionParameter.SetDoubleValue2", serialization);
+            Assert.Contains(
+                "oldData == newData && !requiresUpgrade && !requiresStorageMigration",
+                serialization);
+            Assert.Contains("!previous.Matches(rollbackAttribute)", serialization);
+            Assert.Contains("Refusing to overwrite newer URDF configuration version", serialization);
+            Assert.Contains("Saving was stopped to protect the existing configuration", serialization);
+            Assert.DoesNotContain("MessageBox.", serialization);
+
+            string interaction = ReadRepositoryFile(
+                "SW2URDF", "UI", "ConfigurationSaveInteraction.cs");
+            Assert.Contains("ConfigurationSaveStatus.ConfirmationRequired", interaction);
+            Assert.Contains("MessageBox.Show", interaction);
+        }
+
+        [Fact]
+        public void TestExportValidatesLinksBeforePersistingConfiguration()
+        {
+            string form = ReadRepositoryFile("SW2URDF", "UI", "AssemblyExportForm.cs");
+            int createRobot = form.IndexOf(
+                "Exporter.URDFRobot = CreateRobotFromTreeView",
+                StringComparison.Ordinal);
+            int validateLinks = form.IndexOf(
+                "CheckLinksForErrors(Exporter.URDFRobot.BaseLink)",
+                createRobot,
+                StringComparison.Ordinal);
+            int saveConfiguration = form.IndexOf(
+                "SaveConfigTree(ActiveSWModel, BaseNode, false)",
+                validateLinks,
+                StringComparison.Ordinal);
+
+            Assert.True(createRobot >= 0);
+            Assert.True(validateLinks > createRobot);
+            Assert.True(saveConfiguration > validateLinks);
+        }
+
+        [Fact]
+        public void TestExportCoreDoesNotPumpWinFormsEventsDuringRetries()
+        {
+            string exportHelper = ReadRepositoryFile(
+                "SW2URDF", "URDFExport", "ExportHelper.cs");
+            string package = ReadRepositoryFile(
+                "SW2URDF", "URDFExport", "URDFPackage.cs");
+
+            Assert.DoesNotContain("Application.DoEvents", exportHelper);
+            Assert.DoesNotContain("Application.DoEvents", package);
         }
 
         private static string ReadRepositoryFile(params string[] pathParts)

@@ -17,6 +17,10 @@ Run the TestRunner executable, it will locate the SW2URDF Dll automatically.
 
     TestRunner\bin\Debug\net452>TestRunner.exe
 
+For an isolated build, set `SW2URDF_TEST_ASSEMBLY` to the absolute path of the
+newly built `SW2URDF.dll`. This prevents the runner from silently testing a
+stale DLL when the normal output directory is in use by SolidWorks.
+
 If you only want to run a subset of tests, the first argument of TestRunner.exe is an optional filter parameter.
 Any test with a fully qualified NameSpace.ClassName.FunctionName that contains the provided string will be run.
 For example, to run just the versioning tests.

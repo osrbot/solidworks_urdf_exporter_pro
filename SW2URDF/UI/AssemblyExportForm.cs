@@ -43,7 +43,6 @@ namespace SW2URDF.UI
 
         public ExportHelper Exporter;
         public bool AutoUpdatingForm;
-        public AttributeDef saveConfigurationAttributeDef;
 
         private readonly SldWorks swApp;
         private readonly ModelDoc2 ActiveSWModel;
@@ -57,6 +56,8 @@ namespace SW2URDF.UI
         private double meshReductionRatioForExport;
         private bool enableLayoutFixes;
         private bool applyingLayoutFixes;
+        private string displayedJointType;
+        private bool jointUnitInputsResetForCurrentChange;
         private readonly Dictionary<string, Size> buttonDesignSizes;
         private Button buttonUsageGuide;
 
@@ -73,6 +74,7 @@ namespace SW2URDF.UI
             textBoxIxy.TextChanged += InertiaMatrixOffDiagonalTextChanged;
             textBoxIxz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
             textBoxIyz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
+            comboBoxJointType.TextChanged += ComboBoxJointTypeTextChanged;
             UpdateInertiaMatrixMirrorBoxes();
         }
 
@@ -169,18 +171,6 @@ namespace SW2URDF.UI
                 textBox.KeyPress += NumericalTextBoxKeyPress;
             }
 
-            saveConfigurationAttributeDef = SwApp.DefineAttribute(ConfigurationSerialization.UrdfConfigurationSwAttributeName);
-            int Options = 0;
-
-            saveConfigurationAttributeDef.AddParameter(
-                "data", (int)swParamType_e.swParamTypeString, 0, Options);
-            saveConfigurationAttributeDef.AddParameter(
-                "name", (int)swParamType_e.swParamTypeString, 0, Options);
-            saveConfigurationAttributeDef.AddParameter(
-                "date", (int)swParamType_e.swParamTypeString, 0, Options);
-            saveConfigurationAttributeDef.AddParameter(
-                "exporterVersion", (int)swParamType_e.swParamTypeDouble, 1.0, Options);
-            saveConfigurationAttributeDef.Register();
         }
 
         private void ExceptionHandler(object sender, ThreadExceptionEventArgs e)
@@ -243,23 +233,55 @@ namespace SW2URDF.UI
         private string CheckJointsForErrors()
         {
             StringBuilder builder = new StringBuilder();
+            List<Joint> joints = new List<Joint>();
             foreach (LinkNode child in treeViewJointTree.Nodes)
             {
                 CheckJointsForErrors(child, builder);
+                CollectJoints(child, joints);
             }
             AppendDuplicateJointNameErrors(treeViewJointTree.Nodes, builder);
+            AppendMimicReferenceErrors(joints, builder);
             return builder.ToString();
         }
 
         private string CheckJointsForErrors(LinkNode root)
         {
             StringBuilder builder = new StringBuilder();
+            List<Joint> joints = new List<Joint>();
             foreach (LinkNode child in root.Nodes)
             {
                 CheckJointsForErrors(child, builder);
+                CollectJoints(child, joints);
             }
             AppendDuplicateJointNameErrors(root.Nodes, builder);
+            AppendMimicReferenceErrors(joints, builder);
             return builder.ToString();
+        }
+
+        private static void CollectJoints(LinkNode node, ICollection<Joint> joints)
+        {
+            if (node == null)
+            {
+                return;
+            }
+            if (!node.IsBaseNode && node.Link != null && node.Link.Joint != null)
+            {
+                joints.Add(node.Link.Joint);
+            }
+            foreach (LinkNode child in node.Nodes)
+            {
+                CollectJoints(child, joints);
+            }
+        }
+
+        private static void AppendMimicReferenceErrors(
+            IEnumerable<Joint> joints,
+            StringBuilder builder)
+        {
+            foreach (string error in MimicGraphValidator.Validate(joints))
+            {
+                builder.Append(error).Append("\r\n");
+            }
         }
 
         private StringBuilder CheckJointsForErrors(LinkNode node, StringBuilder builder)
@@ -322,8 +344,10 @@ namespace SW2URDF.UI
                 treeViewJointTree.Nodes.Remove(node);
                 BaseNode.Nodes.Add(node);
             }
-            SaveConfigTree(ActiveSWModel, BaseNode, true);
-            Close();
+            if (SaveConfigTree(ActiveSWModel, BaseNode, true))
+            {
+                Close();
+            }
         }
 
         private void ButtonLinksCancelClick(object sender, EventArgs e)
@@ -332,8 +356,10 @@ namespace SW2URDF.UI
             {
                 SaveLinkDataFromPropertyBoxes(previouslySelectedNode.Link);
             }
-            SaveConfigTree(ActiveSWModel, BaseNode, true);
-            Close();
+            if (SaveConfigTree(ActiveSWModel, BaseNode, true))
+            {
+                Close();
+            }
         }
 
         private void ButtonLinksPreviousClick(object sender, EventArgs e)
@@ -375,9 +401,6 @@ namespace SW2URDF.UI
             }
 
             ApplyEditedMeshReductionToExportTree();
-            SaveConfigTree(ActiveSWModel, BaseNode, false);
-
-            Exporter.URDFRobot = CreateRobotFromTreeView(treeViewLinkProperties);
             string jointErrors = CheckJointsForErrors(BaseNode);
             if (!string.IsNullOrWhiteSpace(jointErrors))
             {
@@ -389,6 +412,8 @@ namespace SW2URDF.UI
                 return;
             }
 
+            Exporter.URDFRobot = CreateRobotFromTreeView(treeViewLinkProperties);
+
             // The UI should prevent these sorts of errors, but just in case
             string errors = CheckLinksForErrors(Exporter.URDFRobot.BaseLink);
             if (!string.IsNullOrWhiteSpace(errors))
@@ -398,6 +423,11 @@ namespace SW2URDF.UI
                 string message = "The following links contained errors in either their link or joint " +
                     "properties. Please address before continuing\r\n\r\n" + errors;
                 MessageBox.Show(message, "URDF Errors");
+                return;
+            }
+
+            if (!SaveConfigTree(ActiveSWModel, BaseNode, false))
+            {
                 return;
             }
 
@@ -448,7 +478,16 @@ namespace SW2URDF.UI
                 {
                     meshFormat = MeshExportFormat.STL;
                 }
-                Exporter.ExportRobot(exportSTL, meshFormat);
+                if (!Exporter.ExportRobot(exportSTL, meshFormat))
+                {
+                    logger.Error(Exporter.ExportErrorWhy);
+                    MessageBox.Show(
+                        Exporter.ExportErrorWhy,
+                        ChineseUiText.Translate("URDF export failed", "URDF \u5bfc\u51fa\u5931\u8d25"),
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    return;
+                }
 
                 Close();
             }
@@ -879,8 +918,14 @@ namespace SW2URDF.UI
         {
             bool showControls = (sender as CheckBox).Checked;
             ShowMimicControls(showControls);
-            textBoxMimicMultiplier.Text = "1.0";
-            textBoxMimicOffset.Text = "0.0";
+            if (showControls && string.IsNullOrWhiteSpace(textBoxMimicMultiplier.Text))
+            {
+                textBoxMimicMultiplier.Text = "1.0";
+            }
+            if (showControls && string.IsNullOrWhiteSpace(textBoxMimicOffset.Text))
+            {
+                textBoxMimicOffset.Text = "0.0";
+            }
         }
 
         protected override void OnLayout(LayoutEventArgs levent)

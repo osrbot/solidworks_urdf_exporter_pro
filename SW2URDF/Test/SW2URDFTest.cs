@@ -9,23 +9,33 @@ namespace SW2URDF.Test
     /// Base class for each Test class. This file contains many helper functions as well
     /// as access to the TestFixture which contains the SwApp reference.
     /// </summary>
-    public abstract class SW2URDFTest : IClassFixture<SWTestFixture>
+    public abstract class SW2URDFTest : System.IDisposable
     {
         public const string ModelName3DofArm = "3_DOF_ARM";
         public const string ModelName4Wheeler = "4_WHEELER";
         public const string ModelNameOriginal3DofArm = "ORIGINAL_3_DOF_ARM";
         protected readonly SWTestFixture TestFixture;
-        protected readonly SldWorks SwApp;
+        protected SldWorks SwApp
+        {
+            get
+            {
+                SWTestFixture.Initialize();
+                return SWTestFixture.SwApp;
+            }
+        }
+
         public SW2URDFTest(SWTestFixture fixture)
         {
-            SWTestFixture.Initialize();
             TestFixture = fixture;
-            SwApp = SWTestFixture.SwApp;
         }
 
         public void Dispose()
         {
-            Assert.True(SwApp.CloseAllDocuments(true));
+            SldWorks initializedApplication = SWTestFixture.GetInitializedApplication();
+            if (initializedApplication != null)
+            {
+                Assert.True(initializedApplication.CloseAllDocuments(true));
+            }
         }
 
         public static string GetDebugDirectory()
@@ -50,7 +60,25 @@ namespace SW2URDF.Test
 
         public static string GetSolutionDirectory()
         {
-            return Path.GetDirectoryName(GetProjectDirectory());
+            string directory = Path.GetFullPath(GetDebugDirectory());
+            for (int i = 0; i < 12 && !System.String.IsNullOrWhiteSpace(directory); i++)
+            {
+                if (File.Exists(Path.Combine(directory, "SW2URDF.sln")))
+                {
+                    return directory;
+                }
+
+                DirectoryInfo parent = Directory.GetParent(
+                    directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (parent == null)
+                {
+                    break;
+                }
+                directory = parent.FullName;
+            }
+
+            throw new DirectoryNotFoundException(
+                "Could not find SW2URDF.sln above " + GetDebugDirectory());
         }
 
         public static string GetExamplesDirectory()
@@ -103,6 +131,10 @@ namespace SW2URDF.Test
                                            configuration, ref errors, ref warnings);
             Assert.Equal(0, errors);
             Assert.Equal(0, warnings);
+            AssemblyDoc assembly = doc as AssemblyDoc;
+            Assert.NotNull(assembly);
+            int resolveStatus = assembly.ResolveAllLightWeightComponents(true);
+            Assert.Equal((int)swComponentResolveStatus_e.swResolveOk, resolveStatus);
             return doc;
         }
 

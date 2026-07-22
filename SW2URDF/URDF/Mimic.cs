@@ -12,13 +12,7 @@ namespace SW2URDF.URDF
         public string JointName
         {
             get => (string)JointNameAttribute.Value;
-            set
-            {
-                if (value.GetType() == typeof(string))
-                {
-                    JointNameAttribute.Value = value;
-                }
-            }
+            set => JointNameAttribute.Value = value;
         }
 
         [DataMember]
@@ -80,6 +74,11 @@ namespace SW2URDF.URDF
         {
             JointNameAttribute.Value = null;
             MultiplierAttribute.Value = null;
+            OffsetAttribute.Value = null;
+        }
+
+        public void ClearOffset()
+        {
             OffsetAttribute.Value = null;
         }
 

@@ -19,6 +19,7 @@ namespace SW2URDF.URDFExport
         private LinkConfigurationStore configurations;
         private CadBindingStore cadBindings;
         private Dictionary<Link, Guid> projectionIds;
+        private Dictionary<LinkNode, Guid> computationProjectionIds;
 
         public LinkTreeSession(LinkNode baseNode)
         {
@@ -30,7 +31,8 @@ namespace SW2URDF.URDFExport
             configurations = new LinkConfigurationStore();
             cadBindings = new CadBindingStore();
             projectionIds = new Dictionary<Link, Guid>();
-            CaptureTree(baseNode);
+            computationProjectionIds = null;
+            CaptureTree(baseNode, projectionIds, null, false, false);
             Revision = 0;
             AppliedRoot = null;
         }
@@ -40,6 +42,10 @@ namespace SW2URDF.URDFExport
         public bool RequiresJointKinematicsRecompute
         {
             get { return configurations.RequiresJointKinematics(); }
+        }
+        public bool RequiresJointLimitsRecompute
+        {
+            get { return configurations.RequiresJointLimits(); }
         }
 
         public LinkTreeDocument LoadTree()
@@ -65,8 +71,13 @@ namespace SW2URDF.URDFExport
             CadBindingStore candidateBindings = cadBindings.Clone();
 
             PrepareNewNodes(candidateDocument, candidateConfigurations, candidateBindings);
-            MigrateRenamedJointReferences(candidateDocument, candidateConfigurations);
-            MarkReparentedJointKinematics(candidateDocument, candidateConfigurations);
+            ApplyJointTypes(candidateDocument, candidateConfigurations);
+            MigrateStableMimicReferences(
+                currentDocument,
+                configurations,
+                candidateDocument,
+                candidateConfigurations);
+            MarkReparentedJointState(candidateDocument, candidateConfigurations);
 
             HashSet<Guid> activeIds = new HashSet<Guid>(candidateDocument.Nodes.Select(node => node.Id));
             candidateConfigurations.RemoveExcept(activeIds);
@@ -75,20 +86,37 @@ namespace SW2URDF.URDFExport
             IList<string> referenceErrors = candidateConfigurations.ValidateMimicReferences(
                 candidateDocument.Nodes
                     .Where(node => node.ParentId.HasValue)
-                    .Select(node => node.JointName));
+                    .ToDictionary(node => node.Id, node => node.JointName));
             if (referenceErrors.Count > 0)
             {
                 throw new InvalidOperationException(string.Join(Environment.NewLine, referenceErrors));
             }
 
+            LinkTreeProjection candidateProjection = BuildProjectionSnapshot(
+                candidateDocument,
+                candidateConfigurations,
+                candidateBindings);
             currentDocument = candidateDocument;
             configurations = candidateConfigurations;
             cadBindings = candidateBindings;
-            AppliedRoot = CreateProjection();
+            projectionIds = candidateProjection.LinkIds;
+            computationProjectionIds = null;
+            AppliedRoot = candidateProjection.Root;
             Revision++;
         }
 
         public void CaptureTree(LinkNode baseNode)
+        {
+            CaptureTree(baseNode, projectionIds, null, true, true);
+            computationProjectionIds = null;
+        }
+
+        private void CaptureTree(
+            LinkNode baseNode,
+            IDictionary<Link, Guid> sourceLinkIds,
+            IDictionary<LinkNode, Guid> sourceNodeIds,
+            bool validateCandidate,
+            bool trackChanges)
         {
             if (baseNode == null)
             {
@@ -110,7 +138,25 @@ namespace SW2URDF.URDFExport
                 capturedDocument,
                 capturedConfigurations,
                 capturedBindings,
-                capturedProjectionIds);
+                capturedProjectionIds,
+                sourceLinkIds,
+                sourceNodeIds,
+                trackChanges,
+                false);
+
+            if (previousDocument != null)
+            {
+                MigrateStableMimicReferences(
+                    previousDocument,
+                    configurations,
+                    capturedDocument,
+                    capturedConfigurations);
+            }
+
+            if (validateCandidate)
+            {
+                ValidateCapturedTree(capturedDocument, capturedConfigurations);
+            }
 
             currentDocument = capturedDocument;
             configurations = capturedConfigurations;
@@ -122,17 +168,64 @@ namespace SW2URDF.URDFExport
 
         public LinkNode CreateProjection()
         {
-            Dictionary<Link, Guid> createdProjectionIds = new Dictionary<Link, Guid>();
-            LinkNode root = BuildProjection(currentDocument, currentDocument.Root, null, createdProjectionIds);
-            root.UpdateLinkTree(null);
-            projectionIds = createdProjectionIds;
-            AppliedRoot = root;
-            return root;
+            return BuildProjectionSnapshot(currentDocument, configurations, cadBindings).Root;
         }
 
-        public string ValidateLinkName(string linkName, Guid editingNodeId)
+        public LinkNode CreateActiveProjection()
         {
-            return LinkTreeDocument.ValidateRosName(linkName);
+            LinkTreeProjection projection = BuildProjectionSnapshot(
+                currentDocument,
+                configurations,
+                cadBindings);
+            projectionIds = projection.LinkIds;
+            computationProjectionIds = null;
+            AppliedRoot = projection.Root;
+            return projection.Root;
+        }
+
+        public LinkNode CreateComputationProjection()
+        {
+            LinkTreeProjection projection = BuildProjectionSnapshot(
+                currentDocument,
+                configurations,
+                cadBindings);
+            computationProjectionIds = projection.NodeIds;
+            return projection.Root;
+        }
+
+        public Guid? GetProjectionNodeId(Link link)
+        {
+            Guid id;
+            return link != null && projectionIds.TryGetValue(link, out id) ? id : (Guid?)null;
+        }
+
+        public void ValidateComputedProjection(LinkNode baseNode)
+        {
+            if (baseNode == null)
+            {
+                throw new ArgumentNullException(nameof(baseNode));
+            }
+
+            if (computationProjectionIds == null)
+            {
+                throw new InvalidOperationException(
+                    "Only the current computation projection can be accepted after computation.");
+            }
+
+            HashSet<Guid> visited = new HashSet<Guid>();
+            ValidateComputationNode(baseNode, null, visited);
+            if (visited.Count != currentDocument.Nodes.Count)
+            {
+                throw new InvalidOperationException(
+                    "The computation projection cannot add or remove Link nodes.");
+            }
+        }
+
+        public void AcceptComputedProjection(LinkNode baseNode)
+        {
+            ValidateComputedProjection(baseNode);
+            CaptureTree(baseNode, null, computationProjectionIds, true, false);
+            computationProjectionIds = null;
         }
 
         private double BuildDocument(
@@ -144,30 +237,58 @@ namespace SW2URDF.URDFExport
             LinkTreeDocument targetDocument,
             LinkConfigurationStore targetConfigurations,
             CadBindingStore targetBindings,
-            IDictionary<Link, Guid> targetProjectionIds)
+            IDictionary<Link, Guid> targetProjectionIds,
+            IDictionary<Link, Guid> sourceLinkIds,
+            IDictionary<LinkNode, Guid> sourceNodeIds,
+            bool trackChanges,
+            bool ancestorJointContextChanged)
         {
             Link link = projectionNode.Link ?? new Link();
-            Guid id;
-            if (!projectionIds.TryGetValue(link, out id))
+            Guid id = Guid.Empty;
+            bool foundId = sourceNodeIds != null && sourceNodeIds.TryGetValue(projectionNode, out id);
+            if (!foundId && sourceLinkIds != null)
+            {
+                foundId = sourceLinkIds.TryGetValue(link, out id);
+            }
+            if (!foundId)
             {
                 id = Guid.NewGuid();
             }
+            bool isNewSessionNode = previousDocument != null && !foundId;
 
             LinkTreeNode previousNode = previousDocument == null ? null : previousDocument.Find(id);
+            bool jointInputsChanged = previousNode != null &&
+                !configurations.JointKinematicsInputsMatch(id, link);
+            bool cadBindingsChanged = previousNode != null && !cadBindings.Matches(id, link);
+            bool parentChanged = previousNode != null && previousNode.ParentId != parentId;
             LinkTreeNode node = new LinkTreeNode
             {
                 Id = id,
                 ParentId = parentId,
                 Name = link.Name,
                 JointName = parentId.HasValue ? link.Joint.Name : string.Empty,
-                JointType = parentId.HasValue ? link.Joint.Type : string.Empty,
+                JointType = parentId.HasValue
+                    ? JointConfigurationPolicy.Normalize(link.Joint.Type)
+                    : string.Empty,
                 X = previousNode == null ? 80 + depth * ColumnGap : previousNode.X
             };
             targetDocument.Nodes.Add(node);
             targetConfigurations.Capture(id, projectionNode);
-            if (configurations.Contains(id) && configurations.RequiresJointKinematics(id))
+            bool typeChanged = previousNode != null && !string.Equals(
+                previousNode.JointType,
+                node.JointType,
+                StringComparison.Ordinal);
+            bool jointContextChanged = trackChanges &&
+                (isNewSessionNode || typeChanged || parentChanged ||
+                 jointInputsChanged || cadBindingsChanged);
+            if (parentId.HasValue)
             {
-                targetConfigurations.MarkJointKinematicsStale(id);
+                targetConfigurations.ApplyJointType(id, node.JointType);
+                if (ancestorJointContextChanged || jointContextChanged)
+                {
+                    targetConfigurations.MarkJointKinematicsStale(id);
+                    targetConfigurations.MarkJointLimitsStale(id);
+                }
             }
             targetBindings.Capture(id, link);
             targetProjectionIds[link] = id;
@@ -184,7 +305,11 @@ namespace SW2URDF.URDFExport
                     targetDocument,
                     targetConfigurations,
                     targetBindings,
-                    targetProjectionIds));
+                    targetProjectionIds,
+                    sourceLinkIds,
+                    sourceNodeIds,
+                    trackChanges,
+                    ancestorJointContextChanged || jointContextChanged));
             }
 
             double layoutY = childRows.Count == 0
@@ -198,10 +323,13 @@ namespace SW2URDF.URDFExport
             LinkTreeDocument document,
             LinkTreeNode source,
             Link parentLink,
-            IDictionary<Link, Guid> createdProjectionIds)
+            LinkConfigurationStore sourceConfigurations,
+            CadBindingStore sourceBindings,
+            IDictionary<Link, Guid> createdLinkIds,
+            IDictionary<LinkNode, Guid> createdNodeIds)
         {
-            Link link = configurations.BuildLink(source.Id);
-            cadBindings.Apply(source.Id, link);
+            Link link = sourceConfigurations.BuildLink(source.Id);
+            sourceBindings.Apply(source.Id, link);
             link.Name = source.Name;
             link.Parent = parentLink;
             link.Children.Clear();
@@ -213,7 +341,7 @@ namespace SW2URDF.URDFExport
                 link.Joint.Child.Name = link.Name;
             }
 
-            LinkConfigurationState state = configurations.Get(source.Id);
+            LinkConfigurationState state = sourceConfigurations.Get(source.Id);
             LinkNode result = new LinkNode
             {
                 Link = link,
@@ -224,15 +352,42 @@ namespace SW2URDF.URDFExport
                 NeedsSaving = state.NeedsSaving,
                 WhyIncomplete = state.WhyIncomplete
             };
-            createdProjectionIds[link] = source.Id;
+            createdLinkIds[link] = source.Id;
+            createdNodeIds[result] = source.Id;
 
             foreach (LinkTreeNode child in document.ChildrenOf(source.Id))
             {
-                LinkNode childNode = BuildProjection(document, child, link, createdProjectionIds);
+                LinkNode childNode = BuildProjection(
+                    document,
+                    child,
+                    link,
+                    sourceConfigurations,
+                    sourceBindings,
+                    createdLinkIds,
+                    createdNodeIds);
                 result.Nodes.Add(childNode);
                 link.Children.Add(childNode.Link);
             }
             return result;
+        }
+
+        private LinkTreeProjection BuildProjectionSnapshot(
+            LinkTreeDocument document,
+            LinkConfigurationStore sourceConfigurations,
+            CadBindingStore sourceBindings)
+        {
+            Dictionary<Link, Guid> createdLinkIds = new Dictionary<Link, Guid>();
+            Dictionary<LinkNode, Guid> createdNodeIds = new Dictionary<LinkNode, Guid>();
+            LinkNode root = BuildProjection(
+                document,
+                document.Root,
+                null,
+                sourceConfigurations,
+                sourceBindings,
+                createdLinkIds,
+                createdNodeIds);
+            root.UpdateLinkTree(null);
+            return new LinkTreeProjection(root, createdLinkIds, createdNodeIds);
         }
 
         private void PrepareNewNodes(
@@ -240,63 +395,172 @@ namespace SW2URDF.URDFExport
             LinkConfigurationStore candidateConfigurations,
             CadBindingStore candidateBindings)
         {
-            foreach (LinkTreeNode node in candidate.Nodes.Where(item => !candidateConfigurations.Contains(item.Id)))
+            List<LinkTreeNode> newNodes = candidate.Nodes
+                .Where(item => !candidateConfigurations.Contains(item.Id))
+                .ToList();
+            foreach (LinkTreeNode node in newNodes.Where(item => !item.CopySourceId.HasValue))
             {
-                if (node.CopySourceId.HasValue && candidateConfigurations.Contains(node.CopySourceId.Value))
-                {
-                    candidateConfigurations.CopyConfiguration(node.CopySourceId.Value, node.Id);
-                }
-                else
-                {
-                    candidateConfigurations.CreateDefault(node.Id);
-                }
+                candidateConfigurations.CreateDefault(node.Id);
                 candidateBindings.CreateEmpty(node.Id);
             }
 
-            Dictionary<Guid, LinkTreeNode> copiesBySource = candidate.Nodes
+            List<LinkTreeNode> pendingCopies = newNodes
                 .Where(node => node.CopySourceId.HasValue)
-                .GroupBy(node => node.CopySourceId.Value)
-                .ToDictionary(group => group.Key, group => group.First());
-            foreach (LinkTreeNode copy in candidate.Nodes.Where(node => node.CopySourceId.HasValue))
+                .ToList();
+            while (pendingCopies.Count > 0)
             {
-                LinkTreeNode source = currentDocument.Find(copy.CopySourceId.Value);
-                if (source == null)
+                int copiedCount = 0;
+                foreach (LinkTreeNode copy in pendingCopies.ToList())
                 {
-                    continue;
+                    if (!candidateConfigurations.Contains(copy.CopySourceId.Value))
+                    {
+                        continue;
+                    }
+                    candidateConfigurations.CopyConfiguration(copy.CopySourceId.Value, copy.Id);
+                    candidateBindings.CreateEmpty(copy.Id);
+                    pendingCopies.Remove(copy);
+                    copiedCount++;
                 }
-                string sourceMimic = configurations.Get(source.Id).Configuration.Joint.Mimic.JointName;
-                LinkTreeNode sourceTarget = currentDocument.Nodes.FirstOrDefault(
-                    node => string.Equals(node.JointName, sourceMimic, StringComparison.OrdinalIgnoreCase));
-                LinkTreeNode copiedTarget;
-                if (sourceTarget != null && copiesBySource.TryGetValue(sourceTarget.Id, out copiedTarget))
+                if (copiedCount == 0)
                 {
-                    candidateConfigurations.SetMimicReference(copy.Id, copiedTarget.JointName);
+                    throw new InvalidOperationException(
+                        "Copied Link references a source that is not available in the current tree.");
                 }
+            }
+
+            foreach (IGrouping<Guid, LinkTreeNode> batch in newNodes
+                .Where(node => node.CopySourceId.HasValue)
+                .GroupBy(node => node.CopyBatchId ?? Guid.Empty))
+            {
+                Dictionary<Guid, LinkTreeNode> copiesBySource = new Dictionary<Guid, LinkTreeNode>();
+                foreach (LinkTreeNode copy in batch)
+                {
+                    if (copiesBySource.ContainsKey(copy.CopySourceId.Value))
+                    {
+                        throw new InvalidOperationException(
+                            "A copied Link group contains the same source more than once.");
+                    }
+                    copiesBySource[copy.CopySourceId.Value] = copy;
+                }
+
+                foreach (LinkTreeNode copy in batch)
+                {
+                    LinkTreeNode source = currentDocument.Find(copy.CopySourceId.Value) ??
+                        candidate.Find(copy.CopySourceId.Value);
+                    if (source == null)
+                    {
+                        continue;
+                    }
+                    string sourceMimic = candidateConfigurations.GetMimicReference(source.Id);
+                    LinkTreeNode sourceTarget = currentDocument.Nodes.FirstOrDefault(
+                        node => string.Equals(node.JointName, sourceMimic, StringComparison.Ordinal)) ??
+                        candidate.Nodes.FirstOrDefault(
+                            node => string.Equals(node.JointName, sourceMimic, StringComparison.Ordinal));
+                    LinkTreeNode copiedTarget;
+                    if (sourceTarget != null && copiesBySource.TryGetValue(sourceTarget.Id, out copiedTarget))
+                    {
+                        candidateConfigurations.SetMimicReference(copy.Id, copiedTarget.JointName);
+                    }
+                    else if (sourceTarget != null)
+                    {
+                        LinkTreeNode retainedTarget = candidate.Find(sourceTarget.Id);
+                        if (retainedTarget == null && currentDocument.Find(sourceTarget.Id) != null)
+                        {
+                            throw new InvalidOperationException(string.Format(
+                                "Copied Mimic target Joint '{0}' was deleted. Include the target in the copy or keep it in the tree.",
+                                sourceMimic));
+                        }
+                        if (retainedTarget != null)
+                        {
+                            candidateConfigurations.SetMimicReference(
+                                copy.Id,
+                                retainedTarget.JointName);
+                        }
+                    }
+                }
+            }
+
+            foreach (LinkTreeNode copy in newNodes.Where(node => node.CopySourceId.HasValue))
+            {
+                copy.CopySourceId = null;
+                copy.CopyBatchId = null;
             }
         }
 
-        private void MigrateRenamedJointReferences(
+        private void ApplyJointTypes(
             LinkTreeDocument candidate,
             LinkConfigurationStore candidateConfigurations)
         {
-            if (currentDocument == null)
+            foreach (LinkTreeNode node in candidate.Nodes.Where(item => item.ParentId.HasValue))
             {
-                return;
-            }
-            foreach (LinkTreeNode current in currentDocument.Nodes.Where(node => node.ParentId.HasValue))
-            {
-                LinkTreeNode updated = candidate.Find(current.Id);
-                if (updated != null && !string.Equals(
-                    current.JointName,
-                    updated.JointName,
-                    StringComparison.OrdinalIgnoreCase))
+                node.JointType = JointConfigurationPolicy.Normalize(node.JointType);
+                LinkTreeNode current = currentDocument == null ? null : currentDocument.Find(node.Id);
+                bool typeChanged = current != null && !string.Equals(
+                    current.JointType,
+                    node.JointType,
+                    StringComparison.Ordinal);
+                candidateConfigurations.ApplyJointType(node.Id, node.JointType);
+                if (typeChanged)
                 {
-                    candidateConfigurations.RenameMimicReference(current.JointName, updated.JointName);
+                    candidateConfigurations.MarkJointKinematicsStale(node.Id);
+                    candidateConfigurations.MarkJointLimitsStale(node.Id);
                 }
             }
         }
 
-        private void MarkReparentedJointKinematics(
+        private static void MigrateStableMimicReferences(
+            LinkTreeDocument sourceDocument,
+            LinkConfigurationStore sourceConfigurations,
+            LinkTreeDocument candidateDocument,
+            LinkConfigurationStore candidateConfigurations)
+        {
+            if (sourceDocument == null || sourceConfigurations == null)
+            {
+                return;
+            }
+
+            foreach (LinkTreeNode sourceOwner in sourceDocument.Nodes
+                .Where(node => node.ParentId.HasValue))
+            {
+                LinkTreeNode candidateOwner = candidateDocument.Find(sourceOwner.Id);
+                if (candidateOwner == null)
+                {
+                    continue;
+                }
+
+                string sourceReference = sourceConfigurations.GetMimicReference(sourceOwner.Id);
+                string candidateReference = candidateConfigurations.GetMimicReference(sourceOwner.Id);
+                if (string.IsNullOrWhiteSpace(sourceReference) ||
+                    !string.Equals(sourceReference, candidateReference, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                LinkTreeNode sourceTarget = sourceDocument.Nodes.SingleOrDefault(node =>
+                    node.ParentId.HasValue && string.Equals(
+                        node.JointName,
+                        sourceReference,
+                        StringComparison.Ordinal));
+                if (sourceTarget == null)
+                {
+                    continue;
+                }
+
+                LinkTreeNode candidateTarget = candidateDocument.Find(sourceTarget.Id);
+                if (candidateTarget == null)
+                {
+                    throw new InvalidOperationException(string.Format(
+                        "Mimic target Joint '{0}' was deleted. Clear or change the Mimic reference before deleting it.",
+                        sourceReference));
+                }
+
+                candidateConfigurations.SetMimicReference(
+                    sourceOwner.Id,
+                    candidateTarget.JointName);
+            }
+        }
+
+        private void MarkReparentedJointState(
             LinkTreeDocument candidate,
             LinkConfigurationStore candidateConfigurations)
         {
@@ -309,9 +573,93 @@ namespace SW2URDF.URDFExport
                 LinkTreeNode current = currentDocument.Find(updated.Id);
                 if (current != null && current.ParentId != updated.ParentId)
                 {
-                    candidateConfigurations.MarkJointKinematicsStale(updated.Id);
+                    MarkJointSubtreeStale(candidate, candidateConfigurations, updated.Id);
                 }
             }
+        }
+
+        private static void MarkJointSubtreeStale(
+            LinkTreeDocument document,
+            LinkConfigurationStore candidateConfigurations,
+            Guid rootId)
+        {
+            LinkTreeNode node = document.Find(rootId);
+            if (node == null)
+            {
+                return;
+            }
+            if (node.ParentId.HasValue)
+            {
+                candidateConfigurations.MarkJointKinematicsStale(node.Id);
+                candidateConfigurations.MarkJointLimitsStale(node.Id);
+            }
+            foreach (LinkTreeNode child in document.ChildrenOf(node.Id))
+            {
+                MarkJointSubtreeStale(document, candidateConfigurations, child.Id);
+            }
+        }
+
+        private void ValidateComputationNode(
+            LinkNode node,
+            Guid? actualParentId,
+            ISet<Guid> visited)
+        {
+            Guid id;
+            if (!computationProjectionIds.TryGetValue(node, out id))
+            {
+                throw new InvalidOperationException(
+                    "The computation projection cannot add Link nodes.");
+            }
+
+            LinkTreeNode expected = currentDocument.Find(id);
+            if (expected == null || expected.ParentId != actualParentId)
+            {
+                throw new InvalidOperationException(
+                    "The computation projection cannot change Link parent relationships.");
+            }
+
+            if (!visited.Add(id))
+            {
+                throw new InvalidOperationException(
+                    "The computation projection contains a duplicate Link node.");
+            }
+
+            foreach (LinkNode child in node.Nodes)
+            {
+                ValidateComputationNode(child, id, visited);
+            }
+        }
+
+        private static void ValidateCapturedTree(
+            LinkTreeDocument document,
+            LinkConfigurationStore capturedConfigurations)
+        {
+            List<string> errors = document.Validate().ToList();
+            errors.AddRange(capturedConfigurations.ValidateMimicReferences(
+                document.Nodes
+                    .Where(node => node.ParentId.HasValue)
+                    .ToDictionary(node => node.Id, node => node.JointName)));
+            if (errors.Count > 0)
+            {
+                throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
+            }
+        }
+
+        private sealed class LinkTreeProjection
+        {
+            public LinkTreeProjection(
+                LinkNode root,
+                Dictionary<Link, Guid> linkIds,
+                Dictionary<LinkNode, Guid> nodeIds)
+            {
+                Root = root;
+                LinkIds = linkIds;
+                NodeIds = nodeIds;
+            }
+
+            public LinkNode Root { get; private set; }
+            public Dictionary<Link, Guid> LinkIds { get; private set; }
+            public Dictionary<LinkNode, Guid> NodeIds { get; private set; }
         }
     }
 }

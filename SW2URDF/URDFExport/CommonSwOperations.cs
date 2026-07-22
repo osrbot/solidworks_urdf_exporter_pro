@@ -25,7 +25,9 @@ using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SW2URDF.URDF;
 using SW2URDF.Utilities;
+using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 
@@ -34,6 +36,34 @@ namespace SW2URDF.URDFExport
     public static class CommonSwOperations
     {
         private static readonly ILog logger = Logger.GetLogger();
+
+        internal static T TryCastComObject<T>(object value, string context) where T : class
+        {
+            T typed = value as T;
+            if (typed == null && value != null)
+            {
+                logger.Warn("Ignoring an unexpected SolidWorks COM object while " + context + ".");
+            }
+            return typed;
+        }
+
+        internal static IEnumerable<T> EnumerateComObjects<T>(
+            object[] values,
+            string context) where T : class
+        {
+            if (values == null)
+            {
+                yield break;
+            }
+            foreach (object value in values)
+            {
+                T typed = TryCastComObject<T>(value, context);
+                if (typed != null)
+                {
+                    yield return typed;
+                }
+            }
+        }
 
         //Selects the components of a link. Helps highlight when the associated node is
         // selected from the tree
@@ -81,7 +111,9 @@ namespace SW2URDF.URDFExport
             for (int i = 0; i < selectionManager.GetSelectedObjectCount2(Mark); i++)
             {
                 object obj = selectionManager.GetSelectedObject6(i + 1, Mark);
-                Component2 comp = (Component2)obj;
+                Component2 comp = TryCastComObject<Component2>(
+                    obj,
+                    "reading selected components");
                 if (comp != null)
                 {
                     Components.Add(comp);
@@ -94,9 +126,10 @@ namespace SW2URDF.URDFExport
         public static List<string> FindHiddenComponents(object[] varComp)
         {
             List<string> hiddenComp = new List<string>();
-            foreach (object obj in varComp)
+            foreach (Component2 comp in EnumerateComObjects<Component2>(
+                varComp,
+                "reading assembly component visibility"))
             {
-                Component2 comp = (Component2)obj;
                 if (comp.IsHidden(false))
                 {
                     hiddenComp.Add(comp.Name2);
@@ -111,7 +144,9 @@ namespace SW2URDF.URDFExport
             AssemblyDoc assyDoc = (AssemblyDoc)model;
             List<Component2> componentsToShow = new List<Component2>();
             object[] varComps = assyDoc.GetComponents(false);
-            foreach (Component2 comp in varComps)
+            foreach (Component2 comp in EnumerateComObjects<Component2>(
+                varComps,
+                "showing assembly components"))
             {
                 if (!hiddenComponents.Contains(comp.Name2))
                 {
@@ -188,18 +223,23 @@ namespace SW2URDF.URDFExport
 
         public static void RetrieveSWComponentPIDs(ModelDoc2 model, LinkNode node)
         {
-            if (node.Link.SWComponents != null)
-            {
-                node.Link.SWComponentPIDs = new List<byte[]>();
-                foreach (IComponent2 comp in node.Link.SWComponents)
-                {
-                    byte[] PID = model.Extension.GetPersistReference3(comp);
-                    node.Link.SWComponentPIDs.Add(PID);
-                }
-            }
+            RetrieveSWComponentPIDs(model, node.Link);
             foreach (LinkNode child in node.Nodes)
             {
                 RetrieveSWComponentPIDs(model, child);
+            }
+        }
+
+        public static void RetrieveSWComponentPIDs(ModelDoc2 model, Link link)
+        {
+            link.SWComponentPIDs = new List<byte[]>();
+            if (link.SWComponents == null)
+            {
+                return;
+            }
+            foreach (IComponent2 component in link.SWComponents)
+            {
+                link.SWComponentPIDs.Add(model.Extension.GetPersistReference3(component));
             }
         }
 
@@ -290,16 +330,25 @@ namespace SW2URDF.URDFExport
         // Converts a single PID to a Component2 object
         public static Component2 LoadSWComponent(ModelDoc2 model, byte[] PID)
         {
-            string byteAsString = PIDToString(PID);
             if (PID == null)
             {
-                throw new System.Exception("PID " + byteAsString + " was null. Is the configuration corrupted?");    
+                throw new System.Exception("PID was null. Is the configuration corrupted?");
             }
+            string byteAsString = PIDToString(PID);
 
             object obj = model.Extension.GetObjectByPersistReference3(PID, out int Errors);
             if (Errors == 0)
             {
-                return (Component2)obj;
+                Component2 component = TryCastComObject<Component2>(
+                    obj,
+                    "loading a component from its persistent reference");
+                if (component == null)
+                {
+                    logger.Error(
+                        "The persistent reference resolved successfully but was not a component: " +
+                        byteAsString);
+                }
+                return component;
             }
             switch ((swPersistReferencedObjectStates_e)Errors)
             {
@@ -329,6 +378,46 @@ namespace SW2URDF.URDFExport
         public static string PIDToString(byte[] pid)
         {
             return Encoding.ASCII.GetString(pid);
+        }
+
+        internal static bool ComReferencesEqual(object left, object right)
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            IntPtr leftIdentity = IntPtr.Zero;
+            IntPtr rightIdentity = IntPtr.Zero;
+            try
+            {
+                leftIdentity = Marshal.GetIUnknownForObject(left);
+                rightIdentity = Marshal.GetIUnknownForObject(right);
+                return leftIdentity == rightIdentity;
+            }
+            catch (COMException)
+            {
+                return false;
+            }
+            catch (InvalidComObjectException)
+            {
+                return false;
+            }
+            finally
+            {
+                if (leftIdentity != IntPtr.Zero)
+                {
+                    Marshal.Release(leftIdentity);
+                }
+                if (rightIdentity != IntPtr.Zero)
+                {
+                    Marshal.Release(rightIdentity);
+                }
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Runtime.Serialization;
 using System.Windows.Forms;
@@ -9,10 +10,23 @@ namespace SW2URDF.URDF
     [DataContract(IsReference = true, Namespace = "http://schemas.datacontract.org/2004/07/SW2URDF")]
     public class Joint : URDFElement
     {
-        public static readonly List<string> AvailableTypes = new List<string>
+        public const string AutomaticallyDetectType = "Automatically Detect";
+
+        public static readonly ReadOnlyCollection<string> AvailableTypes =
+            new ReadOnlyCollection<string>(new[]
+            {
+                "revolute", "continuous", "prismatic", "fixed", "floating", "planar"
+            });
+
+        public static readonly ReadOnlyCollection<string> SelectableTypes =
+            CreateSelectableTypes();
+
+        private static ReadOnlyCollection<string> CreateSelectableTypes()
         {
-            "revolute", "continuous", "prismatic", "fixed", "floating", "planar"
-        };
+            List<string> types = new List<string> { AutomaticallyDetectType };
+            types.AddRange(AvailableTypes);
+            return types.AsReadOnly();
+        }
 
         [DataMember]
         private readonly URDFAttribute NameAttribute;
@@ -110,11 +124,30 @@ namespace SW2URDF.URDF
 
         public override bool ElementContainsData()
         {
-            return !string.IsNullOrWhiteSpace(Name) && !string.IsNullOrWhiteSpace(Type);
+            return !string.IsNullOrWhiteSpace(Name) && AvailableTypes.Contains(Type);
+        }
+
+        public static bool IsAutomaticType(string jointType)
+        {
+            return jointType == AutomaticallyDetectType || jointType == "Automatically Generate";
+        }
+
+        public static bool RequiresAxis(string jointType)
+        {
+            return jointType == "revolute" || jointType == "continuous" ||
+                jointType == "prismatic" || jointType == "planar";
         }
 
         public override bool AreRequiredFieldsSatisfied()
         {
+            if (!AvailableTypes.Contains(Type))
+            {
+                return false;
+            }
+            if (RequiresAxis(Type) && !Axis.HasValidDirection())
+            {
+                return false;
+            }
             Limit.SetRequired((Type == "prismatic" || Type == "revolute"));
             return base.AreRequiredFieldsSatisfied();
         }

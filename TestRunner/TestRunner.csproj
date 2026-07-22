@@ -9,6 +9,7 @@
     <StartupObject />
     <LangVersion>7.1</LangVersion>
     <SolidWorksInstallDir Condition=" '$(SolidWorksInstallDir)' == '' ">E:\Solidworks 2023\SOLIDWORKS Crop\SOLIDWORKS</SolidWorksInstallDir>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;bin\**;.codex-build*\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

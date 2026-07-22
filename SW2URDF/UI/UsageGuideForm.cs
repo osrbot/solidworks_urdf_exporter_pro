@@ -107,7 +107,7 @@ namespace SW2URDF.UI
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("快速功能索引");
             builder.AppendLine();
-            builder.AppendLine("- 自动加载 Link 树配置: 如果装配体里存在 SolidWorks 特征 URDF Export Configuration (v1.4)，插件启动导出时会恢复上次保存的 Link/Joint 树、命名、父子关系和已保存属性。");
+            builder.AppendLine("- 自动加载 Link 树配置: 如果装配体里存在 SolidWorks 特征 URDF Export Configuration (v1.5)，插件启动导出时会恢复上次保存的 Link/Joint 树、命名、父子关系和已保存属性。v1.4 及更早配置会在保存时自动升级。");
             builder.AppendLine("- 保存配置: 导出或关闭配置页时，插件会提示是否保存变化；保存后配置写回当前装配体文件，而不是单独散落在外部目录。");
             builder.AppendLine("- 组件重连: 加载旧配置时会用保存的 SolidWorks component PID 重新关联零件；如果某些零件被删除、替换或另存导致 PID 失效，会弹窗列出需要人工检查的 link。");
             builder.AppendLine("- Load Configuration...: 从 CSV 导入旧 URDF 配置，并通过合并窗口选择是否采用 CSV 里的质量/惯性、视觉/碰撞、Joint 运动学和其他 Joint 参数。适合复用旧项目参数，不等同于自动加载装配体内置配置。");
@@ -151,7 +151,7 @@ namespace SW2URDF.UI
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("Quick feature index");
             builder.AppendLine();
-            builder.AppendLine("- Automatic Link tree loading: when the assembly contains the SolidWorks feature URDF Export Configuration (v1.4), the exporter restores the saved Link/Joint tree, names, parent-child structure, and saved properties at startup.");
+            builder.AppendLine("- Automatic Link tree loading: when the assembly contains the SolidWorks feature URDF Export Configuration (v1.5), the exporter restores the saved Link/Joint tree, names, parent-child structure, and saved properties at startup. v1.4 and older configurations are upgraded when saved.");
             builder.AppendLine("- Save configuration: when the configuration changes, the exporter prompts to save it back into the current assembly document instead of scattering separate sidecar files.");
             builder.AppendLine("- Component reconnect: saved SolidWorks component PIDs are resolved when an old tree is loaded. If parts were deleted, replaced, or saved as new files, the exporter reports the links that need inspection.");
             builder.AppendLine("- Load Configuration...: imports values from a CSV export and opens a merge window. You can choose whether CSV values should override mass/inertia, visual/collision, joint kinematics, and other joint properties. This is for reusing old project data; it is separate from automatic assembly configuration loading.");

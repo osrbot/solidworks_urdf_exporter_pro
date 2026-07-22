@@ -14,7 +14,7 @@ The OSRBot-maintained build keeps the original SolidWorks add-in workflow and ad
 - SolidWorks mass-property based inertia export and per-link validation logs.
 - Collision strategy selection for visual mesh, simplified mesh, accurate mesh, primitive boxes/cylinders/spheres, component boxes, and convex hulls.
 - STL mesh reduction ratio control for lighter exported mesh packages.
-- Automatic Link tree configuration loading from the SolidWorks assembly feature `URDF Export Configuration (v1.4)`.
+- Automatic Link tree configuration loading from the SolidWorks assembly feature `URDF Export Configuration (v1.5)`.
 - Transactional Link tree canvas for adding, renaming, moving, box-selecting, copying, and pasting Link groups before export.
 - CSV configuration loading and merge support through `Load Configuration...` for reusing old project values.
 - Chinese UI localization and safer UTF-8 English export logs.
@@ -34,7 +34,7 @@ Example:
 INSTALL/OUTPUT/sw2urdfSetup_20260629_598c7dd.exe
 ```
 
-Release tags use the installer date: `vYYYYMMDD`. If multiple installers are published on the same day, the release tag stays the same and the installer filename commit suffix identifies the build.
+Release tags use the installer date: `vYYYYMMDD`. Daily releases are immutable: a second installer for the same date is rejected instead of moving a public tag or replacing an already published binary. The installer filename commit suffix and provenance identify the source commit declared by the local maintainer build.
 
 **SolidWorks 2021**
 
@@ -58,15 +58,21 @@ See the [ROS Wiki](http://wiki.ros.org/sw_urdf_exporter) and associated [tutoria
 
 ### User-Friendly Workflow Features
 
-The exporter stores the Link tree configuration inside the SolidWorks assembly as `URDF Export Configuration (v1.4)`. When the same assembly is opened again, the plugin loads the saved Link/Joint tree, names, parent-child structure, and saved link properties automatically. This is the normal path for iterative robot modeling: configure once, reopen, adjust, and export again.
+The exporter stores the Link tree configuration inside the SolidWorks assembly as `URDF Export Configuration (v1.5)`. Existing v1.4 and older configurations are loaded and upgraded when saved. When the same assembly is opened again, the plugin loads the saved Link/Joint tree, names, parent-child structure, and saved link properties automatically. This is the normal path for iterative robot modeling: configure once, reopen, adjust, and export again.
 
 When a saved tree is loaded, SolidWorks component references are reconnected from stored component PIDs. If a part was deleted, replaced, or saved as a new file and can no longer be resolved, the exporter warns which links need inspection before export.
 
 Use `Edit Link Tree...` to open the free canvas. The canvas edits a working copy: `Cancel` discards all structural changes, while `Apply` validates and commits them as one transaction. Topology, URDF configuration, and SolidWorks CAD bindings are stored separately and are combined only when the PropertyManager or exporter requests a projection.
 
-Renaming a Joint updates existing mimic references. Deleting a Joint that is still referenced by a mimic relation is rejected. Reparenting a Link keeps its CAD component assignment but forces Joint kinematics to be recomputed before export, so an Origin calculated for the old parent cannot be exported silently.
+Renaming a Joint updates existing mimic references. Deleting a Joint that is still referenced by a mimic relation is rejected. Reparenting a Link keeps its CAD component assignment but forces Joint kinematics and limits to be recomputed before export, so values calculated for the old relationship cannot be exported silently.
+
+The recompute requirements are saved with the assembly. Closing the PropertyManager or SolidWorks after a topology or Joint-type change does not lose them: the next export automatically enables the required computations and clears each marker only after the computed configuration has been saved and accepted.
 
 Copy/paste duplicates the selected topology and reusable URDF configuration, including Joint settings, inertia, visual, collision, and mesh options. CAD component bindings are intentionally cleared on pasted Links because assigning the same SolidWorks body to two Links would create an invalid robot model. Pasted Links are marked incomplete until their mirrored or replacement components are assigned in the PropertyManager.
+
+Each paste operation is treated as an independent group. Repeatedly pasting the same symmetric Link group keeps Mimic references inside that paste batch instead of pointing later copies back to the first pasted group. Link and Joint names are generated uniquely and can then be edited normally.
+
+Joint type validation uses the six standard URDF values: `fixed`, `revolute`, `continuous`, `prismatic`, `floating`, and `planar`. The editor also preserves the exporter-only `Automatically Detect` configuration state; it must resolve to one of the standard values during computation before URDF output. Type changes normalize incompatible saved fields. In particular, fixed and floating Joints remove stale motion data; continuous Joints keep effort, velocity, dynamics, and Mimic settings while removing lower and upper position bounds.
 
 `Load Configuration...` is a different feature. It imports values from a CSV export and opens a modal merge window, preventing edits made against a newer Link tree from being overwritten by an older merge snapshot. Use it when you want to reuse values from an old robot project, such as mass/inertia, visual/collision settings, joint kinematics, or other joint parameters. It is useful after a CAD redesign where the tree shape is similar but some values should come from a previous export.
 
@@ -112,7 +118,15 @@ From the repository root:
 .\scripts\BuildInstaller.ps1
 ```
 
-The installer is written to `INSTALL\OUTPUT` and should be named `sw2urdfSetup_YYYYMMDD_<commit>.exe`.
+The installer is written to `INSTALL\OUTPUT` and should be named `sw2urdfSetup_YYYYMMDD_<commit>.exe`. Packaging also writes `<installer>.sha256` and `<installer>.provenance.json`; the latter records the full source commit and tree, installer digest, build mode, pinned NuGet inputs, build-tool hashes, the exact staged SolidWorks API inputs, and a SHA256 manifest of every installed DLL and toolbar image.
+
+Packaging requires Inno Setup 6.3 or newer and accepts only a clean `Release|x64` source tree. It creates a detached temporary Git worktree at the recorded source commit, copies the four SolidWorks API build inputs into that worktree, downloads a SHA256-pinned NuGet CLI, restores only `SW2URDF\packages.release.config` through the repository `NuGet.Config`, and verifies every `.nupkg` against `SW2URDF\packages.release.lock.json`. `INSTALL\OUTPUT` artifact changes are excluded from the cleanliness check. Release intermediates start empty, the production DLL uses deterministic compiler settings and commit-derived metadata, and only the completed installer is promoted back to `INSTALL\OUTPUT`. The installer includes runtime DLLs plus the SolidWorks toolbar image assets; test code, test runners, analyzers, XML documentation, PDB files, and the host-provided `solidworkstools.dll` are not shipped.
+
+### Link Tree Architecture
+
+The maintained Link tree implementation lives in `SW2URDF/UI/LinkTreeCanvas`. `LinkTreeSession` owns atomic topology transactions, while `LinkConfigurationStore` and `CadBindingStore` separately own reusable URDF values and SolidWorks object/PID bindings. The canvas depends only on `ILinkTreeCanvasHost` and never owns SolidWorks COM objects.
+
+The former standalone prototype has been retired. Do not duplicate production tree, copy/paste, or validation behavior under `prototypes`; extend the production document/session boundaries and add focused tests instead.
 
 ### Tests
 
@@ -135,14 +149,18 @@ The workflow `.github/workflows/publish-installer-release.yml` publishes committ
 Trigger:
 
 - Push to `master` or `main` with a changed `INSTALL/OUTPUT/sw2urdfSetup_*.exe`.
-- Push to `master` or `main` with a changed release workflow file, which publishes the newest committed installer.
 - Manual `workflow_dispatch`, optionally passing an installer path.
 
 Behavior:
 
 - Parses the date from `sw2urdfSetup_YYYYMMDD_<commit>.exe`.
-- Creates or updates release tag `vYYYYMMDD`.
-- Uploads the installer as a release asset. Existing assets with the same name are replaced.
+- Ignores installer deletions and accepts added, modified, or Git-detected renamed artifacts only when exactly one current installer remains in the release commit.
+- Selects the default manual-release artifact by Git commit time rather than checkout file timestamps.
+- Requires the artifact commit to contain only one installer and its two sidecars, then verifies the checksum, source tree, build mode, pinned NuGet lock, and tool/input records. CI also extracts the Inno Setup package and compares every installed file and SHA256 value with the provenance payload manifest.
+- Rejects an existing `vYYYYMMDD` tag or Release; published daily releases are immutable.
+- Creates the Release as a draft with the installer, checksum, and provenance assets, then makes it public only after all uploads succeed. A retry removes only an incomplete draft for the same tag; a public daily Release remains immutable.
+
+The current workflow promotes a locally built maintainer artifact; GitHub Actions does not rebuild the plugin because the proprietary SolidWorks API assemblies are not available on hosted runners. The provenance is therefore an auditable local-build attestation, not a CI-generated binary-source proof or an Authenticode signature.
 
 ## Converting mesh format from 3dxml to dae
 

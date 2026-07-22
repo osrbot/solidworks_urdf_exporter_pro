@@ -6,6 +6,7 @@ using System;
 using Xunit;
 namespace SW2URDF.Test
 {
+    [Collection("Requires SW Test Collection")]
     public class TestMathOps : SW2URDFTest
     {
         public TestMathOps(SWTestFixture fixture) : base(fixture)

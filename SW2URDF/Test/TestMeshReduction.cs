@@ -90,7 +90,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestLinkCopyPreservesMeshReductionRatio()
+        public void TestLinkConfigurationCopyPreservesExportSettingsWithoutCadBindings()
         {
             Link source = new Link
             {
@@ -98,13 +98,19 @@ namespace SW2URDF.Test
                 MeshReductionRatio = 0.65,
                 CollisionMeshStrategy = CollisionMeshStrategy.Primitive
             };
+            source.SWComponents.Add(null);
             Link target = new Link();
 
-            target.SetSWComponents(source);
+            target.SetElement(source);
 
             Assert.True(target.STLQualityFine);
             Assert.Equal(0.65, target.MeshReductionRatio, 5);
             Assert.Equal(CollisionMeshStrategy.Primitive, target.CollisionMeshStrategy);
+            Assert.Empty(target.SWComponents);
+
+            target.SetSWComponents(source);
+
+            Assert.Single(target.SWComponents);
         }
 
         [Fact]
@@ -128,6 +134,22 @@ namespace SW2URDF.Test
             Assert.Equal(0.35, baseLink.MeshReductionRatio, 5);
             Assert.Equal(0.35, childLink.MeshReductionRatio, 5);
             Assert.Equal(0.0, fixedFrame.MeshReductionRatio, 5);
+        }
+
+        [Fact]
+        public void TestFixedFrameDoesNotHideMeshBearingDescendantsFromExport()
+        {
+            Link baseLink = new Link { Name = "base_link" };
+            Link fixedFrame = new Link { Name = "fixed_frame", isFixedFrame = true };
+            Link sensorLink = new Link { Name = "sensor_link" };
+            baseLink.Children.Add(fixedFrame);
+            fixedFrame.Children.Add(sensorLink);
+
+            IList<Link> links = ExportHelper.GetMeshExportLinks(baseLink);
+
+            Assert.Equal(2, links.Count);
+            Assert.Same(baseLink, links[0]);
+            Assert.Same(sensorLink, links[1]);
         }
 
         [Fact]

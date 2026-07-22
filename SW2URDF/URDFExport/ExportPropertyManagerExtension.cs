@@ -23,6 +23,7 @@ THE SOFTWARE.
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SolidWorks.Interop.swpublished;
+using SW2URDF.UI;
 using SW2URDF.UI.LinkTreeCanvas;
 using SW2URDF.URDF;
 using SW2URDF.Utilities;
@@ -46,6 +47,7 @@ namespace SW2URDF.URDFExport
             SaveActiveNode();
             Link selectedLink = previouslySelectedNode == null ? null : previouslySelectedNode.Link;
             CommitLinkTreeProjection();
+            Guid? selectedNodeId = linkTreeSession.GetProjectionNodeId(selectedLink);
 
             try
             {
@@ -61,7 +63,12 @@ namespace SW2URDF.URDFExport
                     PMComputeJointKinematics.Checked = true;
                     logger.Info("Joint topology changed; joint kinematics recomputation was enabled.");
                 }
-                RefreshLinkTreeProjection(selectedLink);
+                if (linkTreeSession.RequiresJointLimitsRecompute)
+                {
+                    PMComputeJointLimits.Checked = true;
+                    logger.Info("Joint configuration changed; joint limit recomputation was enabled.");
+                }
+                RefreshLinkTreeProjection(selectedNodeId);
             }
             catch (Exception exception)
             {
@@ -72,14 +79,14 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private void ReplaceLinkTreeRoot(LinkNode root, Link selectedLink = null)
+        private void ReplaceLinkTreeRoot(LinkNode root, Guid? selectedNodeId = null)
         {
             if (root == null)
             {
                 throw new ArgumentNullException(nameof(root));
             }
             linkTreeSession = new LinkTreeSession(root);
-            RefreshLinkTreeProjection(selectedLink);
+            RefreshLinkTreeProjection(selectedNodeId);
         }
 
         private void CommitLinkTreeProjection()
@@ -99,14 +106,14 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private void RefreshLinkTreeProjection(Link selectedLink = null)
+        private void RefreshLinkTreeProjection(Guid? selectedNodeId = null)
         {
             if (linkTreeSession == null)
             {
                 return;
             }
 
-            LinkNode root = linkTreeSession.CreateProjection();
+            LinkNode root = linkTreeSession.CreateActiveProjection();
             AddDocMenu(root);
             previouslySelectedNode = null;
             previouslySelectedLink = null;
@@ -114,20 +121,20 @@ namespace SW2URDF.URDFExport
             Tree.Nodes.Add(root);
             Tree.ExpandAll();
 
-            LinkNode selectedNode = FindNodeByLink(root, selectedLink) ?? root;
+            LinkNode selectedNode = FindNodeById(root, selectedNodeId) ?? root;
             Tree.SelectedNode = selectedNode;
             selectedNode.EnsureVisible();
         }
 
-        private static LinkNode FindNodeByLink(LinkNode node, Link link)
+        private LinkNode FindNodeById(LinkNode node, Guid? nodeId)
         {
-            if (link == null || object.ReferenceEquals(node.Link, link))
+            if (nodeId.HasValue && linkTreeSession.GetProjectionNodeId(node.Link) == nodeId)
             {
-                return link == null ? null : node;
+                return node;
             }
             foreach (LinkNode child in node.Nodes)
             {
-                LinkNode match = FindNodeByLink(child, link);
+                LinkNode match = FindNodeById(child, nodeId);
                 if (match != null)
                 {
                     return match;
@@ -139,10 +146,16 @@ namespace SW2URDF.URDFExport
         public static readonly double ConfigurationVersion = 1.3;
         public static readonly double SoapMinVersion = 1.3;
 
-        public void SaveConfigTree(ModelDoc2 model, LinkNode BaseNode, bool warnUser)
+        public bool SaveConfigTree(ModelDoc2 model, LinkNode BaseNode, bool warnUser)
         {
             CommonSwOperations.RetrieveSWComponentPIDs(model, BaseNode);
-            ConfigurationSerialization.SaveConfigTreeXML(swApp, model, BaseNode, warnUser);
+            return ConfigurationSaveInteraction.Save(
+                allowOverwrite => ConfigurationSerialization.SaveConfigTreeXML(
+                    swApp,
+                    model,
+                    BaseNode,
+                    allowOverwrite),
+                warnUser);
         }
 
         //As nodes are created and destroyed, this menu gets called a lot. It basically just
@@ -282,15 +295,19 @@ namespace SW2URDF.URDFExport
         }
 
         // Finds the next incomplete node and returns that
-        public LinkNode FindNextLinkToVisit(LinkNode nodeToCheck)
+        public static LinkNode FindNextLinkToVisit(LinkNode nodeToCheck)
         {
-            if (nodeToCheck.Link.isIncomplete)
+            if (nodeToCheck.IsIncomplete)
             {
                 return nodeToCheck;
             }
             foreach (LinkNode node in nodeToCheck.Nodes)
             {
-                return FindNextLinkToVisit(node);
+                LinkNode incomplete = FindNextLinkToVisit(node);
+                if (incomplete != null)
+                {
+                    return incomplete;
+                }
             }
             return null;
         }
@@ -333,12 +350,21 @@ namespace SW2URDF.URDFExport
                     "        without components. Either select an axis or at least one component.";
             }
 
-            if (node.Link.SWComponents.Count == 0 && node.Link.Joint.Type == "Automatically Generate")
+            if (node.Link.SWComponents.Count == 0 &&
+                (node.Link.Joint.Type == "Automatically Generate" ||
+                 node.Link.Joint.Type == Joint.AutomaticallyDetectType))
             {
                 node.IsIncomplete = true;
                 node.WhyIncomplete +=
                     "        The joint type cannot be automatically detected\r\n" +
                     "        without components. Either select an joint type or at least one component.";
+            }
+            else if (node.Link.Joint.Type != Joint.AutomaticallyDetectType &&
+                !Joint.AvailableTypes.Contains(node.Link.Joint.Type))
+            {
+                node.IsIncomplete = true;
+                node.WhyIncomplete +=
+                    "        The joint type is not supported. Select a standard URDF joint type.";
             }
         }
 
@@ -361,6 +387,7 @@ namespace SW2URDF.URDFExport
             CheckNodeInertialComplete(node);
             CheckNodeVisualComplete(node);
             CheckNodeJointComplete(node);
+            node.Link.isIncomplete = node.IsIncomplete;
         }
 
         private void CheckModelDocsExist(LinkNode node, List<string> problemComponents)
@@ -433,6 +460,8 @@ namespace SW2URDF.URDFExport
                 }
                 CommonSwOperations.GetSelectedComponents(
                     ActiveSWModel, previouslySelectedNode.Link.SWComponents, PMSelection.Mark);
+                CommonSwOperations.RetrieveSWComponentPIDs(
+                    ActiveSWModel, previouslySelectedNode.Link);
             }
         }
 
@@ -456,7 +485,7 @@ namespace SW2URDF.URDFExport
                 node.Link.Name = "Empty_Link";
                 node.Link.Joint.AxisName = "Automatically Generate";
                 node.Link.Joint.CoordinateSystemName = "Automatically Generate";
-                node.Link.Joint.Type = "Automatically Detect";
+                node.Link.Joint.Type = Joint.AutomaticallyDetectType;
                 node.Link.SWComponents = new List<Component2>();
                 node.IsBaseNode = false;
                 node.IsIncomplete = true;
@@ -592,12 +621,16 @@ namespace SW2URDF.URDFExport
         /// <returns>bool representing success of load. If false, PMPage should not open</returns>
         public bool LoadConfigTree()
         {
-            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(ActiveSWModel, out bool abortProcess);
+            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(
+                ActiveSWModel,
+                out string errorMessage);
 
-            if (abortProcess)
+            if (!string.IsNullOrWhiteSpace(errorMessage))
             {
-                MessageBox.Show("An error occured loading an existing configuration. Either resolve the issue" +
-                    " or delete the configuration from the feature manager");
+                MessageBox.Show(
+                    errorMessage + "\r\n\r\nEither resolve the issue or delete the configuration " +
+                    "from the feature manager.",
+                    "SW2URDF");
                 return false;
             }
 
@@ -642,9 +675,10 @@ namespace SW2URDF.URDFExport
         {
             bool needToCreateFolder = true;
             Object[] objects = ActiveSWModel.FeatureManager.GetFeatures(true);
-            foreach (Object obj in objects)
+            foreach (Feature feat in CommonSwOperations.EnumerateComObjects<Feature>(
+                objects,
+                "organizing URDF features"))
             {
-                Feature feat = (Feature)obj;
                 if (feat.Name == "URDF Export Items")
                 {
                     needToCreateFolder = false;

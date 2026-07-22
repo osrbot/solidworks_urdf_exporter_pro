@@ -7,6 +7,7 @@
     ///     out List<Link> matchedLinks, out List<Link> unmatchedLinks)
     /// public Link GetCorrespondingLink(TreeViewItem item)
     /// </summary>
+    [Xunit.Collection("Requires SW Test Collection")]
     public class TestURDFMerge : SW2URDFTest
     {
         public TestURDFMerge(SWTestFixture fixture) : base(fixture)

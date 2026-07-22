@@ -2,6 +2,7 @@
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System.Collections.Generic;
+using System.IO;
 using Xunit;
 
 namespace SW2URDF.Test
@@ -11,6 +12,40 @@ namespace SW2URDF.Test
     {
         public TestExportHelper(SWTestFixture fixture) : base(fixture)
         {
+        }
+
+        private static LinkNode LoadConfiguredBaseNode(ModelDoc2 doc)
+        {
+            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(
+                doc,
+                out bool error);
+            Assert.False(error);
+
+            List<string> problemLinks = new List<string>();
+            CommonSwOperations.LoadSWComponents(doc, baseNode, problemLinks);
+            Assert.Empty(problemLinks);
+            return baseNode;
+        }
+
+        private static bool ExportToTemporaryRoot(
+            ExportHelper helper,
+            bool exportMeshes,
+            MeshExportFormat meshFormat = MeshExportFormat.STL)
+        {
+            string exportRoot = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            Directory.CreateDirectory(exportRoot);
+            helper.SavePath = exportRoot;
+            try
+            {
+                return helper.ExportRobot(exportMeshes, meshFormat);
+            }
+            finally
+            {
+                if (Directory.Exists(exportRoot))
+                {
+                    Directory.Delete(exportRoot, true);
+                }
+            }
         }
 
         [Theory]
@@ -28,10 +63,11 @@ namespace SW2URDF.Test
             helper.SetComputeJointKinematics(true);
             helper.SetComputeJointLimits(true);
             helper.SetComputeVisualCollision(true);
-            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(doc, out bool error);
-            Assert.False(error);
-            helper.CreateRobotFromTreeView(baseNode);
-            helper.ExportRobot(true, meshExportFormat);
+            LinkNode baseNode = LoadConfiguredBaseNode(doc);
+            Assert.True(helper.CreateRobotFromTreeView(baseNode), helper.ExportErrorWhy);
+            Assert.True(
+                ExportToTemporaryRoot(helper, true, meshExportFormat),
+                helper.ExportErrorWhy);
             Assert.NotNull(helper.URDFRobot);
             Assert.Equal(expNumLinks, CommonSwOperations.GetCount(helper.URDFRobot.BaseLink));
             Assert.True(SwApp.CloseAllDocuments(true));
@@ -49,10 +85,9 @@ namespace SW2URDF.Test
             helper.SetComputeJointKinematics(true);
             helper.SetComputeJointLimits(true);
             helper.SetComputeVisualCollision(true);
-            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(doc, out bool error);
-            Assert.False(error);
-            helper.CreateRobotFromTreeView(baseNode);
-            helper.ExportRobot(false);
+            LinkNode baseNode = LoadConfiguredBaseNode(doc);
+            Assert.True(helper.CreateRobotFromTreeView(baseNode), helper.ExportErrorWhy);
+            Assert.True(ExportToTemporaryRoot(helper, false), helper.ExportErrorWhy);
             Assert.NotNull(helper.URDFRobot);
             Assert.Equal(expNumLinks, CommonSwOperations.GetCount(helper.URDFRobot.BaseLink));
             Assert.True(SwApp.CloseAllDocuments(true));
@@ -70,10 +105,9 @@ namespace SW2URDF.Test
             helper.SetComputeJointKinematics(true);
             helper.SetComputeJointLimits(true);
             helper.SetComputeVisualCollision(true);
-            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(doc, out bool error);
-            Assert.False(error);
-            helper.CreateRobotFromTreeView(baseNode);
-            helper.ExportRobot(true);
+            LinkNode baseNode = LoadConfiguredBaseNode(doc);
+            Assert.True(helper.CreateRobotFromTreeView(baseNode), helper.ExportErrorWhy);
+            Assert.True(ExportToTemporaryRoot(helper, true), helper.ExportErrorWhy);
             Assert.NotNull(helper.URDFRobot);
             Assert.Equal(expNumLinks, CommonSwOperations.GetCount(helper.URDFRobot.BaseLink));
             Assert.True(SwApp.CloseAllDocuments(true));
@@ -91,10 +125,9 @@ namespace SW2URDF.Test
             helper.SetComputeJointKinematics(true);
             helper.SetComputeJointLimits(true);
             helper.SetComputeVisualCollision(false);
-            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(doc, out bool error);
-            Assert.False(error);
-            helper.CreateRobotFromTreeView(baseNode);
-            helper.ExportRobot(true);
+            LinkNode baseNode = LoadConfiguredBaseNode(doc);
+            Assert.True(helper.CreateRobotFromTreeView(baseNode), helper.ExportErrorWhy);
+            Assert.True(ExportToTemporaryRoot(helper, true), helper.ExportErrorWhy);
             Assert.NotNull(helper.URDFRobot);
             Assert.Equal(expNumLinks, CommonSwOperations.GetCount(helper.URDFRobot.BaseLink));
             Assert.True(SwApp.CloseAllDocuments(true));
@@ -112,10 +145,9 @@ namespace SW2URDF.Test
             helper.SetComputeJointKinematics(false);
             helper.SetComputeJointLimits(true);
             helper.SetComputeVisualCollision(true);
-            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(doc, out bool error);
-            Assert.False(error);
-            helper.CreateRobotFromTreeView(baseNode);
-            helper.ExportRobot(true);
+            LinkNode baseNode = LoadConfiguredBaseNode(doc);
+            Assert.True(helper.CreateRobotFromTreeView(baseNode), helper.ExportErrorWhy);
+            Assert.True(ExportToTemporaryRoot(helper, true), helper.ExportErrorWhy);
             Assert.NotNull(helper.URDFRobot);
             Assert.Equal(expNumLinks, CommonSwOperations.GetCount(helper.URDFRobot.BaseLink));
             Assert.True(SwApp.CloseAllDocuments(true));
@@ -133,10 +165,9 @@ namespace SW2URDF.Test
             helper.SetComputeJointKinematics(true);
             helper.SetComputeJointLimits(false);
             helper.SetComputeVisualCollision(true);
-            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(doc, out bool error);
-            Assert.False(error);
-            helper.CreateRobotFromTreeView(baseNode);
-            helper.ExportRobot(true);
+            LinkNode baseNode = LoadConfiguredBaseNode(doc);
+            Assert.True(helper.CreateRobotFromTreeView(baseNode), helper.ExportErrorWhy);
+            Assert.True(ExportToTemporaryRoot(helper, true), helper.ExportErrorWhy);
             Assert.NotNull(helper.URDFRobot);
             Assert.Equal(expNumLinks, CommonSwOperations.GetCount(helper.URDFRobot.BaseLink));
             Assert.True(SwApp.CloseAllDocuments(true));
@@ -150,10 +181,9 @@ namespace SW2URDF.Test
         {
             ModelDoc2 doc = OpenSWDocument(modelName);
             ExportHelper helper = new ExportHelper(SwApp);
-            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(doc, out bool error);
-            Assert.False(error);
-            helper.CreateRobotFromTreeView(baseNode);
-            helper.ExportRobot(true);
+            LinkNode baseNode = LoadConfiguredBaseNode(doc);
+            Assert.True(helper.CreateRobotFromTreeView(baseNode), helper.ExportErrorWhy);
+            Assert.True(ExportToTemporaryRoot(helper, true), helper.ExportErrorWhy);
             List<string> jointNames = helper.GetJointNames();
             Assert.NotNull(jointNames);
             Assert.Equal(jointNames.Count, expNumJoints);
@@ -191,10 +221,9 @@ namespace SW2URDF.Test
         {
             ModelDoc2 doc = OpenSWDocument(modelName);
             ExportHelper helper = new ExportHelper(SwApp);
-            LinkNode baseNode = ConfigurationSerialization.LoadBaseNodeFromModel(doc, out bool error);
-            Assert.False(error);
+            LinkNode baseNode = LoadConfiguredBaseNode(doc);
 
-            helper.CreateRobotFromTreeView(baseNode);
+            Assert.True(helper.CreateRobotFromTreeView(baseNode), helper.ExportErrorWhy);
             Assert.NotNull(helper.URDFRobot);
             Assert.True(SwApp.CloseAllDocuments(true));
         }

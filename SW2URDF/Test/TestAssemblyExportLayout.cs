@@ -200,6 +200,10 @@ namespace SW2URDF.Test
                 Rectangle labelBounds = mimicJointLabel.Bounds;
                 Rectangle cancelBounds = cancelButton.Bounds;
                 Rectangle nextBounds = nextButton.Bounds;
+                TextBox multiplier = GetControl<TextBox>(form, "textBoxMimicMultiplier");
+                TextBox offset = GetControl<TextBox>(form, "textBoxMimicOffset");
+                multiplier.Text = "-1.25";
+                offset.Text = "0.4";
 
                 for (int i = 0; i < 20; i++)
                 {
@@ -215,6 +219,8 @@ namespace SW2URDF.Test
                 Assert.Equal(cancelBounds.Left, cancelButton.Left);
                 Assert.Equal(nextBounds.Width, nextButton.Width);
                 Assert.Equal(nextBounds.Right, nextButton.Right);
+                Assert.Equal("-1.25", multiplier.Text);
+                Assert.Equal("0.4", offset.Text);
                 AssertMimicControlsDoNotOverlapFooter(form);
                 AssertFooterButtonsFitText(form);
             }
@@ -260,7 +266,7 @@ namespace SW2URDF.Test
 
             Assert.Contains("Recommended default: ComponentBoxes", guide);
             Assert.Contains("Automatic Link tree loading", guide);
-            Assert.Contains("URDF Export Configuration (v1.4)", guide);
+            Assert.Contains("URDF Export Configuration (v1.5)", guide);
             Assert.Contains("Load Configuration...", guide);
             Assert.Contains("config/inertial_validation.csv", guide);
             Assert.Contains("CylinderPrimitive", guide);

@@ -29,6 +29,7 @@ using SW2URDF.URDFExport;
 using SW2URDF.Utilities;
 using System;
 using System.Collections;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -245,13 +246,16 @@ namespace SW2URDF.SW
         public void AddCommandMgr()
         {
             // Do not use AddMenuItem5 here despite the obselete warning, AddMenuItem5 doesn't work
+            string imageDirectory = Path.Combine(
+                Path.GetDirectoryName(typeof(SwAddin).Assembly.Location),
+                "images");
             string[] images = {
-                "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS\\URDFExporter\\images\\ros_logo_20x20.png",
-                "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS\\URDFExporter\\images\\ros_logo_32x32.png",
-                "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS\\URDFExporter\\images\\ros_logo_40x40.png",
-                "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS\\URDFExporter\\images\\ros_logo_64x64.png",
-                "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS\\URDFExporter\\images\\ros_logo_96x96.png",
-                "C:\\Program Files\\SOLIDWORKS Corp\\SOLIDWORKS\\URDFExporter\\images\\ros_logo_128x128.png",
+                Path.Combine(imageDirectory, "ros_logo_20x20.png"),
+                Path.Combine(imageDirectory, "ros_logo_32x32.png"),
+                Path.Combine(imageDirectory, "ros_logo_40x40.png"),
+                Path.Combine(imageDirectory, "ros_logo_64x64.png"),
+                Path.Combine(imageDirectory, "ros_logo_96x96.png"),
+                Path.Combine(imageDirectory, "ros_logo_128x128.png"),
             };
             string exportMenuText = ChineseUiText.Translate(
                 "Export as URDF",

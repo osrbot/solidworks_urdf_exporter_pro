@@ -96,14 +96,7 @@
                     <TextBox x:Name="JointNameTextBox" Margin="0,5,0,12" IsEnabled="False" LostFocus="JointNameCommit" KeyDown="PropertyTextBoxKeyDown" />
 
                     <TextBlock Text="Joint 类型" Foreground="#475467" />
-                    <ComboBox x:Name="JointTypeComboBox" Margin="0,5,0,20" IsEnabled="False" SelectionChanged="JointTypeChanged">
-                        <ComboBoxItem Content="fixed" />
-                        <ComboBoxItem Content="revolute" />
-                        <ComboBoxItem Content="continuous" />
-                        <ComboBoxItem Content="prismatic" />
-                        <ComboBoxItem Content="floating" />
-                        <ComboBoxItem Content="planar" />
-                    </ComboBox>
+                    <ComboBox x:Name="JointTypeComboBox" Margin="0,5,0,20" IsEnabled="False" SelectionChanged="JointTypeChanged" />
 
                     <Button Content="+ 添加子 Link" Click="AddChildClick" Margin="0,0,0,8" />
                     <Button Content="删除整个分支" Click="DeleteSelectedClick" Margin="0,0,0,8" />

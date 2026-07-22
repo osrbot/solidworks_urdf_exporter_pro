@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "nuget": {
+    "version": "6.11.1",
+    "url": "https://dist.nuget.org/win-x86-commandline/v6.11.1/nuget.exe",
+    "sha256": "c0ddc9cb0633c4607da7e8028eb4f91248c8b74e45a68b0c79fcfa7d78c2a481"
+  },
+  "packages": [
+    {
+      "id": "CsvHelper",
+      "version": "7.1.1",
+      "sha256": "9c4344ce14c6a988f11e29252ab2270d0da227792beac2185253c551014c37aa"
+    },
+    {
+      "id": "MathNet.Numerics",
+      "version": "4.7.0",
+      "sha256": "72738799153317512de477343e7517aeae51ffa9881326946c73ea5e31d07f03"
+    },
+    {
+      "id": "MathNet.Numerics.Signed",
+      "version": "4.7.0",
+      "sha256": "82a429b5da0b00fde7de73224cb70081f0cd5b55ae6e0f0e305d47508276776b"
+    },
+    {
+      "id": "Microsoft.Net.Compilers",
+      "version": "3.11.0",
+      "sha256": "e4a540a9cb41d15e6e1cc05fa2cadb847454df9ebe49d683cded2780506ef880"
+    },
+    {
+      "id": "System.Runtime.CompilerServices.Unsafe",
+      "version": "4.5.0",
+      "sha256": "83d8c8750b57480858f9ecd0b583601c4528411dc7cf39c7b3724ccc3f5b8a9e"
+    },
+    {
+      "id": "System.Threading.Tasks.Extensions",
+      "version": "4.5.1",
+      "sha256": "dcd7810beafb793573ddff9c126d4d9158714abecbad8197fcd754c237bd79c6"
+    }
+  ]
+}

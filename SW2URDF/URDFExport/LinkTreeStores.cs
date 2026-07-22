@@ -32,12 +32,13 @@ namespace SW2URDF.URDFExport
 
         public void Capture(Guid id, LinkNode node)
         {
+            Link configuration = CloneConfiguration(node.Link);
+            configuration.isIncomplete = node.IsIncomplete;
             states[id] = new LinkConfigurationState(
-                CloneConfiguration(node.Link),
+                configuration,
                 node.IsIncomplete,
                 node.NeedsSaving,
-                node.WhyIncomplete,
-                false);
+                node.WhyIncomplete);
         }
 
         public void CreateDefault(Guid id)
@@ -45,12 +46,14 @@ namespace SW2URDF.URDFExport
             Link link = new Link();
             link.Joint.AxisName = "Automatically Generate";
             link.Joint.CoordinateSystemName = "Automatically Generate";
+            link.JointKinematicsDirty = true;
+            link.JointLimitsDirty = true;
+            link.isIncomplete = true;
             states[id] = new LinkConfigurationState(
                 link,
                 true,
                 false,
-                "SolidWorks components are not assigned.",
-                false);
+                "SolidWorks components are not assigned.");
         }
 
         public void CopyConfiguration(Guid sourceId, Guid targetId)
@@ -58,14 +61,14 @@ namespace SW2URDF.URDFExport
             LinkConfigurationState source;
             if (!states.TryGetValue(sourceId, out source))
             {
-                CreateDefault(targetId);
-                return;
+                throw new InvalidOperationException(
+                    "Cannot copy URDF configuration because the source Link does not exist.");
             }
 
             LinkConfigurationState copy = source.Clone();
-            copy.IsIncomplete = true;
-            copy.NeedsSaving = true;
-            copy.WhyIncomplete = "SolidWorks components are not assigned to this copied Link.";
+            copy.MarkIncomplete("SolidWorks components are not assigned to this copied Link.");
+            copy.MarkJointKinematicsStale();
+            copy.MarkJointLimitsStale();
             states[targetId] = copy;
         }
 
@@ -76,7 +79,7 @@ namespace SW2URDF.URDFExport
             {
                 throw new InvalidOperationException("Missing URDF configuration for Link node " + id + ".");
             }
-            return CloneConfiguration(state.Configuration);
+            return state.BuildLink();
         }
 
         public LinkConfigurationState Get(Guid id)
@@ -84,23 +87,10 @@ namespace SW2URDF.URDFExport
             return states[id];
         }
 
-        public void RenameMimicReference(string oldJointName, string newJointName)
+        public string GetMimicReference(Guid id)
         {
-            if (string.IsNullOrWhiteSpace(oldJointName) || oldJointName == newJointName)
-            {
-                return;
-            }
-
-            foreach (LinkConfigurationState state in states.Values)
-            {
-                if (string.Equals(
-                    state.Configuration.Joint.Mimic.JointName,
-                    oldJointName,
-                    StringComparison.OrdinalIgnoreCase))
-                {
-                    state.Configuration.Joint.Mimic.JointName = newJointName;
-                }
-            }
+            LinkConfigurationState state;
+            return states.TryGetValue(id, out state) ? state.GetMimicReference() : string.Empty;
         }
 
         public void SetMimicReference(Guid id, string jointName)
@@ -108,8 +98,18 @@ namespace SW2URDF.URDFExport
             LinkConfigurationState state;
             if (states.TryGetValue(id, out state) && !string.IsNullOrWhiteSpace(jointName))
             {
-                state.Configuration.Joint.Mimic.JointName = jointName;
+                state.SetMimicReference(jointName);
             }
+        }
+
+        public void ApplyJointType(Guid id, string jointType)
+        {
+            LinkConfigurationState state;
+            if (!states.TryGetValue(id, out state))
+            {
+                throw new InvalidOperationException("Missing URDF configuration for Link node " + id + ".");
+            }
+            state.ApplyJointType(jointType);
         }
 
         public void MarkJointKinematicsStale(Guid id)
@@ -117,34 +117,62 @@ namespace SW2URDF.URDFExport
             LinkConfigurationState state;
             if (states.TryGetValue(id, out state))
             {
-                state.RequiresJointKinematics = true;
+                state.MarkJointKinematicsStale();
             }
         }
 
-        public IList<string> ValidateMimicReferences(IEnumerable<string> jointNames)
+        public void MarkJointLimitsStale(Guid id)
         {
-            HashSet<string> available = new HashSet<string>(jointNames, StringComparer.OrdinalIgnoreCase);
-            List<string> errors = new List<string>();
-            foreach (LinkConfigurationState state in states.Values)
+            LinkConfigurationState state;
+            if (states.TryGetValue(id, out state))
             {
-                string target = state.Configuration.Joint.Mimic.JointName;
-                if (!string.IsNullOrWhiteSpace(target) && !available.Contains(target))
-                {
-                    errors.Add("Mimic Joint '" + target + "' does not exist.");
-                }
+                state.MarkJointLimitsStale();
             }
-            return errors.Distinct().ToList();
+        }
+
+        public bool JointKinematicsInputsMatch(Guid id, Link candidate)
+        {
+            LinkConfigurationState state;
+            return states.TryGetValue(id, out state) &&
+                state.JointKinematicsInputsMatch(candidate);
+        }
+
+        public IList<string> ValidateMimicReferences(
+            IDictionary<Guid, string> jointNamesById)
+        {
+            List<string> errors = new List<string>();
+            List<Joint> joints = new List<Joint>();
+            foreach (KeyValuePair<Guid, LinkConfigurationState> pair in states)
+            {
+                string owner;
+                if (!jointNamesById.TryGetValue(pair.Key, out owner))
+                {
+                    if (pair.Value.HasMimicData())
+                    {
+                        errors.Add("The base Link cannot contain a Mimic Joint.");
+                    }
+                    continue;
+                }
+
+                Link link = pair.Value.BuildLink();
+                link.Joint.Name = owner;
+                joints.Add(link.Joint);
+            }
+
+            errors.AddRange(MimicGraphValidator.Validate(joints));
+            return errors.Distinct(StringComparer.Ordinal).ToList();
         }
 
         public bool RequiresJointKinematics()
         {
-            return states.Values.Any(state => state.RequiresJointKinematics);
+            return states.Values.Any(state =>
+                state.RequiresJointKinematics() || state.RequiresAutomaticJointTypeResolution());
         }
 
-        public bool RequiresJointKinematics(Guid id)
+        public bool RequiresJointLimits()
         {
-            LinkConfigurationState state;
-            return states.TryGetValue(id, out state) && state.RequiresJointKinematics;
+            return states.Values.Any(state =>
+                state.RequiresJointLimits() || state.RequiresAutomaticJointTypeResolution());
         }
 
         public void RemoveExcept(ISet<Guid> activeIds)
@@ -161,20 +189,6 @@ namespace SW2URDF.URDFExport
             clone.SetElement(source);
             clone.Parent = null;
             clone.Children.Clear();
-            clone.SWMainComponent = null;
-            clone.SWComponents = new List<Component2>();
-            clone.SWMainComponentPID = null;
-            clone.SWComponentPIDs = new List<byte[]>();
-            clone.ClearAdditionalCollisions();
-            if (source.AdditionalCollisions != null)
-            {
-                foreach (SW2URDF.URDF.Collision collision in source.AdditionalCollisions)
-                {
-                    SW2URDF.URDF.Collision copiedCollision = new SW2URDF.URDF.Collision();
-                    copiedCollision.SetElement(collision);
-                    clone.AddAdditionalCollision(copiedCollision);
-                }
-            }
             return clone;
         }
     }
@@ -185,30 +199,104 @@ namespace SW2URDF.URDFExport
             Link configuration,
             bool isIncomplete,
             bool needsSaving,
-            string whyIncomplete,
-            bool requiresJointKinematics)
+            string whyIncomplete)
         {
-            Configuration = configuration;
+            this.configuration = configuration;
             IsIncomplete = isIncomplete;
             NeedsSaving = needsSaving;
             WhyIncomplete = whyIncomplete;
-            RequiresJointKinematics = requiresJointKinematics;
+            this.configuration.isIncomplete = isIncomplete;
         }
 
-        public Link Configuration { get; private set; }
-        public bool IsIncomplete { get; set; }
-        public bool NeedsSaving { get; set; }
-        public string WhyIncomplete { get; set; }
-        public bool RequiresJointKinematics { get; set; }
+        private readonly Link configuration;
+        public bool IsIncomplete { get; private set; }
+        public bool NeedsSaving { get; private set; }
+        public string WhyIncomplete { get; private set; }
+
+        public Link BuildLink()
+        {
+            return LinkConfigurationStore.CloneConfiguration(configuration);
+        }
+
+        public string GetMimicReference()
+        {
+            return configuration.Joint.Mimic.JointName;
+        }
+
+        public void SetMimicReference(string jointName)
+        {
+            configuration.Joint.Mimic.JointName = jointName;
+        }
+
+        public void ApplyJointType(string jointType)
+        {
+            JointConfigurationPolicy.Apply(configuration.Joint, jointType);
+        }
+
+        public void MarkJointKinematicsStale()
+        {
+            configuration.JointKinematicsDirty = true;
+        }
+
+        public void MarkJointLimitsStale()
+        {
+            configuration.JointLimitsDirty = true;
+        }
+
+        public void MarkIncomplete(string reason)
+        {
+            IsIncomplete = true;
+            NeedsSaving = true;
+            WhyIncomplete = reason;
+            configuration.isIncomplete = true;
+        }
+
+        public bool RequiresJointKinematics()
+        {
+            return configuration.JointKinematicsDirty;
+        }
+
+        public bool RequiresJointLimits()
+        {
+            return configuration.JointLimitsDirty;
+        }
+
+        public bool RequiresAutomaticJointTypeResolution()
+        {
+            return Joint.IsAutomaticType(configuration.Joint.Type);
+        }
+
+        public bool HasMimicData()
+        {
+            return configuration.Joint.Mimic != null &&
+                configuration.Joint.Mimic.ElementContainsData();
+        }
+
+        public bool JointKinematicsInputsMatch(Link candidate)
+        {
+            return candidate != null &&
+                string.Equals(
+                    JointConfigurationPolicy.Normalize(configuration.Joint.Type),
+                    JointConfigurationPolicy.Normalize(candidate.Joint.Type),
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    configuration.Joint.CoordinateSystemName,
+                    candidate.Joint.CoordinateSystemName,
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    configuration.Joint.AxisName,
+                    candidate.Joint.AxisName,
+                    StringComparison.Ordinal) &&
+                configuration.isFixedFrame == candidate.isFixedFrame;
+        }
 
         public LinkConfigurationState Clone()
         {
             return new LinkConfigurationState(
-                LinkConfigurationStore.CloneConfiguration(Configuration),
+                LinkConfigurationStore.CloneConfiguration(configuration),
                 IsIncomplete,
                 NeedsSaving,
-                WhyIncomplete,
-                RequiresJointKinematics);
+                WhyIncomplete);
         }
     }
 
@@ -239,6 +327,12 @@ namespace SW2URDF.URDFExport
         public void CreateEmpty(Guid id)
         {
             states[id] = new CadBindingState();
+        }
+
+        public bool Matches(Guid id, Link candidate)
+        {
+            CadBindingState state;
+            return states.TryGetValue(id, out state) && state.Matches(candidate);
         }
 
         public void Apply(Guid id, Link link)
@@ -303,6 +397,73 @@ namespace SW2URDF.URDFExport
             link.SWComponents = new List<Component2>(Components);
             link.SWMainComponentPID = CloneBytes(MainComponentPid);
             link.SWComponentPIDs = ComponentPids.Select(CloneBytes).ToList();
+        }
+
+        public bool Matches(Link link)
+        {
+            if (link == null || !MainComponentMatches(link))
+            {
+                return false;
+            }
+
+            List<Component2> candidateComponents = link.SWComponents ?? new List<Component2>();
+            if (Components.Count != candidateComponents.Count)
+            {
+                return false;
+            }
+            bool hasLiveComponents = Components.Any(component => component != null) ||
+                candidateComponents.Any(component => component != null);
+            if (hasLiveComponents)
+            {
+                for (int index = 0; index < Components.Count; index++)
+                {
+                    if (!CommonSwOperations.ComReferencesEqual(
+                        Components[index],
+                        candidateComponents[index]))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            List<byte[]> candidatePids = link.SWComponentPIDs ?? new List<byte[]>();
+            if (ComponentPids.Count != candidatePids.Count)
+            {
+                return false;
+            }
+            for (int index = 0; index < ComponentPids.Count; index++)
+            {
+                if (!BytesEqual(ComponentPids[index], candidatePids[index]))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private bool MainComponentMatches(Link link)
+        {
+            if (MainComponent != null || link.SWMainComponent != null)
+            {
+                return CommonSwOperations.ComReferencesEqual(
+                    MainComponent,
+                    link.SWMainComponent);
+            }
+            if (MainComponentPid != null || link.SWMainComponentPID != null)
+            {
+                return BytesEqual(MainComponentPid, link.SWMainComponentPID);
+            }
+            return true;
+        }
+
+        private static bool BytesEqual(byte[] left, byte[] right)
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+            return left != null && right != null && left.SequenceEqual(right);
         }
 
         private static byte[] CloneBytes(byte[] value)

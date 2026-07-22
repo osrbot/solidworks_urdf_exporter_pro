@@ -49,6 +49,7 @@ namespace SW2URDF.URDF
         [DataMember]
         public Collision Collision;
 
+        [DataMember]
         public List<Collision> AdditionalCollisions;
 
         [DataMember]
@@ -62,6 +63,12 @@ namespace SW2URDF.URDF
 
         [DataMember]
         public CollisionMeshStrategy CollisionMeshStrategy;
+
+        [DataMember]
+        public bool JointKinematicsDirty;
+
+        [DataMember]
+        public bool JointLimitsDirty;
 
         [DataMember]
         public bool isIncomplete;
@@ -96,6 +103,8 @@ namespace SW2URDF.URDF
             isFixedFrame = false;
             MeshReductionRatio = 0;
             CollisionMeshStrategy = CollisionMeshStrategy.VisualMesh;
+            JointKinematicsDirty = false;
+            JointLimitsDirty = false;
 
             Attributes.Add(NameAttribute);
             ChildElements.Add(Inertial);
@@ -108,10 +117,11 @@ namespace SW2URDF.URDF
         {
             Link cloned = new Link();
             cloned.SetElement(this);
+            cloned.SetSWComponents(this);
             foreach (Link child in Children)
             {
                 Link clonedChild = child.Clone();
-                clonedChild.Parent = this;
+                clonedChild.Parent = cloned;
                 cloned.Children.Add(clonedChild);
             }
             return cloned;
@@ -134,6 +144,8 @@ namespace SW2URDF.URDF
             isFixedFrame = false;
             MeshReductionRatio = 0;
             CollisionMeshStrategy = CollisionMeshStrategy.VisualMesh;
+            JointKinematicsDirty = false;
+            JointLimitsDirty = false;
 
             Attributes.Add(NameAttribute);
             ChildElements.Add(Inertial);
@@ -236,7 +248,7 @@ namespace SW2URDF.URDF
         public override void SetElement(URDFElement externalElement)
         {
             base.SetElement(externalElement);
-            SetSWComponents((Link)externalElement);
+            SetExportSettings((Link)externalElement);
         }
 
         public void SetSWComponents(Link externalLink)
@@ -251,7 +263,9 @@ namespace SW2URDF.URDF
             }
             if (externalLink.SWComponentPIDs != null)
             {
-                SWComponentPIDs = new List<byte[]>(externalLink.SWComponentPIDs);
+                SWComponentPIDs = externalLink.SWComponentPIDs
+                    .Select(CloneBytes)
+                    .ToList();
             }
             else
             {
@@ -259,13 +273,37 @@ namespace SW2URDF.URDF
             }
 
             SWMainComponent = externalLink.SWMainComponent;
-            SWMainComponentPID = externalLink.SWMainComponentPID;
+            SWMainComponentPID = CloneBytes(externalLink.SWMainComponentPID);
+        }
 
+        private void SetExportSettings(Link externalLink)
+        {
             STLQualityFine = externalLink.STLQualityFine;
             MeshReductionRatio = externalLink.MeshReductionRatio;
             CollisionMeshStrategy = externalLink.CollisionMeshStrategy;
             AdditionalCollisions = new List<Collision>();
+            if (externalLink.AdditionalCollisions != null)
+            {
+                foreach (Collision collision in externalLink.AdditionalCollisions)
+                {
+                    if (collision == null)
+                    {
+                        continue;
+                    }
+                    Collision copy = new Collision();
+                    copy.SetElement(collision);
+                    AdditionalCollisions.Add(copy);
+                }
+            }
             isFixedFrame = externalLink.isFixedFrame;
+            isIncomplete = externalLink.isIncomplete;
+            JointKinematicsDirty = externalLink.JointKinematicsDirty;
+            JointLimitsDirty = externalLink.JointLimitsDirty;
+        }
+
+        private static byte[] CloneBytes(byte[] value)
+        {
+            return value == null ? null : (byte[])value.Clone();
         }
 
         public string[] GetJointNames(bool includeFixed)

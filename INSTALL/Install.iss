@@ -3,12 +3,19 @@
 
 #define MyAppName "SolidWorks To URDF"
 #define MyAppVersion "2018 v1.6"
-#define MyAppPublisher "Stephen Brawner"
-#define MyAppURL "http://wiki.ros.org/sw_urdf_exporter"
+#define MyAppPublisher "OSRBot / kitso666"
+#define MyAppURL "https://github.com/osrbot/solidworks_urdf_exporter_pro"
 
 #define MainBinaryName  "SW2URDF.dll"
 #define SetupBaseName   "sw2urdfSetup_"
-#define DllLocation     AddBackslash(SourcePath + "..\SW2URDF\bin\x64\Release") + MainBinaryName
+#ifndef BuildConfiguration
+  #define BuildConfiguration "Release"
+#endif
+#ifndef BuildPlatform
+  #define BuildPlatform "x64"
+#endif
+#define BuildOutputPath AddBackslash(SourcePath + "..\SW2URDF\bin\" + BuildPlatform + "\" + BuildConfiguration)
+#define DllLocation     BuildOutputPath + MainBinaryName
 #define BuildVersion    GetVersionNumbersString(DllLocation)
 #define CommitVersion   GetFileProductVersion(DllLocation)
 #if CommitVersion == ""
@@ -42,7 +49,7 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 CreateAppDir=yes
 DisableDirPage=no
-UsePreviousAppDir=no
+UsePreviousAppDir=yes
 OutputBaseFilename={#SetupBaseName + InstallerDate + "_" + InstallerCommit}
 Compression=lzma
 DefaultDirName="{autopf}\SolidWorks Corp\SolidWorks\URDFExporter"
@@ -64,7 +71,9 @@ chinesesimplified.RegisteringControls=正在注册 SolidWorks URDF 导出插件.
 chinesesimplified.UnregisteringControls=正在注销 SolidWorks URDF 导出插件...
 
 [Files]
-Source: x64\Release\*;  DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\*.dll"}; DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\SW2URDF.png"}; DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\images\*.png"}; DestDir: {app}\images; Flags: ignoreversion; Check: IsWin64;
 ;Source: x86\Debug\*;  DestDir: {app}; Flags: regserver ignoreversion; Check: not IsWin64
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files

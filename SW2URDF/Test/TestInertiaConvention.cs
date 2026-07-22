@@ -1,5 +1,7 @@
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
+using SW2URDF.Utilities;
+using System;
 using System.Linq;
 using Xunit;
 
@@ -50,6 +52,69 @@ namespace SW2URDF.Test
             Assert.Equal(expected[3], inertia.Iyy, 10);
             Assert.Equal(expected[4], inertia.Iyz, 10);
             Assert.Equal(expected[5], inertia.Izz, 10);
+        }
+
+        [Fact]
+        public void TestUrdfMomentMatrixSetterDoesNotFlipProductsOfInertia()
+        {
+            Inertia inertia = new Inertia();
+            double[] urdfMoment =
+            {
+                1.0, 0.25, -0.1,
+                0.25, 2.0, 0.3,
+                -0.1, 0.3, 3.0
+            };
+
+            inertia.SetUrdfMomentMatrix(urdfMoment);
+
+            Assert.Equal(0.25, inertia.Ixy, 10);
+            Assert.Equal(-0.1, inertia.Ixz, 10);
+            Assert.Equal(0.3, inertia.Iyz, 10);
+        }
+
+        [Fact]
+        public void TestInertiaRotationUsesGlobalToLocalFrame()
+        {
+            double[] globalUrdfMoment =
+            {
+                1.0, 0.25, 0.0,
+                0.25, 2.0, 0.0,
+                0.0, 0.0, 3.0
+            };
+            double[] localUrdfMoment = ExportHelper.RotateUrdfInertiaToLocalFrame(
+                globalUrdfMoment,
+                MathOps.GetTransformation(
+                    new double[] { 0, 0, 0 },
+                    new double[] { 0, 0, Math.PI / 4.0 }));
+
+            Assert.Equal(1.75, localUrdfMoment[0], 10);
+            Assert.Equal(0.5, localUrdfMoment[1], 10);
+            Assert.Equal(0.5, localUrdfMoment[3], 10);
+            Assert.Equal(1.25, localUrdfMoment[4], 10);
+            Assert.Equal(3.0, localUrdfMoment[8], 10);
+        }
+
+        [Fact]
+        public void TestMeshOriginLocalizationDoesNotMutateInertia()
+        {
+            Link link = new Link();
+            link.Inertial.Inertia.SetUrdfMomentMatrix(new double[]
+            {
+                1.0, 0.25, 0.0,
+                0.25, 2.0, 0.0,
+                0.0, 0.0, 3.0
+            });
+
+            ExportHelper.LocalizeVisualAndCollision(
+                link,
+                MathOps.GetTransformation(
+                    new double[] { 1, 2, 3 },
+                    new double[] { 0, 0, Math.PI / 4.0 }));
+
+            Assert.Equal(1.0, link.Inertial.Inertia.Ixx, 10);
+            Assert.Equal(0.25, link.Inertial.Inertia.Ixy, 10);
+            Assert.Equal(2.0, link.Inertial.Inertia.Iyy, 10);
+            Assert.Equal(3.0, link.Inertial.Inertia.Izz, 10);
         }
 
         [Fact]

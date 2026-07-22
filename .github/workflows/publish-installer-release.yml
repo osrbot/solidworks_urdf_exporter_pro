@@ -7,7 +7,6 @@ on:
       - main
     paths:
       - "INSTALL/OUTPUT/sw2urdfSetup_*.exe"
-      - ".github/workflows/publish-installer-release.yml"
   workflow_dispatch:
     inputs:
       installer:
@@ -18,42 +17,66 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: publish-installer-release
+  cancel-in-progress: false
+
 jobs:
   publish-installer:
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+
+      - name: Install installer inspection tool
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends innoextract
 
       - name: Select installer
         id: installer
         shell: bash
+        env:
+          INPUT_INSTALLER: ${{ github.event.inputs.installer }}
         run: |
           set -euo pipefail
 
-          input_installer="${{ github.event.inputs.installer }}"
+          input_installer="$INPUT_INSTALLER"
           installer=""
 
           if [[ -n "$input_installer" ]]; then
             installer="$input_installer"
           elif [[ "${{ github.event_name }}" == "push" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
             mapfile -t changed_installers < <(
-              git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- "INSTALL/OUTPUT/sw2urdfSetup_*.exe" |
-              sort
+              git diff --diff-filter=AMR --name-only "${{ github.event.before }}" "${{ github.sha }}" -- "INSTALL/OUTPUT/sw2urdfSetup_*.exe" |
+              while IFS= read -r candidate; do
+                [[ -f "$candidate" ]] && printf '%s\n' "$candidate"
+              done |
+              sort -u
             )
-            if [[ "${#changed_installers[@]}" -gt 0 ]]; then
-              installer="${changed_installers[-1]}"
+            if [[ "${#changed_installers[@]}" -eq 1 ]]; then
+              installer="${changed_installers[0]}"
+            elif [[ "${#changed_installers[@]}" -gt 1 ]]; then
+              echo "A release commit must contain exactly one current installer artifact." >&2
+              exit 1
+            else
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
           fi
 
           if [[ -z "$installer" ]]; then
             installer="$(
-              find INSTALL/OUTPUT -maxdepth 1 -type f -name "sw2urdfSetup_*.exe" -printf "%T@ %p\n" |
-              sort -nr |
-              awk 'NR == 1 {print $2}'
+              while IFS= read -r candidate; do
+                commit_time="$(git log -1 --format=%ct -- "$candidate")"
+                [[ -n "$commit_time" ]] && printf '%s\t%s\n' "$commit_time" "$candidate"
+              done < <(find INSTALL/OUTPUT -maxdepth 1 -type f -name "sw2urdfSetup_*.exe" -print | sort) |
+              sort -k1,1nr -k2,2r |
+              awk -F '\t' 'NR == 1 {print $2}'
             )"
           fi
 
@@ -61,9 +84,13 @@ jobs:
             echo "No installer artifact found." >&2
             exit 1
           fi
+          if [[ "$installer" != INSTALL/OUTPUT/sw2urdfSetup_*.exe ]]; then
+            echo "Installer must be a committed artifact under INSTALL/OUTPUT: $installer" >&2
+            exit 1
+          fi
 
           filename="$(basename "$installer")"
-          if [[ ! "$filename" =~ ^sw2urdfSetup_([0-9]{8})_([0-9A-Za-z._-]+)\.exe$ ]]; then
+          if [[ ! "$filename" =~ ^sw2urdfSetup_([0-9]{8})_([0-9a-f]{7,40})\.exe$ ]]; then
             echo "Installer filename must match sw2urdfSetup_YYYYMMDD_<commit>.exe: $filename" >&2
             exit 1
           fi
@@ -71,22 +98,138 @@ jobs:
           release_date="${BASH_REMATCH[1]}"
           release_commit="${BASH_REMATCH[2]}"
           release_tag="v${release_date}"
+          if ! source_sha="$(git rev-parse --verify "${release_commit}^{commit}" 2>/dev/null)"; then
+            echo "Installer source commit does not exist: $release_commit" >&2
+            exit 1
+          fi
+          artifact_sha="$(git log -1 --format=%H -- "$installer")"
+          if [[ -z "$artifact_sha" ]]; then
+            echo "Installer is not committed: $installer" >&2
+            exit 1
+          fi
+          artifact_parent="$(git rev-parse "${artifact_sha}^1")"
+          if [[ "$artifact_parent" != "$source_sha" ]]; then
+            echo "Installer filename commit $release_commit is not the parent of artifact commit $artifact_sha." >&2
+            exit 1
+          fi
+          sha256_path="${installer}.sha256"
+          provenance_path="${installer}.provenance.json"
+          if [[ ! -f "$sha256_path" || ! -f "$provenance_path" ]]; then
+            echo "Installer checksum or provenance sidecar is missing." >&2
+            exit 1
+          fi
+          if [[ "$(git log -1 --format=%H -- "$sha256_path")" != "$artifact_sha" ||
+                "$(git log -1 --format=%H -- "$provenance_path")" != "$artifact_sha" ]]; then
+            echo "Installer and provenance sidecars must be committed together." >&2
+            exit 1
+          fi
+          mapfile -t artifact_changes < <(
+            git diff --name-only "$source_sha" "$artifact_sha" | sort
+          )
+          mapfile -t expected_artifact_changes < <(
+            printf '%s\n' "$installer" "$sha256_path" "$provenance_path" | sort
+          )
+          if [[ "${artifact_changes[*]}" != "${expected_artifact_changes[*]}" ]]; then
+            echo "Artifact commit must change only the installer and its two sidecars." >&2
+            printf 'Changed: %s\n' "${artifact_changes[@]}" >&2
+            exit 1
+          fi
+          sha256sum --check "$sha256_path"
+          actual_sha256="$(sha256sum "$installer" | awk '{print $1}')"
+          source_tree="$(git rev-parse "${source_sha}^{tree}")"
+          if [[ "$(jq -r '.schemaVersion' "$provenance_path")" != "2" ||
+                "$(jq -r '.trustModel' "$provenance_path")" != "local-build-from-immutable-git-worktree" ||
+                "$(jq -r '.sourceCommit' "$provenance_path")" != "$source_sha" ||
+                "$(jq -r '.sourceTree' "$provenance_path")" != "$source_tree" ||
+                "$(jq -r '.sourceCommitShort' "$provenance_path")" != "$release_commit" ||
+                "$(jq -r '.installerDate' "$provenance_path")" != "$release_date" ||
+                "$(jq -r '.installerFile' "$provenance_path")" != "$filename" ||
+                "$(jq -r '.installerSha256' "$provenance_path")" != "$actual_sha256" ||
+                "$(jq -r '.configuration' "$provenance_path")" != "Release" ||
+                "$(jq -r '.platform' "$provenance_path")" != "x64" ||
+                "$(jq -r '.nugetSource' "$provenance_path")" != "https://api.nuget.org/v3/index.json" ||
+                "$(jq -r '.packageInputs | length' "$provenance_path")" -lt 1 ||
+                "$(jq -r '.solidWorksInputs | length' "$provenance_path")" -ne 4 ]]; then
+            echo "Installer provenance does not match the selected source and binary." >&2
+            exit 1
+          fi
+          if ! jq -e '
+              (.tools.nuget.sha256 | test("^[0-9a-f]{64}$")) and
+              (.tools.msbuild.sha256 | test("^[0-9a-f]{64}$")) and
+              (.tools.innoSetup.sha256 | test("^[0-9a-f]{64}$")) and
+              (all(.packageInputs[]; .id != "" and .version != "" and
+                (.sha256 | test("^[0-9a-f]{64}$")))) and
+              (all(.solidWorksInputs[]; .file != "" and
+                (.sha256 | test("^[0-9a-f]{64}$")))) and
+              (.payloadInputs | length > 0) and
+              (any(.payloadInputs[]; .path == "SW2URDF.dll")) and
+              (all(.payloadInputs[]; .path != "" and
+                (.sha256 | test("^[0-9a-f]{64}$"))))
+            ' "$provenance_path" >/dev/null; then
+            echo "Installer provenance contains invalid build input records." >&2
+            exit 1
+          fi
+          release_lock="$(mktemp)"
+          git show "${source_sha}:SW2URDF/packages.release.lock.json" > "$release_lock"
+          if [[ "$(jq -S -c '.packages | sort_by(.id, .version)' "$release_lock")" !=
+                "$(jq -S -c '.packageInputs | sort_by(.id, .version)' "$provenance_path")" ||
+                "$(jq -r '.nuget.version' "$release_lock")" !=
+                "$(jq -r '.tools.nuget.version' "$provenance_path")" ||
+                "$(jq -r '.nuget.sha256' "$release_lock")" !=
+                "$(jq -r '.tools.nuget.sha256' "$provenance_path")" ]]; then
+            echo "Installer provenance does not match the source commit's release lock." >&2
+            exit 1
+          fi
+
+          extracted_installer="$(mktemp -d)"
+          innoextract --silent --extract --output-dir "$extracted_installer" "$installer"
+          expected_payloads="$(mktemp)"
+          actual_payloads="$(mktemp)"
+          jq -r '.payloadInputs[].path' "$provenance_path" | sort -u > "$expected_payloads"
+          find "$extracted_installer/app" -type f -printf '%P\n' | sort -u > "$actual_payloads"
+          if ! diff -u "$expected_payloads" "$actual_payloads"; then
+            echo "Installer payload does not match the provenance manifest." >&2
+            exit 1
+          fi
+          while IFS=$'\t' read -r relative_path expected_hash; do
+            if [[ "$relative_path" == /* || "$relative_path" =~ (^|/)\.\.(/|$) ]]; then
+              echo "Installer provenance contains an unsafe payload path: $relative_path" >&2
+              exit 1
+            fi
+            extracted_path="$extracted_installer/app/$relative_path"
+            if [[ ! -f "$extracted_path" ||
+                  "$(sha256sum "$extracted_path" | awk '{print $1}')" != "$expected_hash" ]]; then
+              echo "Extracted installer payload hash mismatch: $relative_path" >&2
+              exit 1
+            fi
+          done < <(jq -r '.payloadInputs[] | [.path, .sha256] | @tsv' "$provenance_path")
 
           {
             echo "path=$installer"
+            echo "sha256_path=$sha256_path"
+            echo "provenance_path=$provenance_path"
             echo "filename=$filename"
             echo "date=$release_date"
             echo "commit=$release_commit"
+            echo "source_sha=$source_sha"
+            echo "artifact_sha=$artifact_sha"
             echo "tag=$release_tag"
+            echo "publish=true"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create or update GitHub release
+      - name: Create immutable GitHub release
+        if: steps.installer.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.installer.outputs.tag }}
           RELEASE_DATE: ${{ steps.installer.outputs.date }}
+          RELEASE_COMMIT: ${{ steps.installer.outputs.commit }}
+          RELEASE_SOURCE_SHA: ${{ steps.installer.outputs.source_sha }}
+          RELEASE_ARTIFACT_SHA: ${{ steps.installer.outputs.artifact_sha }}
           INSTALLER_PATH: ${{ steps.installer.outputs.path }}
+          INSTALLER_SHA256_PATH: ${{ steps.installer.outputs.sha256_path }}
+          INSTALLER_PROVENANCE_PATH: ${{ steps.installer.outputs.provenance_path }}
           INSTALLER_FILE: ${{ steps.installer.outputs.filename }}
         run: |
           set -euo pipefail
@@ -96,15 +239,32 @@ jobs:
             echo "SW2URDF installer build ${RELEASE_DATE}."
             echo
             echo "- Asset: \`${INSTALLER_FILE}\`"
-            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- Source commit: \`${RELEASE_COMMIT}\`"
+            echo "- Artifact commit: \`${RELEASE_ARTIFACT_SHA}\`"
             echo
             echo "This release is created automatically from committed installer artifacts under \`INSTALL/OUTPUT\`."
           } > "$notes"
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$INSTALLER_PATH" --clobber
-          else
-            gh release create "$RELEASE_TAG" "$INSTALLER_PATH" \
-              --title "SW2URDF installer ${RELEASE_DATE}" \
-              --notes-file "$notes"
+            is_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+            if [[ "$is_draft" == "true" ]]; then
+              echo "Removing an incomplete draft before retrying ${RELEASE_TAG}."
+              gh release delete "$RELEASE_TAG" --yes --cleanup-tag
+            else
+              echo "Release tag ${RELEASE_TAG} already exists. Daily releases are immutable." >&2
+              exit 1
+            fi
+          elif git rev-parse --verify --quiet "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            echo "Release tag ${RELEASE_TAG} already exists. Daily releases are immutable." >&2
+            exit 1
           fi
+
+          gh release create "$RELEASE_TAG" \
+            "$INSTALLER_PATH" \
+            "$INSTALLER_SHA256_PATH" \
+            "$INSTALLER_PROVENANCE_PATH" \
+            --draft \
+            --target "$RELEASE_SOURCE_SHA" \
+            --title "SW2URDF installer ${RELEASE_DATE}" \
+            --notes-file "$notes"
+          gh release edit "$RELEASE_TAG" --draft=false

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Runtime.Serialization;
@@ -47,9 +48,33 @@ namespace SW2URDF.URDF
 
         public Axis() : base("axis", false)
         {
-            XYZAttribute = new URDFAttribute("xyz", true, new double[] { 0, 0, 0 });
+            XYZAttribute = new URDFAttribute("xyz", true, new double[] { 1, 0, 0 });
 
             Attributes.Add(XYZAttribute);
+        }
+
+        public bool HasValidDirection()
+        {
+            return IsValidDirection(XYZAttribute.Value as double[]);
+        }
+
+        public static bool IsValidDirection(double[] xyz)
+        {
+            if (xyz == null || xyz.Length != 3)
+            {
+                return false;
+            }
+
+            double squaredMagnitude = 0;
+            foreach (double value in xyz)
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                {
+                    return false;
+                }
+                squaredMagnitude += value * value;
+            }
+            return squaredMagnitude > 1e-24;
         }
 
         public void FillBoxes(TextBox boxX, TextBox boxY, TextBox boxZ, string format)

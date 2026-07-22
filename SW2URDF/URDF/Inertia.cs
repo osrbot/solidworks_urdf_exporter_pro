@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.Serialization;
 using System.Windows.Forms;
 
@@ -80,11 +81,28 @@ namespace SW2URDF.URDF
 
         public void SetMomentMatrix(double[] array)
         {
+            SetSolidWorksMomentMatrix(array);
+        }
+
+        public void SetSolidWorksMomentMatrix(double[] array)
+        {
+            ValidateMomentMatrix(array);
             Ixx = array[0];
             Ixy = -array[1];
             Ixz = -array[2];
             Iyy = array[4];
             Iyz = -array[5];
+            Izz = array[8];
+        }
+
+        public void SetUrdfMomentMatrix(double[] array)
+        {
+            ValidateMomentMatrix(array);
+            Ixx = array[0];
+            Ixy = array[1];
+            Ixz = array[2];
+            Iyy = array[4];
+            Iyz = array[5];
             Izz = array[8];
         }
 
@@ -113,6 +131,14 @@ namespace SW2URDF.URDF
         internal double[] GetMoment()
         {
             return new double[] { Ixx, Ixy, Ixz, Ixy, Iyy, Iyz, Ixz, Iyz, Izz };
+        }
+
+        private static void ValidateMomentMatrix(double[] array)
+        {
+            if (array == null || array.Length != 9)
+            {
+                throw new ArgumentException("An inertia matrix must contain exactly nine values.", "array");
+            }
         }
     }
 }

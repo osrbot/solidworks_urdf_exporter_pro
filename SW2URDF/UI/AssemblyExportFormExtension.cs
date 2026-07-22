@@ -98,13 +98,22 @@ namespace SW2URDF.UI
         {
             FillBlank(jointBoxes);
             AutoUpdatingForm = true;
+            if (joint == null)
+            {
+                LimitRequiredLabel.Visible = false;
+                AxisRequiredLabel.Visible = false;
+                UpdateJointUnitLabels(string.Empty);
+                displayedJointType = string.Empty;
+                jointUnitInputsResetForCurrentChange = false;
+                AutoUpdatingForm = false;
+                return;
+            }
             if (joint != null) //For the base_link or if none is selected
             {
                 // Limits are required for prismatic and revolute joints
                 LimitRequiredLabel.Visible = (joint.Type == "prismatic" || joint.Type == "revolute");
 
-                // Axis values are required, except for a fixed joint
-                AxisRequiredLabel.Visible = (joint.Type != "fixed");
+                AxisRequiredLabel.Visible = JointConfigurationPolicy.RequiresMotionAxis(joint.Type);
 
                 joint.FillBoxes(textBoxJointName, comboBoxJointType);
                 joint.Parent.FillBoxes(labelParent);
@@ -120,7 +129,7 @@ namespace SW2URDF.UI
                                        textBoxJointYaw,
                                        GeneralDisplayFormat);
 
-                if (joint.Type != "fixed")
+                if (JointConfigurationPolicy.RequiresMotionAxis(joint.Type))
                 {
                     joint.Axis.FillBoxes(textBoxAxisX, textBoxAxisY, textBoxAxisZ, GeneralDisplayFormat);
                 }
@@ -158,46 +167,7 @@ namespace SW2URDF.UI
                 }
             }
 
-            if (joint != null && (joint.Type == "revolute" || joint.Type == "continuous"))
-            {
-                labelLowerLimit.Text = "lower (rad)";
-                labelLimitUpper.Text = "upper (rad)";
-                labelEffort.Text = "effort (N-m)";
-                labelVelocity.Text = "velocity (rad/s)";
-                labelFriction.Text = "friction (N-m)";
-                labelDamping.Text = "damping (N-m-s/rad)";
-                labelSoftLower.Text = "soft lower limit (rad)";
-                labelSoftUpper.Text = "soft upper limit (rad)";
-                labelKPosition.Text = "k position";
-                labelKVelocity.Text = "k velocity";
-            }
-            else if (joint != null && joint.Type == "prismatic")
-            {
-                labelLowerLimit.Text = "lower (m)";
-                labelLimitUpper.Text = "upper (m)";
-                labelEffort.Text = "effort (N)";
-                labelVelocity.Text = "velocity (m/s)";
-                labelFriction.Text = "friction (N)";
-                labelDamping.Text = "damping (N-s/m)";
-                labelSoftLower.Text = "soft lower limit (m)";
-                labelSoftUpper.Text = "soft upper limit (m)";
-                labelKPosition.Text = "k position";
-                labelKVelocity.Text = "k velocity";
-            }
-            else
-            {
-                labelLowerLimit.Text = "lower";
-                labelLimitUpper.Text = "upper";
-                labelEffort.Text = "effort";
-                labelVelocity.Text = "velocity";
-                labelFriction.Text = "friction";
-                labelDamping.Text = "damping";
-                labelSoftLower.Text = "soft lower limit";
-                labelSoftUpper.Text = "soft upper limit";
-                labelKPosition.Text = "k position";
-                labelKVelocity.Text = "k velocity";
-            }
-            LocalizeDynamicJointLabels();
+            UpdateJointUnitLabels(joint.Type);
             comboBoxOrigin.Items.Clear();
             List<string> originNames = Exporter.GetRefCoordinateSystems();
             comboBoxOrigin.Items.AddRange(originNames.ToArray());
@@ -209,6 +179,10 @@ namespace SW2URDF.UI
 
             // Updating Mimic Element Fields
             List<string> jointNames = Exporter.GetJointNames();
+            jointNames.RemoveAll(name => string.Equals(
+                name,
+                joint.Name,
+                StringComparison.Ordinal));
 
             // We'll be setting this automatically, so unsubscribe callback
             MimicCheckBox.CheckedChanged -= MimicCheckBoxCheckedChanged;
@@ -235,7 +209,81 @@ namespace SW2URDF.UI
             {
                 comboBoxAxis.SelectedIndex = comboBoxAxis.FindStringExact(joint.AxisName);
             }
+            displayedJointType = JointConfigurationPolicy.Normalize(joint.Type);
+            jointUnitInputsResetForCurrentChange = false;
             AutoUpdatingForm = false;
+        }
+
+        private void UpdateJointUnitLabels(string jointType)
+        {
+            if (jointType == "revolute" || jointType == "continuous")
+            {
+                labelLowerLimit.Text = "lower (rad)";
+                labelLimitUpper.Text = "upper (rad)";
+                labelEffort.Text = "effort (N-m)";
+                labelVelocity.Text = "velocity (rad/s)";
+                labelFriction.Text = "friction (N-m)";
+                labelDamping.Text = "damping (N-m-s/rad)";
+                labelSoftLower.Text = "soft lower limit (rad)";
+                labelSoftUpper.Text = "soft upper limit (rad)";
+                labelKPosition.Text = "k position";
+                labelKVelocity.Text = "k velocity";
+            }
+            else if (jointType == "prismatic")
+            {
+                labelLowerLimit.Text = "lower (m)";
+                labelLimitUpper.Text = "upper (m)";
+                labelEffort.Text = "effort (N)";
+                labelVelocity.Text = "velocity (m/s)";
+                labelFriction.Text = "friction (N)";
+                labelDamping.Text = "damping (N-s/m)";
+                labelSoftLower.Text = "soft lower limit (m)";
+                labelSoftUpper.Text = "soft upper limit (m)";
+                labelKPosition.Text = "k position";
+                labelKVelocity.Text = "k velocity";
+            }
+            else
+            {
+                labelLowerLimit.Text = "lower";
+                labelLimitUpper.Text = "upper";
+                labelEffort.Text = "effort";
+                labelVelocity.Text = "velocity";
+                labelFriction.Text = "friction";
+                labelDamping.Text = "damping";
+                labelSoftLower.Text = "soft lower limit";
+                labelSoftUpper.Text = "soft upper limit";
+                labelKPosition.Text = "k position";
+                labelKVelocity.Text = "k velocity";
+            }
+            LocalizeDynamicJointLabels();
+        }
+
+        private void ComboBoxJointTypeTextChanged(object sender, EventArgs e)
+        {
+            if (AutoUpdatingForm)
+            {
+                return;
+            }
+
+            string nextType = JointConfigurationPolicy.Normalize(comboBoxJointType.Text);
+            if (JointConfigurationPolicy.ChangesMotionUnits(displayedJointType, nextType))
+            {
+                FillBlank(new Control[]
+                {
+                    textBoxLimitLower, textBoxLimitUpper,
+                    textBoxLimitEffort, textBoxLimitVelocity,
+                    textBoxCalibrationRising, textBoxCalibrationFalling,
+                    textBoxDamping, textBoxFriction,
+                    textBoxSoftLower, textBoxSoftUpper,
+                    textBoxKPosition, textBoxKVelocity,
+                    textBoxMimicOffset
+                });
+                jointUnitInputsResetForCurrentChange = true;
+            }
+            displayedJointType = nextType;
+            LimitRequiredLabel.Visible = nextType == "revolute" || nextType == "prismatic";
+            AxisRequiredLabel.Visible = JointConfigurationPolicy.RequiresMotionAxis(nextType);
+            UpdateJointUnitLabels(nextType);
         }
 
         public static void FillBlank(Control[] boxes)
@@ -291,7 +339,23 @@ namespace SW2URDF.UI
         //Saves data from text boxes back into a joint
         public void SaveJointDataFromPropertyBoxes(Joint Joint)
         {
-            Joint.Update(textBoxJointName, comboBoxJointType);
+            string previousType = JointConfigurationPolicy.Normalize(Joint.Type);
+            string selectedType = JointConfigurationPolicy.Normalize(comboBoxJointType.Text);
+            if (JointConfigurationPolicy.ChangesMotionUnits(previousType, selectedType) &&
+                !jointUnitInputsResetForCurrentChange)
+            {
+                FillBlank(new Control[]
+                {
+                    textBoxLimitLower, textBoxLimitUpper,
+                    textBoxLimitEffort, textBoxLimitVelocity,
+                    textBoxCalibrationRising, textBoxCalibrationFalling,
+                    textBoxDamping, textBoxFriction,
+                    textBoxSoftLower, textBoxSoftUpper,
+                    textBoxKPosition, textBoxKVelocity,
+                    textBoxMimicOffset
+                });
+            }
+            Joint.Name = textBoxJointName.Text;
 
             Joint.Parent.Update(labelParent);
             Joint.Child.Update(labelChild);
@@ -310,7 +374,7 @@ namespace SW2URDF.UI
                               textBoxAxisY,
                               textBoxAxisZ);
 
-            Joint.Limit.SetRequired(Joint.Type == "revolute" || Joint.Type == "prismatic");
+            Joint.Limit.SetRequired(selectedType == "revolute" || selectedType == "prismatic");
             Joint.Limit.SetValues(textBoxLimitLower,
                                   textBoxLimitUpper,
                                   textBoxLimitEffort,
@@ -361,6 +425,10 @@ namespace SW2URDF.UI
             {
                 Joint.Mimic.Clear();
             }
+
+            JointConfigurationPolicy.Apply(Joint, selectedType);
+            displayedJointType = Joint.Type;
+            jointUnitInputsResetForCurrentChange = false;
         }
 
         private void LocalizeDynamicJointLabels()
@@ -543,10 +611,27 @@ namespace SW2URDF.UI
             return builder.ToString();
         }
 
-        public void SaveConfigTree(ModelDoc2 model, LinkNode BaseNode, bool warnUser)
+        public bool SaveConfigTree(ModelDoc2 model, LinkNode BaseNode, bool warnUser)
         {
+            List<Joint> joints = new List<Joint>();
+            CollectJoints(BaseNode, joints);
+            IList<string> mimicErrors = MimicGraphValidator.Validate(joints);
+            if (mimicErrors.Count > 0)
+            {
+                string message = "The URDF configuration was not saved because the Mimic Joint graph is invalid:\r\n\r\n" +
+                    string.Join("\r\n", mimicErrors);
+                logger.Warn(message);
+                MessageBox.Show(message, "URDF Joint Errors");
+                return false;
+            }
             CommonSwOperations.RetrieveSWComponentPIDs(model, BaseNode);
-            ConfigurationSerialization.SaveConfigTreeXML(swApp, model, BaseNode, warnUser);
+            return ConfigurationSaveInteraction.Save(
+                allowOverwrite => ConfigurationSerialization.SaveConfigTreeXML(
+                    swApp,
+                    model,
+                    BaseNode,
+                    allowOverwrite),
+                warnUser);
         }
 
         public void ChangeAllNodeFont(LinkNode node, Font font)

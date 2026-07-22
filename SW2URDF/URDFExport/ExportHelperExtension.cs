@@ -32,15 +32,15 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
-using System.Windows;
 
 namespace SW2URDF.URDFExport
 {
     public partial class ExportHelper
     {
         private string referenceSketchName;
-        private string ExportErrorWhy;
+        public string ExportErrorWhy { get; private set; }
 
         #region SW to Robot and link methods
 
@@ -86,15 +86,10 @@ namespace SW2URDF.URDFExport
 
             //Get link properties from SolidWorks part
             IMassProperty swMass = swModel.Extension.CreateMassProperty();
-            Link.Inertial.Mass.Value = swMass.Mass;
-
-            // returned as double with values [Lxx, Lxy, Lxz, Lyx, Lyy, Lyz, Lzx, Lzy, Lzz]
-            double[] moment = swMass.GetMomentOfInertia(
-                (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass);
-            Link.Inertial.Inertia.SetMomentMatrix(moment);
-
-            double[] centerOfMass = swMass.CenterOfMass;
-            Link.Inertial.Origin.SetXYZ(centerOfMass);
+            MassPropertySnapshot massProperty = ReadMassProperty(swMass);
+            Link.Inertial.Mass.Value = massProperty.Mass;
+            Link.Inertial.Inertia.SetMomentMatrix(massProperty.Moment);
+            Link.Inertial.Origin.SetXYZ(massProperty.CenterOfMass);
             Link.Inertial.Origin.SetRPY(new double[3] { 0, 0, 0 });
 
             // Will this ever not be zeros?
@@ -116,46 +111,76 @@ namespace SW2URDF.URDFExport
 
         //This is only used by the Part Exporter, but it localizes the link to the Origin_global
         // coordinate system
-        private static void LocalizeLink(Link Link, Matrix<double> GlobalTransform)
+        private static void LocalizeLink(Link link, Matrix<double> globalTransform)
         {
-            Matrix<double> GlobalTransformInverse = GlobalTransform.Inverse();
-            Matrix<double> linkCoMTransform = MathOps.GetTranslation(Link.Inertial.Origin.GetXYZ());
-            Matrix<double> localLinkCoMTransform = GlobalTransformInverse * linkCoMTransform;
+            Matrix<double> globalTransformInverse = globalTransform.Inverse();
+            Matrix<double> linkCoMTransform = MathOps.GetTranslation(link.Inertial.Origin.GetXYZ());
+            Matrix<double> localLinkCoMTransform = globalTransformInverse * linkCoMTransform;
 
-            Matrix<double> linkVisualTransform =
-                MathOps.GetTransformation(Link.Visual.Origin.GetXYZ(), Link.Visual.Origin.GetRPY());
-            Matrix<double> localVisualTransform = GlobalTransformInverse * linkVisualTransform;
+            double[] localMoment = RotateUrdfInertiaToLocalFrame(
+                link.Inertial.Inertia.GetMoment(),
+                globalTransform);
 
-            Matrix<double> linkCollisionTransform =
-                MathOps.GetTransformation(Link.Collision.Origin.GetXYZ(), Link.Collision.Origin.GetRPY());
+            link.Inertial.Origin.SetXYZ(MathOps.GetXYZ(localLinkCoMTransform));
+            link.Inertial.Origin.SetRPY(new double[] { 0, 0, 0 });
+            link.Inertial.Inertia.SetUrdfMomentMatrix(localMoment);
+
+            LocalizeVisualAndCollisionWithInverse(link, globalTransformInverse);
+        }
+
+        internal static double[] RotateUrdfInertiaToLocalFrame(
+            double[] globalUrdfMoment,
+            Matrix<double> globalTransform)
+        {
+            if (globalUrdfMoment == null || globalUrdfMoment.Length != 9)
+            {
+                throw new ArgumentException(
+                    "An inertia matrix must contain exactly nine values.",
+                    "globalUrdfMoment");
+            }
+            if (globalTransform == null || globalTransform.RowCount != 4 ||
+                globalTransform.ColumnCount != 4)
+            {
+                throw new ArgumentException(
+                    "The coordinate-system transform must be a 4x4 matrix.",
+                    "globalTransform");
+            }
+
+            Matrix<double> globalMoment = new DenseMatrix(3, 3, globalUrdfMoment);
+            Matrix<double> localRotation = globalTransform
+                .Inverse()
+                .SubMatrix(0, 3, 0, 3);
+            Matrix<double> localMoment =
+                localRotation * globalMoment * localRotation.Transpose();
+            return localMoment.ToRowMajorArray();
+        }
+
+        internal static void LocalizeVisualAndCollision(
+            Link link,
+            Matrix<double> globalTransform)
+        {
+            LocalizeVisualAndCollisionWithInverse(link, globalTransform.Inverse());
+        }
+
+        private static void LocalizeVisualAndCollisionWithInverse(
+            Link link,
+            Matrix<double> globalTransformInverse)
+        {
+            Matrix<double> linkVisualTransform = MathOps.GetTransformation(
+                link.Visual.Origin.GetXYZ(),
+                link.Visual.Origin.GetRPY());
+            Matrix<double> localVisualTransform = globalTransformInverse * linkVisualTransform;
+
+            Matrix<double> linkCollisionTransform = MathOps.GetTransformation(
+                link.Collision.Origin.GetXYZ(),
+                link.Collision.Origin.GetRPY());
             Matrix<double> localCollisionTransform =
-                GlobalTransformInverse * linkCollisionTransform;
+                globalTransformInverse * linkCollisionTransform;
 
-            // The linear array in Link.Inertial.Inertia.Moment is in row major order, but this
-            // matrix constructor uses column major order. It's a rotation matrix, so this
-            // shouldn't matter. If it does, just transpose linkGlobalMomentInertia. These three
-            // matrices are 3x3 as opposed to the 4x4 transformation matrices above.
-            // You're welcome for the confusion.
-            Matrix<double> linkGlobalMomentInertia =
-                new DenseMatrix(3, 3, Link.Inertial.Inertia.GetMoment());
-            Matrix<double> GlobalRotMat =
-                GlobalTransform.SubMatrix(0, 3, 0, 3);
-            Matrix<double> linkLocalMomentInertia =
-                GlobalRotMat * linkGlobalMomentInertia * GlobalRotMat.Transpose();
-
-            Link.Inertial.Origin.SetXYZ(MathOps.GetXYZ(localLinkCoMTransform));
-            Link.Inertial.Origin.SetRPY(new double[] { 0, 0, 0 });
-
-            // Wait are you saying that even though the matrix was trasposed from column major
-            // order, you are writing it in row-major order here. Yes, yes I am.
-            double[] moment = linkLocalMomentInertia.ToRowMajorArray();
-            Link.Inertial.Inertia.SetMomentMatrix(moment);
-
-            Link.Collision.Origin.SetXYZ(MathOps.GetXYZ(localCollisionTransform));
-            Link.Collision.Origin.SetRPY(MathOps.GetRPY(localCollisionTransform));
-
-            Link.Visual.Origin.SetXYZ(MathOps.GetXYZ(localVisualTransform));
-            Link.Visual.Origin.SetRPY(MathOps.GetRPY(localVisualTransform));
+            link.Collision.Origin.SetXYZ(MathOps.GetXYZ(localCollisionTransform));
+            link.Collision.Origin.SetRPY(MathOps.GetRPY(localCollisionTransform));
+            link.Visual.Origin.SetXYZ(MathOps.GetXYZ(localVisualTransform));
+            link.Visual.Origin.SetRPY(MathOps.GetRPY(localVisualTransform));
         }
 
         // The one used by the Assembly Exporter
@@ -164,28 +189,158 @@ namespace SW2URDF.URDFExport
             ExportErrorWhy = "";
             URDFRobot = new Robot();
 
-            progressBar.Start(0, CommonSwOperations.GetCount(baseNode.Nodes) + 1,
-                ChineseUiText.Translate("Building links", "\u6b63\u5728\u6784\u5efa Link"));
-            int count = 0;
-
-            progressBar.UpdateProgress(count);
-            progressBar.UpdateTitle(ChineseUiText.Translate(
-                "Building link: " + baseNode.Name,
-                "\u6b63\u5728\u6784\u5efa Link: " + baseNode.Name));
-            
-            Link baseLink = CreateLink(baseNode, 1);
-            if (baseLink == null || !string.IsNullOrWhiteSpace(ExportErrorWhy))
+            string jointTypeError = FindJointTypeError(baseNode, ComputeJointKinematics);
+            if (!string.IsNullOrWhiteSpace(jointTypeError))
             {
-                MessageBox.Show(ExportErrorWhy);
+                ExportErrorWhy = jointTypeError;
                 logger.Warn(ExportErrorWhy);
-                progressBar.End();
                 return false;
             }
-            URDFRobot.SetBaseLink(baseLink);
-            baseNode.Link = baseLink;
 
-            progressBar.End();
-            return true;
+            bool progressStarted = false;
+            try
+            {
+                progressStarted = true;
+                progressBar.Start(0, CommonSwOperations.GetCount(baseNode.Nodes) + 1,
+                    ChineseUiText.Translate("Building links", "\u6b63\u5728\u6784\u5efa Link"));
+                int count = 0;
+                Link baseLink = CreateLink(baseNode, ref count);
+                if (baseLink == null || !string.IsNullOrWhiteSpace(ExportErrorWhy))
+                {
+                    logger.Warn(ExportErrorWhy);
+                    return false;
+                }
+                URDFRobot.SetBaseLink(baseLink);
+                baseNode.Link = baseLink;
+
+                jointTypeError = FindJointTypeError(baseNode, false);
+                if (!string.IsNullOrWhiteSpace(jointTypeError))
+                {
+                    ExportErrorWhy = jointTypeError;
+                    logger.Warn(ExportErrorWhy);
+                    return false;
+                }
+
+                string computationError = FindJointComputationError(baseNode);
+                if (!string.IsNullOrWhiteSpace(computationError))
+                {
+                    ExportErrorWhy = computationError;
+                    logger.Warn(ExportErrorWhy);
+                    return false;
+                }
+
+                string jointDataError = FindJointDataError(baseNode);
+                if (!string.IsNullOrWhiteSpace(jointDataError))
+                {
+                    ExportErrorWhy = jointDataError;
+                    logger.Warn(ExportErrorWhy);
+                    return false;
+                }
+
+                return true;
+            }
+            finally
+            {
+                if (progressStarted)
+                {
+                    try
+                    {
+                        progressBar.End();
+                    }
+                    catch (Exception e)
+                    {
+                        logger.Error("Ending the SolidWorks link-building progress bar failed", e);
+                    }
+                }
+            }
+        }
+
+        private static string FindJointTypeError(LinkNode node, bool allowAutomaticType)
+        {
+            if (!node.IsBaseNode)
+            {
+                string jointType = node.Link.Joint.Type;
+                if (Joint.IsAutomaticType(jointType))
+                {
+                    if (!allowAutomaticType)
+                    {
+                        return "Joint '" + node.Link.Joint.Name +
+                            "' still uses automatic type detection. Enable joint kinematics " +
+                            "computation before exporting.";
+                    }
+                }
+                else if (!Joint.AvailableTypes.Contains(jointType))
+                {
+                    return "Joint '" + node.Link.Joint.Name + "' has unsupported type '" +
+                        jointType + "'.";
+                }
+            }
+
+            foreach (LinkNode child in node.Nodes)
+            {
+                string error = FindJointTypeError(child, allowAutomaticType);
+                if (!string.IsNullOrWhiteSpace(error))
+                {
+                    return error;
+                }
+            }
+            return string.Empty;
+        }
+
+        private static string FindJointDataError(LinkNode node)
+        {
+            if (!node.IsBaseNode)
+            {
+                Joint joint = node.Link.Joint;
+                if (Joint.RequiresAxis(joint.Type) && !joint.Axis.HasValidDirection())
+                {
+                    return "Joint '" + joint.Name +
+                        "' requires a finite, nonzero axis direction.";
+                }
+                if (!joint.AreRequiredFieldsSatisfied())
+                {
+                    return "Joint '" + joint.Name +
+                        "' is missing one or more required URDF values.";
+                }
+            }
+
+            foreach (LinkNode child in node.Nodes)
+            {
+                string error = FindJointDataError(child);
+                if (!string.IsNullOrWhiteSpace(error))
+                {
+                    return error;
+                }
+            }
+            return string.Empty;
+        }
+
+        private static string FindJointComputationError(LinkNode node)
+        {
+            if (!node.IsBaseNode)
+            {
+                if (node.Link.JointKinematicsDirty)
+                {
+                    return "Joint '" + node.Link.Joint.Name +
+                        "' kinematics could not be recomputed. Check its components and reference geometry.";
+                }
+                if (node.Link.JointLimitsDirty)
+                {
+                    return "Joint '" + node.Link.Joint.Name +
+                        "' limits could not be recomputed. Add a compatible SolidWorks limit mate " +
+                        "or enter valid limits manually before exporting.";
+                }
+            }
+
+            foreach (LinkNode child in node.Nodes)
+            {
+                string error = FindJointComputationError(child);
+                if (!string.IsNullOrWhiteSpace(error))
+                {
+                    return error;
+                }
+            }
+            return string.Empty;
         }
 
         private Link CreateBaseLinkFromComponents(LinkNode node)
@@ -206,12 +361,13 @@ namespace SW2URDF.URDFExport
         }
 
         //Method which builds an entire link and iterates through.
-        private Link CreateLink(LinkNode node, int count)
+        private Link CreateLink(LinkNode node, ref int count)
         {
             progressBar.UpdateTitle(ChineseUiText.Translate(
                 "Building link: " + node.Name,
                 "\u6b63\u5728\u6784\u5efa Link: " + node.Name));
             progressBar.UpdateProgress(count);
+            count++;
             Link link;
             if (node.IsBaseNode)
             {
@@ -233,7 +389,7 @@ namespace SW2URDF.URDFExport
             link.Children.Clear();
             foreach (LinkNode child in node.Nodes)
             {
-                Link childLink = CreateLink(child, count + 1);
+                Link childLink = CreateLink(child, ref count);
 
                 if (!string.IsNullOrWhiteSpace(ExportErrorWhy))
                 {
@@ -262,14 +418,12 @@ namespace SW2URDF.URDFExport
                 " from " + bodies.Count + " solid bodies in coordinate system " +
                 link.Joint.CoordinateSystemName);
             MassProperty swMass = CreateMassProperty(bodies, jointTransform);
+            MassPropertySnapshot massProperty = ReadMassProperty(swMass);
 
-            link.Inertial.Mass.Value = swMass.Mass;
-            link.Inertial.Origin.SetXYZ(swMass.CenterOfMass);
+            link.Inertial.Mass.Value = massProperty.Mass;
+            link.Inertial.Origin.SetXYZ(massProperty.CenterOfMass);
             link.Inertial.Origin.SetRPY(new double[3] { 0, 0, 0 });
-
-            double[] moment = (double[])swMass.GetMomentOfInertia(
-                (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass);
-            link.Inertial.Inertia.SetMomentMatrix(moment);
+            link.Inertial.Inertia.SetMomentMatrix(massProperty.Moment);
 
             if (!InertiaEllipsoid.TryCreate(
                 link.Inertial.Mass.Value,
@@ -277,8 +431,24 @@ namespace SW2URDF.URDFExport
                 out InertiaEllipsoid ellipsoid,
                 out string error))
             {
-                throw new Exception("Computed inertia for link " + link.Name +
-                    " is not physically valid: " + error);
+                double[] urdfMoment = link.Inertial.Inertia.GetMoment();
+                throw new Exception(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Computed inertia for link {0} is not physically valid: {1} " +
+                    "mass={2:G17} kg, tensor=[{3:G17}, {4:G17}, {5:G17}; " +
+                    "{6:G17}, {7:G17}, {8:G17}; {9:G17}, {10:G17}, {11:G17}] kg*m^2",
+                    link.Name,
+                    error,
+                    link.Inertial.Mass.Value,
+                    urdfMoment[0],
+                    urdfMoment[1],
+                    urdfMoment[2],
+                    urdfMoment[3],
+                    urdfMoment[4],
+                    urdfMoment[5],
+                    urdfMoment[6],
+                    urdfMoment[7],
+                    urdfMoment[8]));
             }
             logger.Info(string.Format(CultureInfo.InvariantCulture,
                 "Computed inertia for link {0}: mass={1:G9} kg, COM=({2:G9}, {3:G9}, {4:G9}) m, " +
@@ -430,10 +600,9 @@ namespace SW2URDF.URDFExport
         {
             List<Body2> bodies = GetBodies(link.SWComponents);
             MassProperty swMass = CreateMassProperty(bodies, jointTransform);
-            double[] swCenterOfMass = swMass.CenterOfMass;
-            double[] swMoment = (double[])swMass.GetMomentOfInertia(
-                (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass);
-            double[] expectedMoment = ConvertSolidWorksMomentToUrdfConvention(swMoment);
+            MassPropertySnapshot massProperty = ReadMassProperty(swMass);
+            double[] expectedMoment = ConvertSolidWorksMomentToUrdfConvention(
+                massProperty.Moment);
 
             double[] urdfOrigin = link.Inertial.Origin.GetXYZ();
             double[] urdfMoment = new double[]
@@ -448,10 +617,10 @@ namespace SW2URDF.URDFExport
 
             return new List<InertialValidationRow>
             {
-                new InertialValidationRow("mass", "kg", swMass.Mass, link.Inertial.Mass.Value),
-                new InertialValidationRow("origin.x", "m", swCenterOfMass[0], urdfOrigin[0]),
-                new InertialValidationRow("origin.y", "m", swCenterOfMass[1], urdfOrigin[1]),
-                new InertialValidationRow("origin.z", "m", swCenterOfMass[2], urdfOrigin[2]),
+                new InertialValidationRow("mass", "kg", massProperty.Mass, link.Inertial.Mass.Value),
+                new InertialValidationRow("origin.x", "m", massProperty.CenterOfMass[0], urdfOrigin[0]),
+                new InertialValidationRow("origin.y", "m", massProperty.CenterOfMass[1], urdfOrigin[1]),
+                new InertialValidationRow("origin.z", "m", massProperty.CenterOfMass[2], urdfOrigin[2]),
                 new InertialValidationRow("ixx", "kg*m^2", expectedMoment[0], urdfMoment[0]),
                 new InertialValidationRow("ixy", "kg*m^2", expectedMoment[1], urdfMoment[1]),
                 new InertialValidationRow("ixz", "kg*m^2", expectedMoment[2], urdfMoment[2]),
@@ -1207,6 +1376,37 @@ namespace SW2URDF.URDFExport
             return swMass;
         }
 
+        private static MassPropertySnapshot ReadMassProperty(IMassProperty swMass)
+        {
+            if (swMass == null)
+            {
+                throw new ArgumentNullException("swMass");
+            }
+
+            // SW2023 can return a zero tensor if CenterOfMass is read before the inertia tensor.
+            double[] moment = (double[])swMass.GetMomentOfInertia(
+                (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass);
+            double mass = swMass.Mass;
+            double[] centerOfMass = (double[])swMass.CenterOfMass;
+            return new MassPropertySnapshot(mass, centerOfMass, moment);
+        }
+
+        private sealed class MassPropertySnapshot
+        {
+            public MassPropertySnapshot(double mass, double[] centerOfMass, double[] moment)
+            {
+                Mass = mass;
+                CenterOfMass = centerOfMass;
+                Moment = moment;
+            }
+
+            public double Mass { get; private set; }
+
+            public double[] CenterOfMass { get; private set; }
+
+            public double[] Moment { get; private set; }
+        }
+
         private static void ComputeVisualCollisionProperties(Link link)
         {
             link.Visual.Origin.SetXYZ(new double[3] { 0, 0, 0 });
@@ -1243,13 +1443,19 @@ namespace SW2URDF.URDFExport
             if (parent != null && ComputeJointKinematics)
             {
                 logger.Info("Creating joint " + node.Link.Name);
-                bool error = CreateJoint(parent, node.Link);
-                if (error)
+                bool success = CreateJoint(parent, node.Link);
+                ApplyJointComputationResult(node.Link, success);
+                if (!success)
                 {
                     logger.Warn(
                         string.Format("Creating joint from parent {0} to child {1} failed", 
                             parent.Name, node.Link.Name));
                 }
+            }
+            else if (parent != null && ComputeJointLimits)
+            {
+                node.Link.JointLimitsDirty =
+                    !ComputeJointLimitsFromComponents(parent, node.Link);
             }
 
             if (ComputeInertialValues)
@@ -1265,33 +1471,75 @@ namespace SW2URDF.URDFExport
             return node.Link;
         }
 
+        internal static void ApplyJointComputationResult(Link link, bool success)
+        {
+            if (link == null)
+            {
+                throw new ArgumentNullException("link");
+            }
+
+            link.JointKinematicsDirty = !success;
+            if (!success)
+            {
+                link.JointLimitsDirty = true;
+            }
+        }
+
         private List<Body2> GetBodies(List<Component2> components)
         {
             List<Body2> bodies = new List<Body2>();
+            HashSet<string> visitedComponents =
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (Component2 comp in components)
             {
-                // Retrieving the Body2 bodies of the component. Also need to recur through the assembly tree
-                object[] componentBodies =
-                    (object[])comp.GetBodies3((int)swBodyType_e.swSolidBody, out _);
-                if (componentBodies != null)
-                {
-                    foreach (Body2 obj in componentBodies)
-                    {
-                        bodies.Add(obj);
-                    }
-                }
-                object[] children = comp.GetChildren();
-                if (children != null)
-                {
-                    List<Component2> childComponents = new List<Component2>();
-                    foreach (Component2 child in children)
-                    {
-                        childComponents.Add(child);
-                    }
-                    bodies.AddRange(GetBodies(childComponents));
-                }
+                AddComponentBodies(comp, visitedComponents, bodies);
             }
             return bodies;
+        }
+
+        private void AddComponentBodies(
+            Component2 component,
+            ISet<string> visitedComponents,
+            ICollection<Body2> bodies)
+        {
+            if (component == null)
+            {
+                return;
+            }
+
+            string componentPath = component.Name2;
+            if (string.IsNullOrWhiteSpace(componentPath))
+            {
+                componentPath = "<component-id:" + component.GetID() + ">";
+            }
+            if (!visitedComponents.Add(componentPath))
+            {
+                logger.Warn("Skipping duplicate mass-property component: " + componentPath);
+                return;
+            }
+
+            object[] componentBodies =
+                (object[])component.GetBodies3((int)swBodyType_e.swSolidBody, out _);
+            if (componentBodies != null)
+            {
+                foreach (Body2 body in componentBodies)
+                {
+                    if (body != null)
+                    {
+                        bodies.Add(body);
+                    }
+                }
+            }
+
+            object[] children = component.GetChildren();
+            if (children == null)
+            {
+                return;
+            }
+            foreach (Component2 child in children)
+            {
+                AddComponentBodies(child, visitedComponents, bodies);
+            }
         }
 
         #endregion SW to Robot and link methods
@@ -1303,29 +1551,28 @@ namespace SW2URDF.URDFExport
         {
             CheckRefGeometryExists(child);
 
-            string coordSysName = child.Joint.CoordinateSystemName;
-            string axisName = child.Joint.AxisName;
-            string jointType = child.Joint.Type;
-
             child.Joint.Parent.Name = parent.Name;
             child.Joint.Child.Name = child.Name;
+            string jointType = child.isFixedFrame
+                ? "fixed"
+                : JointConfigurationPolicy.Normalize(child.Joint.Type);
+            JointConfigurationPolicy.Apply(child.Joint, jointType);
+
+            string coordSysName = child.Joint.CoordinateSystemName;
+            string axisName = child.Joint.AxisName;
             if (child.isFixedFrame)
             {
                 axisName = "";
-                jointType = "fixed";
-                child.Joint.Type = jointType;
+                child.Joint.AxisName = "";
             }
             else if (coordSysName == "Automatically Generate" ||
-                axisName == "Automatically Generate" || jointType == "Automatically Detect")
+                (JointConfigurationPolicy.RequiresMotionAxis(jointType) &&
+                 axisName == "Automatically Generate") ||
+                jointType == Joint.AutomaticallyDetectType)
             {
                 // We have to estimate the joint if the user specifies automatic for either the
                 // reference coordinate system, the reference axis or the joint type.
-                EstimateGlobalJointFromComponents(parent, child);
-                bool autoGenerateError = (
-                    child.Joint.Origin.X == 0.0 && child.Joint.Origin.Y == 0.0 && child.Joint.Origin.Z == 0.0 &&
-                    child.Joint.Origin.Roll == 0.0 && child.Joint.Origin.Pitch == 0.0 && child.Joint.Origin.Yaw == 0.0);
-
-                if (autoGenerateError)
+                if (!EstimateGlobalJointFromComponents(parent, child))
                 {
                     ExportErrorWhy = string.Format("Inferring the joint geometry failed for the joint {0} " +
                         "from link {1} to {2} failed. Check that the mates have not fully defined the " +
@@ -1333,6 +1580,7 @@ namespace SW2URDF.URDFExport
                         child.Joint.Name, child.Name, parent.Name);
                     return false;
                 }
+                JointConfigurationPolicy.Apply(child.Joint, child.Joint.Type);
             }
 
             if (coordSysName == "Automatically Generate")
@@ -1352,7 +1600,8 @@ namespace SW2URDF.URDFExport
                 CreateRefOrigin(child.Joint);
             }
 
-            if (axisName == "Automatically Generate")
+            if (axisName == "Automatically Generate" &&
+                JointConfigurationPolicy.RequiresMotionAxis(child.Joint.Type))
             {
                 child.Joint.AxisName = "Axis_" + child.Joint.Name;
                 ActiveSWModel.ClearSelection2(true);
@@ -1364,17 +1613,28 @@ namespace SW2URDF.URDFExport
                     child.Joint.AxisName = "Axis_" + child.Joint.Name + i.ToString();
                     i++;
                 }
-                if (child.Joint.Type != "fixed")
-                {
-                    CreateRefAxis(child.Joint);
-                }
+                CreateRefAxis(child.Joint);
+            }
+            else if (!JointConfigurationPolicy.RequiresMotionAxis(child.Joint.Type))
+            {
+                child.Joint.AxisName = string.Empty;
             }
 
-            EstimateGlobalJointFromRefGeometry(child);
+            if (!EstimateGlobalJointFromRefGeometry(child))
+            {
+                return false;
+            }
 
             coordSysName = parent.Joint.CoordinateSystemName;
 
-            LocalizeJoint(child.Joint, coordSysName);
+            if (!LocalizeJoint(child.Joint, coordSysName))
+            {
+                return false;
+            }
+            if (ComputeJointLimits)
+            {
+                child.JointLimitsDirty = !ComputeJointLimitsFromComponents(parent, child);
+            }
             return true;
         }
 
@@ -1502,14 +1762,25 @@ namespace SW2URDF.URDFExport
 
         // Takes a links joint and calculates the local transform from the global transforms of
         // the parent and child. It also converts the axis to local values
-        private void LocalizeJoint(Joint Joint, string parentCoordsysName)
+        private bool LocalizeJoint(Joint Joint, string parentCoordsysName)
         {
             MathTransform parentTransform = GetCoordinateSystemTransform(parentCoordsysName);
+            if (parentTransform == null)
+            {
+                logger.Warn("Parent coordinate system could not be resolved: " + parentCoordsysName);
+                return false;
+            }
             
             Matrix<double> ParentJointGlobalTransform =
                 MathOps.GetTransformation(parentTransform);
             MathTransform coordsysTransform =
                 GetCoordinateSystemTransform(Joint.CoordinateSystemName);
+            if (coordsysTransform == null)
+            {
+                logger.Warn("Joint coordinate system could not be resolved: " +
+                    Joint.CoordinateSystemName);
+                return false;
+            }
            
             //Transform from global origin to child joint
             Matrix<double> ChildJointGlobalTransform =
@@ -1517,14 +1788,27 @@ namespace SW2URDF.URDFExport
             Matrix<double> ChildJointOrigin =
                 ParentJointGlobalTransform.Inverse() * ChildJointGlobalTransform;
             
-            //Localize the axis to the Link's coordinate system.
-            Joint.Axis.SetXYZ(LocalizeAxis(Joint.Axis.GetXYZ(), Joint.CoordinateSystemName));
+            if (JointConfigurationPolicy.RequiresMotionAxis(Joint.Type))
+            {
+                if (!Joint.Axis.HasValidDirection())
+                {
+                    logger.Warn("Joint axis is missing or invalid for joint " + Joint.Name);
+                    return false;
+                }
+                Joint.Axis.SetXYZ(LocalizeAxis(Joint.Axis.GetXYZ(), coordsysTransform));
+                if (!Joint.Axis.HasValidDirection())
+                {
+                    logger.Warn("Localized joint axis is invalid for joint " + Joint.Name);
+                    return false;
+                }
+            }
 
             // Get the array values and threshold them so small values are set to 0.
             Joint.Origin.SetXYZ(MathOps.GetXYZ(ChildJointOrigin));
             Joint.Origin.SetXYZ(MathOps.Threshold(Joint.Origin.GetXYZ(), 0.00001));
             Joint.Origin.SetRPY(MathOps.GetRPY(ChildJointOrigin));
             Joint.Origin.SetRPY(MathOps.Threshold(Joint.Origin.GetRPY(), 0.00001));
+            return true;
         }
 
         // Funny method I created that inserts a RefAxis and then finds the reference to it.
@@ -1702,26 +1986,50 @@ namespace SW2URDF.URDFExport
         // the axis of rotation/translation, and the type of joint
         public Boolean EstimateGlobalJointFromComponents(Link parent, Link child)
         {
-            //Create the ref objects
-            int degreesOfFreedom;
-
-            // Fix parent components so that only the actual degree of freedom can be detected.
-            List<Component2> fixedComponents = FixComponents(parent);
-
-            // Surpress Limit Mates to properly find degrees of freedom. They don't work with the API call
-            List<Mate2> limitMates = SuppressLimitMates(child.SWMainComponent);
-            Boolean success = false;
-            if (child.SWMainComponent != null)
+            if (child.SWMainComponent == null || child.SWMainComponent.Transform2 == null)
             {
+                return false;
+            }
+
+            string configuredType = JointConfigurationPolicy.Normalize(child.Joint.Type);
+            if (configuredType == "fixed" || configuredType == "floating")
+            {
+                JointConfigurationPolicy.Apply(child.Joint, configuredType);
+                child.Joint.Origin.SetXYZ(MathOps.Threshold(
+                    MathOps.GetXYZ(child.SWMainComponent.Transform2),
+                    0.00001));
+                child.Joint.Origin.SetRPY(MathOps.Threshold(
+                    MathOps.GetRPY(child.SWMainComponent.Transform2),
+                    0.00001));
+                return true;
+            }
+
+            //Create the ref objects
+            List<Component2> fixedComponents = new List<Component2>();
+            List<LimitMateSuppressionState> limitMates =
+                new List<LimitMateSuppressionState>();
+            Boolean success = false;
+            Exception operationFailure = null;
+            try
+            {
+                // Fix parent components so that only the actual degree of freedom can be detected.
+                fixedComponents = FixComponents(parent);
+
+                // Suppress limit mates to properly find degrees of freedom. They don't work with the API call.
+                if (child.SWMainComponent != null)
+                {
+                    limitMates = SuppressLimitMates(child.SWMainComponent);
+                }
+
                 // The wonderful undocumented API call I found to get the degrees of freedom in a joint.
                 // https://forum.solidworks.com/thread/57414
-                int remainingDOFs =
+                int apiResult =
                     child.SWMainComponent.GetRemainingDOFs(
                         out int R1Status, out MathPoint RPoint1, out int R1DirStatus, out MathVector RDir1,
                         out int R2Status, out MathPoint RPoint2, out int R2DirStatus, out MathVector RDir2,
                         out int L1Status, out MathVector LDir1,
                         out int L2Status, out MathVector LDir2);
-                if (RPoint1 != null)
+                if (RPoint1 != null && RDir1 != null)
                 {
                     logger.Info("R1: " + R1Status + ", " + RPoint1 + ", " + R1DirStatus + ", " + RDir1.ArrayData);
                 }
@@ -1730,7 +2038,7 @@ namespace SW2URDF.URDFExport
                     logger.Info("R1: " + R1Status + ", " + R1DirStatus);
                 }
 
-                if (RPoint2 != null)
+                if (RPoint2 != null && RDir2 != null)
                 {
                     logger.Info("R2: " + R2Status + ", " + RPoint2 + ", " + R2DirStatus + ", " + RDir2.ArrayData);
                 }
@@ -1748,56 +2056,96 @@ namespace SW2URDF.URDFExport
                 }
                 if (LDir2 != null)
                 {
-                    logger.Info("L2: " + ", " + LDir2.ArrayData);
+                    logger.Info("L2: " + L2Status + ", " + LDir2.ArrayData);
                 }
                 else
                 {
                     logger.Info("L2: " + L2Status);
                 }
 
-                degreesOfFreedom = remainingDOFs;
+                string inferredType = null;
+                if (!JointConfigurationPolicy.TryClassifyDetectedType(
+                        apiResult,
+                        R1Status,
+                        R2Status,
+                        L1Status,
+                        L2Status,
+                        out inferredType) ||
+                    !JointConfigurationPolicy.IsDetectedTypeCompatible(
+                        configuredType,
+                        inferredType))
+                {
+                    logger.Warn(string.Format(
+                        "Joint DOF inference rejected for {0}: result={1}, R1={2}, R2={3}, L1={4}, L2={5}, configured={6}.",
+                        child.Joint.Name,
+                        apiResult,
+                        R1Status,
+                        R2Status,
+                        L1Status,
+                        L2Status,
+                        configuredType));
+                    return false;
+                }
 
-                // Convert the gotten degrees of freedom to a joint type, origin and axis
-                child.Joint.Type = "fixed";
+                JointConfigurationPolicy.Apply(child.Joint,
+                    JointConfigurationPolicy.ResolveDetectedType(configuredType, inferredType));
                 child.Joint.Origin.SetXYZ(MathOps.GetXYZ(child.SWMainComponent.Transform2));
                 child.Joint.Origin.SetRPY(MathOps.GetRPY(child.SWMainComponent.Transform2));
 
-                if (degreesOfFreedom == 0 && (R1Status + L1Status > 0))
+                if (!JointConfigurationPolicy.RequiresMotionAxis(child.Joint.Type))
                 {
                     success = true;
-                    if (R1Status == 1)
-                    {
-                        child.Joint.Type = "continuous";
-                        child.Joint.Axis.SetXYZ(RDir1.ArrayData);
-                        child.Joint.Origin.SetXYZ(RPoint1.ArrayData);
-                        child.Joint.Origin.SetRPY(MathOps.GetRPY(child.SWMainComponent.Transform2));
-                        MoveOrigin(parent, child);
-                    }
-                    else if (L1Status == 1)
-                    {
-                        child.Joint.Type = "prismatic";
-                        child.Joint.Axis.SetXYZ(LDir1.ArrayData);
-                        child.Joint.Origin.SetXYZ(MathOps.GetXYZ(child.SWMainComponent.Transform2));
-                        child.Joint.Origin.SetRPY(MathOps.GetRPY(child.SWMainComponent.Transform2));
-                        MoveOrigin(parent, child);
-                    }
+                }
+                else if (inferredType == "continuous" && R1DirStatus == 1 &&
+                    RDir1 != null && RPoint1 != null)
+                {
+                    child.Joint.Axis.SetXYZ(RDir1.ArrayData);
+                    child.Joint.Origin.SetXYZ(RPoint1.ArrayData);
+                    child.Joint.Origin.SetRPY(MathOps.GetRPY(child.SWMainComponent.Transform2));
+                    success = MoveOrigin(parent, child);
+                }
+                else if (inferredType == "prismatic" && LDir1 != null)
+                {
+                    child.Joint.Axis.SetXYZ(LDir1.ArrayData);
+                    child.Joint.Origin.SetXYZ(MathOps.GetXYZ(child.SWMainComponent.Transform2));
+                    child.Joint.Origin.SetRPY(MathOps.GetRPY(child.SWMainComponent.Transform2));
+                    success = MoveOrigin(parent, child);
                 }
                 child.Joint.Origin.SetXYZ(MathOps.Threshold(child.Joint.Origin.GetXYZ(), 0.00001));
                 child.Joint.Origin.SetRPY(MathOps.Threshold(child.Joint.Origin.GetRPY(), 0.00001));
-                UnsuppressLimitMates(limitMates);
-                if (limitMates.Count > 0 && ComputeJointLimits)
+                return success;
+            }
+            catch (Exception exception)
+            {
+                operationFailure = exception;
+                throw;
+            }
+            finally
+            {
+                Exception cleanupFailure = RestoreJointInferenceEnvironment(
+                    limitMates,
+                    fixedComponents);
+                if (cleanupFailure != null)
                 {
-                    AddLimits(child.Joint, limitMates, parent.SWMainComponent, child.SWMainComponent);
+                    if (operationFailure != null)
+                    {
+                        logger.Error(
+                            "Restoring the SolidWorks assembly after joint inference also failed.",
+                            cleanupFailure);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException(
+                            "SolidWorks assembly state could not be restored after joint inference.",
+                            cleanupFailure);
+                    }
                 }
             }
-
-            UnFixComponents(fixedComponents);
-            return success;
         }
 
         //This now needs to be able to get the component, and it's associated coordinate system name.
         //Then it needs to transform to the top level assembly (sounds like fun).
-        private void EstimateGlobalJointFromRefGeometry(Link child)
+        private bool EstimateGlobalJointFromRefGeometry(Link child)
         {
             MathTransform GlobalCoordsysTransform =
                 GetCoordinateSystemTransform(child.Joint.CoordinateSystemName);
@@ -1806,14 +2154,22 @@ namespace SW2URDF.URDFExport
                 logger.Warn(
                     string.Format("Joint transform for coordinate system {0} could not be computed for joint {1}", 
                         child.Joint.CoordinateSystemName, child.Joint.Name));
-                return;
+                return false;
             }
             child.Joint.Origin.SetXYZ(MathOps.GetXYZ(GlobalCoordsysTransform));
             child.Joint.Origin.SetRPY(MathOps.GetRPY(GlobalCoordsysTransform));
-            if (child.Joint.Type != "fixed")
+            if (JointConfigurationPolicy.RequiresMotionAxis(child.Joint.Type))
             {
                 EstimateAxis(child.Joint);
+                if (!child.Joint.Axis.HasValidDirection())
+                {
+                    logger.Warn(
+                        string.Format("Reference axis {0} could not be resolved for joint {1}",
+                            child.Joint.AxisName, child.Joint.Name));
+                    return false;
+                }
             }
+            return true;
         }
 
         // Method to get the SolidWorks MathTransform from a coordinate system. This method can account for
@@ -1824,42 +2180,69 @@ namespace SW2URDF.URDFExport
         {
             ModelDoc2 ComponentModel = ActiveSWModel;
             MathTransform ComponentTransform = default;
-            if (CoordinateSystemName == null)
+            if (string.IsNullOrWhiteSpace(CoordinateSystemName))
             {
-                throw new Exception("Coordinate system string is null");
+                return null;
             }
-            if (CoordinateSystemName.Contains("<") && CoordinateSystemName.Contains(">"))
+            bool hasComponentQualifier =
+                CoordinateSystemName.Contains("<") || CoordinateSystemName.Contains(">");
+            if (hasComponentQualifier)
             {
-                string componentStr = "";
                 int indexFirst = CoordinateSystemName.IndexOf('<');
                 int indexLast = CoordinateSystemName.IndexOf('>', indexFirst);
-                if (indexLast > indexFirst)
+                if (indexFirst < 0 || indexLast <= indexFirst)
                 {
-                    componentStr =
-                        CoordinateSystemName.Substring(indexFirst + 1, indexLast - indexFirst - 1);
-                    string CoordinateSystemNameUnTrimmed = CoordinateSystemName.Substring(0, indexFirst);
-                    CoordinateSystemName = CoordinateSystemNameUnTrimmed.Trim();
+                    return null;
                 }
+                string componentStr =
+                    CoordinateSystemName.Substring(indexFirst + 1, indexLast - indexFirst - 1);
+                string CoordinateSystemNameUnTrimmed = CoordinateSystemName.Substring(0, indexFirst);
+                CoordinateSystemName = CoordinateSystemNameUnTrimmed.Trim();
                 AssemblyDoc assy = (AssemblyDoc)ActiveSWModel;
                 object[] components = assy.GetComponents(false);
+                bool componentFound = false;
+                if (components == null)
+                {
+                    return null;
+                }
                 foreach (Component2 comp in components)
                 {
                     if (comp.Name2 == componentStr)
                     {
                         ComponentModel = comp.GetModelDoc2();
                         ComponentTransform = comp.Transform2;
+                        componentFound = true;
+                        break;
                     }
                 }
+                if (!componentFound)
+                {
+                    return null;
+                }
+            }
+            if (ComponentModel == null || ComponentModel.Extension == null)
+            {
+                return null;
             }
             MathTransform LocalCoordsysTransform =
                 ComponentModel.Extension.GetCoordinateSystemTransformByName(CoordinateSystemName);
+            if (LocalCoordsysTransform == null)
+            {
+                return null;
+            }
             MathTransform GlobalCoordsysTransform = (ComponentTransform == null) ?
                 LocalCoordsysTransform : LocalCoordsysTransform.Multiply(ComponentTransform);
             return GlobalCoordsysTransform;
         }
 
-        private void MoveOrigin(Link parent, Link nonLocalizedChild)
+        private bool MoveOrigin(Link parent, Link nonLocalizedChild)
         {
+            if (nonLocalizedChild.SWComponents == null ||
+                nonLocalizedChild.SWComponents.Count == 0 ||
+                !nonLocalizedChild.Joint.Axis.HasValidDirection())
+            {
+                return false;
+            }
             double xMax = Double.MinValue;
             double yMax = Double.MinValue;
             double zMax = Double.MinValue;
@@ -1870,8 +2253,16 @@ namespace SW2URDF.URDFExport
 
             foreach (Component2 comp in nonLocalizedChild.SWComponents)
             {
+                if (comp == null)
+                {
+                    return false;
+                }
                 // Returns box as [ XCorner1, YCorner1, ZCorner1, XCorner2, YCorner2, ZCorner2 ]
                 points = comp.GetBox(false, false);
+                if (points == null || points.Length < 6)
+                {
+                    return false;
+                }
                 xMax = MathOps.Max(points[0], points[3], xMax);
                 yMax = MathOps.Max(points[1], points[4], yMax);
                 zMax = MathOps.Max(points[2], points[5], zMax);
@@ -1881,6 +2272,10 @@ namespace SW2URDF.URDFExport
             }
             string coordsys = parent.Joint.CoordinateSystemName;
             MathTransform parentTransform = GetCoordinateSystemTransform(coordsys);
+            if (parentTransform == null)
+            {
+                return false;
+            }
 
             double[] xyzParent = MathOps.GetXYZ(parentTransform);
             double[] xyzJointAxis = nonLocalizedChild.Joint.Axis.GetXYZ();
@@ -1891,6 +2286,7 @@ namespace SW2URDF.URDFExport
             nonLocalizedChild.Joint.Origin.SetXYZ(
                 MathOps.ClosestPointOnLineWithinBox(xMin, xMax, yMin, yMax, zMin, zMax,
                     nonLocalizedChild.Joint.Axis.GetXYZ(), idealOrigin));
+            return true;
         }
 
         // Calculates the axis from a Reference Axis in the model
@@ -1910,48 +2306,82 @@ namespace SW2URDF.URDFExport
 
         private double[] GetRefAxis(string axisStr)
         {
+            double[] axisVector = new double[3];
+            if (string.IsNullOrWhiteSpace(axisStr))
+            {
+                return axisVector;
+            }
+
             ModelDoc2 ComponentModel = ActiveSWModel;
             string axisName = axisStr;
             MathTransform ComponentTransform = default;
 
-            if (axisStr.Contains("<") && axisStr.Contains(">"))
+            bool hasComponentQualifier = axisStr.Contains("<") || axisStr.Contains(">");
+            if (hasComponentQualifier)
             {
-                string componentStr = "";
                 int indexFirst = axisStr.IndexOf('<');
                 int indexLast = axisStr.IndexOf('>', indexFirst);
-                if (indexLast > indexFirst)
+                if (indexFirst < 0 || indexLast <= indexFirst)
                 {
-                    componentStr = axisStr.Substring(indexFirst + 1, indexLast - indexFirst - 1);
-                    string CoordinateSystemNameUnTrimmed = axisStr.Substring(0, indexFirst);
-                    axisName = CoordinateSystemNameUnTrimmed.Trim();
+                    return axisVector;
                 }
+                string componentStr =
+                    axisStr.Substring(indexFirst + 1, indexLast - indexFirst - 1);
+                string CoordinateSystemNameUnTrimmed = axisStr.Substring(0, indexFirst);
+                axisName = CoordinateSystemNameUnTrimmed.Trim();
                 AssemblyDoc assy = (AssemblyDoc)ActiveSWModel;
                 object[] components = assy.GetComponents(false);
+                bool componentFound = false;
+                if (components == null)
+                {
+                    return axisVector;
+                }
                 foreach (Component2 comp in components)
                 {
                     if (comp.Name2 == componentStr)
                     {
                         ComponentModel = comp.GetModelDoc2();
                         ComponentTransform = comp.Transform2;
+                        componentFound = true;
+                        break;
                     }
+                }
+                if (!componentFound)
+                {
+                    return axisVector;
                 }
             }
             //Calculate!
-            double[] axisParams;
-            double[] axisVector = new double[3];
+            if (ComponentModel == null || ComponentModel.Extension == null ||
+                ComponentModel.SelectionManager == null)
+            {
+                return axisVector;
+            }
 
             bool selected =
                 ComponentModel.Extension.SelectByID2(axisName, "AXIS", 0, 0, 0, false, 0, null, 0);
             if (selected)
             {
-                Feature feat = ComponentModel.SelectionManager.GetSelectedObject6(1, 0);
-                RefAxis axis = (RefAxis)feat.GetSpecificFeature2();
+                Feature feat = ComponentModel.SelectionManager.GetSelectedObject6(1, 0) as Feature;
+                RefAxis axis = feat == null ? null : feat.GetSpecificFeature2() as RefAxis;
+                if (axis == null)
+                {
+                    return axisVector;
+                }
 
                 // GetRefAxisParams returns {startX, startY, startZ, endX, endY, endZ}
-                axisParams = axis.GetRefAxisParams();
+                double[] axisParams = axis.GetRefAxisParams();
+                if (axisParams == null || axisParams.Length < 6)
+                {
+                    return axisVector;
+                }
                 axisVector[0] = axisParams[0] - axisParams[3];
                 axisVector[1] = axisParams[1] - axisParams[4];
                 axisVector[2] = axisParams[2] - axisParams[5];
+                if (!Axis.IsValidDirection(axisVector))
+                {
+                    return new double[3];
+                }
 
                 // Normalize and cleanup
                 axisVector = MathOps.PNorm(axisVector, 2);
@@ -1986,7 +2416,7 @@ namespace SW2URDF.URDFExport
 
         private static double[] GlobalAxis(double[] axis, Matrix<double> transform)
         {
-            double[] transformedAxis = new double[axis.Length];
+            double[] transformedAxis = (double[])axis.Clone();
             if (transform != null)
             {
                 Vector<double> transformedVector = new DenseVector(new double[] { axis[0], axis[1], axis[2], 0 });
@@ -2032,11 +2462,27 @@ namespace SW2URDF.URDFExport
             }
 
             logger.Info("Found " + featureObjects.Length + " in " + fileName);
-            foreach (Feature feat in featureObjects)
+            foreach (object featureObject in featureObjects)
             {
-                if (feat.GetTypeName2() == featureName)
+                Feature feat = featureObject as Feature;
+                if (feat == null)
                 {
-                    features[keyName].Add(feat);
+                    logger.Warn("Skipping a SolidWorks feature entry that does not expose IFeature in " +
+                        fileName + ".");
+                    continue;
+                }
+
+                try
+                {
+                    if (feat.GetTypeName2() == featureName)
+                    {
+                        features[keyName].Add(feat);
+                    }
+                }
+                catch (COMException exception)
+                {
+                    logger.Warn("Skipping an unavailable SolidWorks feature entry in " + fileName +
+                        ": " + exception.Message);
                 }
             }
 
@@ -2056,9 +2502,27 @@ namespace SW2URDF.URDFExport
                 if (components != null)
                 {
                     logger.Info(components.Length + " components to check");
-                    foreach (Component2 comp in components)
+                    foreach (object componentObject in components)
                     {
-                        ModelDoc2 doc = comp.GetModelDoc2();
+                        Component2 comp = componentObject as Component2;
+                        if (comp == null)
+                        {
+                            logger.Warn("Skipping an assembly component entry that does not expose IComponent2 in " +
+                                fileName + ".");
+                            continue;
+                        }
+
+                        ModelDoc2 doc;
+                        try
+                        {
+                            doc = comp.GetModelDoc2();
+                        }
+                        catch (COMException exception)
+                        {
+                            logger.Warn("Skipping an unavailable assembly component in " + fileName +
+                                ": " + exception.Message);
+                            continue;
+                        }
                         if (doc != null)
                         {
                             //We already have all the components in an assembly, we don't want
@@ -2137,15 +2601,73 @@ namespace SW2URDF.URDFExport
             return new List<string>(ReferenceAxesNames);
         }
 
-        //This method adds in the limits from a limit mate, to make a joint a revolute joint.
-        // It really needs to checked for correctness.
-        private static void AddLimits(Joint Joint, List<Mate2> limitMates,
+        private bool ComputeJointLimitsFromComponents(Link parent, Link child)
+        {
+            string jointType = JointConfigurationPolicy.Normalize(child.Joint.Type);
+            if (jointType == "fixed" || jointType == "floating" || jointType == "planar")
+            {
+                JointConfigurationPolicy.Apply(child.Joint, jointType);
+                return true;
+            }
+            if (jointType != "continuous" && jointType != "revolute" &&
+                jointType != "prismatic")
+            {
+                return false;
+            }
+
+            JointConfigurationPolicy.PrepareLimitRecomputation(child.Joint);
+            if (parent.SWMainComponent == null || child.SWMainComponent == null)
+            {
+                return jointType == "continuous";
+            }
+
+            List<LimitMateSuppressionState> limitMates =
+                SuppressLimitMates(child.SWMainComponent);
+            Exception operationFailure = null;
+            try
+            {
+                bool applied = AddLimits(
+                    child.Joint,
+                    limitMates.Select(state => state.Mate).ToList(),
+                    parent.SWMainComponent,
+                    child.SWMainComponent);
+                return applied || jointType == "continuous";
+            }
+            catch (Exception exception)
+            {
+                operationFailure = exception;
+                throw;
+            }
+            finally
+            {
+                Exception cleanupFailure = RestoreJointInferenceEnvironment(
+                    limitMates,
+                    null);
+                if (cleanupFailure != null)
+                {
+                    if (operationFailure != null)
+                    {
+                        logger.Error(
+                            "Restoring SolidWorks limit mates after limit computation also failed.",
+                            cleanupFailure);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException(
+                            "SolidWorks limit mates could not be restored after limit computation.",
+                            cleanupFailure);
+                    }
+                }
+            }
+        }
+
+        // Adds position bounds from an eligible SolidWorks limit mate.
+        private static bool AddLimits(Joint joint, List<Mate2> limitMates,
             Component2 parentComponent, Component2 childComponent)
         {
             logger.Info("Parent SW Component: " + parentComponent.Name2);
             logger.Info("Child SW Component: " + childComponent.Name2);
-            // The number of limit Mates should only be one. But for completeness, I cycle through
-            // every found limit mate.
+            List<Mate2> eligibleMates = new List<Mate2>();
             foreach (Mate2 swMate in limitMates)
             {
                 logger.Info("Determining limit mate eligibility ");
@@ -2173,86 +2695,242 @@ namespace SW2URDF.URDFExport
                     }
                 }
 
-                if (entities.Contains(parentComponent) && entities.Contains(childComponent))
+                if (entities.Any(component =>
+                        CommonSwOperations.ComReferencesEqual(component, parentComponent)) &&
+                    entities.Any(component =>
+                        CommonSwOperations.ComReferencesEqual(component, childComponent)))
                 {
                     // [TODO] This assumes the limit mate limits the right degree of freedom,
                     // it really should check that assumption
-                    if ((Joint.Type == "continuous" && swMate.Type ==
-                            (int)swMateType_e.swMateANGLE) ||
-                        (Joint.Type == "prismatic" && swMate.Type ==
+                    if (((joint.Type == "continuous" || joint.Type == "revolute") &&
+                            swMate.Type == (int)swMateType_e.swMateANGLE) ||
+                        (joint.Type == "prismatic" && swMate.Type ==
                             (int)swMateType_e.swMateDISTANCE))
                     {
-                        // Unclear if flipped is the right thing we want to be checking here.
-                        // From a sample size of 1, in SolidWorks it appears that an aligned and
-                        // anti-aligned mates are NOT flipped...
-                        if (!swMate.Flipped)
-                        {
-                            // Reverse mate directions, for some reason
-                            Joint.Limit.Upper = -swMate.MinimumVariation;
-                            Joint.Limit.Lower = -swMate.MaximumVariation;
-                        }
-                        else
-                        {
-                            // Lucky me that no conversion is necessary
-                            Joint.Limit.Upper = swMate.MaximumVariation;
-                            Joint.Limit.Lower = swMate.MinimumVariation;
-                        }
-                        if (Joint.Type == "continuous")
-                        {
-                            Joint.Type = "revolute";
-                        }
+                        eligibleMates.Add(swMate);
                     }
                 }
             }
+
+            if (eligibleMates.Count == 0)
+            {
+                return false;
+            }
+            if (eligibleMates.Count > 1)
+            {
+                throw new InvalidOperationException(
+                    "Multiple SolidWorks limit mates match the same URDF joint. " +
+                    "Select a single limit mate before exporting.");
+            }
+
+            Mate2 selectedMate = eligibleMates[0];
+            double lower;
+            double upper;
+            // SolidWorks reports an unflipped mate in the opposite direction to URDF.
+            if (!selectedMate.Flipped)
+            {
+                upper = -selectedMate.MinimumVariation;
+                lower = -selectedMate.MaximumVariation;
+            }
+            else
+            {
+                upper = selectedMate.MaximumVariation;
+                lower = selectedMate.MinimumVariation;
+            }
+            if (double.IsNaN(lower) || double.IsInfinity(lower) ||
+                double.IsNaN(upper) || double.IsInfinity(upper) || lower > upper)
+            {
+                throw new InvalidOperationException(
+                    "The selected SolidWorks limit mate has invalid bounds.");
+            }
+
+            if (joint.Type == "continuous")
+            {
+                JointConfigurationPolicy.Apply(joint, "revolute");
+            }
+            joint.Limit.Lower = lower;
+            joint.Limit.Upper = upper;
+            return true;
         }
 
         // Suppresses limit mates to make it easier to find the free degree of freedom in a joint
-        private static List<Mate2> SuppressLimitMates(IComponent2 component)
+        private sealed class LimitMateSuppressionState
         {
-            List<Mate2> limitMates = new List<Mate2>();
+            public LimitMateSuppressionState(Mate2 mate, Feature feature)
+            {
+                Mate = mate;
+                Feature = feature;
+            }
+
+            public Mate2 Mate { get; private set; }
+            public Feature Feature { get; private set; }
+        }
+
+        private static List<LimitMateSuppressionState> SuppressLimitMates(
+            IComponent2 component)
+        {
+            List<LimitMateSuppressionState> suppressedMates =
+                new List<LimitMateSuppressionState>();
+
+            if (component == null)
+            {
+                return suppressedMates;
+            }
 
             object[] objs = component.GetMates();
-
-            //limit mates aren't always present
-            if (objs != null)
+            try
             {
+                if (objs == null)
+                {
+                    return suppressedMates;
+                }
+
                 foreach (object obj in objs)
                 {
-                    if (obj is Mate2 swMate)
+                    Mate2 swMate = obj as Mate2;
+                    if (swMate == null ||
+                        swMate.MinimumVariation == swMate.MaximumVariation)
                     {
-                        if (swMate.MinimumVariation != swMate.MaximumVariation)
-                        {
-                            limitMates.Add(swMate);
-                        }
+                        continue;
+                    }
+
+                    Feature feature = (Feature)swMate;
+                    if (ReadSuppressionState(feature.IsSuppressed2(
+                        (int)swInConfigurationOpts_e.swThisConfiguration,
+                        null)))
+                    {
+                        continue;
+                    }
+
+                    LimitMateSuppressionState state =
+                        new LimitMateSuppressionState(swMate, feature);
+                    suppressedMates.Add(state);
+                    feature.Select(false);
+                    if (!feature.SetSuppression2(
+                        (int)swFeatureSuppressionAction_e.swSuppressFeature,
+                        (int)swInConfigurationOpts_e.swThisConfiguration,
+                        null))
+                    {
+                        throw new InvalidOperationException(
+                            "SolidWorks refused to suppress an active limit mate.");
+                    }
+                }
+            }
+            catch
+            {
+                try
+                {
+                    RestoreLimitMates(suppressedMates);
+                }
+                catch (Exception restoreException)
+                {
+                    logger.Error(
+                        "Restoring partially suppressed SolidWorks limit mates failed.",
+                        restoreException);
+                }
+                throw;
+            }
+
+            return suppressedMates;
+        }
+
+        internal static bool ReadSuppressionState(object value)
+        {
+            if (value is bool)
+            {
+                return (bool)value;
+            }
+
+            Array values = value as Array;
+            if (values != null && values.Length > 0 && values.GetValue(0) is bool)
+            {
+                return (bool)values.GetValue(0);
+            }
+
+            throw new InvalidOperationException(
+                "SolidWorks returned an unreadable feature suppression state.");
+        }
+
+        // Restores only mates that this operation changed from active to suppressed.
+        private static void RestoreLimitMates(
+            List<LimitMateSuppressionState> limitMates)
+        {
+            Exception firstFailure = null;
+            foreach (LimitMateSuppressionState state in limitMates)
+            {
+                try
+                {
+                    if (!state.Feature.SetSuppression2(
+                        (int)swFeatureSuppressionAction_e.swUnSuppressFeature,
+                        (int)swInConfigurationOpts_e.swThisConfiguration,
+                        null))
+                    {
+                        throw new InvalidOperationException(
+                            "SolidWorks refused to restore a limit mate.");
+                    }
+                }
+                catch (Exception exception)
+                {
+                    logger.Error("Restoring a SolidWorks limit mate failed.", exception);
+                    if (firstFailure == null)
+                    {
+                        firstFailure = exception;
                     }
                 }
             }
 
-            foreach (Mate2 swMate in limitMates)
+            if (firstFailure != null)
             {
-                Feature feat = (Feature)swMate;
-                feat.Select(false);
-                feat.SetSuppression2((int)swFeatureSuppressionAction_e.swSuppressFeature,
-                    (int)swInConfigurationOpts_e.swThisConfiguration, null);
+                throw new InvalidOperationException(
+                    "One or more SolidWorks limit mates could not be restored.",
+                    firstFailure);
             }
-
-            return limitMates;
         }
 
-        // Unsuppresses limit mates that were suppressed before
-        private static void UnsuppressLimitMates(List<Mate2> limitMates)
+        private Exception RestoreJointInferenceEnvironment(
+            List<LimitMateSuppressionState> limitMates,
+            List<Component2> fixedComponents)
         {
-            foreach (Mate2 swMate in limitMates)
+            List<Exception> failures = new List<Exception>();
+            try
             {
-                Feature feat = (Feature)swMate;
-                feat.SetSuppression2((int)swFeatureSuppressionAction_e.swUnSuppressFeature,
-                    (int)swInConfigurationOpts_e.swThisConfiguration, null);
+                RestoreLimitMates(limitMates ?? new List<LimitMateSuppressionState>());
             }
+            catch (Exception exception)
+            {
+                failures.Add(exception);
+            }
+
+            try
+            {
+                UnFixComponents(fixedComponents);
+            }
+            catch (Exception exception)
+            {
+                logger.Error("Restoring fixed SolidWorks components failed.", exception);
+                failures.Add(exception);
+            }
+
+            if (failures.Count == 0)
+            {
+                return null;
+            }
+            if (failures.Count == 1)
+            {
+                return failures[0];
+            }
+            return new AggregateException(
+                "Multiple SolidWorks assembly cleanup operations failed.",
+                failures);
         }
 
         //Unfixes components that were fixed to find the free degree of freedom
         private void UnFixComponents(List<Component2> components)
         {
+            if (components == null || components.Count == 0)
+            {
+                return;
+            }
             foreach (Component2 comp in components)
             {
                 logger.Info("Unfixing component " + comp.GetID());
@@ -2271,9 +2949,20 @@ namespace SW2URDF.URDFExport
             {
                 link.Joint.CoordinateSystemName = "Automatically Generate";
             }
-            if (!CheckRefAxisExists(link.Joint.AxisName))
+            string jointType = link.isFixedFrame
+                ? "fixed"
+                : JointConfigurationPolicy.Normalize(link.Joint.Type);
+            if (Joint.IsAutomaticType(jointType) ||
+                JointConfigurationPolicy.RequiresMotionAxis(jointType))
             {
-                link.Joint.AxisName = "Automatically Generate";
+                if (!CheckRefAxisExists(link.Joint.AxisName))
+                {
+                    link.Joint.AxisName = "Automatically Generate";
+                }
+            }
+            else
+            {
+                link.Joint.AxisName = string.Empty;
             }
         }
 
@@ -2317,7 +3006,26 @@ namespace SW2URDF.URDFExport
             }
             CommonSwOperations.SelectComponents(ActiveSWModel, componentsToFix, true);
             AssemblyDoc assy = (AssemblyDoc)ActiveSWModel;
-            assy.FixComponent();
+            try
+            {
+                assy.FixComponent();
+            }
+            catch (Exception exception)
+            {
+                try
+                {
+                    UnFixComponents(componentsToUnfix);
+                }
+                catch (Exception restoreException)
+                {
+                    logger.Error(
+                        "Restoring components after a failed fix operation also failed.",
+                        restoreException);
+                }
+                throw new InvalidOperationException(
+                    "SolidWorks could not fix the parent components for joint inference.",
+                    exception);
+            }
             return componentsToUnfix;
         }
 

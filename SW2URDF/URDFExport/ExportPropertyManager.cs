@@ -54,6 +54,7 @@ namespace SW2URDF.URDFExport
         public List<Link> linksToVisit;
         public LinkNode rightClickedNode;
         private LinkTreeSession linkTreeSession;
+        private bool closingAfterSuccessfulExport;
         private readonly ContextMenuStrip docMenu;
 
         //General objects required for the PropertyManager page
@@ -96,14 +97,18 @@ namespace SW2URDF.URDFExport
         private const int GroupID = 1;
         private const int TextBoxLinkNameID = 2;
         private const int SelectionID = 3;
+        private const int TextBoxJointNameID = 4;
         private const int NumBoxChildCountID = 7;
         private const int LabelLinkNameID = 8;
         private const int LabelJointNameID = 14;
         private const int dotNetTree = 16;
         private const int ButtonExportID = 17;
+        private const int ComboBoxAxesID = 18;
         private const int ComboBoxCoordSysID = 19;
         private const int LabelAxesID = 20;
         private const int LabelCoordSysID = 21;
+        private const int ComboBoxJointTypeID = 22;
+        private const int LabelJointTypeID = 23;
         private const int IDGlobalCoordsys = 24;
         private const int IDLabelGlobalCoordsys = 25;
         private const int LoadConfigurationID = 26;
@@ -204,11 +209,21 @@ namespace SW2URDF.URDFExport
         private void ExportButtonPress()
         {
             SaveActiveNode();
+
+            if (!CheckIfNamesAreUnique((LinkNode)Tree.Nodes[0]) || !CheckNodesComplete(Tree))
+            {
+                return;
+            }
+
             CommitLinkTreeProjection();
 
             if (linkTreeSession.RequiresJointKinematicsRecompute)
             {
                 PMComputeJointKinematics.Checked = true;
+            }
+            if (linkTreeSession.RequiresJointLimitsRecompute)
+            {
+                PMComputeJointLimits.Checked = true;
             }
 
             Exporter.SetComputeInertial(PMComputeMassInertia.Checked);
@@ -216,74 +231,84 @@ namespace SW2URDF.URDFExport
             Exporter.SetComputeJointKinematics(PMComputeJointKinematics.Checked);
             Exporter.SetComputeJointLimits(PMComputeJointLimits.Checked);
 
-            // Only if everything is A-OK, then do we proceed.
-            if (CheckIfNamesAreUnique((LinkNode)Tree.Nodes[0]) && CheckNodesComplete(Tree))
+            AssemblyDoc assy = (AssemblyDoc)ActiveSWModel;
+            int result;
+            using (OperationHeartbeat.Start(logger,
+                "Resolving all lightweight SolidWorks components"))
             {
-                //It saves automatically when sending Okay as true;
-                PMPage.Close(true); 
-                AssemblyDoc assy = (AssemblyDoc)ActiveSWModel;
-
-                //This call can be a real sink of processing time if the model is large.
-                //Unfortunately there isn't a way around it I believe.
-                int result;
-                using (OperationHeartbeat.Start(logger,
-                    "Resolving all lightweight SolidWorks components"))
-                {
-                    result = assy.ResolveAllLightWeightComponents(true);
-                }
-
-                // If the user confirms to resolve the components and they are successfully
-                // resolved we can continue
-                if (result == (int)swComponentResolveStatus_e.swResolveOk)
-                {
-                    List<string> unresolvedComponents = new List<string>();
-                    LinkNode baseNode = linkTreeSession.CreateProjection();
-                    CheckModelDocsExist(baseNode, unresolvedComponents);
-                    if (unresolvedComponents.Count > 0)
-                    {
-                        string componentNames = string.Join("\r\n", unresolvedComponents);
-                        logger.Error("SolidWorks told us the resolve succeeded, but ModelDocs" +
-                            " could not be obtained for: " + componentNames);
-                        MessageBox.Show(
-                            ChineseUiText.Translate(
-                                "Model documents could not be obtained for the following components. " +
-                                    "Please resolve them:\r\n",
-                                "\u65e0\u6cd5\u83b7\u53d6\u4ee5\u4e0b\u7ec4\u4ef6\u7684\u6a21\u578b\u6587\u6863\uff0c\u8bf7\u5148\u89e3\u6790\u8fd9\u4e9b\u7ec4\u4ef6\uff1a\r\n") +
-                            componentNames);
-                        return;
-                    }
-
-                    // Builds the links and joints from the PMPage configuration
-                    bool exportSuccess = Exporter.CreateRobotFromTreeView(baseNode);
-                    if (exportSuccess)
-                    {
-                        AssemblyExportForm exportForm = new AssemblyExportForm(swApp, baseNode, Exporter);
-                        exportForm.Exporter = Exporter;
-                        exportForm.Show();
-                    }
-                }
-                else if (result == (int)swComponentResolveStatus_e.swResolveError ||
-                    result == (int)swComponentResolveStatus_e.swResolveNotPerformed)
-                {
-                    logger.Warn("Resolving components failed. Warning user to do so on their own");
-                    MessageBox.Show(
-                        ChineseUiText.Translate(
-                            "Resolving components failed. All components must be resolved before " +
-                                "exporting to URDF. Resolve lightweight components manually and try again.",
-                            "\u7ec4\u4ef6\u89e3\u6790\u5931\u8d25\u3002\u5bfc\u51fa URDF \u524d\u5fc5\u987b\u89e3\u6790\u6240\u6709\u7ec4\u4ef6\u3002" +
-                                "\u8bf7\u624b\u52a8\u89e3\u6790\u8f7b\u91cf\u5316\u7ec4\u4ef6\u540e\u91cd\u8bd5\u3002"));
-                }
-                else if (result == (int)swComponentResolveStatus_e.swResolveAbortedByUser)
-                {
-                    logger.Warn("Components were not resolved by user");
-                    MessageBox.Show(
-                        ChineseUiText.Translate(
-                            "All components must be resolved before exporting to URDF. " +
-                                "Resolve them manually or try exporting again.",
-                            "\u5bfc\u51fa URDF \u524d\u5fc5\u987b\u89e3\u6790\u6240\u6709\u7ec4\u4ef6\u3002" +
-                                "\u8bf7\u624b\u52a8\u89e3\u6790\uff0c\u6216\u91cd\u65b0\u5c1d\u8bd5\u5bfc\u51fa\u3002"));
-                }
+                result = assy.ResolveAllLightWeightComponents(true);
             }
+
+            if (result == (int)swComponentResolveStatus_e.swResolveError ||
+                result == (int)swComponentResolveStatus_e.swResolveNotPerformed)
+            {
+                logger.Warn("Resolving components failed. Warning user to do so on their own");
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "Resolving components failed. All components must be resolved before " +
+                            "exporting to URDF. Resolve lightweight components manually and try again.",
+                        "\u7ec4\u4ef6\u89e3\u6790\u5931\u8d25\u3002\u5bfc\u51fa URDF \u524d\u5fc5\u987b\u89e3\u6790\u6240\u6709\u7ec4\u4ef6\u3002" +
+                            "\u8bf7\u624b\u52a8\u89e3\u6790\u8f7b\u91cf\u5316\u7ec4\u4ef6\u540e\u91cd\u8bd5\u3002"));
+                return;
+            }
+            if (result == (int)swComponentResolveStatus_e.swResolveAbortedByUser)
+            {
+                logger.Warn("Components were not resolved by user");
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "All components must be resolved before exporting to URDF. " +
+                            "Resolve them manually or try exporting again.",
+                        "\u5bfc\u51fa URDF \u524d\u5fc5\u987b\u89e3\u6790\u6240\u6709\u7ec4\u4ef6\u3002" +
+                            "\u8bf7\u624b\u52a8\u89e3\u6790\uff0c\u6216\u91cd\u65b0\u5c1d\u8bd5\u5bfc\u51fa\u3002"));
+                return;
+            }
+            if (result != (int)swComponentResolveStatus_e.swResolveOk)
+            {
+                logger.Error("SolidWorks returned an unexpected component resolve status: " + result);
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "SolidWorks returned an unexpected component resolve status. " +
+                            "Resolve all lightweight components manually and try again.",
+                        "SolidWorks 返回了未知的组件解析状态。请手动解析所有轻量化组件后重试。"));
+                return;
+            }
+
+            List<string> unresolvedComponents = new List<string>();
+            LinkNode baseNode = linkTreeSession.CreateComputationProjection();
+            CheckModelDocsExist(baseNode, unresolvedComponents);
+            if (unresolvedComponents.Count > 0)
+            {
+                string componentNames = string.Join("\r\n", unresolvedComponents);
+                logger.Error("SolidWorks told us the resolve succeeded, but ModelDocs" +
+                    " could not be obtained for: " + componentNames);
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "Model documents could not be obtained for the following components. " +
+                            "Please resolve them:\r\n",
+                        "\u65e0\u6cd5\u83b7\u53d6\u4ee5\u4e0b\u7ec4\u4ef6\u7684\u6a21\u578b\u6587\u6863\uff0c\u8bf7\u5148\u89e3\u6790\u8fd9\u4e9b\u7ec4\u4ef6\uff1a\r\n") +
+                    componentNames);
+                return;
+            }
+
+            if (!Exporter.CreateRobotFromTreeView(baseNode))
+            {
+                MessageBox.Show(Exporter.ExportErrorWhy);
+                return;
+            }
+
+            linkTreeSession.ValidateComputedProjection(baseNode);
+            if (!SaveConfigTree(ActiveSWModel, baseNode, false))
+            {
+                RefreshLinkTreeProjection();
+                return;
+            }
+            linkTreeSession.AcceptComputedProjection(baseNode);
+            closingAfterSuccessfulExport = true;
+            PMPage.Close(true);
+
+            AssemblyExportForm exportForm = new AssemblyExportForm(swApp, baseNode, Exporter);
+            exportForm.Exporter = Exporter;
+            exportForm.Show();
         }
 
         private void EnableControl(IPropertyManagerPageControl control, bool isEnabled = true)
@@ -325,6 +350,14 @@ namespace SW2URDF.URDFExport
             PMComputeVisualCollision.Checked = !e.UsedCSVVisualCollision;
             PMComputeJointKinematics.Checked = !e.UsedCSVJointKinematics;
             PMComputeJointLimits.Checked = !e.UsedCSVJointOther;
+            if (linkTreeSession.RequiresJointKinematicsRecompute)
+            {
+                PMComputeJointKinematics.Checked = true;
+            }
+            if (linkTreeSession.RequiresJointLimitsRecompute)
+            {
+                PMComputeJointLimits.Checked = true;
+            }
             PMLabelCSVFilename.Caption = ChineseUiText.Translate(
                 "Filename: ",
                 "\u6587\u4ef6\u540d\uff1a") + e.CSVFilename;
@@ -469,9 +502,19 @@ namespace SW2URDF.URDFExport
                     (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_Okay)
                 {
                     logger.Info("Configuration saved");
+                    if (closingAfterSuccessfulExport)
+                    {
+                        return;
+                    }
                     SaveActiveNode();
                     CommitLinkTreeProjection();
-                    SaveConfigTree(ActiveSWModel, linkTreeSession.CreateProjection(), false);
+                    if (!SaveConfigTree(
+                        ActiveSWModel,
+                        linkTreeSession.CreateProjection(),
+                        false))
+                    {
+                        logger.Error("URDF configuration could not be persisted while closing.");
+                    }
                 }
             }
             catch (Exception e)
@@ -842,7 +885,7 @@ namespace SW2URDF.URDFExport
                 "\u8f93\u5165 Joint \u540d\u79f0");
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMTextBoxJointName = (PropertyManagerPageTextbox)PMGroup.AddControl2(
-                TextBoxLinkNameID, (short)(controlType), caption, (short)alignment, (int)options, tip);
+                TextBoxJointNameID, (short)(controlType), caption, (short)alignment, (int)options, tip);
 
             //Create the global origin coordinate sys label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
@@ -922,7 +965,7 @@ namespace SW2URDF.URDFExport
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMComboBoxAxes = (PropertyManagerPageCombobox)PMGroup.AddControl2(
-                ComboBoxCoordSysID, (short)controlType, caption, (short)alignment, (int)options, tip);
+                ComboBoxAxesID, (short)controlType, caption, (short)alignment, (int)options, tip);
             PMComboBoxAxes.Style =
                 (int)swPropMgrPageComboBoxStyle_e.swPropMgrPageComboBoxStyle_EditBoxReadOnly;
 
@@ -935,7 +978,7 @@ namespace SW2URDF.URDFExport
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMLabelJointType = (PropertyManagerPageLabel)PMGroup.AddControl2(
-                LabelAxesID, (short)controlType, caption, (short)alignment, (int)options, tip);
+                LabelJointTypeID, (short)controlType, caption, (short)alignment, (int)options, tip);
 
             // Create pull down menu for joint type
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Combobox;
@@ -946,11 +989,10 @@ namespace SW2URDF.URDFExport
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMComboBoxJointType = (PropertyManagerPageCombobox)PMGroup.AddControl2(
-                ComboBoxCoordSysID, (short)controlType, caption, (short)alignment, (int)options, tip);
+                ComboBoxJointTypeID, (short)controlType, caption, (short)alignment, (int)options, tip);
             PMComboBoxJointType.Style =
                 (int)swPropMgrPageComboBoxStyle_e.swPropMgrPageComboBoxStyle_EditBoxReadOnly;
-            PMComboBoxJointType.AddItems(new string[] {
-                "Automatically Detect", "continuous", "revolute", "prismatic", "fixed" });
+            PMComboBoxJointType.AddItems(new List<string>(Joint.SelectableTypes).ToArray());
 
             //Create the selection box label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
