@@ -251,6 +251,18 @@ namespace SW2URDF.Test
             Assert.DoesNotContain("Application.DoEvents", package);
         }
 
+        [Fact]
+        public void TestLinkTreeWindowDoesNotForwardReferenceItsOwnResources()
+        {
+            string xaml = ReadRepositoryFile(
+                "SW2URDF", "UI", "LinkTreeCanvas", "LinkTreeCanvasWindow.xaml");
+            int resourcesStart = xaml.IndexOf("<Window.Resources>", StringComparison.Ordinal);
+
+            Assert.True(resourcesStart > 0);
+            Assert.DoesNotContain("StaticResource", xaml.Substring(0, resourcesStart));
+            Assert.Contains("Background=\"#F4F6F8\"", xaml.Substring(0, resourcesStart));
+        }
+
         private static string ReadRepositoryFile(params string[] pathParts)
         {
             DirectoryInfo directory = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);

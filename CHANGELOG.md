@@ -2,6 +2,12 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## 2026-07-23
+
+### Fixed
+
+- Fixed Link tree editor startup in SolidWorks by removing a forward WPF `StaticResource` reference from the root window.
+
 ## 2026-07-22
 
 ### Changed
