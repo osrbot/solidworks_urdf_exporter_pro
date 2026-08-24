@@ -82,10 +82,40 @@ Source: {#BuildPlatform + "\" + BuildConfiguration + "\images\*.png"}; DestDir: 
 Filename: "{reg:HKLM64\SOFTWARE\Microsoft\.NETFramework,InstallRoot}\v4.0.30319\RegAsm.exe"; Parameters: """{app}\SW2URDF.dll"" ""/codebase"""; StatusMsg: "{cm:RegisteringControls}"; Check: IsWin64;
 
 
-[Registry]
-Root: HKLM64; Subkey: "SOFTWARE\SolidWorks\Addins\{{65c9fc17-6a74-45a3-8f84-55185900275d}";        ValueType: none; ValueName: ""; Flags: dontcreatekey deletekey uninsdeletevalue; Check: IsWin64
-Root: HKCU64; Subkey: "Software\SolidWorks\AddInsStartup\{{65c9fc17-6a74-45a3-8f84-55185900275d}"; ValueType: none; ValueName: ""; Flags: dontcreatekey deletekey uninsdeletevalue; Check: IsWin64
-
 [UninstallRun]
 
-Filename: "{reg:HKLM64\SOFTWARE\Microsoft\.NETFramework,InstallRoot}\v4.0.30319\RegAsm.exe"; Parameters:  """{app}\SW2URDF.dll"" ""/unregister"""; StatusMsg: "{cm:UnregisteringControls}"; Check: IsWin64; RunOnceId: "UnregisterSW2URDF";
+Filename: "{reg:HKLM64\SOFTWARE\Microsoft\.NETFramework,InstallRoot}\v4.0.30319\RegAsm.exe"; Parameters:  """{app}\SW2URDF.dll"" ""/unregister"""; StatusMsg: "{cm:UnregisteringControls}"; Check: IsWin64 and CurrentInstallOwnsComRegistration; RunOnceId: "UnregisterSW2URDF";
+
+[Code]
+const
+  Sw2UrdfComRegistrationKey = 'SOFTWARE\Classes\CLSID\{65c9fc17-6a74-45a3-8f84-55185900275d}\InprocServer32';
+
+function NormalizeCodeBasePath(Value: String): String;
+begin
+  Result := Trim(Value);
+  if CompareText(Copy(Result, 1, 8), 'file:///') = 0 then
+    Delete(Result, 1, 8);
+  StringChangeEx(Result, '/', '\', True);
+end;
+
+function CurrentInstallOwnsComRegistration(): Boolean;
+var
+  RegisteredCodeBase: String;
+  RegisteredPath: String;
+  ExpectedPath: String;
+begin
+  Result := False;
+  if not RegQueryStringValue(
+    HKLM64, Sw2UrdfComRegistrationKey, 'CodeBase', RegisteredCodeBase) then
+  begin
+    Log('Skipping COM unregistration: the SW2URDF CodeBase is not registered.');
+    Exit;
+  end;
+
+  RegisteredPath := NormalizeCodeBasePath(RegisteredCodeBase);
+  ExpectedPath := NormalizeCodeBasePath(ExpandConstant('{app}\SW2URDF.dll'));
+  Result := CompareText(RegisteredPath, ExpectedPath) = 0;
+  if not Result then
+    Log('Skipping COM unregistration: this installer does not own the active SW2URDF registration. ' +
+      'Registered=' + RegisteredPath + '; Expected=' + ExpectedPath);
+end;

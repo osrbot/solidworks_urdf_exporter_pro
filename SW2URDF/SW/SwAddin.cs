@@ -138,32 +138,27 @@ namespace SW2URDF.SW
         [ComUnregisterFunction]
         public static void UnregisterFunction(Type t)
         {
+            string guid = t.GUID.ToString();
+            DeleteRegistrySubKeyIfPresent(
+                Microsoft.Win32.Registry.LocalMachine,
+                "SOFTWARE\\SolidWorks\\Addins\\{" + guid + "}");
+            DeleteRegistrySubKeyIfPresent(
+                Microsoft.Win32.Registry.CurrentUser,
+                "Software\\SolidWorks\\AddInsStartup\\{" + guid + "}");
+        }
+
+        private static void DeleteRegistrySubKeyIfPresent(
+            Microsoft.Win32.RegistryKey root,
+            string keyName)
+        {
             try
             {
-                Microsoft.Win32.RegistryKey hklm = Microsoft.Win32.Registry.LocalMachine;
-                Microsoft.Win32.RegistryKey hkcu = Microsoft.Win32.Registry.CurrentUser;
-
-                string keyname = "SOFTWARE\\SolidWorks\\Addins\\{" + t.GUID.ToString() + "}";
-                logger.Info("Unregistering " + keyname);
-                hklm.DeleteSubKey(keyname);
-
-                keyname = "Software\\SolidWorks\\AddInsStartup\\{" + t.GUID.ToString() + "}";
-                logger.Info("Unregistering " + keyname);
-                hkcu.DeleteSubKey(keyname);
-            }
-            catch (NullReferenceException nl)
-            {
-                logger.Error("There was a problem unregistering this dll: " + nl.Message);
-                MessageBox.Show("There was a problem unregistering this dll: \n\"" +
-                    nl.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                logger.Info("Unregistering " + keyName);
+                root.DeleteSubKey(keyName, false);
             }
             catch (Exception e)
             {
-                logger.Error("There was a problem unregistering this dll: " + e.Message);
-                MessageBox.Show("There was a problem unregistering this dll: \n\"" +
-                    e.Message + "\"\nEmail your maintainer with the log file found at " +
-                    Logger.GetFileName());
+                logger.Error("Could not unregister " + keyName + ": " + e.Message);
             }
         }
 

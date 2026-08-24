@@ -8,6 +8,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 - Included the required `solidworkstools.dll` runtime dependency in clean Release installers so first-time installation can register the SolidWorks add-in.
 - Made release packaging fail when either `SW2URDF.dll` or `solidworkstools.dll` is absent from the installer payload.
+- Prevented an older installer copy from unregistering a newer SW2URDF installation by verifying the active COM `CodeBase` before uninstall registration cleanup.
+- Made SolidWorks add-in registry cleanup idempotent and limited it to the two SW2URDF GUID keys without recursive registry deletion.
 
 ## 2026-07-23
 

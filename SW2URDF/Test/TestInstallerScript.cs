@@ -177,10 +177,27 @@ namespace SW2URDF.Test
                 installerScript);
             Assert.Contains("Parameters:  \"\"\"{app}\\SW2URDF.dll\"\" \"\"/unregister\"\"\"",
                 installerScript);
-            Assert.Contains("SOFTWARE\\SolidWorks\\Addins\\{{65c9fc17-6a74-45a3-8f84-55185900275d}",
+            Assert.Contains("Check: IsWin64 and CurrentInstallOwnsComRegistration",
                 installerScript);
-            Assert.Contains("Software\\SolidWorks\\AddInsStartup\\{{65c9fc17-6a74-45a3-8f84-55185900275d}",
-                installerScript);
+            Assert.Contains("RegQueryStringValue(", installerScript);
+            Assert.Contains("HKLM64, Sw2UrdfComRegistrationKey", installerScript);
+            Assert.Contains("\\InprocServer32';", installerScript);
+            Assert.Contains("'CodeBase'", installerScript);
+            Assert.Contains("ExpandConstant('{app}\\SW2URDF.dll')", installerScript);
+            Assert.DoesNotContain("Flags: dontcreatekey deletekey", installerScript);
+        }
+
+        [Fact]
+        public void TestUnregisterOnlyDeletesPrivateAddinKeysIdempotently()
+        {
+            string addin = ReadRepositoryFile("SW2URDF", "SW", "SwAddin.cs");
+
+            Assert.Contains("DeleteRegistrySubKeyIfPresent(", addin);
+            Assert.Contains("root.DeleteSubKey(keyName, false)", addin);
+            Assert.Contains("SOFTWARE\\\\SolidWorks\\\\Addins\\\\{", addin);
+            Assert.Contains("Software\\\\SolidWorks\\\\AddInsStartup\\\\{", addin);
+            Assert.DoesNotContain("DeleteSubKeyTree", addin);
+            Assert.DoesNotContain("DeleteSubKey(\"SOFTWARE\\\\SolidWorks\"", addin);
         }
 
         [Fact]
