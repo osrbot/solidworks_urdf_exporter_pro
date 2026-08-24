@@ -255,8 +255,14 @@ try {
         Get-ChildItem -LiteralPath (Join-Path $BuildOutputDirectory "images") `
             -File -Filter "*.png"
     )
-    if (-not ($PayloadCandidates | Where-Object { $_.Name -eq "SW2URDF.dll" })) {
-        throw "Release build did not produce SW2URDF.dll."
+    $RequiredPayloadFiles = @(
+        "SW2URDF.dll",
+        "solidworkstools.dll"
+    )
+    foreach ($RequiredPayloadFile in $RequiredPayloadFiles) {
+        if (-not ($PayloadCandidates | Where-Object { $_.Name -eq $RequiredPayloadFile })) {
+            throw "Release build did not produce required installer payload: $RequiredPayloadFile"
+        }
     }
     $PayloadRoot = $BuildOutputDirectory.TrimEnd("\") + "\"
     $PayloadInputs = @($PayloadCandidates |

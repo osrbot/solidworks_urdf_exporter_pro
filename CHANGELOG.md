@@ -2,6 +2,13 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## 2026-08-24
+
+### Fixed
+
+- Included the required `solidworkstools.dll` runtime dependency in clean Release installers so first-time installation can register the SolidWorks add-in.
+- Made release packaging fail when either `SW2URDF.dll` or `solidworkstools.dll` is absent from the installer payload.
+
 ## 2026-07-23
 
 ### Fixed

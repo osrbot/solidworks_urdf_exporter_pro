@@ -66,6 +66,9 @@ namespace SW2URDF.Test
             Assert.Contains("Remove-Item -LiteralPath $ResolvedIntermediateOutput -Recurse -Force", buildScript);
             Assert.Contains("$Project = Join-Path $BuildRoot \"SW2URDF\\SW2URDF.csproj\"", buildScript);
             Assert.Contains("\"/p:SolutionDir=$SolutionDir\"", buildScript);
+            Assert.Contains("$RequiredPayloadFiles", buildScript);
+            Assert.Contains("\"solidworkstools.dll\"", buildScript);
+            Assert.Contains("required installer payload: $RequiredPayloadFile", buildScript);
             Assert.DoesNotContain("& $MSBuild $Solution", buildScript);
             Assert.DoesNotContain("$NuGetCommand.Source", buildScript);
         }
@@ -95,6 +98,8 @@ namespace SW2URDF.Test
             Assert.Contains("<Deterministic>true</Deterministic>", project);
             Assert.Contains("<PathMap>$(MSBuildProjectDirectory)=/_/SW2URDF</PathMap>", project);
             Assert.Contains("<DebugType>none</DebugType>", project);
+            Assert.Contains("<HintPath>$(SolidWorksInstallDir)\\solidworkstools.dll</HintPath>", project);
+            Assert.Contains("<Private>True</Private>", project);
             Assert.Contains("<VersionInfoStrictArgument Condition=", project);
             Assert.Contains("$(VersionInfoStrictArgument)", project);
 
