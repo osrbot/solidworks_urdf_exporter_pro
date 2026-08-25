@@ -25,6 +25,7 @@ All notable OSRBot-maintained changes to this fork are documented here.
 ### Fixed
 
 - Excluded the root Link from parent-Joint type validation so `base_link` no longer blocks preview/export with a false unsupported-Joint error.
+- Changed successful legacy-configuration upgrade notices from a blocking English dialog to an English UTF-8 log entry so preview/export continues without an extra confirmation step.
 
 ## 2026-08-24
 

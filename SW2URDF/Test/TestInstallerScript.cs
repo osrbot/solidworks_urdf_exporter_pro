@@ -238,6 +238,8 @@ namespace SW2URDF.Test
                 "SW2URDF", "UI", "ConfigurationSaveInteraction.cs");
             Assert.Contains("ConfigurationSaveStatus.ConfirmationRequired", interaction);
             Assert.Contains("MessageBox.Show", interaction);
+            Assert.Contains("logger.Info(result.InformationMessage)", interaction);
+            Assert.DoesNotContain("MessageBox.Show(result.InformationMessage", interaction);
         }
 
         [Fact]

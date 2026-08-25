@@ -1,4 +1,5 @@
 using SW2URDF.URDFExport;
+using SW2URDF.Utilities;
 using System;
 using System.Windows.Forms;
 
@@ -6,6 +7,8 @@ namespace SW2URDF.UI
 {
     internal static class ConfigurationSaveInteraction
     {
+        private static readonly log4net.ILog logger = Logger.GetLogger();
+
         public static bool Save(
             Func<bool, ConfigurationSaveResult> saveOperation,
             bool confirmChanges)
@@ -37,7 +40,7 @@ namespace SW2URDF.UI
 
             if (!string.IsNullOrWhiteSpace(result.InformationMessage))
             {
-                MessageBox.Show(result.InformationMessage, "SW2URDF");
+                logger.Info(result.InformationMessage);
             }
             return true;
         }
