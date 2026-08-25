@@ -10,10 +10,13 @@ All notable OSRBot-maintained changes to this fork are documented here.
 - Added live outline validation for ROS names, duplicate Links, multiple roots, and skipped heading levels without mutating the current canvas tree.
 - Unified automatic Joint naming across canvas and outline editing: a `_link` suffix is replaced with `_joint`, otherwise `_joint` is appended.
 - Preserved node identity, reusable properties, and CAD bindings for unambiguous same-position Link renames in the outline editor.
+- Added a first-use, eight-step companion tutorial for the complete assembly-to-URDF workflow: SolidWorks preparation, reference frames, Link tree, Joints, inertia validation, collision geometry, ROS1/ROS2 export, and report/viewer checks.
+- Added `Tools > URDF Export Tutorial` so completed, skipped, or dismissed tutorials can always be reopened.
 
 ### Changed
 
 - Removed the legacy `Load Configuration...` CSV merge button from the PropertyManager while retaining CSV serialization compatibility for existing exports.
+- Stored tutorial progress only under the current user's `%LOCALAPPDATA%\OSRBot\SW2URDF` directory; the onboarding flow does not read or write SolidWorks registry keys and never modifies the active model automatically.
 
 ## 2026-08-24
 

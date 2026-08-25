@@ -105,6 +105,8 @@ namespace SW2URDF.UI
         private static string BuildChineseGuideText()
         {
             StringBuilder builder = new StringBuilder();
+            builder.AppendLine("首次导出时可启动 8 步完整导出教程；教程会伴随真实导出界面，覆盖装配体准备、坐标系、Link 树、Joint、惯性、碰撞网格、ROS1/ROS2 输出和结果校验。之后可从 SolidWorks 的 工具 > URDF 导出教程 随时重开。");
+            builder.AppendLine();
             builder.AppendLine("快速功能索引");
             builder.AppendLine();
             builder.AppendLine("- 自动加载 Link 树配置: 如果装配体里存在 SolidWorks 特征 URDF Export Configuration (v1.5)，插件启动导出时会恢复上次保存的 Link/Joint 树、命名、父子关系和已保存属性。v1.4 及更早配置会在保存时自动升级。");
@@ -149,6 +151,8 @@ namespace SW2URDF.UI
         private static string BuildEnglishGuideText()
         {
             StringBuilder builder = new StringBuilder();
+            builder.AppendLine("The first assembly export can open an eight-step companion tutorial covering assembly preparation, frames, the Link tree, Joints, inertia, collision meshes, ROS1/ROS2 output, and final validation. Reopen it at any time from Tools > URDF Export Tutorial.");
+            builder.AppendLine();
             builder.AppendLine("Quick feature index");
             builder.AppendLine();
             builder.AppendLine("- Automatic Link tree loading: when the assembly contains the SolidWorks feature URDF Export Configuration (v1.5), the exporter restores the saved Link/Joint tree, names, parent-child structure, and saved properties at startup. v1.4 and older configurations are upgraded when saved.");

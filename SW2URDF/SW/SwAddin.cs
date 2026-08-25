@@ -78,6 +78,8 @@ namespace SW2URDF.SW
 
         public Hashtable OpenDocs { get; private set; } = new Hashtable();
 
+        private UrdfExportTutorialController tutorialController;
+
         #endregion Local Variables
 
         #region SolidWorks Registration
@@ -216,6 +218,11 @@ namespace SW2URDF.SW
 
         public bool DisconnectFromSW()
         {
+            if (tutorialController != null)
+            {
+                tutorialController.Dispose();
+                tutorialController = null;
+            }
             RemoveCommandMgr();
             DetachEventHandlers();
 
@@ -265,9 +272,11 @@ namespace SW2URDF.SW
             if (ret < 0)
             {
                 logger.Error("Failure to add menu item 'Export as URDF' to menu 'Tools'");
-                return;
             }
-            logger.Info("Adding Assembly export to file menu");
+            else
+            {
+                logger.Info("Adding Assembly export to file menu");
+            }
             ret = SwApp.AddMenuItem5((int)swDocumentTypes_e.swDocPART, add_in_id_,
                 exportMenuText + "@&Tools",
                 -1, "PartURDFExporter", "",
@@ -278,10 +287,26 @@ namespace SW2URDF.SW
             if (ret < 0)
             {
                 logger.Error("Failure to add menu item 'Export as URDF' to menu 'Tools'");
-                return;
+            }
+            else
+            {
+                logger.Info("Adding Part export to file menu");
             }
 
-            logger.Info("Adding Part export to file menu");
+            string tutorialMenuText = ChineseUiText.Translate(
+                "URDF Export Tutorial",
+                "URDF 导出教程");
+            ret = SwApp.AddMenuItem5((int)swDocumentTypes_e.swDocASSEMBLY, add_in_id_,
+                tutorialMenuText + "@&Tools",
+                -1, "URDFExportTutorial", "",
+                ChineseUiText.Translate(
+                    "Show the complete SolidWorks to URDF export workflow",
+                    "显示从 SolidWorks 到 URDF 的完整导出流程"),
+                images);
+            if (ret < 0)
+            {
+                logger.Error("Failure to add menu item 'URDF Export Tutorial' to menu 'Tools'");
+            }
         }
 
         public int ToolbarEnableMethod()
@@ -299,6 +324,12 @@ namespace SW2URDF.SW
             SwApp.RemoveMenu((int)swDocumentTypes_e.swDocPART,
                 exportMenuText + "@&Tools", "");
             logger.Info("Removing part export from file menu");
+            string tutorialMenuText = ChineseUiText.Translate(
+                "URDF Export Tutorial",
+                "URDF 导出教程");
+            SwApp.RemoveMenu((int)swDocumentTypes_e.swDocASSEMBLY,
+                tutorialMenuText + "@&Tools", "");
+            logger.Info("Removing URDF export tutorial from Tools menu");
         }
 
         #endregion UI Methods
@@ -345,6 +376,16 @@ namespace SW2URDF.SW
         {
             try
             {
+                try
+                {
+                    GetTutorialController().OfferBeforeAssemblyExport();
+                }
+                catch (Exception tutorialException)
+                {
+                    logger.Warn(
+                        "The first-use tutorial could not be opened; assembly export will continue.",
+                        tutorialException);
+                }
                 SetupAssemblyExporter();
             }
             catch (Exception e)
@@ -355,6 +396,31 @@ namespace SW2URDF.SW
                     "\u521b\u5efa\u5c5e\u6027\u7ba1\u7406\u5668\u65f6\u53d1\u751f\u9519\u8bef\u3002",
                     e);
             }
+        }
+
+        public void URDFExportTutorial()
+        {
+            try
+            {
+                GetTutorialController().ShowExplicitly();
+            }
+            catch (Exception e)
+            {
+                logger.Warn("The URDF export tutorial could not be opened.", e);
+                ShowMaintenanceError(
+                    "The URDF export tutorial could not be opened.",
+                    "URDF 导出教程无法打开。",
+                    e);
+            }
+        }
+
+        private UrdfExportTutorialController GetTutorialController()
+        {
+            if (tutorialController == null)
+            {
+                tutorialController = new UrdfExportTutorialController();
+            }
+            return tutorialController;
         }
 
         public void SetupPropertyManager()

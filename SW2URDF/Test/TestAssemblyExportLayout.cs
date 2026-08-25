@@ -265,6 +265,8 @@ namespace SW2URDF.Test
             string guide = UsageGuideForm.BuildGuideText(false);
 
             Assert.Contains("Recommended default: ComponentBoxes", guide);
+            Assert.Contains("Tools > URDF Export Tutorial", guide);
+            Assert.Contains("eight-step companion tutorial", guide);
             Assert.Contains("Automatic Link tree loading", guide);
             Assert.Contains("URDF Export Configuration (v1.5)", guide);
             Assert.Contains("Link tree outline editing", guide);

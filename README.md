@@ -19,6 +19,7 @@ The OSRBot-maintained build keeps the original SolidWorks add-in workflow and ad
 - Markdown-style Link tree outline editing, where heading depth (`#`, `##`, `###`) defines the Link hierarchy.
 - Chinese UI localization and safer UTF-8 English export logs.
 - Built-in usage guide with collision strategy recommendations, common URDF material names, project URL, and maintainer information.
+- First-use, eight-step companion tutorial that follows the real assembly export workflow without modifying the SolidWorks model automatically.
 
 ## Latest Release
 
@@ -55,6 +56,29 @@ https://github.com/ros/solidworks_urdf_exporter/releases/tag/1.5.1
 ## Usage
 
 See the [ROS Wiki](http://wiki.ros.org/sw_urdf_exporter) and associated [tutorials](http://wiki.ros.org/sw_urdf_exporter/Tutorials).
+
+### First-Use Export Tutorial
+
+The first time `Tools > Export as URDF` is invoked for an assembly, the exporter offers three explicit choices:
+
+- `Start tutorial`: opens the companion checklist and continues into the real exporter.
+- `Skip once`: continues the export and asks again on a later assembly export.
+- `Do not remind`: suppresses future automatic prompts.
+
+The tutorial can always be reopened from `Tools > URDF Export Tutorial`. Progress is stored per Windows user in `%LOCALAPPDATA%\OSRBot\SW2URDF\urdf-export-tutorial-v1.state`; it does not use or modify SolidWorks registry keys. Closing an in-progress tutorial preserves its current step. Completing or permanently dismissing it suppresses automatic prompts, but the Tools menu entry remains available.
+
+The eight tutorial steps follow the actual export order:
+
+1. Prepare an assembly copy, resolve components, assign material density, rebuild, save, and verify SolidWorks mass properties.
+2. Create `Origin_global`, per-Joint coordinate systems, and motion axes using a consistent right-handed convention.
+3. Build and bind the Link tree, including free-canvas editing and Markdown outline editing with `#`, `##`, and `###` headings.
+4. Configure Joint names, types, parent/child relationships, origins, axes, limits, dynamics, and optional Mimic relationships.
+5. Validate mass, center of mass, the COM inertia tensor, rigid-body inequalities, and the inertia ellipsoid.
+6. Select visual/collision geometry, collision strategy, and STL reduction while checking simulator cost and geometric coverage.
+7. Export matching ROS1 and ROS2 packages with complete `urdf` and `meshes` directories.
+8. Review `export_report.md`, `inertial_validation.csv`, and `mesh_manifest.csv`, then inspect Visual, Collision, Inertia, COM, axes, and Joint motion in a URDF viewer.
+
+The companion window is intentionally instructional: it does not automate clicks, save files, alter CAD bindings, or mutate the model. This keeps the tutorial version-independent and lets the user verify each engineering decision in the real exporter.
 
 ### User-Friendly Workflow Features
 

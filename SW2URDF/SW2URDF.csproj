@@ -330,6 +330,10 @@
     <Compile Include="UI\ChineseUiText.cs" />
     <Compile Include="UI\ConfigurationSaveInteraction.cs" />
     <Compile Include="UI\InertiaPreview.cs" />
+    <Compile Include="UI\UrdfExportTutorialContent.cs" />
+    <Compile Include="UI\UrdfExportTutorialController.cs" />
+    <Compile Include="UI\UrdfExportTutorialForm.cs" />
+    <Compile Include="UI\UrdfExportTutorialState.cs" />
     <Compile Include="UI\LinkTreeCanvas\CanvasContracts.cs" />
     <Compile Include="UI\LinkTreeCanvas\LinkTreeDocument.cs" />
     <Compile Include="UI\LinkTreeCanvas\LinkTreeOutline.cs" />
@@ -347,6 +351,7 @@
     <Compile Include="Test\TestCommon.cs" />
     <Compile Include="Test\TestCSVImportExport.cs" />
     <Compile Include="Test\TestAssemblyExportLayout.cs" />
+    <Compile Include="Test\TestUrdfExportTutorial.cs" />
     <Compile Include="Test\TestExportHelper.cs" />
     <Compile Include="Test\TestInstallerScript.cs" />
     <Compile Include="Test\TestInertiaEllipsoid.cs" />
