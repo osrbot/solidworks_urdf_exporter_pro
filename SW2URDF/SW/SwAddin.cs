@@ -79,6 +79,7 @@ namespace SW2URDF.SW
         public Hashtable OpenDocs { get; private set; } = new Hashtable();
 
         private UrdfExportTutorialController tutorialController;
+        private ExportPropertyManager activeAssemblyExportPropertyManager;
 
         #endregion Local Variables
 
@@ -218,6 +219,7 @@ namespace SW2URDF.SW
 
         public bool DisconnectFromSW()
         {
+            CloseActiveAssemblyExportPropertyManager();
             if (tutorialController != null)
             {
                 tutorialController.Dispose();
@@ -425,14 +427,75 @@ namespace SW2URDF.SW
 
         public void SetupPropertyManager()
         {
-            ExportPropertyManager pm = new ExportPropertyManager((SldWorks)SwApp);
-            logger.Info("Loading config tree");
-            bool success = pm.LoadConfigTree();
-
-            if (success)
+            if (activeAssemblyExportPropertyManager != null)
             {
-                logger.Info("Showing property manager");
-                pm.Show();
+                logger.Info("The assembly export property manager is already open.");
+                return;
+            }
+
+            ExportPropertyManager propertyManager =
+                new ExportPropertyManager((SldWorks)SwApp);
+            propertyManager.Closed += AssemblyExportPropertyManagerClosed;
+            activeAssemblyExportPropertyManager = propertyManager;
+
+            try
+            {
+                logger.Info("Loading config tree");
+                bool success = propertyManager.LoadConfigTree();
+
+                if (success)
+                {
+                    logger.Info("Showing property manager");
+                    propertyManager.Show();
+                }
+                else
+                {
+                    ReleaseAssemblyExportPropertyManager(propertyManager);
+                }
+            }
+            catch
+            {
+                ReleaseAssemblyExportPropertyManager(propertyManager);
+                throw;
+            }
+        }
+
+        private void AssemblyExportPropertyManagerClosed(object sender, EventArgs e)
+        {
+            ReleaseAssemblyExportPropertyManager(sender as ExportPropertyManager);
+        }
+
+        private void ReleaseAssemblyExportPropertyManager(ExportPropertyManager propertyManager)
+        {
+            if (propertyManager == null ||
+                !ReferenceEquals(activeAssemblyExportPropertyManager, propertyManager))
+            {
+                return;
+            }
+
+            propertyManager.Closed -= AssemblyExportPropertyManagerClosed;
+            activeAssemblyExportPropertyManager = null;
+        }
+
+        private void CloseActiveAssemblyExportPropertyManager()
+        {
+            ExportPropertyManager propertyManager = activeAssemblyExportPropertyManager;
+            if (propertyManager == null)
+            {
+                return;
+            }
+
+            propertyManager.Closed -= AssemblyExportPropertyManagerClosed;
+            activeAssemblyExportPropertyManager = null;
+            try
+            {
+                propertyManager.Close(false);
+            }
+            catch (Exception exception)
+            {
+                logger.Warn(
+                    "The assembly export property manager could not be closed during add-in shutdown.",
+                    exception);
             }
         }
 

@@ -55,6 +55,10 @@ namespace SW2URDF.URDFExport
         public LinkNode rightClickedNode;
         private LinkTreeSession linkTreeSession;
         private bool closingAfterSuccessfulExport;
+        private bool closingProgrammatically;
+        private int pendingCloseReason =
+            (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_UnknownReason;
+        private LinkNode pendingCloseProjection;
         [NonSerialized]
         private readonly IExportSessionDraftStore exportSessionDraftStore;
         private readonly ContextMenuStrip docMenu;
@@ -90,6 +94,9 @@ namespace SW2URDF.URDFExport
 
         public TreeView Tree
         { get; set; }
+
+        [field: NonSerialized]
+        internal event EventHandler Closed;
 
         private bool automaticallySwitched = false;
 
@@ -128,7 +135,15 @@ namespace SW2URDF.URDFExport
 
         public void Close(bool ok)
         {
-            PMPage.Close(ok);
+            closingProgrammatically = true;
+            try
+            {
+                PMPage.Close(ok);
+            }
+            finally
+            {
+                closingProgrammatically = false;
+            }
         }
 
         //The following runs when a new instance of the class is created
@@ -481,44 +496,68 @@ namespace SW2URDF.URDFExport
 
         void IPropertyManagerPage2Handler9.OnClose(int Reason)
         {
+            logger.Info("URDF property manager close requested with reason " + Reason + ".");
+            if (ShouldRejectExternalClose(Reason))
+            {
+                logger.Warn(
+                    "SolidWorks requested an external close of the URDF property manager " +
+                    "while the Link tree was being edited. The close request was rejected.");
+                throw new COMException(
+                    "The URDF Link tree is still being edited.",
+                    1);
+            }
+
             try
             {
-                if (Reason ==
-                    (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_Cancel)
+                pendingCloseReason = Reason;
+                pendingCloseProjection = null;
+                if (!closingAfterSuccessfulExport)
                 {
-                    logger.Info("Configuration canceled");
                     SaveActiveNode();
                     CommitLinkTreeProjection();
-                    SaveExportSessionDraft(linkTreeSession.CreateProjection());
-                }
-                else if (Reason ==
-                    (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_Okay)
-                {
-                    logger.Info("Configuration saved");
-                    if (closingAfterSuccessfulExport)
-                    {
-                        return;
-                    }
-                    SaveActiveNode();
-                    CommitLinkTreeProjection();
-                    if (!SaveConfigTree(
-                        ActiveSWModel,
-                        linkTreeSession.CreateProjection(),
-                        false))
-                    {
-                        logger.Error("URDF configuration could not be persisted while closing.");
-                        SaveExportSessionDraft(linkTreeSession.CreateProjection());
-                    }
+                    pendingCloseProjection = linkTreeSession.CreateProjection();
                 }
             }
             catch (Exception e)
             {
                 logger.Error("Exception caught on close ", e);
-                ShowPropertyManagerError(
-                    "There was a problem closing the property manager.",
-                    "\u5173\u95ed\u5c5e\u6027\u7ba1\u7406\u5668\u65f6\u53d1\u751f\u9519\u8bef\u3002",
-                    e);
             }
+        }
+
+        private bool ShouldRejectExternalClose(int reason)
+        {
+            if (closingAfterSuccessfulExport || closingProgrammatically)
+            {
+                return false;
+            }
+
+            return reason ==
+                    (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_UnknownReason ||
+                reason ==
+                    (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_Closed;
+        }
+
+        private void CompletePropertyManagerClose()
+        {
+            if (closingAfterSuccessfulExport || pendingCloseProjection == null)
+            {
+                return;
+            }
+
+            if (pendingCloseReason ==
+                (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_Okay)
+            {
+                logger.Info("Configuration saved");
+                if (!SaveConfigTree(ActiveSWModel, pendingCloseProjection, false))
+                {
+                    logger.Error("URDF configuration could not be persisted after closing.");
+                    SaveExportSessionDraft(pendingCloseProjection);
+                }
+                return;
+            }
+
+            logger.Info("Configuration editing ended without a formal save; preserving a draft.");
+            SaveExportSessionDraft(pendingCloseProjection);
         }
 
         void IPropertyManagerPage2Handler9.OnGainedFocus(int Id)
@@ -1329,8 +1368,26 @@ namespace SW2URDF.URDFExport
 
         void IPropertyManagerPage2Handler9.AfterClose()
         {
-            logger.Info("AfterClose called. This method no longer throws an Exception. It just " +
-                "silently does nothing. Ok, except for this logging message");
+            try
+            {
+                CompletePropertyManagerClose();
+            }
+            catch (Exception exception)
+            {
+                logger.Error("Exception caught after closing the property manager.", exception);
+                ShowPropertyManagerError(
+                    "There was a problem finalizing the property manager close.",
+                    "\u5b8c\u6210\u5c5e\u6027\u7ba1\u7406\u5668\u5173\u95ed\u64cd\u4f5c\u65f6\u53d1\u751f\u9519\u8bef\u3002",
+                    exception);
+            }
+            finally
+            {
+                EventHandler closed = Closed;
+                if (closed != null)
+                {
+                    closed(this, EventArgs.Empty);
+                }
+            }
         }
 
         int IPropertyManagerPage2Handler9.OnActiveXControlCreated(int Id, bool Status)

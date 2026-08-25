@@ -289,6 +289,78 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestPropertyManagerHasAnAddinOwnerUntilAfterClose()
+        {
+            string addin = ReadRepositoryFile("SW2URDF", "SW", "SwAddin.cs");
+            string propertyManager = ReadRepositoryFile(
+                "SW2URDF", "URDFExport", "ExportPropertyManager.cs");
+
+            Assert.Contains(
+                "private ExportPropertyManager activeAssemblyExportPropertyManager;",
+                addin);
+            Assert.Contains(
+                "propertyManager.Closed += AssemblyExportPropertyManagerClosed;",
+                addin);
+            Assert.Contains(
+                "activeAssemblyExportPropertyManager = propertyManager;",
+                addin);
+            Assert.Contains("internal event EventHandler Closed;", propertyManager);
+            Assert.Contains(
+                "swPropertyManagerPageClose_Closed",
+                propertyManager);
+            Assert.Contains(
+                "throw new COMException(",
+                propertyManager);
+
+            int afterClose = propertyManager.IndexOf(
+                "void IPropertyManagerPage2Handler9.AfterClose()",
+                StringComparison.Ordinal);
+            Assert.True(afterClose >= 0);
+            Assert.Contains(
+                "closed(this, EventArgs.Empty)",
+                propertyManager.Substring(afterClose));
+        }
+
+        [Fact]
+        public void TestPropertyManagerDefersPersistenceUntilAfterClose()
+        {
+            string propertyManager = ReadRepositoryFile(
+                "SW2URDF", "URDFExport", "ExportPropertyManager.cs");
+            int onClose = propertyManager.IndexOf(
+                "void IPropertyManagerPage2Handler9.OnClose(int Reason)",
+                StringComparison.Ordinal);
+            int onCloseEnd = propertyManager.IndexOf(
+                "private bool ShouldRejectExternalClose",
+                onClose,
+                StringComparison.Ordinal);
+            int completeClose = propertyManager.IndexOf(
+                "private void CompletePropertyManagerClose()",
+                onClose,
+                StringComparison.Ordinal);
+
+            Assert.True(onClose >= 0);
+            Assert.True(onCloseEnd > onClose);
+            Assert.True(completeClose > onClose);
+            string onCloseBody = propertyManager.Substring(onClose, onCloseEnd - onClose);
+            Assert.DoesNotContain("SaveConfigTree(", onCloseBody);
+            Assert.DoesNotContain("SaveExportSessionDraft(", onCloseBody);
+            Assert.Contains("SaveConfigTree(", propertyManager.Substring(completeClose));
+            Assert.Contains("SaveExportSessionDraft(", propertyManager.Substring(completeClose));
+        }
+
+        [Fact]
+        public void TestDisplayStateCallbacksRejectUnexpectedComObjects()
+        {
+            string eventHandling = ReadRepositoryFile("SW2URDF", "SW", "EventHandling.cs");
+
+            Assert.DoesNotContain("Component2 component = (Component2)swObject", eventHandling);
+            Assert.Contains(
+                "CommonSwOperations.TryCastComObject<Component2>",
+                eventHandling);
+            Assert.Contains("catch (COMException exception)", eventHandling);
+        }
+
+        [Fact]
         public void TestExportCoreDoesNotPumpWinFormsEventsDuringRetries()
         {
             string exportHelper = ReadRepositoryFile(

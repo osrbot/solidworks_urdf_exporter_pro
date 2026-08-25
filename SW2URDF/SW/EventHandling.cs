@@ -22,7 +22,11 @@ THE SOFTWARE.
 
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
+using SW2URDF.URDFExport;
+using SW2URDF.Utilities;
+using System;
 using System.Collections;
+using System.Runtime.InteropServices;
 
 namespace SW2URDF.SW
 {
@@ -152,6 +156,7 @@ namespace SW2URDF.SW
 
     public class AssemblyEventHandler : DocumentEventHandler
     {
+        private static readonly log4net.ILog logger = Logger.GetLogger();
         private readonly AssemblyDoc doc;
         private readonly SwAddin swAddin;
 
@@ -204,7 +209,13 @@ namespace SW2URDF.SW
         //attach events to a component if it becomes resolved
         protected int ComponentStateChange(object componentModel, short newCompState)
         {
-            ModelDoc2 modDoc = (ModelDoc2)componentModel;
+            ModelDoc2 modDoc = CommonSwOperations.TryCastComObject<ModelDoc2>(
+                componentModel,
+                "handling a component state change");
+            if (modDoc == null)
+            {
+                return 0;
+            }
             swComponentSuppressionState_e newState = (swComponentSuppressionState_e)newCompState;
 
             switch (newState)
@@ -257,18 +268,50 @@ namespace SW2URDF.SW
 
         private int ComponentDisplayStateChangeNotify(object swObject)
         {
-            Component2 component = (Component2)swObject;
-            ModelDoc2 modDoc = (ModelDoc2)component.GetModelDoc();
-
-            return ComponentStateChange(modDoc);
+            return HandleComponentDisplayChange(
+                swObject,
+                "handling a component display-state change");
         }
 
         private int ComponentVisualPropertiesChangeNotify(object swObject)
         {
-            Component2 component = (Component2)swObject;
-            ModelDoc2 modDoc = (ModelDoc2)component.GetModelDoc();
+            return HandleComponentDisplayChange(
+                swObject,
+                "handling a component visual-properties change");
+        }
 
-            return ComponentStateChange(modDoc);
+        private int HandleComponentDisplayChange(object swObject, string context)
+        {
+            try
+            {
+                Component2 component = CommonSwOperations.TryCastComObject<Component2>(
+                    swObject,
+                    context);
+                if (component == null)
+                {
+                    return 0;
+                }
+
+                ModelDoc2 modDoc = CommonSwOperations.TryCastComObject<ModelDoc2>(
+                    component.GetModelDoc(),
+                    context);
+                if (modDoc == null)
+                {
+                    return 0;
+                }
+
+                return ComponentStateChange(modDoc);
+            }
+            catch (COMException exception)
+            {
+                logger.Warn("SolidWorks rejected a COM call while " + context + ".", exception);
+                return 0;
+            }
+            catch (Exception exception)
+            {
+                logger.Warn("Ignoring an unexpected callback failure while " + context + ".", exception);
+                return 0;
+            }
         }
     }
 

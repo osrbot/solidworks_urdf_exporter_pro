@@ -24,6 +24,11 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Fixed
 
+- Kept the URDF PropertyManager alive for its full SolidWorks COM lifetime, rejected accidental
+  external close requests while editing the Link tree, and isolated assembly display-state
+  callbacks from invalid or unavailable COM objects.
+- Deferred configuration persistence from `OnClose` to `AfterClose`, as required by the
+  SolidWorks PropertyManager lifecycle, while preserving non-saved sessions as recovery drafts.
 - Excluded the root Link from parent-Joint type validation so `base_link` no longer blocks preview/export with a false unsupported-Joint error.
 - Changed successful legacy-configuration upgrade notices from a blocking English dialog to an English UTF-8 log entry so preview/export continues without an extra confirmation step.
 - Prevented preview/export from creating or upgrading a SolidWorks configuration Feature while the PropertyManager is open; the computed Link tree is now protected by a local recovery draft and formally persisted from the following export window.
