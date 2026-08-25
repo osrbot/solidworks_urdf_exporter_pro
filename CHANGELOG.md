@@ -2,6 +2,19 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## 2026-08-25
+
+### Added
+
+- Added transactional Markdown-style Link tree outline editing inside the canvas, using `#`, `##`, and `###` headings for hierarchy depth.
+- Added live outline validation for ROS names, duplicate Links, multiple roots, and skipped heading levels without mutating the current canvas tree.
+- Unified automatic Joint naming across canvas and outline editing: a `_link` suffix is replaced with `_joint`, otherwise `_joint` is appended.
+- Preserved node identity, reusable properties, and CAD bindings for unambiguous same-position Link renames in the outline editor.
+
+### Changed
+
+- Removed the legacy `Load Configuration...` CSV merge button from the PropertyManager while retaining CSV serialization compatibility for existing exports.
+
 ## 2026-08-24
 
 ### Fixed

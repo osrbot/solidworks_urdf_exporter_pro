@@ -1432,6 +1432,10 @@ namespace SW2URDF.Test
         public void DefaultJointNamePolicyDoesNotClaimCustomJointNames()
         {
             Assert.True(LinkTreeDocument.UsesDefaultJointName(
+                "sensor_joint",
+                "base_link",
+                "sensor_link"));
+            Assert.True(LinkTreeDocument.UsesDefaultJointName(
                 "base_link_sensor_link_joint",
                 "base_link",
                 "sensor_link"));
@@ -1439,6 +1443,15 @@ namespace SW2URDF.Test
                 "steering_axis",
                 "base_link",
                 "sensor_link"));
+        }
+
+        [Theory]
+        [InlineData("camera_link", "camera_joint")]
+        [InlineData("imu", "imu_joint")]
+        [InlineData("Left_front_wheel_link", "Left_front_wheel_joint")]
+        public void DefaultJointNameIsDerivedOnlyFromLinkName(string linkName, string expected)
+        {
+            Assert.Equal(expected, LinkTreeDocument.BuildDefaultJointName(linkName));
         }
 
         private static LinkTreeDocument CreateSampleDocument()

@@ -267,7 +267,8 @@ namespace SW2URDF.Test
             Assert.Contains("Recommended default: ComponentBoxes", guide);
             Assert.Contains("Automatic Link tree loading", guide);
             Assert.Contains("URDF Export Configuration (v1.5)", guide);
-            Assert.Contains("Load Configuration...", guide);
+            Assert.Contains("Link tree outline editing", guide);
+            Assert.Contains("#/##/###", guide);
             Assert.Contains("config/inertial_validation.csv", guide);
             Assert.Contains("CylinderPrimitive", guide);
             Assert.Contains("export_report.md", guide);

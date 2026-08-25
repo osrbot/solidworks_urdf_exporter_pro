@@ -16,7 +16,7 @@ The OSRBot-maintained build keeps the original SolidWorks add-in workflow and ad
 - STL mesh reduction ratio control for lighter exported mesh packages.
 - Automatic Link tree configuration loading from the SolidWorks assembly feature `URDF Export Configuration (v1.5)`.
 - Transactional Link tree canvas for adding, renaming, moving, box-selecting, copying, and pasting Link groups before export.
-- CSV configuration loading and merge support through `Load Configuration...` for reusing old project values.
+- Markdown-style Link tree outline editing, where heading depth (`#`, `##`, `###`) defines the Link hierarchy.
 - Chinese UI localization and safer UTF-8 English export logs.
 - Built-in usage guide with collision strategy recommendations, common URDF material names, project URL, and maintainer information.
 
@@ -64,6 +64,17 @@ When a saved tree is loaded, SolidWorks component references are reconnected fro
 
 Use `Edit Link Tree...` to open the free canvas. The canvas edits a working copy: `Cancel` discards all structural changes, while `Apply` validates and commits them as one transaction. Topology, URDF configuration, and SolidWorks CAD bindings are stored separately and are combined only when the PropertyManager or exporter requests a projection.
 
+For a large hierarchy, click `Outline Edit` in the canvas and edit one Link per line. Markdown heading depth defines the parent-child relationship:
+
+```text
+# base_link
+## camera_link
+## left_steering_link
+### left_front_wheel_link
+```
+
+Both `#base_link` and `# base_link` are accepted. Existing Links matched by name keep their Joint configuration, reusable URDF values, and SolidWorks CAD bindings. A plain-text rename in the same sibling position also keeps node identity and bindings. New headings create new Links with generated `fixed` Joints; `camera_link` becomes `camera_joint`, while a name without the `_link` suffix receives `_joint`. Joint names and types can then be changed on the canvas. Removing a heading removes that Link from the candidate tree. Invalid ROS names, duplicate names, multiple roots, and skipped heading levels are reported without replacing the canvas document. Apply the outline to update the canvas, then apply the canvas to commit the complete Link tree transaction.
+
 Renaming a Joint updates existing mimic references. Deleting a Joint that is still referenced by a mimic relation is rejected. Reparenting a Link keeps its CAD component assignment but forces Joint kinematics and limits to be recomputed before export, so values calculated for the old relationship cannot be exported silently.
 
 The recompute requirements are saved with the assembly. Closing the PropertyManager or SolidWorks after a topology or Joint-type change does not lose them: the next export automatically enables the required computations and clears each marker only after the computed configuration has been saved and accepted.
@@ -73,8 +84,6 @@ Copy/paste duplicates the selected topology and reusable URDF configuration, inc
 Each paste operation is treated as an independent group. Repeatedly pasting the same symmetric Link group keeps Mimic references inside that paste batch instead of pointing later copies back to the first pasted group. Link and Joint names are generated uniquely and can then be edited normally.
 
 Joint type validation uses the six standard URDF values: `fixed`, `revolute`, `continuous`, `prismatic`, `floating`, and `planar`. The editor also preserves the exporter-only `Automatically Detect` configuration state; it must resolve to one of the standard values during computation before URDF output. Type changes normalize incompatible saved fields. In particular, fixed and floating Joints remove stale motion data; continuous Joints keep effort, velocity, dynamics, and Mimic settings while removing lower and upper position bounds.
-
-`Load Configuration...` is a different feature. It imports values from a CSV export and opens a modal merge window, preventing edits made against a newer Link tree from being overwritten by an older merge snapshot. Use it when you want to reuse values from an old robot project, such as mass/inertia, visual/collision settings, joint kinematics, or other joint parameters. It is useful after a CAD redesign where the tree shape is similar but some values should come from a previous export.
 
 For fast review after export, check:
 

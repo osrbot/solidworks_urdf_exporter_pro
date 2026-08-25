@@ -332,6 +332,10 @@
     <Compile Include="UI\InertiaPreview.cs" />
     <Compile Include="UI\LinkTreeCanvas\CanvasContracts.cs" />
     <Compile Include="UI\LinkTreeCanvas\LinkTreeDocument.cs" />
+    <Compile Include="UI\LinkTreeCanvas\LinkTreeOutline.cs" />
+    <Compile Include="UI\LinkTreeCanvas\LinkTreeOutlineWindow.xaml.cs">
+      <DependentUpon>LinkTreeOutlineWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\LinkTreeCanvas\LinkTreeCanvasWindow.xaml.cs">
       <DependentUpon>LinkTreeCanvasWindow.xaml</DependentUpon>
     </Compile>
@@ -350,6 +354,7 @@
     <Compile Include="Test\TestInertiaPreview.cs" />
     <Compile Include="Test\TestLogger.cs" />
     <Compile Include="Test\TestLinkTreeCanvas.cs" />
+    <Compile Include="Test\TestLinkTreeOutline.cs" />
     <Compile Include="Test\TestMathOps.cs" />
     <Compile Include="Test\TestMeshReduction.cs" />
     <Compile Include="Test\TestOperationHeartbeat.cs" />
@@ -493,6 +498,10 @@
   </ItemGroup>
   <ItemGroup>
     <Page Include="UI\LinkTreeCanvas\LinkTreeCanvasWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="UI\LinkTreeCanvas\LinkTreeOutlineWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

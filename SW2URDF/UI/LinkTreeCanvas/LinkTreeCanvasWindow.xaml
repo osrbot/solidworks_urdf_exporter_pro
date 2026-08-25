@@ -39,12 +39,14 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Link 树编辑器" FontWeight="SemiBold" FontSize="17" VerticalAlignment="Center" Margin="0,0,20,0" />
                     <Button x:Name="AddChildToolbarButton" Content="+ 添加子 Link" Click="AddChildClick" />
+                    <Button Content="大纲编辑" Click="OutlineEditClick" />
                     <Button Content="复制" Click="CopyClick" />
                     <Button Content="粘贴" Click="PasteClick" />
                     <Button Content="自动整理" Click="AutoLayoutClick" />
                     <Button Content="重置视图" Click="ResetViewClick" />
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="拖动节点自由排布；拖到另一节点上可改变父级" Foreground="#667085" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="拖动节点可调整父子关系" TextTrimming="CharacterEllipsis"
+                           Foreground="#667085" VerticalAlignment="Center" HorizontalAlignment="Center" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button Content="取消" Click="CancelClick" />
                     <Button Content="应用" Margin="0" Click="ApplyClick" />

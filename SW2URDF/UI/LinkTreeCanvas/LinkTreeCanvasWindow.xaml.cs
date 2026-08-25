@@ -348,7 +348,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                     if (updateGeneratedJointName)
                     {
                         dragged.JointName = MakeUniqueJointName(
-                            LinkTreeDocument.BuildDefaultJointName(target.Name, dragged.Name),
+                            LinkTreeDocument.BuildDefaultJointName(dragged.Name),
                             dragged.Id);
                     }
                     int siblingIndex = document.ChildrenOf(target.Id).Count(node => node.Id != dragged.Id);
@@ -520,7 +520,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 parent.X + LayoutColumnGap,
                 parent.Y + siblingCount * LayoutRowGap);
             child.JointName = MakeUniqueJointName(
-                LinkTreeDocument.BuildDefaultJointName(parent.Name, child.Name),
+                LinkTreeDocument.BuildDefaultJointName(child.Name),
                 child.Id);
             document.Nodes.Add(child);
             RenderDocument();
@@ -586,9 +586,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                     parentNode.Name,
                     oldName))
                 {
-                    string nextDefaultJointName = LinkTreeDocument.BuildDefaultJointName(
-                        parentNode.Name,
-                        value);
+                    string nextDefaultJointName = LinkTreeDocument.BuildDefaultJointName(value);
                     selectedNode.JointName = MakeUniqueJointName(nextDefaultJointName, selectedNode.Id);
                     JointNameTextBox.Text = selectedNode.JointName;
                 }
@@ -720,11 +718,45 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         private void AutoLayoutClick(object sender, RoutedEventArgs e)
         {
+            AutoLayoutDocument();
+            UpdateStatus("已按层级自动整理");
+        }
+
+        private void OutlineEditClick(object sender, RoutedEventArgs e)
+        {
+            if (selectedNodeIds.Count == 1)
+            {
+                if (!CommitLinkName())
+                {
+                    UpdateStatus("请先修正节点名称");
+                    return;
+                }
+                JointNameCommit(null, new RoutedEventArgs());
+            }
+
+            LinkTreeOutlineWindow outlineWindow = new LinkTreeOutlineWindow(document)
+            {
+                Owner = this
+            };
+            if (outlineWindow.ShowDialog() != true || outlineWindow.ResultDocument == null)
+            {
+                return;
+            }
+
+            document = outlineWindow.ResultDocument;
+            selectedNodeIds.Clear();
+            selectedNodeId = null;
+            AutoLayoutDocument();
+            SelectNode(document.Root.Id);
+            UpdateStatus("已从大纲更新画布；点击应用后才会提交 Link 树");
+        }
+
+        private void AutoLayoutDocument()
+        {
             int row = 0;
             LayoutSubtree(document.Root, 0, ref row);
             RenderDocument();
             FitDocumentToViewport();
-            UpdateStatus("已按层级自动整理");
         }
 
         private double LayoutSubtree(LinkTreeNode node, int depth, ref int row)
@@ -1065,7 +1097,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                     LinkTreeNode parent = document.Find(copy.ParentId.Value) ?? copies.Values.FirstOrDefault(node => node.Id == copy.ParentId.Value);
                     string parentName = parent == null ? "link" : parent.Name;
                     copy.JointName = MakeUniqueJointName(
-                        LinkTreeDocument.BuildDefaultJointName(parentName, copy.Name),
+                        LinkTreeDocument.BuildDefaultJointName(copy.Name),
                         copy.Id);
                 }
                 document.Nodes.Add(copy);

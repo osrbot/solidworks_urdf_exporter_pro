@@ -191,9 +191,14 @@ namespace SW2URDF.UI.LinkTreeCanvas
             return null;
         }
 
-        public static string BuildDefaultJointName(string parentName, string linkName)
+        public static string BuildDefaultJointName(string linkName)
         {
-            return parentName + "_" + linkName + "_joint";
+            string baseName = linkName ?? string.Empty;
+            if (baseName.EndsWith("_link", StringComparison.OrdinalIgnoreCase))
+            {
+                baseName = baseName.Substring(0, baseName.Length - "_link".Length);
+            }
+            return baseName + "_joint";
         }
 
         public static bool UsesDefaultJointName(
@@ -202,9 +207,13 @@ namespace SW2URDF.UI.LinkTreeCanvas
             string linkName)
         {
             return string.Equals(
-                jointName,
-                BuildDefaultJointName(parentName, linkName),
-                StringComparison.OrdinalIgnoreCase);
+                    jointName,
+                    BuildDefaultJointName(linkName),
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(
+                    jointName,
+                    parentName + "_" + linkName + "_joint",
+                    StringComparison.OrdinalIgnoreCase);
         }
 
         public static LinkTreeNode NewNode(string name, Guid? parentId, double x, double y)
@@ -214,7 +223,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 Id = Guid.NewGuid(),
                 ParentId = parentId,
                 Name = name,
-                JointName = parentId.HasValue ? name.Replace("_link", "") + "_joint" : string.Empty,
+                JointName = parentId.HasValue ? BuildDefaultJointName(name) : string.Empty,
                 JointType = parentId.HasValue ? "fixed" : string.Empty,
                 X = x,
                 Y = y

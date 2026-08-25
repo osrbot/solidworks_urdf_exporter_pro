@@ -63,7 +63,6 @@ namespace SW2URDF.URDFExport
         private PropertyManagerPageGroup PMGroup;
         private PropertyManagerPageSelectionbox PMSelection;
         private PropertyManagerPageButton PMButtonExport;
-        private PropertyManagerPageButton PMButtonLoad;
         private PropertyManagerPageButton PMButtonEditTree;
         private PropertyManagerPageTextbox PMTextBoxLinkName;
         private PropertyManagerPageTextbox PMTextBoxJointName;
@@ -111,7 +110,6 @@ namespace SW2URDF.URDFExport
         private const int LabelJointTypeID = 23;
         private const int IDGlobalCoordsys = 24;
         private const int IDLabelGlobalCoordsys = 25;
-        private const int LoadConfigurationID = 26;
         private const int ComputeMassInertiaID = 27;
         private const int ComputeVisualCollisionID = 28;
         private const int ComputeJointKinematicsID = 29;
@@ -394,8 +392,6 @@ namespace SW2URDF.URDFExport
             CommitLinkTreeProjection();
 
             LinkNode existingBaseNode = (LinkNode)linkTreeSession.CreateProjection().Clone();
-            IPropertyManagerPageControl loadConfigurationControl = (IPropertyManagerPageControl)PMButtonLoad;
-
             if (existingBaseNode == null || !existingBaseNode.RebuildLink().AreRequiredFieldsSatisfied())
             {
                 logger.Warn("Loading a configuration with an incomplete export");
@@ -455,10 +451,6 @@ namespace SW2URDF.URDFExport
             {
                 case ButtonExportID:
                     ExportButtonPress();
-                    break;
-
-                case LoadConfigurationID:
-                    LoadFromCSV();
                     break;
 
                 case EditLinkTreeID:
@@ -1068,21 +1060,6 @@ namespace SW2URDF.URDFExport
             PMButtonEditTree = PMGroup.AddControl2(
                 EditLinkTreeID, (short)controlType, caption, (short)alignment, (int)options, tip);
             (PMButtonEditTree as IPropertyManagerPageControl).Width = 200;
-
-            // Load Configuration button
-            controlType = (int)swPropertyManagerPageControlType_e.swControlType_Button;
-            caption = ChineseUiText.Translate(
-                "Load Configuration...",
-                "\u52a0\u8f7d\u914d\u7f6e...");
-            tip = ChineseUiText.Translate(
-                "Import values from a CSV file",
-                "\u4ece CSV \u6587\u4ef6\u5bfc\u5165\u6570\u503c");
-            alignment = 0;// (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_DoubleIndent;
-            options = (int)swAddControlOptions_e.swControlOptions_Visible +
-                (int)swAddControlOptions_e.swControlOptions_Enabled;
-            PMButtonLoad = PMGroup.AddControl2(
-                LoadConfigurationID, (short)controlType, caption, (short)alignment, (int)options, tip);
-            (PMButtonLoad as IPropertyManagerPageControl).Width = 200;
 
             // Loaded CSV Filename label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
