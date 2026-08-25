@@ -12,11 +12,19 @@ All notable OSRBot-maintained changes to this fork are documented here.
 - Preserved node identity, reusable properties, and CAD bindings for unambiguous same-position Link renames in the outline editor.
 - Added a first-use, eight-step companion tutorial for the complete assembly-to-URDF workflow: SolidWorks preparation, reference frames, Link tree, Joints, inertia validation, collision geometry, ROS1/ROS2 export, and report/viewer checks.
 - Added `Tools > URDF Export Tutorial` so completed, skipped, or dismissed tutorials can always be reopened.
+- Added per-assembly recovery drafts for unsaved PropertyManager, Joint, Link, ROS package, export-path, and mesh-option edits when an exporter window is closed unexpectedly.
+- Added a dedicated Link-tree branch command group that keeps copy, paste, and delete actions together.
 
 ### Changed
 
 - Removed the legacy `Load Configuration...` CSV merge button from the PropertyManager while retaining CSV serialization compatibility for existing exports.
 - Stored tutorial progress only under the current user's `%LOCALAPPDATA%\OSRBot\SW2URDF` directory; the onboarding flow does not read or write SolidWorks registry keys and never modifies the active model automatically.
+- Changed Link-tree copy semantics so a selected Link automatically includes every descendant; overlapping multi-selections are merged without duplicate nodes.
+- Stored recovery drafts under `%LOCALAPPDATA%\OSRBot\SW2URDF\export-drafts`, isolated by the saved assembly's full path, and removed them after a successful formal configuration save or export.
+
+### Fixed
+
+- Excluded the root Link from parent-Joint type validation so `base_link` no longer blocks preview/export with a false unsupported-Joint error.
 
 ## 2026-08-24
 

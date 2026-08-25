@@ -74,6 +74,33 @@ namespace SW2URDF.UI.LinkTreeCanvas
             return clone;
         }
 
+        public IList<LinkTreeNode> CreateBranchClipboard(IEnumerable<Guid> selectedNodeIds)
+        {
+            HashSet<Guid> selected = new HashSet<Guid>(selectedNodeIds ?? Enumerable.Empty<Guid>());
+            selected.RemoveWhere(id =>
+            {
+                LinkTreeNode node = Find(id);
+                return node == null || !node.ParentId.HasValue;
+            });
+
+            HashSet<Guid> branchRoots = new HashSet<Guid>();
+            foreach (Guid id in selected)
+            {
+                bool hasSelectedAncestor = selected.Any(ancestorId =>
+                    ancestorId != id && IsDescendant(id, ancestorId));
+                if (!hasSelectedAncestor)
+                {
+                    branchRoots.Add(id);
+                }
+            }
+
+            return Nodes
+                .Where(node => branchRoots.Contains(node.Id) ||
+                    branchRoots.Any(rootId => IsDescendant(node.Id, rootId)))
+                .Select(node => node.Clone())
+                .ToList();
+        }
+
         public IList<string> ValidateClipboardSources(IEnumerable<LinkTreeNode> copiedNodes)
         {
             List<LinkTreeNode> snapshot = copiedNodes == null

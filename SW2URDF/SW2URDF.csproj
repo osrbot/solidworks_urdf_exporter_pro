@@ -351,6 +351,7 @@
     <Compile Include="Test\TestCommon.cs" />
     <Compile Include="Test\TestCSVImportExport.cs" />
     <Compile Include="Test\TestAssemblyExportLayout.cs" />
+    <Compile Include="Test\TestExportSessionDraftStore.cs" />
     <Compile Include="Test\TestUrdfExportTutorial.cs" />
     <Compile Include="Test\TestExportHelper.cs" />
     <Compile Include="Test\TestInstallerScript.cs" />
@@ -400,6 +401,7 @@
     <Compile Include="URDFExport\CSV\ContextToColumns.cs" />
     <Compile Include="URDFExport\CSV\CSVImportExport.cs" />
     <Compile Include="URDFExport\ConfigurationSerialization.cs" />
+    <Compile Include="URDFExport\ExportSessionDraftStore.cs" />
     <Compile Include="URDFExport\ExportHelper.cs" />
     <Compile Include="URDFExport\ExportHelperExtension.cs" />
     <Compile Include="URDFExport\ExportHelperReport.cs" />

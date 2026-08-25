@@ -256,6 +256,16 @@ namespace SW2URDF.URDFExport
         /// </summary>
         /// <param name="node">TreeView LinkNode to serialize</param>
         /// <returns>A string serialized utilizing DataContract serialization XML scheme</returns>
+        internal static string SerializeDraftPayload(LinkNode node)
+        {
+            return SerializeToString(node);
+        }
+
+        internal static LinkNode DeserializeDraftPayload(string data)
+        {
+            return DeserializeFromString(data);
+        }
+
         private static string SerializeToString(LinkNode node)
         {
             if (node == null)

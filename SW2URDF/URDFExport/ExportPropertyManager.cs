@@ -55,6 +55,8 @@ namespace SW2URDF.URDFExport
         public LinkNode rightClickedNode;
         private LinkTreeSession linkTreeSession;
         private bool closingAfterSuccessfulExport;
+        [NonSerialized]
+        private readonly IExportSessionDraftStore exportSessionDraftStore;
         private readonly ContextMenuStrip docMenu;
 
         //General objects required for the PropertyManager page
@@ -132,6 +134,7 @@ namespace SW2URDF.URDFExport
         //The following runs when a new instance of the class is created
         public ExportPropertyManager(SldWorks swAppPtr)
         {
+            exportSessionDraftStore = new FileExportSessionDraftStore();
             swApp = swAppPtr;
             ActiveSWModel = swApp.ActiveDoc;
             Exporter = new ExportHelper(swApp);
@@ -489,6 +492,8 @@ namespace SW2URDF.URDFExport
                 {
                     logger.Info("Configuration canceled");
                     SaveActiveNode();
+                    CommitLinkTreeProjection();
+                    SaveExportSessionDraft(linkTreeSession.CreateProjection());
                 }
                 else if (Reason ==
                     (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_Okay)
@@ -506,6 +511,7 @@ namespace SW2URDF.URDFExport
                         false))
                     {
                         logger.Error("URDF configuration could not be persisted while closing.");
+                        SaveExportSessionDraft(linkTreeSession.CreateProjection());
                     }
                 }
             }

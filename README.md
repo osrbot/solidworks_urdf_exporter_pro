@@ -16,6 +16,7 @@ The OSRBot-maintained build keeps the original SolidWorks add-in workflow and ad
 - STL mesh reduction ratio control for lighter exported mesh packages.
 - Automatic Link tree configuration loading from the SolidWorks assembly feature `URDF Export Configuration (v1.5)`.
 - Transactional Link tree canvas for adding, renaming, moving, box-selecting, copying, and pasting Link groups before export.
+- Automatic per-assembly recovery of edits when an exporter window is closed before the configuration is formally saved.
 - Markdown-style Link tree outline editing, where heading depth (`#`, `##`, `###`) defines the Link hierarchy.
 - Chinese UI localization and safer UTF-8 English export logs.
 - Built-in usage guide with collision strategy recommendations, common URDF material names, project URL, and maintainer information.
@@ -103,9 +104,15 @@ Renaming a Joint updates existing mimic references. Deleting a Joint that is sti
 
 The recompute requirements are saved with the assembly. Closing the PropertyManager or SolidWorks after a topology or Joint-type change does not lose them: the next export automatically enables the required computations and clears each marker only after the computed configuration has been saved and accepted.
 
+The right-side `Branch operations` group keeps `Copy branch`, `Paste branch`, and `Delete branch` in one place. Selecting one Link copies or deletes that Link together with every descendant. A box selection copies the union of all selected branches; overlapping parent/child selections are merged without duplicate nodes. `Ctrl+C`, `Ctrl+V`, and `Delete` use the same branch semantics.
+
 Copy/paste duplicates the selected topology and reusable URDF configuration, including Joint settings, inertia, visual, collision, and mesh options. CAD component bindings are intentionally cleared on pasted Links because assigning the same SolidWorks body to two Links would create an invalid robot model. Pasted Links are marked incomplete until their mirrored or replacement components are assigned in the PropertyManager.
 
 Each paste operation is treated as an independent group. Repeatedly pasting the same symmetric Link group keeps Mimic references inside that paste batch instead of pointing later copies back to the first pasted group. Link and Joint names are generated uniquely and can then be edited normally.
+
+If the PropertyManager or the Joint/Link export window is closed before the current edits are formally saved, the exporter writes a recovery draft under `%LOCALAPPDATA%\OSRBot\SW2URDF\export-drafts`. Drafts are keyed by the complete saved assembly path, so two assemblies with the same filename in different folders do not share state. The next invocation for that assembly restores the draft automatically and reports that recovery occurred. A successful configuration save or completed export deletes the draft so committed assembly data remains authoritative. Unsaved assemblies do not have a stable path and therefore cannot use this recovery mechanism.
+
+Recovery drafts reuse the same v1.5 Link/Joint configuration serializer as the assembly feature and also retain the ROS package name and last export directory. They are local per-user files: this feature does not add or remove SolidWorks registry entries and does not silently write the draft into the assembly.
 
 Joint type validation uses the six standard URDF values: `fixed`, `revolute`, `continuous`, `prismatic`, `floating`, and `planar`. The editor also preserves the exporter-only `Automatically Detect` configuration state; it must resolve to one of the standard values during computation before URDF output. Type changes normalize incompatible saved fields. In particular, fixed and floating Joints remove stale motion data; continuous Joints keep effort, velocity, dynamics, and Mimic settings while removing lower and upper position bounds.
 

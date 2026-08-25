@@ -285,6 +285,24 @@ namespace SW2URDF.Test
             Assert.Contains("Background=\"#F4F6F8\"", xaml.Substring(0, resourcesStart));
         }
 
+        [Fact]
+        public void TestLinkTreeBranchCommandsShareOneCommandGroup()
+        {
+            string xaml = ReadRepositoryFile(
+                "SW2URDF", "UI", "LinkTreeCanvas", "LinkTreeCanvasWindow.xaml");
+            int groupStart = xaml.IndexOf(
+                "Header=\"分支操作（选中节点及其子节点）\"",
+                StringComparison.Ordinal);
+            int groupEnd = xaml.IndexOf("</GroupBox>", groupStart, StringComparison.Ordinal);
+
+            Assert.True(groupStart > 0);
+            Assert.True(groupEnd > groupStart);
+            string commandGroup = xaml.Substring(groupStart, groupEnd - groupStart);
+            Assert.Contains("x:Name=\"CopyBranchButton\"", commandGroup);
+            Assert.Contains("x:Name=\"PasteBranchButton\"", commandGroup);
+            Assert.Contains("x:Name=\"DeleteBranchButton\"", commandGroup);
+        }
+
         private static string ReadRepositoryFile(params string[] pathParts)
         {
             DirectoryInfo directory = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);

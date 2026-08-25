@@ -59,10 +59,13 @@ namespace SW2URDF.UI
         private string displayedJointType;
         private bool jointUnitInputsResetForCurrentChange;
         private readonly Dictionary<string, Size> buttonDesignSizes;
+        private readonly IExportSessionDraftStore exportSessionDraftStore;
         private Button buttonUsageGuide;
+        private bool suppressRecoveryDraftOnClose;
 
         private AssemblyExportForm()
         {
+            exportSessionDraftStore = new FileExportSessionDraftStore();
             InitializeComponent();
             ChineseUiText.Apply(this);
             InitializeUsageGuideButton();
@@ -125,6 +128,7 @@ namespace SW2URDF.UI
             inertiaPreview = new InertiaPreview(swApp, ActiveSWModel);
             Exporter = exporter;
             AutoUpdatingForm = false;
+            FormClosing += AssemblyExportFormClosing;
             FormClosed += AssemblyExportFormClosed;
 
             jointBoxes = new Control[] {
@@ -346,7 +350,7 @@ namespace SW2URDF.UI
             }
             if (SaveConfigTree(ActiveSWModel, BaseNode, true))
             {
-                Close();
+                CloseWithoutRecoveryDraft();
             }
         }
 
@@ -358,7 +362,7 @@ namespace SW2URDF.UI
             }
             if (SaveConfigTree(ActiveSWModel, BaseNode, true))
             {
-                Close();
+                CloseWithoutRecoveryDraft();
             }
         }
 
@@ -489,7 +493,7 @@ namespace SW2URDF.UI
                     return;
                 }
 
-                Close();
+                CloseWithoutRecoveryDraft();
             }
             folderBrowserDialog.Dispose();
         }
@@ -785,6 +789,79 @@ namespace SW2URDF.UI
         private void AssemblyExportFormClosed(object sender, FormClosedEventArgs e)
         {
             inertiaPreview.Dispose();
+        }
+
+        private void AssemblyExportFormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (suppressRecoveryDraftOnClose)
+            {
+                return;
+            }
+
+            try
+            {
+                CaptureCurrentExportSession();
+                CommonSwOperations.RetrieveSWComponentPIDs(ActiveSWModel, BaseNode);
+                Exporter.RosPackageName = URDFPackage.SanitizePackageName(
+                    textBoxRosPackageName.Text);
+                if (exportSessionDraftStore.Save(
+                    ActiveSWModel.GetPathName(),
+                    BaseNode,
+                    Exporter.RosPackageName,
+                    Exporter.SavePath))
+                {
+                    logger.Info("Saved the URDF export recovery draft before closing the export window.");
+                }
+            }
+            catch (Exception exception)
+            {
+                logger.Warn("The URDF export recovery draft could not be captured while closing.", exception);
+            }
+        }
+
+        private void CaptureCurrentExportSession()
+        {
+            if (panelLinkProperties.Visible)
+            {
+                LinkNode selectedLinkNode = (LinkNode)treeViewLinkProperties.SelectedNode;
+                if (selectedLinkNode != null)
+                {
+                    SaveLinkDataFromPropertyBoxes(selectedLinkNode.Link);
+                }
+            }
+            else
+            {
+                if (previouslySelectedNode != null && previouslySelectedNode.Link.Joint != null)
+                {
+                    SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link.Joint);
+                }
+                while (treeViewJointTree.Nodes.Count > 0)
+                {
+                    LinkNode node = (LinkNode)treeViewJointTree.Nodes[0];
+                    treeViewJointTree.Nodes.Remove(node);
+                    BaseNode.Nodes.Add(node);
+                }
+            }
+
+            ApplyEditedMeshReductionToExportTree();
+        }
+
+        private void CloseWithoutRecoveryDraft()
+        {
+            suppressRecoveryDraftOnClose = true;
+            Close();
+        }
+
+        private void ClearExportSessionDraft()
+        {
+            try
+            {
+                exportSessionDraftStore.Delete(ActiveSWModel.GetPathName());
+            }
+            catch (Exception exception)
+            {
+                logger.Warn("The URDF export recovery draft could not be cleared.", exception);
+            }
         }
 
         private void UpdateMeshReductionLabel()

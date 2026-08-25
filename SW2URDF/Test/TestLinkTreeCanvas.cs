@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Serialization;
 using Xunit;
 using Component2 = SolidWorks.Interop.sldworks.Component2;
 using SwAttribute = SolidWorks.Interop.sldworks.Attribute;
@@ -38,6 +39,66 @@ namespace SW2URDF.Test
             string errors = string.Join(" ", document.Validate());
 
             Assert.Contains("标识不能重复", errors);
+        }
+
+        [Fact]
+        public void BranchClipboardIncludesEveryDescendantOfTheSelectedNode()
+        {
+            LinkTreeDocument document = CreateSampleDocument();
+            LinkTreeNode chassis = document.Nodes.Single(node => node.Name == "chassis_link");
+
+            IList<LinkTreeNode> clipboard = document.CreateBranchClipboard(new[] { chassis.Id });
+
+            Assert.Equal(5, clipboard.Count);
+            Assert.Contains(clipboard, node => node.Name == "lidar_link");
+            Assert.Contains(clipboard, node => node.Name == "right_wheel_link");
+            Assert.DoesNotContain(clipboard, node => node.Name == "base_link");
+            Assert.All(clipboard, node => Assert.NotSame(document.Find(node.Id), node));
+        }
+
+        [Fact]
+        public void BranchClipboardMergesOverlappingSelectionsWithoutDuplicates()
+        {
+            LinkTreeDocument document = CreateSampleDocument();
+            LinkTreeNode chassis = document.Nodes.Single(node => node.Name == "chassis_link");
+            LinkTreeNode lidar = document.Nodes.Single(node => node.Name == "lidar_link");
+
+            IList<LinkTreeNode> clipboard = document.CreateBranchClipboard(
+                new[] { chassis.Id, lidar.Id });
+
+            Assert.Equal(5, clipboard.Count);
+            Assert.Equal(clipboard.Count, clipboard.Select(node => node.Id).Distinct().Count());
+        }
+
+        [Fact]
+        public void BranchClipboardDoesNotCopyTheRootNode()
+        {
+            LinkTreeDocument document = CreateSampleDocument();
+
+            IList<LinkTreeNode> clipboard = document.CreateBranchClipboard(
+                new[] { document.Root.Id });
+
+            Assert.Empty(clipboard);
+        }
+
+        [Fact]
+        public void RootLinkDoesNotRequireAParentJointType()
+        {
+            ExportPropertyManager manager = (ExportPropertyManager)
+                FormatterServices.GetUninitializedObject(typeof(ExportPropertyManager));
+            LinkNode root = new LinkNode
+            {
+                IsBaseNode = true,
+                Text = "base_link"
+            };
+            root.Link.Name = "base_link";
+            root.Link.Joint.Type = string.Empty;
+            root.Link.SWComponents.Add(new Mock<Component2>().Object);
+
+            manager.CheckNodeComplete(root);
+
+            Assert.False(root.IsIncomplete);
+            Assert.DoesNotContain("joint type", root.WhyIncomplete);
         }
 
         [Fact]

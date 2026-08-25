@@ -625,13 +625,18 @@ namespace SW2URDF.UI
                 return false;
             }
             CommonSwOperations.RetrieveSWComponentPIDs(model, BaseNode);
-            return ConfigurationSaveInteraction.Save(
+            bool saved = ConfigurationSaveInteraction.Save(
                 allowOverwrite => ConfigurationSerialization.SaveConfigTreeXML(
                     swApp,
                     model,
                     BaseNode,
                     allowOverwrite),
                 warnUser);
+            if (saved)
+            {
+                ClearExportSessionDraft();
+            }
+            return saved;
         }
 
         public void ChangeAllNodeFont(LinkNode node, Font font)

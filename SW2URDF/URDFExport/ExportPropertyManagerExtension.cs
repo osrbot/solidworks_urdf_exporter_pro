@@ -149,13 +149,57 @@ namespace SW2URDF.URDFExport
         public bool SaveConfigTree(ModelDoc2 model, LinkNode BaseNode, bool warnUser)
         {
             CommonSwOperations.RetrieveSWComponentPIDs(model, BaseNode);
-            return ConfigurationSaveInteraction.Save(
+            bool saved = ConfigurationSaveInteraction.Save(
                 allowOverwrite => ConfigurationSerialization.SaveConfigTreeXML(
                     swApp,
                     model,
                     BaseNode,
                     allowOverwrite),
                 warnUser);
+            if (saved)
+            {
+                ClearExportSessionDraft();
+            }
+            return saved;
+        }
+
+        private void SaveExportSessionDraft(LinkNode root)
+        {
+            try
+            {
+                if (root == null || ActiveSWModel == null)
+                {
+                    return;
+                }
+                CommonSwOperations.RetrieveSWComponentPIDs(ActiveSWModel, root);
+                if (exportSessionDraftStore.Save(
+                    ActiveSWModel.GetPathName(),
+                    root,
+                    Exporter.RosPackageName,
+                    Exporter.SavePath))
+                {
+                    logger.Info("Saved the URDF export recovery draft for the active assembly.");
+                }
+            }
+            catch (Exception exception)
+            {
+                logger.Warn("The URDF export recovery draft could not be captured.", exception);
+            }
+        }
+
+        private void ClearExportSessionDraft()
+        {
+            try
+            {
+                if (ActiveSWModel != null)
+                {
+                    exportSessionDraftStore.Delete(ActiveSWModel.GetPathName());
+                }
+            }
+            catch (Exception exception)
+            {
+                logger.Warn("The URDF export recovery draft could not be cleared.", exception);
+            }
         }
 
         //As nodes are created and destroyed, this menu gets called a lot. It basically just
@@ -386,7 +430,10 @@ namespace SW2URDF.URDFExport
 
             CheckNodeInertialComplete(node);
             CheckNodeVisualComplete(node);
-            CheckNodeJointComplete(node);
+            if (!node.IsBaseNode)
+            {
+                CheckNodeJointComplete(node);
+            }
             node.Link.isIncomplete = node.IsIncomplete;
         }
 
@@ -625,7 +672,26 @@ namespace SW2URDF.URDFExport
                 ActiveSWModel,
                 out string errorMessage);
 
-            if (!string.IsNullOrWhiteSpace(errorMessage))
+            bool restoredDraft = exportSessionDraftStore.TryLoad(
+                ActiveSWModel.GetPathName(),
+                out ExportSessionDraft draft);
+            if (restoredDraft)
+            {
+                baseNode = draft.Root;
+                if (!String.IsNullOrWhiteSpace(draft.RosPackageName))
+                {
+                    Exporter.RosPackageName = draft.RosPackageName;
+                }
+                if (!String.IsNullOrWhiteSpace(draft.SavePath))
+                {
+                    Exporter.SavePath = draft.SavePath;
+                }
+                logger.Info(
+                    "Restored the URDF export recovery draft saved at " +
+                    draft.SavedUtc.ToString("O") + ".");
+            }
+
+            if (!string.IsNullOrWhiteSpace(errorMessage) && !restoredDraft)
             {
                 MessageBox.Show(
                     errorMessage + "\r\n\r\nEither resolve the issue or delete the configuration " +
@@ -635,6 +701,17 @@ namespace SW2URDF.URDFExport
             }
 
             SetConfigTree(baseNode);
+
+            if (restoredDraft)
+            {
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "Unsaved URDF export edits from the previous window were restored automatically.",
+                        "已自动恢复上次关闭导出窗口前尚未正式保存的 URDF 编辑内容。"),
+                    "SW2URDF",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
 
             return true;
         }

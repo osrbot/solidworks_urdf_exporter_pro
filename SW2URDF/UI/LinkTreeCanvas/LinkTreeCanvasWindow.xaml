@@ -40,8 +40,6 @@
                     <TextBlock Text="Link 树编辑器" FontWeight="SemiBold" FontSize="17" VerticalAlignment="Center" Margin="0,0,20,0" />
                     <Button x:Name="AddChildToolbarButton" Content="+ 添加子 Link" Click="AddChildClick" />
                     <Button Content="大纲编辑" Click="OutlineEditClick" />
-                    <Button Content="复制" Click="CopyClick" />
-                    <Button Content="粘贴" Click="PasteClick" />
                     <Button Content="自动整理" Click="AutoLayoutClick" />
                     <Button Content="重置视图" Click="ResetViewClick" />
                 </StackPanel>
@@ -100,12 +98,19 @@
                     <ComboBox x:Name="JointTypeComboBox" Margin="0,5,0,20" IsEnabled="False" SelectionChanged="JointTypeChanged" />
 
                     <Button Content="+ 添加子 Link" Click="AddChildClick" Margin="0,0,0,8" />
-                    <Button Content="删除整个分支" Click="DeleteSelectedClick" Margin="0,0,0,8" />
                     <Button Content="聚焦当前节点" Click="FocusSelectedClick" Margin="0" />
 
-                    <Border Margin="0,24,0,0" Padding="12" Background="#F2F4F7" CornerRadius="4">
+                    <GroupBox Header="分支操作（选中节点及其子节点）" Margin="0,20,0,0" Padding="10">
+                        <StackPanel>
+                            <Button x:Name="CopyBranchButton" Content="复制分支" Click="CopyClick" Margin="0,0,0,8" />
+                            <Button x:Name="PasteBranchButton" Content="粘贴分支" Click="PasteClick" Margin="0,0,0,8" />
+                            <Button x:Name="DeleteBranchButton" Content="删除分支" Click="DeleteSelectedClick" Margin="0" />
+                        </StackPanel>
+                    </GroupBox>
+
+                    <Border Margin="0,20,0,0" Padding="12" Background="#F2F4F7" CornerRadius="4">
                         <TextBlock TextWrapping="Wrap" Foreground="#475467"
-                                   Text="连接箭头表示 Parent → Child。移动节点到空白位置只改变布局；释放到另一个节点上会将其设为新父级。根节点不能删除或改变父级。" />
+                                   Text="连接箭头表示 Parent → Child。复制、粘贴和删除都以完整分支为单位；Ctrl+C、Ctrl+V 和 Delete 可执行相同操作。根节点不能复制、删除或改变父级。" />
                     </Border>
                 </StackPanel>
             </Border>

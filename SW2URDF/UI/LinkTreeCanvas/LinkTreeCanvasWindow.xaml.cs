@@ -444,6 +444,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         private void RefreshSelectionPanel()
         {
+            UpdateBranchCommandState();
             if (selectedNodeIds.Count != 1 || !selectedNodeId.HasValue)
             {
                 suppressPropertyEvents = true;
@@ -484,6 +485,18 @@ namespace SW2URDF.UI.LinkTreeCanvas
             NameValidationText.Text = string.Empty;
             suppressPropertyEvents = false;
             SelectionText.Text = "当前：" + node.Name;
+        }
+
+        private void UpdateBranchCommandState()
+        {
+            bool hasCopyableSelection = selectedNodeIds.Any(id =>
+            {
+                LinkTreeNode node = document.Find(id);
+                return node != null && node.ParentId.HasValue;
+            });
+            CopyBranchButton.IsEnabled = hasCopyableSelection;
+            PasteBranchButton.IsEnabled = copiedNodes.Count > 0;
+            DeleteBranchButton.IsEnabled = selectedNodeIds.Count == 1 && hasCopyableSelection;
         }
 
         private void SelectJointType(string jointType)
@@ -668,6 +681,11 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         private void DeleteSelected()
         {
+            if (selectedNodeIds.Count > 1)
+            {
+                UpdateStatus("删除操作一次只接受一个完整分支");
+                return;
+            }
             if (!selectedNodeId.HasValue)
             {
                 return;
@@ -1044,10 +1062,11 @@ namespace SW2URDF.UI.LinkTreeCanvas
         private void CopySelected()
         {
             copiedNodes.Clear();
-            copiedNodes.AddRange(document.Nodes
-                .Where(node => node.ParentId.HasValue && selectedNodeIds.Contains(node.Id))
-                .Select(node => node.Clone()));
-            UpdateStatus(copiedNodes.Count == 0 ? "请先框选需要复制的 Link" : "已复制 " + copiedNodes.Count + " 个 Link");
+            copiedNodes.AddRange(document.CreateBranchClipboard(selectedNodeIds));
+            UpdateBranchCommandState();
+            UpdateStatus(copiedNodes.Count == 0
+                ? "请选择一个非根 Link 分支"
+                : "已复制完整分支，共 " + copiedNodes.Count + " 个 Link");
         }
 
         private void PasteCopied()
