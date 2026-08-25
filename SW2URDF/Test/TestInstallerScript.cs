@@ -264,6 +264,31 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestPreviewTransitionDoesNotWriteSolidWorksFeaturesWhilePropertyManagerIsOpen()
+        {
+            string propertyManager = ReadRepositoryFile(
+                "SW2URDF", "URDFExport", "ExportPropertyManager.cs");
+            int methodStart = propertyManager.IndexOf(
+                "private void ExportButtonPress()",
+                StringComparison.Ordinal);
+            int methodEnd = propertyManager.IndexOf(
+                "private void EnableControl",
+                methodStart,
+                StringComparison.Ordinal);
+
+            Assert.True(methodStart >= 0);
+            Assert.True(methodEnd > methodStart);
+            string previewTransition = propertyManager.Substring(
+                methodStart,
+                methodEnd - methodStart);
+            Assert.DoesNotContain("SaveConfigTree(", previewTransition);
+            Assert.Contains("SaveExportSessionDraft(baseNode)", previewTransition);
+            Assert.True(
+                previewTransition.IndexOf("SaveExportSessionDraft(baseNode)", StringComparison.Ordinal) <
+                previewTransition.IndexOf("PMPage.Close(true)", StringComparison.Ordinal));
+        }
+
+        [Fact]
         public void TestExportCoreDoesNotPumpWinFormsEventsDuringRetries()
         {
             string exportHelper = ReadRepositoryFile(

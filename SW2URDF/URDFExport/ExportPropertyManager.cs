@@ -298,12 +298,8 @@ namespace SW2URDF.URDFExport
             }
 
             linkTreeSession.ValidateComputedProjection(baseNode);
-            if (!SaveConfigTree(ActiveSWModel, baseNode, false))
-            {
-                RefreshLinkTreeProjection();
-                return;
-            }
             linkTreeSession.AcceptComputedProjection(baseNode);
+            SaveExportSessionDraft(baseNode);
             closingAfterSuccessfulExport = true;
             PMPage.Close(true);
 
