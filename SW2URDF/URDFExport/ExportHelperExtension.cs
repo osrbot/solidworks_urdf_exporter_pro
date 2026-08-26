@@ -376,8 +376,7 @@ namespace SW2URDF.URDFExport
             List<Body2> bodies = GetBodies(link.SWComponents);
 
             logger.Info("Computing inertial properties for link " + link.Name +
-                " from " + bodies.Count + " solid bodies in global coordinate system " +
-                assemblyGlobalCoordinateSystemName + ", localized to " +
+                " from " + bodies.Count + " solid bodies directly in Link coordinate system " +
                 link.Joint.CoordinateSystemName);
             MassPropertySnapshot massProperty = ReadLinkLocalMassProperty(
                 bodies,
@@ -577,8 +576,8 @@ namespace SW2URDF.URDFExport
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("Inertial validation for link '" + link.Name + "'");
             builder.AppendLine("Coordinate system: " + coordinateSystemName);
-            builder.AppendLine("SolidWorks source: MassProperty in the configured global frame, then explicitly " +
-                "transformed to the Link frame; tensor entries preserved directly for URDF.");
+            builder.AppendLine("SolidWorks source: MassProperty calculated directly in the selected Link " +
+                "coordinate system; tensor entries preserved directly for URDF.");
             builder.AppendLine("Units: mass kg, origin m, inertia kg*m^2. SolidWorks UI equivalent: origin m*1000, inertia kg*m^2*1e6.");
             builder.AppendLine(string.Format(CultureInfo.InvariantCulture,
                 "{0,-35} {1,-10} {2,-8} {3,18} {4,18} {5,18} {6,14} {7,8} {8}",
@@ -1450,23 +1449,11 @@ namespace SW2URDF.URDFExport
             IList<Body2> bodies,
             MathTransform linkFrameToDocument)
         {
-            MathTransform globalFrameToDocument = GetCoordinateSystemTransform(
-                assemblyGlobalCoordinateSystemName);
-            if (globalFrameToDocument == null)
-            {
-                throw new Exception("Cannot compute mass properties because global coordinate system " +
-                    assemblyGlobalCoordinateSystemName + " was not found");
-            }
-
             MassProperty swMass = CreateMassPropertyInCoordinateSystem(
                 ActiveSWModel,
-                globalFrameToDocument,
+                linkFrameToDocument,
                 bodies);
-            MassPropertySnapshot globalSnapshot = ReadMassProperty(swMass);
-            return MassPropertyFrameConverter.Convert(
-                globalSnapshot,
-                MathOps.GetTransformation(globalFrameToDocument),
-                MathOps.GetTransformation(linkFrameToDocument));
+            return ReadMassProperty(swMass);
         }
 
         private static MassProperty CreateMassPropertyInCoordinateSystem(
@@ -1487,7 +1474,10 @@ namespace SW2URDF.URDFExport
                     throw new Exception(
                         "Cannot compute mass properties because no solid bodies were found");
                 }
-                if (!swMass.AddBodies(bodies.ToArray()))
+                DispatchWrapper[] dispatchBodies = bodies
+                    .Select(body => new DispatchWrapper(body))
+                    .ToArray();
+                if (!swMass.AddBodies(dispatchBodies))
                 {
                     throw new Exception("Failed to add bodies to the mass-property object");
                 }

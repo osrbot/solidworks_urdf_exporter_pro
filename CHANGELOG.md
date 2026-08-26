@@ -6,6 +6,12 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Fixed
 
+- Fixed assembly Link COM coordinates being transformed twice after
+  `IMassProperty.SetCoordinateSystem()`. Mass, COM, and the COM inertia tensor are now read
+  directly in each selected Link coordinate system, matching the part-export route.
+- Marshals selected SolidWorks component bodies through `DispatchWrapper[]`, matching the
+  official `IMassProperty.AddBodies` C# contract so a Link cannot silently fall back to whole-model
+  mass properties.
 - Added a per-Link coordinate-system selector backed by the coordinate systems that exist in the
   active SolidWorks document. Changing it transactionally recomputes the Link COM inertia tensor,
   the parent Joint origin, and direct child Joint origins in the new Link frame.

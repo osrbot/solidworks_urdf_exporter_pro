@@ -82,8 +82,9 @@ The eight tutorial steps follow the actual export order:
 Each non-root Link uses its child-Joint coordinate system as its own URDF Link frame; the root Link
 uses `Origin_global` or another explicitly selected root frame. These frames must exist as
 SolidWorks coordinate-system features. On the Link properties page, use the `Link frame` selector
-to choose from the frames currently available in the model. A frame change recomputes the COM in
-meters, rotates the center-of-mass inertia tensor in `kg*m^2`, and updates the adjacent Joint
+to choose from the frames currently available in the model. The exporter asks SolidWorks to
+calculate mass, COM, and the COM inertia tensor directly in that Link frame. A frame change
+recomputes the COM in meters, rotates the center-of-mass inertia tensor in `kg*m^2`, and updates the adjacent Joint
 origins. It does not apply a parallel-axis offset because URDF stores inertia about the COM. Mass
 and principal moments must therefore remain unchanged when only the Link frame changes.
 
