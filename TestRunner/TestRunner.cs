@@ -22,6 +22,7 @@ namespace TestRunner
         static int result = 0;
 
         static string TestNameFilter = "";
+        static string IsolatedTestLogFile;
 
         [SuppressMessage(
             "Design",
@@ -43,6 +44,7 @@ namespace TestRunner
         private static int Run(string[] args)
         {
             string solutionDir = FindSolutionDirectory(AppDomain.CurrentDomain.BaseDirectory);
+            ConfigureIsolatedTestLog();
 
             string configuredAssembly = System.Environment.GetEnvironmentVariable(
                 "SW2URDF_TEST_ASSEMBLY");
@@ -76,7 +78,45 @@ namespace TestRunner
 
                 finished.WaitOne();
                 finished.Dispose();
-                return result;
+            }
+
+            CleanupIsolatedTestLog();
+            return result;
+        }
+
+        private static void ConfigureIsolatedTestLog()
+        {
+            const string variableName = "SW2URDF_LOG_FILE";
+            if (!String.IsNullOrWhiteSpace(
+                System.Environment.GetEnvironmentVariable(variableName)))
+            {
+                return;
+            }
+
+            string logFile = Path.Combine(
+                Path.GetTempPath(),
+                "sw2urdf-tests",
+                "sw2urdf-" + System.Diagnostics.Process.GetCurrentProcess().Id + ".log");
+            System.Environment.SetEnvironmentVariable(variableName, logFile);
+            IsolatedTestLogFile = logFile;
+        }
+
+        private static void CleanupIsolatedTestLog()
+        {
+            if (String.IsNullOrWhiteSpace(IsolatedTestLogFile))
+            {
+                return;
+            }
+
+            try
+            {
+                File.Delete(IsolatedTestLogFile);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
             }
         }
 

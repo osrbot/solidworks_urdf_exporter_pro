@@ -123,6 +123,7 @@ namespace SW2URDF.URDFExport
         private bool ComputeVisualCollision;
         private bool ComputeJointKinematics;
         private bool ComputeJointLimits;
+        private string assemblyGlobalCoordinateSystemName;
 
         #endregion class variables
 
@@ -2180,9 +2181,19 @@ namespace SW2URDF.URDFExport
             CreateBaseRefOrigin(zIsUp);
             MathTransform coordSysTransform =
                 ActiveSWModel.Extension.GetCoordinateSystemTransformByName("Origin_global");
-            Matrix<double> GlobalTransform = MathOps.GetTransformation(coordSysTransform);
+            if (coordSysTransform == null)
+            {
+                throw new InvalidOperationException(
+                    "SolidWorks could not resolve the Origin_global coordinate system.");
+            }
+            Matrix<double> globalTransform = MathOps.GetTransformation(coordSysTransform);
 
-            LocalizeLink(URDFRobot.BaseLink, GlobalTransform);
+            MassProperty swMass = CreateMassPropertyInCoordinateSystem(
+                ActiveSWModel,
+                coordSysTransform,
+                null);
+            ApplyMassPropertyToLink(URDFRobot.BaseLink, swMass);
+            LocalizeVisualAndCollision(URDFRobot.BaseLink, globalTransform);
 
             //Creating package directories
             PackageName = URDFPackage.SanitizePackageName(PackageName);

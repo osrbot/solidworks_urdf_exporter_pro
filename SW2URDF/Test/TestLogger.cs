@@ -67,12 +67,14 @@ namespace SW2URDF.Test
 
         private static string ReadSharedText(string filename, Encoding encoding)
         {
-            using (FileStream stream = new FileStream(
-                filename,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite))
-            using (StreamReader reader = new StreamReader(stream, encoding, true))
+            using (StreamReader reader = new StreamReader(
+                new FileStream(
+                    filename,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite),
+                encoding,
+                true))
             {
                 return reader.ReadToEnd();
             }

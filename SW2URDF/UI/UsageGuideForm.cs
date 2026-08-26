@@ -105,6 +105,8 @@ namespace SW2URDF.UI
         private static string BuildChineseGuideText()
         {
             StringBuilder builder = new StringBuilder();
+            builder.AppendLine("\u6bcf\u4e2a Link \u5fc5\u987b\u5728 SolidWorks \u4e2d\u624b\u52a8\u521b\u5efa\u5e76\u9009\u62e9\u81ea\u8eab\u5750\u6807\u7cfb\uff1b\u975e\u6839 Link \u4f7f\u7528\u5176\u5b50 Joint \u5750\u6807\u7cfb\uff0c\u6839 Link \u4f7f\u7528 Origin_global \u6216\u660e\u786e\u9009\u62e9\u7684\u6839\u5750\u6807\u7cfb\u3002\u4fee\u6539 Link \u5750\u6807\u7cfb\u540e\uff0c\u63d2\u4ef6\u4f1a\u91cd\u7b97 COM\u3001\u8d28\u5fc3\u60ef\u6027\u5f20\u91cf\u548c\u76f8\u90bb Joint \u539f\u70b9\u3002");
+            builder.AppendLine();
             builder.AppendLine("首次导出时可启动 8 步完整导出教程；教程会伴随真实导出界面，覆盖装配体准备、坐标系、Link 树、Joint、惯性、碰撞网格、ROS1/ROS2 输出和结果校验。之后可从 SolidWorks 的 工具 > URDF 导出教程 随时重开。");
             builder.AppendLine();
             builder.AppendLine("快速功能索引");
@@ -160,6 +162,7 @@ namespace SW2URDF.UI
             builder.AppendLine("- Component reconnect: saved SolidWorks component PIDs are resolved when an old tree is loaded. If parts were deleted, replaced, or saved as new files, the exporter reports the links that need inspection.");
             builder.AppendLine("- Edit Link Tree...: opens a free canvas for adding child Links, drag-to-reparent, box selection, and structure copy/paste. The canvas edits a working copy: Cancel discards changes and Apply commits them. New or pasted Links do not inherit SolidWorks component bindings and must be assigned on the property page.");
             builder.AppendLine("- Link tree outline editing: click Outline Edit in the canvas to edit the complete hierarchy with Markdown headings. # is the root Link, ## is a second-level Link, and ### is a third-level Link. Existing Links matched by name keep Joint data, reusable properties, and CAD bindings. New Links receive generated fixed Joints: camera_link becomes camera_joint. Joint details remain editable on the canvas, and invalid text never replaces the canvas document.");
+            builder.AppendLine("- Link frames and inertia: create each Link frame as a SolidWorks coordinate-system feature, then select it on the Link properties page. Non-root Links use their child-Joint frame; the root uses Origin_global or another explicit root frame. Changing the frame recomputes COM, the COM inertia tensor, and adjacent Joint origins without a parallel-axis shift.");
             builder.AppendLine("- Export diagnostics: after export, check config/export_report.md, config/inertial_validation.csv, and config/mesh_manifest.csv for inertia error, mesh size, fallback, and effective collision strategy.");
             builder.AppendLine();
             builder.AppendLine("Recommended workflow");

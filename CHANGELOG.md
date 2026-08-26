@@ -6,12 +6,30 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Fixed
 
-- Checkpointed accepted Link-tree canvas edits immediately and retained an in-memory fallback
-  before reading SolidWorks selections during PropertyManager close, so entering and leaving the
-  Component Preview window cannot discard the edited tree or prevent recovery on the next launch.
-- Decoupled recovery-draft file persistence from live SolidWorks component selection and PID
-  refresh calls, allowing a valid committed snapshot to be saved while SolidWorks tears down or
-  replaces the PropertyManager for native preview commands.
+- Added a per-Link coordinate-system selector backed by the coordinate systems that exist in the
+  active SolidWorks document. Changing it transactionally recomputes the Link COM inertia tensor,
+  the parent Joint origin, and direct child Joint origins in the new Link frame.
+- Kept URDF inertia at the center of mass during frame changes: translation changes the COM
+  coordinates but does not apply a parallel-axis shift, while rotation applies `R * I * R^T` and
+  preserves mass and principal moments.
+- Shortened the ROS package path hint, added its full ROS1/ROS2 paths as a tooltip, displayed
+  inertia-ellipsoid dimensions in millimeters, and fitted the new frame selector without adding a
+  stale scrollbar.
+- Repaired recovery drafts and legacy configurations that incorrectly retained a hidden parent
+  Joint on the root Link, preventing false duplicate-Joint errors after reopening the exporter.
+- Enforced the root-Link/no-parent-Joint invariant across configuration serialization, draft
+  restoration, Link-tree session projections, robot imports, and final name validation while
+  preserving the assembly-wide SolidWorks coordinate-system reference.
+- Accepted SolidWorks-owned PropertyManager closes, including Component Preview transitions,
+  instead of vetoing them with a COM exception that prevented `AfterClose`, draft persistence, and
+  add-in owner release.
+- Captured the current local Link-tree projection during `OnClose`, persisted configuration or a
+  recovery draft only during `AfterClose`, and made close finalization and owner notification
+  idempotent.
+- Decoupled live Link/Joint field edits from SolidWorks component selection and PID refresh calls,
+  with a committed-session fallback if the closing WinForms tree can no longer be cloned.
+- Isolated TestRunner logs from a running SolidWorks process and made logger initialization
+  thread-safe with immediate UTF-8 file flushing.
 
 ## 2026-08-25
 
@@ -35,9 +53,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Fixed
 
-- Kept the URDF PropertyManager alive for its full SolidWorks COM lifetime, rejected accidental
-  external close requests while editing the Link tree, and isolated assembly display-state
-  callbacks from invalid or unavailable COM objects.
+- Kept the URDF PropertyManager alive for its full SolidWorks COM lifetime and isolated assembly
+  display-state callbacks from invalid or unavailable COM objects.
 - Deferred configuration persistence from `OnClose` to `AfterClose`, as required by the
   SolidWorks PropertyManager lifecycle, while preserving non-saved sessions as recovery drafts.
 - Excluded the root Link from parent-Joint type validation so `base_link` no longer blocks preview/export with a false unsupported-Joint error.

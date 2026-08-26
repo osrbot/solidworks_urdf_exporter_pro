@@ -86,13 +86,10 @@ namespace SW2URDF.URDF
 
         public void SetSolidWorksMomentMatrix(double[] array)
         {
-            ValidateMomentMatrix(array);
-            Ixx = array[0];
-            Ixy = -array[1];
-            Ixz = -array[2];
-            Iyy = array[4];
-            Iyz = -array[5];
-            Izz = array[8];
+            // GetMomentOfInertia returns the physical inertia tensor expressed in the
+            // requested coordinate system. Its off-diagonal entries already have the
+            // sign required by URDF and must not be negated again.
+            SetUrdfMomentMatrix(array);
         }
 
         public void SetUrdfMomentMatrix(double[] array)

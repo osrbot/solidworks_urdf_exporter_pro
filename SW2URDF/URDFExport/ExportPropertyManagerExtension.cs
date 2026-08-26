@@ -86,6 +86,7 @@ namespace SW2URDF.URDFExport
             {
                 throw new ArgumentNullException(nameof(root));
             }
+            LinkTreeRootJointPolicy.Normalize(root);
             linkTreeSession = new LinkTreeSession(root);
             RefreshLinkTreeProjection(selectedNodeId);
         }
@@ -304,14 +305,13 @@ namespace SW2URDF.URDFExport
             {
                 previouslySelectedNode.NodeFont = fontRegular;
             }
-            FillPropertyManager(node);
-
-            //If this flag is set to true, it prevents this method from getting called again when
-            // changing the selected node
-            automaticallySwitched = true;
-
-            //Change the selected node to the argument node. This highlights the newly activated node
-            Tree.SelectedNode = node;
+            using (treeSelectionUpdateGuard.Suppress())
+            {
+                // Programmatic combo-box changes raise the same callbacks as user edits. Keep
+                // those callbacks from writing child values into the root Link (and vice versa).
+                Tree.SelectedNode = node;
+                FillPropertyManager(node);
+            }
 
             node.NodeFont = fontBold;
             node.Text = node.Text;
@@ -490,25 +490,93 @@ namespace SW2URDF.URDFExport
         // When the selected node is changed, the previously active node needs to be saved
         public void SaveActiveNode()
         {
-            if (previouslySelectedNode != null)
+            if (previouslySelectedNode == null)
             {
-                previouslySelectedNode.Link.Name = PMTextBoxLinkName.Text;
-                if (!previouslySelectedNode.IsBaseNode)
+                return;
+            }
+
+            SaveActiveNodeFields(previouslySelectedNode);
+            UpdateNodeCadBindings(previouslySelectedNode);
+        }
+
+        private void SaveActiveNodeFields(LinkNode node)
+        {
+            node.Link.Name = PMTextBoxLinkName.Text;
+            if (!node.IsBaseNode)
+            {
+                node.Link.Joint.Name = PMTextBoxJointName.Text;
+                node.Link.Joint.AxisName = PMComboBoxAxes.get_ItemText(-1);
+                node.Link.Joint.CoordinateSystemName = PMComboBoxCoordSys.get_ItemText(-1);
+                node.Link.Joint.Type = PMComboBoxJointType.get_ItemText(-1);
+                return;
+            }
+
+            node.Link.Joint.CoordinateSystemName =
+                PMComboBoxGlobalCoordsys.get_ItemText(-1);
+        }
+
+        private void UpdateSelectedNodeComboValue(int controlId, int item)
+        {
+            if (treeSelectionUpdateGuard.IsSuppressed)
+            {
+                return;
+            }
+
+            LinkNode node = Tree == null ? null : Tree.SelectedNode as LinkNode;
+            if (node == null || item < 0)
+            {
+                return;
+            }
+
+            try
+            {
+                if (controlId == IDGlobalCoordsys && node.IsBaseNode)
                 {
-                    previouslySelectedNode.Link.Joint.Name = PMTextBoxJointName.Text;
-                    previouslySelectedNode.Link.Joint.AxisName = PMComboBoxAxes.get_ItemText(-1);
-                    previouslySelectedNode.Link.Joint.CoordinateSystemName = PMComboBoxCoordSys.get_ItemText(-1);
-                    previouslySelectedNode.Link.Joint.Type = PMComboBoxJointType.get_ItemText(-1);
+                    node.Link.Joint.CoordinateSystemName =
+                        PMComboBoxGlobalCoordsys.get_ItemText((short)item);
                 }
-                else
+                else if (!node.IsBaseNode && controlId == ComboBoxCoordSysID)
                 {
-                    previouslySelectedNode.Link.Joint.CoordinateSystemName =
-                        PMComboBoxGlobalCoordsys.get_ItemText(-1);
+                    node.Link.Joint.CoordinateSystemName = PMComboBoxCoordSys.get_ItemText((short)item);
                 }
+                else if (!node.IsBaseNode && controlId == ComboBoxAxesID)
+                {
+                    node.Link.Joint.AxisName = PMComboBoxAxes.get_ItemText((short)item);
+                }
+                else if (!node.IsBaseNode && controlId == ComboBoxJointTypeID)
+                {
+                    node.Link.Joint.Type = PMComboBoxJointType.get_ItemText((short)item);
+                }
+            }
+            catch (Exception exception)
+            {
+                logger.Warn("The selected Link field could not be updated.", exception);
+            }
+        }
+
+        private void UpdateSelectedNodeCadBindings()
+        {
+            LinkNode selectedNode = Tree == null ? null : Tree.SelectedNode as LinkNode;
+            if (selectedNode == null ||
+                !ReferenceEquals(selectedNode, previouslySelectedNode))
+            {
+                return;
+            }
+
+            UpdateNodeCadBindings(selectedNode);
+        }
+
+        private void UpdateNodeCadBindings(LinkNode node)
+        {
+            try
+            {
                 CommonSwOperations.GetSelectedComponents(
-                    ActiveSWModel, previouslySelectedNode.Link.SWComponents, PMSelection.Mark);
-                CommonSwOperations.RetrieveSWComponentPIDs(
-                    ActiveSWModel, previouslySelectedNode.Link);
+                    ActiveSWModel, node.Link.SWComponents, PMSelection.Mark);
+                CommonSwOperations.RetrieveSWComponentPIDs(ActiveSWModel, node.Link);
+            }
+            catch (Exception exception)
+            {
+                logger.Warn("The selected Link CAD bindings could not be updated.", exception);
             }
         }
 
@@ -634,7 +702,9 @@ namespace SW2URDF.URDFExport
             baseNode.Name = baseLink.Name;
             baseNode.Text = baseLink.Name;
             baseNode.Link = baseLink;
+            baseNode.IsBaseNode = true;
             baseNode.ContextMenuStrip = docMenu;
+            LinkTreeRootJointPolicy.Normalize(baseNode);
 
             foreach (Link child in baseLink.Children)
             {
@@ -650,6 +720,7 @@ namespace SW2URDF.URDFExport
             node.Name = Link.Name;
             node.Text = Link.Name;
             node.Link = Link;
+            node.IsBaseNode = false;
             node.ContextMenuStrip = docMenu;
 
             foreach (Link child in Link.Children)
@@ -803,7 +874,7 @@ namespace SW2URDF.URDFExport
 
         public void CheckIfJointNamesAreUnique(LinkNode node, string jointName, List<string> conflict)
         {
-            if (node.Link.Joint.Name == jointName)
+            if (!node.IsBaseNode && node.Link.Joint.Name == jointName)
             {
                 conflict.Add(node.Link.Joint.Name);
             }
@@ -815,62 +886,39 @@ namespace SW2URDF.URDFExport
 
         public bool CheckIfNamesAreUnique(LinkNode node)
         {
-            List<List<string>> linkConflicts = new List<List<string>>();
-            List<List<string>> jointConflicts = new List<List<string>>();
-            CheckIfLinkNamesAreUnique(node, node, linkConflicts);
-            CheckIfJointNamesAreUnique(node, node, jointConflicts);
+            LinkTreeNameValidationResult result = LinkTreeNameValidator.Validate(node);
+            if (result.IsValid)
+            {
+                return true;
+            }
 
-            string message = "\r\nPlease fix these errors before proceeding.";
-            string specificErrors = "";
-            bool displayInitialMessage = true;
-            bool linkNamesInConflict = false;
-            foreach (List<string> conflict in linkConflicts)
+            List<string> sections = new List<string>();
+            if (result.DuplicateLinkNames.Count > 0)
             {
-                if (conflict.Count > 1)
-                {
-                    linkNamesInConflict = true;
-                    if (displayInitialMessage)
-                    {
-                        specificErrors +=
-                            "The following links have LINK names that conflict:\r\n\r\n";
-                        displayInitialMessage = false;
-                    }
-                    bool isFirst = true;
-                    foreach (string linkName in conflict)
-                    {
-                        specificErrors += (isFirst) ? "     " + linkName : ", " + linkName;
-                        isFirst = false;
-                    }
-                    specificErrors += "\r\n";
-                }
+                sections.Add(
+                    ChineseUiText.Translate(
+                        "The following Link names are duplicated:",
+                        "以下 Link 名称重复：") +
+                    "\r\n\r\n    " + string.Join(", ", result.DuplicateLinkNames));
             }
-            displayInitialMessage = true;
-            foreach (List<string> conflict in jointConflicts)
+            if (result.DuplicateJointNames.Count > 0)
             {
-                if (conflict.Count > 1)
-                {
-                    linkNamesInConflict = true;
-                    if (displayInitialMessage)
-                    {
-                        specificErrors +=
-                            "The following links have JOINT names that conflict:\r\n\r\n";
-                        displayInitialMessage = false;
-                    }
-                    bool isFirst = true;
-                    foreach (string linkName in conflict)
-                    {
-                        specificErrors += (isFirst) ? "     " + linkName : ", " + linkName;
-                        isFirst = false;
-                    }
-                    specificErrors += "\r\n";
-                }
+                sections.Add(
+                    ChineseUiText.Translate(
+                        "The following Joint names are duplicated:",
+                        "以下 Joint 名称重复：") +
+                    "\r\n\r\n    " + string.Join(", ", result.DuplicateJointNames));
             }
-            if (linkNamesInConflict)
-            {
-                MessageBox.Show(specificErrors + message);
-                return false;
-            }
-            return true;
+
+            MessageBox.Show(
+                string.Join("\r\n\r\n", sections) +
+                "\r\n\r\n" + ChineseUiText.Translate(
+                    "Please rename the duplicated entries before continuing.",
+                    "请先修改重复名称，然后再继续。"),
+                "SW2URDF",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return false;
         }
 
         public void CheckIfLinkNamesAreUnique(
@@ -903,22 +951,25 @@ namespace SW2URDF.URDFExport
         public void CheckIfJointNamesAreUnique(
             LinkNode basenode, LinkNode currentNode, List<List<string>> conflicts)
         {
-            List<string> conflict = new List<string>();
-
-            //Finds the conflicts of the currentNode with all the other nodes
-            CheckIfJointNamesAreUnique(basenode, currentNode.Link.Joint.Name, conflict);
-            bool alreadyExists = false;
-            foreach (List<string> existingConflict in conflicts)
+            if (!currentNode.IsBaseNode)
             {
-                if (conflict.Count > 0 && existingConflict.Contains(conflict[0]))
+                List<string> conflict = new List<string>();
+
+                // Finds the conflicts of the current non-root Joint with all other non-root Joints.
+                CheckIfJointNamesAreUnique(basenode, currentNode.Link.Joint.Name, conflict);
+                bool alreadyExists = false;
+                foreach (List<string> existingConflict in conflicts)
                 {
-                    alreadyExists = true;
+                    if (conflict.Count > 0 && existingConflict.Contains(conflict[0]))
+                    {
+                        alreadyExists = true;
+                    }
                 }
-            }
 
-            if (!alreadyExists)
-            {
-                conflicts.Add(conflict);
+                if (!alreadyExists)
+                {
+                    conflicts.Add(conflict);
+                }
             }
             foreach (LinkNode child in currentNode.Nodes)
             {

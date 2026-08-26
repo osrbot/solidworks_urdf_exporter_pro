@@ -682,7 +682,7 @@
             this.labelInertiaPreviewStatus.Name = "labelInertiaPreviewStatus";
             this.labelInertiaPreviewStatus.Size = new System.Drawing.Size(169, 13);
             this.labelInertiaPreviewStatus.TabIndex = 35;
-            this.labelInertiaPreviewStatus.Text = "R a / G b / B c: principal semi-axes";
+            this.labelInertiaPreviewStatus.Text = "R a / G b / B c: principal semi-axes (mm)";
             // 
             // groupBox4
             //

@@ -669,6 +669,82 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void ConfigurationSerializationRepairsHiddenRootJointState()
+        {
+            LinkNode root = CreateTree();
+            root.Link.Joint.Name = "sensor_joint";
+            root.Link.Joint.Type = "continuous";
+            root.Link.Joint.AxisName = "stale_axis";
+            root.Link.Joint.CoordinateSystemName = "Origin_global";
+            root.Link.Joint.Parent.Name = "stale_parent";
+            root.Link.Joint.Child.Name = "stale_child";
+            root.Link.Joint.Mimic.JointName = "sensor_joint";
+            MethodInfo serialize = typeof(ConfigurationSerialization).GetMethod(
+                "SerializeToString",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            MethodInfo deserialize = typeof(ConfigurationSerialization).GetMethod(
+                "DeserializeFromString",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            string data = (string)serialize.Invoke(null, new object[] { root });
+            LinkNode restored = (LinkNode)deserialize.Invoke(null, new object[] { data });
+
+            Assert.Equal("sensor_joint", root.Link.Joint.Name);
+            Assert.Equal(string.Empty, restored.Link.Joint.Name);
+            Assert.Equal(string.Empty, restored.Link.Joint.Type);
+            Assert.Equal(string.Empty, restored.Link.Joint.AxisName);
+            Assert.Equal("Origin_global", restored.Link.Joint.CoordinateSystemName);
+            Assert.Null(restored.Link.Joint.Parent.Name);
+            Assert.Null(restored.Link.Joint.Child.Name);
+            Assert.Null(restored.Link.Joint.Mimic.JointName);
+            Assert.Equal(
+                "sensor_joint",
+                ((LinkNode)restored.Nodes[0]).Link.Joint.Name);
+        }
+
+        [Fact]
+        public void SessionProjectionRepairsHiddenRootJointState()
+        {
+            LinkNode root = CreateTree();
+            root.Link.Joint.Name = "sensor_joint";
+            root.Link.Joint.Type = "continuous";
+            root.Link.Joint.CoordinateSystemName = "Origin_global";
+
+            LinkNode projected = new LinkTreeSession(root).CreateProjection();
+
+            Assert.Equal(string.Empty, projected.Link.Joint.Name);
+            Assert.Equal(string.Empty, projected.Link.Joint.Type);
+            Assert.Equal("Origin_global", projected.Link.Joint.CoordinateSystemName);
+            Assert.Equal(
+                "sensor_joint",
+                ((LinkNode)projected.Nodes[0]).Link.Joint.Name);
+        }
+
+        [Fact]
+        public void NameValidationIgnoresHiddenRootJointName()
+        {
+            LinkNode root = CreateTree();
+            root.Link.Joint.Name = "sensor_joint";
+
+            LinkTreeNameValidationResult result = LinkTreeNameValidator.Validate(root);
+
+            Assert.True(result.IsValid);
+            Assert.Empty(result.DuplicateJointNames);
+        }
+
+        [Fact]
+        public void NameValidationStillRejectsDuplicateChildJointNames()
+        {
+            LinkNode root = CreateTree();
+            AddChild(root, "camera_link", "sensor_joint");
+
+            LinkTreeNameValidationResult result = LinkTreeNameValidator.Validate(root);
+
+            Assert.False(result.IsValid);
+            Assert.Equal(new[] { "sensor_joint" }, result.DuplicateJointNames);
+        }
+
+        [Fact]
         public void DocumentRejectsUnsupportedJointTypes()
         {
             LinkTreeDocument document = CreateSampleDocument();

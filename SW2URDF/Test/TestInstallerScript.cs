@@ -305,19 +305,25 @@ namespace SW2URDF.Test
                 "activeAssemblyExportPropertyManager = propertyManager;",
                 addin);
             Assert.Contains("internal event EventHandler Closed;", propertyManager);
-            Assert.Contains(
-                "swPropertyManagerPageClose_Closed",
-                propertyManager);
-            Assert.Contains(
+            int onClose = propertyManager.IndexOf(
+                "void IPropertyManagerPage2Handler9.OnClose(int Reason)",
+                StringComparison.Ordinal);
+            int onCloseEnd = propertyManager.IndexOf(
+                "private LinkNode CaptureCurrentLinkTreeProjection()",
+                onClose,
+                StringComparison.Ordinal);
+            Assert.True(onClose >= 0);
+            Assert.True(onCloseEnd > onClose);
+            Assert.DoesNotContain(
                 "throw new COMException(",
-                propertyManager);
+                propertyManager.Substring(onClose, onCloseEnd - onClose));
 
             int afterClose = propertyManager.IndexOf(
                 "void IPropertyManagerPage2Handler9.AfterClose()",
                 StringComparison.Ordinal);
             Assert.True(afterClose >= 0);
             Assert.Contains(
-                "closed(this, EventArgs.Empty)",
+                "NotifyClosed();",
                 propertyManager.Substring(afterClose));
         }
 
@@ -330,7 +336,7 @@ namespace SW2URDF.Test
                 "void IPropertyManagerPage2Handler9.OnClose(int Reason)",
                 StringComparison.Ordinal);
             int onCloseEnd = propertyManager.IndexOf(
-                "private bool ShouldRejectExternalClose",
+                "private LinkNode CaptureCurrentLinkTreeProjection()",
                 onClose,
                 StringComparison.Ordinal);
             int completeClose = propertyManager.IndexOf(
@@ -357,7 +363,7 @@ namespace SW2URDF.Test
                 "void IPropertyManagerPage2Handler9.OnClose(int Reason)",
                 StringComparison.Ordinal);
             int onCloseEnd = propertyManager.IndexOf(
-                "private bool ShouldRejectExternalClose",
+                "private LinkNode CaptureCurrentLinkTreeProjection()",
                 onClose,
                 StringComparison.Ordinal);
 
@@ -365,14 +371,13 @@ namespace SW2URDF.Test
             Assert.True(onCloseEnd > onClose);
             string onCloseBody = propertyManager.Substring(onClose, onCloseEnd - onClose);
             int recoveryProjection = onCloseBody.IndexOf(
-                "linkTreeSession.CreateProjection()",
-                StringComparison.Ordinal);
-            int solidWorksSelection = onCloseBody.IndexOf(
-                "SaveActiveNode()",
+                "CaptureCurrentLinkTreeProjection()",
                 StringComparison.Ordinal);
 
             Assert.True(recoveryProjection >= 0);
-            Assert.True(solidWorksSelection > recoveryProjection);
+            Assert.DoesNotContain("SaveActiveNode()", onCloseBody);
+            Assert.DoesNotContain("CommitLinkTreeProjection()", onCloseBody);
+            Assert.DoesNotContain("PMSelection", onCloseBody);
         }
 
         [Fact]

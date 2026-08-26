@@ -274,6 +274,10 @@ namespace SW2URDF.URDFExport
             };
             targetDocument.Nodes.Add(node);
             targetConfigurations.Capture(id, projectionNode);
+            if (!parentId.HasValue)
+            {
+                targetConfigurations.NormalizeRoot(id);
+            }
             bool typeChanged = previousNode != null && !string.Equals(
                 previousNode.JointType,
                 node.JointType,
@@ -339,6 +343,10 @@ namespace SW2URDF.URDFExport
                 link.Joint.Type = source.JointType;
                 link.Joint.Parent.Name = parentLink == null ? string.Empty : parentLink.Name;
                 link.Joint.Child.Name = link.Name;
+            }
+            else
+            {
+                LinkTreeRootJointPolicy.Normalize(link);
             }
 
             LinkConfigurationState state = sourceConfigurations.Get(source.Id);

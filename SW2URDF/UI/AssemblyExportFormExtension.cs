@@ -43,8 +43,23 @@ namespace SW2URDF.UI
         public void FillLinkPropertyBoxes(Link Link)
         {
             FillBlank(linkBoxes);
+            comboBoxLinkCoordinateSystem.Items.Clear();
+            comboBoxLinkCoordinateSystem.Enabled = !Link.isFixedFrame;
             if (!Link.isFixedFrame)
             {
+                List<string> coordinateSystems = Exporter.GetRefCoordinateSystems();
+                if (!string.IsNullOrWhiteSpace(Link.Joint.CoordinateSystemName) &&
+                    !coordinateSystems.Contains(Link.Joint.CoordinateSystemName))
+                {
+                    // Keep a stale saved value visible so selecting another node cannot
+                    // silently erase it before the user chooses a replacement frame.
+                    coordinateSystems.Add(Link.Joint.CoordinateSystemName);
+                }
+                comboBoxLinkCoordinateSystem.Items.AddRange(coordinateSystems.ToArray());
+                comboBoxLinkCoordinateSystem.SelectedIndex =
+                    comboBoxLinkCoordinateSystem.FindStringExact(
+                        Link.Joint.CoordinateSystemName);
+
                 //G5: Maximum decimal places to use (not counting exponential notation) is 5
                 Link.Visual.Origin.FillBoxes(textBoxVisualOriginX,
                                              textBoxVisualOriginY,
@@ -333,6 +348,7 @@ namespace SW2URDF.UI
                 Link.STLQualityFine = radioButtonFine.Checked;
                 Link.MeshReductionRatio = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
                 Link.CollisionMeshStrategy = GetSelectedCollisionStrategy();
+                Link.Joint.CoordinateSystemName = comboBoxLinkCoordinateSystem.Text;
             }
         }
 
@@ -523,24 +539,31 @@ namespace SW2URDF.UI
         //Fills specifically the joint TreeView
         public void FillJointTree()
         {
-            treeViewJointTree.Nodes.Clear();
-
-            while (BaseNode.Nodes.Count > 0)
+            using (treeSelectionUpdateGuard.Suppress())
             {
-                LinkNode node = (LinkNode)BaseNode.FirstNode;
-                BaseNode.Nodes.Remove(node);
-                treeViewJointTree.Nodes.Add(node);
-                UpdateNodeText(node, true);
+                treeViewJointTree.Nodes.Clear();
+
+                while (BaseNode.Nodes.Count > 0)
+                {
+                    LinkNode node = (LinkNode)BaseNode.FirstNode;
+                    BaseNode.Nodes.Remove(node);
+                    treeViewJointTree.Nodes.Add(node);
+                    UpdateNodeText(node, true);
+                }
+                treeViewJointTree.ExpandAll();
+                previouslySelectedNode = null;
             }
-            treeViewJointTree.ExpandAll();
         }
 
         public void FillLinkTree()
         {
-            treeViewLinkProperties.Nodes.Clear();
-            treeViewLinkProperties.Nodes.Add(BaseNode);
-            UpdateNodeText(BaseNode, false);
-            treeViewLinkProperties.ExpandAll();
+            using (treeSelectionUpdateGuard.Suppress())
+            {
+                treeViewLinkProperties.Nodes.Clear();
+                treeViewLinkProperties.Nodes.Add(BaseNode);
+                UpdateNodeText(BaseNode, false);
+                treeViewLinkProperties.ExpandAll();
+            }
         }
 
         public void UpdateNodeText(LinkNode node, bool useJointName)

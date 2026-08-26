@@ -37,6 +37,37 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void DraftRoundTripRepairsHiddenJointOnRootLink()
+        {
+            string directory = CreateTemporaryDirectory();
+            try
+            {
+                FileExportSessionDraftStore store = new FileExportSessionDraftStore(directory);
+                string modelPath = Path.Combine(directory, "robot.SLDASM");
+                LinkNode root = CreateTree();
+                root.Link.Joint.Name = "camera_joint";
+                root.Link.Joint.Type = "continuous";
+                root.Link.Joint.CoordinateSystemName = "Origin_global";
+
+                Assert.True(store.Save(modelPath, root, "robot_description", directory));
+                Assert.True(store.TryLoad(modelPath, out ExportSessionDraft restored));
+
+                Assert.True(restored.Root.IsBaseNode);
+                Assert.Equal(string.Empty, restored.Root.Link.Joint.Name);
+                Assert.Equal(string.Empty, restored.Root.Link.Joint.Type);
+                Assert.Equal("Origin_global", restored.Root.Link.Joint.CoordinateSystemName);
+                Assert.Equal(
+                    "camera_joint",
+                    ((LinkNode)restored.Root.Nodes[0]).Link.Joint.Name);
+                Assert.True(LinkTreeNameValidator.Validate(restored.Root).IsValid);
+            }
+            finally
+            {
+                DeleteTemporaryDirectory(directory);
+            }
+        }
+
+        [Fact]
         public void DraftsAreIsolatedByTheCompleteAssemblyPath()
         {
             string directory = CreateTemporaryDirectory();

@@ -10,7 +10,7 @@ namespace SW2URDF.Test
     public class TestInertiaConvention
     {
         [Fact]
-        public void TestSolidWorksMomentProductsAreConvertedToUrdfConvention()
+        public void TestSolidWorksMomentProductsArePreservedForUrdf()
         {
             double[] solidWorksMoment =
             {
@@ -23,10 +23,10 @@ namespace SW2URDF.Test
                 ExportHelper.ConvertSolidWorksMomentToUrdfConvention(solidWorksMoment);
 
             Assert.Equal(1.0, urdfMoment[0], 10);
-            Assert.Equal(-0.2, urdfMoment[1], 10);
-            Assert.Equal(0.3, urdfMoment[2], 10);
+            Assert.Equal(0.2, urdfMoment[1], 10);
+            Assert.Equal(-0.3, urdfMoment[2], 10);
             Assert.Equal(2.0, urdfMoment[3], 10);
-            Assert.Equal(-0.4, urdfMoment[4], 10);
+            Assert.Equal(0.4, urdfMoment[4], 10);
             Assert.Equal(3.0, urdfMoment[5], 10);
         }
 
@@ -73,25 +73,27 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestInertiaRotationUsesGlobalToLocalFrame()
+        public void TestMappedSolidWorksTensorRetainsApiPrincipalMoments()
         {
-            double[] globalUrdfMoment =
+            double[] apiMoment =
             {
-                1.0, 0.25, 0.0,
-                0.25, 2.0, 0.0,
-                0.0, 0.0, 3.0
+                0.00234644857189018, -0.000373959249444624, -0.000421009451907641,
+                -0.000373959249444624, 0.00287861626172314, 0.000275437637214335,
+                -0.000421009451907641, 0.000275437637214335, 0.00168955066821846
             };
-            double[] localUrdfMoment = ExportHelper.RotateUrdfInertiaToLocalFrame(
-                globalUrdfMoment,
-                MathOps.GetTransformation(
-                    new double[] { 0, 0, 0 },
-                    new double[] { 0, 0, Math.PI / 4.0 }));
+            double[] apiPrincipalMoments =
+            {
+                0.00147824918912377,
+                0.00223316012761648,
+                0.00320320618509152
+            };
+            Inertia inertia = new Inertia();
+            inertia.SetSolidWorksMomentMatrix(apiMoment);
 
-            Assert.Equal(1.75, localUrdfMoment[0], 10);
-            Assert.Equal(0.5, localUrdfMoment[1], 10);
-            Assert.Equal(0.5, localUrdfMoment[3], 10);
-            Assert.Equal(1.25, localUrdfMoment[4], 10);
-            Assert.Equal(3.0, localUrdfMoment[8], 10);
+            AssertPrincipalMomentsMatch(
+                inertia,
+                0.9017122387702872,
+                apiPrincipalMoments);
         }
 
         [Fact]
@@ -220,5 +222,39 @@ namespace SW2URDF.Test
                 "base_link,Origin_global,ellipsoid.display,,,,,,WARN,display,\"display failed, physical inertia passed\"",
                 csv);
         }
+
+        private static void AssertPrincipalMomentsMatch(
+            Inertia inertia,
+            double mass,
+            double[] apiPrincipalMoments)
+        {
+            Assert.True(
+                InertiaEllipsoid.TryCreate(
+                    mass,
+                    inertia,
+                    out InertiaEllipsoid ellipsoid,
+                    out string error),
+                error);
+
+            double[] mappedPrincipalMoments = ellipsoid.PrincipalMoments
+                .OrderBy(value => value)
+                .ToArray();
+            double[] expectedPrincipalMoments = apiPrincipalMoments
+                .OrderBy(value => value)
+                .ToArray();
+            double scale = Math.Max(1e-12, expectedPrincipalMoments.Max());
+            for (int i = 0; i < expectedPrincipalMoments.Length; i++)
+            {
+                Assert.True(
+                    Math.Abs(mappedPrincipalMoments[i] - expectedPrincipalMoments[i]) <=
+                    scale * 1e-9,
+                    string.Format(
+                        "Principal moment {0} differs: mapped={1:G17}, api={2:G17}",
+                        i,
+                        mappedPrincipalMoments[i],
+                        expectedPrincipalMoments[i]));
+            }
+        }
+
     }
 }

@@ -275,6 +275,7 @@ namespace SW2URDF.URDFExport
 
             LinkNode snapshot = (LinkNode)node.Clone();
             SavePropertiesLinkNodeToLink(snapshot);
+            LinkTreeRootJointPolicy.Normalize(snapshot);
             Link link = snapshot.UpdateLinkTree(null);
             string data = "";
             using (MemoryStream stream = new MemoryStream())
@@ -318,6 +319,7 @@ namespace SW2URDF.URDFExport
                         // By copying this link, we can ensure that all non-serialized properties are setup correctly
                         Link copy = link.Clone();
                         baseNode = new LinkNode(copy);
+                        LinkTreeRootJointPolicy.Normalize(baseNode);
                     }
                     catch (SerializationException e)
                     {
@@ -346,6 +348,7 @@ namespace SW2URDF.URDFExport
                 textReader.Close();
 
                 baseNode = sNode.BuildLinkNodeFromSerialNode();
+                LinkTreeRootJointPolicy.Normalize(baseNode);
             }
             return baseNode;
         }

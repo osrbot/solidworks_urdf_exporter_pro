@@ -332,3 +332,7 @@ ASALocalRun/
 *.zip
 
 SW2URDF/Versioning/VersionInfo.cs
+
+# LoopX local control-plane state
+.loopx/
+.codex/goals/

@@ -164,7 +164,7 @@ namespace SW2URDF.Test
                         panel.ClientSize.Height));
 
                 packageName.Text = "rover_description";
-                Assert.Equal("ROS1/rover_description | ROS2/rover_description", packageHint.Text);
+                Assert.Equal("ROS1/2: rover_description", packageHint.Text);
                 Assert.DoesNotContain("and", packageHint.Text);
                 Assert.DoesNotContain("\u548c", packageHint.Text);
                 Assert.True(
@@ -270,6 +270,8 @@ namespace SW2URDF.Test
             Assert.Contains("Automatic Link tree loading", guide);
             Assert.Contains("URDF Export Configuration (v1.5)", guide);
             Assert.Contains("Link tree outline editing", guide);
+            Assert.Contains("Link frames and inertia", guide);
+            Assert.Contains("without a parallel-axis shift", guide);
             Assert.Contains("#/##/###", guide);
             Assert.Contains("config/inertial_validation.csv", guide);
             Assert.Contains("CylinderPrimitive", guide);
@@ -319,6 +321,12 @@ namespace SW2URDF.Test
             Button finishButton = GetControl<Button>(form, "buttonLinksFinish");
             ComboBox collisionStrategy = GetControl<ComboBox>(form, "comboBoxCollisionStrategy");
             Label collisionStrategyLabel = GetControl<Label>(form, "labelCollisionStrategy");
+            ComboBox linkCoordinateSystem =
+                GetControl<ComboBox>(form, "comboBoxLinkCoordinateSystem");
+            Label linkCoordinateSystemLabel =
+                GetControl<Label>(form, "labelLinkCoordinateSystem");
+            Label inertiaPreviewStatus =
+                GetControl<Label>(form, "labelInertiaPreviewStatus");
             TextBox visualYaw = GetControl<TextBox>(form, "textBoxVisualOriginYaw");
             DomainUpDown colorRed = GetControl<DomainUpDown>(form, "domainUpDownRed");
             int scrollBottom = Math.Max(panel.ClientSize.Height, panel.AutoScrollMinSize.Height);
@@ -334,6 +342,10 @@ namespace SW2URDF.Test
             Assert.Equal(cancelButton.Top, finishButton.Top);
             AssertLinkFooterBelowContent(form);
             Assert.Equal(ComboBoxStyle.DropDownList, collisionStrategy.DropDownStyle);
+            Assert.Equal(ComboBoxStyle.DropDownList, linkCoordinateSystem.DropDownStyle);
+            Assert.True(linkCoordinateSystemLabel.Right < linkCoordinateSystem.Left);
+            Assert.True(linkCoordinateSystem.Right <= inertiaGroup.ClientSize.Width);
+            Assert.Contains("mm", inertiaPreviewStatus.Text);
             Assert.True(collisionStrategy.Left > visualYaw.Right);
             Assert.True(collisionStrategy.Right < colorRed.Left);
             Assert.True(collisionStrategyLabel.Bottom <= collisionStrategy.Top);

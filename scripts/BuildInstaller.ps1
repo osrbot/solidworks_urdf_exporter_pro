@@ -7,7 +7,20 @@ param(
 $ErrorActionPreference = "Stop"
 
 function Get-Sha256([string]$Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $Stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString(
+                $Sha256.ComputeHash($Stream))).Replace("-", "").ToLowerInvariant()
+        }
+        finally {
+            $Sha256.Dispose()
+        }
+    }
+    finally {
+        $Stream.Dispose()
+    }
 }
 
 function Assert-ChildPath([string]$Parent, [string]$Child, [string]$Description) {

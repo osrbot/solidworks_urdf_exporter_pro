@@ -79,6 +79,14 @@ The eight tutorial steps follow the actual export order:
 7. Export matching ROS1 and ROS2 packages with complete `urdf` and `meshes` directories.
 8. Review `export_report.md`, `inertial_validation.csv`, and `mesh_manifest.csv`, then inspect Visual, Collision, Inertia, COM, axes, and Joint motion in a URDF viewer.
 
+Each non-root Link uses its child-Joint coordinate system as its own URDF Link frame; the root Link
+uses `Origin_global` or another explicitly selected root frame. These frames must exist as
+SolidWorks coordinate-system features. On the Link properties page, use the `Link frame` selector
+to choose from the frames currently available in the model. A frame change recomputes the COM in
+meters, rotates the center-of-mass inertia tensor in `kg*m^2`, and updates the adjacent Joint
+origins. It does not apply a parallel-axis offset because URDF stores inertia about the COM. Mass
+and principal moments must therefore remain unchanged when only the Link frame changes.
+
 The companion window is intentionally instructional: it does not automate clicks, save files, alter CAD bindings, or mutate the model. This keeps the tutorial version-independent and lets the user verify each engineering decision in the real exporter.
 
 ### User-Friendly Workflow Features
@@ -113,6 +121,8 @@ Each paste operation is treated as an independent group. Repeatedly pasting the 
 If the PropertyManager or the Joint/Link export window is closed before the current edits are formally saved, the exporter writes a recovery draft under `%LOCALAPPDATA%\OSRBot\SW2URDF\export-drafts`. Drafts are keyed by the complete saved assembly path, so two assemblies with the same filename in different folders do not share state. The next invocation for that assembly restores the draft automatically and reports that recovery occurred. A successful configuration save or completed export deletes the draft so committed assembly data remains authoritative. Unsaved assemblies do not have a stable path and therefore cannot use this recovery mechanism.
 
 Recovery drafts reuse the same v1.5 Link/Joint configuration serializer as the assembly feature and also retain the ROS package name and last export directory. They are local per-user files: this feature does not add or remove SolidWorks registry entries and does not silently write the draft into the assembly.
+
+SolidWorks-owned transitions such as Component Preview are allowed to close the PropertyManager normally. The exporter captures the local Link-tree snapshot during `OnClose`, persists the recovery draft during `AfterClose`, and then releases the add-in owner so the exporter can be opened again without stale-window state.
 
 Joint type validation uses the six standard URDF values: `fixed`, `revolute`, `continuous`, `prismatic`, `floating`, and `planar`. The editor also preserves the exporter-only `Automatically Detect` configuration state; it must resolve to one of the standard values during computation before URDF output. Type changes normalize incompatible saved fields. In particular, fixed and floating Joints remove stale motion data; continuous Joints keep effort, velocity, dynamics, and Mimic settings while removing lower and upper position bounds.
 
@@ -181,6 +191,8 @@ To run a focused subset:
 ```powershell
 TestRunner\bin\x64\Debug\net452\TestRunner.exe TestAssemblyExportLayout
 ```
+
+The test runner assigns a process-specific UTF-8 log under the system temporary directory before loading the plugin assembly. This keeps tests deterministic when SolidWorks is already running and owns the normal `%USERPROFILE%\\sw2urdf_logs\\sw2urdf.log` file.
 
 ### Release Automation
 

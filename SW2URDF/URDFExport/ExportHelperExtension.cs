@@ -85,12 +85,8 @@ namespace SW2URDF.URDFExport
             Link.isFixedFrame = false;
 
             //Get link properties from SolidWorks part
-            IMassProperty swMass = swModel.Extension.CreateMassProperty();
-            MassPropertySnapshot massProperty = ReadMassProperty(swMass);
-            Link.Inertial.Mass.Value = massProperty.Mass;
-            Link.Inertial.Inertia.SetMomentMatrix(massProperty.Moment);
-            Link.Inertial.Origin.SetXYZ(massProperty.CenterOfMass);
-            Link.Inertial.Origin.SetRPY(new double[3] { 0, 0, 0 });
+            IMassProperty swMass = CreateSystemUnitMassProperty(swModel);
+            ApplyMassPropertyToLink(Link, swMass);
 
             // Will this ever not be zeros?
             Link.Visual.Origin.SetXYZ(new double[3] { 0, 0, 0 });
@@ -107,52 +103,6 @@ namespace SW2URDF.URDFExport
             Link.Visual.Material.Name = "material_" + Link.Name;
 
             return Link;
-        }
-
-        //This is only used by the Part Exporter, but it localizes the link to the Origin_global
-        // coordinate system
-        private static void LocalizeLink(Link link, Matrix<double> globalTransform)
-        {
-            Matrix<double> globalTransformInverse = globalTransform.Inverse();
-            Matrix<double> linkCoMTransform = MathOps.GetTranslation(link.Inertial.Origin.GetXYZ());
-            Matrix<double> localLinkCoMTransform = globalTransformInverse * linkCoMTransform;
-
-            double[] localMoment = RotateUrdfInertiaToLocalFrame(
-                link.Inertial.Inertia.GetMoment(),
-                globalTransform);
-
-            link.Inertial.Origin.SetXYZ(MathOps.GetXYZ(localLinkCoMTransform));
-            link.Inertial.Origin.SetRPY(new double[] { 0, 0, 0 });
-            link.Inertial.Inertia.SetUrdfMomentMatrix(localMoment);
-
-            LocalizeVisualAndCollisionWithInverse(link, globalTransformInverse);
-        }
-
-        internal static double[] RotateUrdfInertiaToLocalFrame(
-            double[] globalUrdfMoment,
-            Matrix<double> globalTransform)
-        {
-            if (globalUrdfMoment == null || globalUrdfMoment.Length != 9)
-            {
-                throw new ArgumentException(
-                    "An inertia matrix must contain exactly nine values.",
-                    "globalUrdfMoment");
-            }
-            if (globalTransform == null || globalTransform.RowCount != 4 ||
-                globalTransform.ColumnCount != 4)
-            {
-                throw new ArgumentException(
-                    "The coordinate-system transform must be a 4x4 matrix.",
-                    "globalTransform");
-            }
-
-            Matrix<double> globalMoment = new DenseMatrix(3, 3, globalUrdfMoment);
-            Matrix<double> localRotation = globalTransform
-                .Inverse()
-                .SubMatrix(0, 3, 0, 3);
-            Matrix<double> localMoment =
-                localRotation * globalMoment * localRotation.Transpose();
-            return localMoment.ToRowMajorArray();
         }
 
         internal static void LocalizeVisualAndCollision(
@@ -345,18 +295,29 @@ namespace SW2URDF.URDFExport
 
         private Link CreateBaseLinkFromComponents(LinkNode node)
         {
-            // Build the link from the partdoc
-            Link link = CreateLinkFromComponents(null, node);
             if (node.Link.Joint.CoordinateSystemName == "Automatically Generate")
             {
                 CreateBaseRefOrigin(true);
                 node.Link.Joint.CoordinateSystemName = "Origin_global";
-                link.Joint.CoordinateSystemName = node.Link.Joint.CoordinateSystemName;
             }
-            else
+
+            string configuredGlobalFrame = node.Link.Joint.CoordinateSystemName;
+            string resolvedGlobalFrame = LinkTreeGlobalFramePolicy.Resolve(
+                node,
+                ReferenceCoordinateSystemNames);
+            if (!string.Equals(
+                configuredGlobalFrame,
+                resolvedGlobalFrame,
+                StringComparison.Ordinal))
             {
-                link.Joint.CoordinateSystemName = node.Link.Joint.CoordinateSystemName;
+                logger.Warn("The root coordinate system had been overwritten by child Joint frame " +
+                    configuredGlobalFrame + "; restored Origin_global.");
+                node.Link.Joint.CoordinateSystemName = resolvedGlobalFrame;
             }
+
+            assemblyGlobalCoordinateSystemName = node.Link.Joint.CoordinateSystemName;
+            Link link = CreateLinkFromComponents(null, node);
+            link.Joint.CoordinateSystemName = assemblyGlobalCoordinateSystemName;
             return link;
         }
 
@@ -403,11 +364,11 @@ namespace SW2URDF.URDFExport
             return link;
         }
 
-        private void ComputeInertialProperties(Link link)
+        internal void ComputeInertialProperties(Link link)
         {
-            // Get the SolidWorks MathTransform that corresponds to the child coordinate system
-            MathTransform jointTransform = GetCoordinateSystemTransform(link.Joint.CoordinateSystemName);
-            if (jointTransform == null)
+            MathTransform linkTransform = GetCoordinateSystemTransform(
+                link.Joint.CoordinateSystemName);
+            if (linkTransform == null)
             {
                 throw new Exception("Cannot compute mass properties because coordinate system " +
                     link.Joint.CoordinateSystemName + " was not found");
@@ -415,15 +376,14 @@ namespace SW2URDF.URDFExport
             List<Body2> bodies = GetBodies(link.SWComponents);
 
             logger.Info("Computing inertial properties for link " + link.Name +
-                " from " + bodies.Count + " solid bodies in coordinate system " +
+                " from " + bodies.Count + " solid bodies in global coordinate system " +
+                assemblyGlobalCoordinateSystemName + ", localized to " +
                 link.Joint.CoordinateSystemName);
-            MassProperty swMass = CreateMassProperty(bodies, jointTransform);
-            MassPropertySnapshot massProperty = ReadMassProperty(swMass);
+            MassPropertySnapshot massProperty = ReadLinkLocalMassProperty(
+                bodies,
+                linkTransform);
 
-            link.Inertial.Mass.Value = massProperty.Mass;
-            link.Inertial.Origin.SetXYZ(massProperty.CenterOfMass);
-            link.Inertial.Origin.SetRPY(new double[3] { 0, 0, 0 });
-            link.Inertial.Inertia.SetMomentMatrix(massProperty.Moment);
+            ApplyMassPropertyToLink(link, massProperty);
 
             if (!InertiaEllipsoid.TryCreate(
                 link.Inertial.Mass.Value,
@@ -473,6 +433,90 @@ namespace SW2URDF.URDFExport
             return records;
         }
 
+        internal void RecomputeLinkCoordinateSystem(
+            LinkNode node,
+            string coordinateSystemName)
+        {
+            if (node == null || node.Link == null)
+            {
+                throw new ArgumentNullException("node");
+            }
+
+            if (string.IsNullOrWhiteSpace(coordinateSystemName))
+            {
+                throw new ArgumentException(
+                    "A Link coordinate system must be selected.",
+                    "coordinateSystemName");
+            }
+
+            MathTransform selectedFrame = GetCoordinateSystemTransform(
+                coordinateSystemName);
+            if (selectedFrame == null)
+            {
+                throw new Exception("Cannot use Link coordinate system " +
+                    coordinateSystemName + " because it was not found");
+            }
+
+            string previousGlobalCoordinateSystemName =
+                assemblyGlobalCoordinateSystemName;
+            string previousExportErrorWhy = ExportErrorWhy;
+            List<Tuple<Link, Link>> snapshots = new List<Tuple<Link, Link>>
+            {
+                Tuple.Create(node.Link, SnapshotLinkValues(node.Link))
+            };
+            snapshots.AddRange(
+                node.Nodes
+                    .Cast<LinkNode>()
+                    .Select(child => Tuple.Create(
+                        child.Link,
+                        SnapshotLinkValues(child.Link))));
+
+            try
+            {
+                node.Link.Joint.CoordinateSystemName = coordinateSystemName;
+                LinkNode parentNode = node.Parent as LinkNode;
+                if (parentNode == null)
+                {
+                    assemblyGlobalCoordinateSystemName = coordinateSystemName;
+                }
+                else if (!CreateJoint(parentNode.Link, node.Link))
+                {
+                    throw new Exception("Could not recompute Joint " + node.Link.Joint.Name +
+                        " after changing Link coordinate system");
+                }
+
+                ComputeInertialProperties(node.Link);
+
+                foreach (LinkNode childNode in node.Nodes)
+                {
+                    if (!CreateJoint(node.Link, childNode.Link))
+                    {
+                        throw new Exception("Could not recompute child Joint " +
+                            childNode.Link.Joint.Name + " after changing Link coordinate system");
+                    }
+                }
+            }
+            catch
+            {
+                assemblyGlobalCoordinateSystemName =
+                    previousGlobalCoordinateSystemName;
+                ExportErrorWhy = previousExportErrorWhy;
+                foreach (Tuple<Link, Link> snapshot in snapshots)
+                {
+                    snapshot.Item1.SetElement(snapshot.Item2);
+                }
+                throw;
+            }
+        }
+
+        private static Link SnapshotLinkValues(Link source)
+        {
+            Link snapshot = new Link();
+            snapshot.SetElement(source);
+            snapshot.SetSWComponents(source);
+            return snapshot;
+        }
+
         private void LogLinkInertialValidation(Link link, List<InertialValidationRecord> records)
         {
             if (link == null)
@@ -520,6 +564,7 @@ namespace SW2URDF.URDFExport
             }
 
             rows.AddRange(BuildPhysicalInertiaValidationRows(link));
+            rows.Add(BuildCenterOfMassBoundsValidationRow(link));
 
             foreach (InertialValidationRow row in rows)
             {
@@ -532,8 +577,8 @@ namespace SW2URDF.URDFExport
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("Inertial validation for link '" + link.Name + "'");
             builder.AppendLine("Coordinate system: " + coordinateSystemName);
-            builder.AppendLine("SolidWorks source: MassProperty with selected coordinate system, COM inertia; " +
-                "off-diagonal products converted to URDF sign convention.");
+            builder.AppendLine("SolidWorks source: MassProperty in the configured global frame, then explicitly " +
+                "transformed to the Link frame; tensor entries preserved directly for URDF.");
             builder.AppendLine("Units: mass kg, origin m, inertia kg*m^2. SolidWorks UI equivalent: origin m*1000, inertia kg*m^2*1e6.");
             builder.AppendLine(string.Format(CultureInfo.InvariantCulture,
                 "{0,-35} {1,-10} {2,-8} {3,18} {4,18} {5,18} {6,14} {7,8} {8}",
@@ -599,8 +644,9 @@ namespace SW2URDF.URDFExport
             MathTransform jointTransform)
         {
             List<Body2> bodies = GetBodies(link.SWComponents);
-            MassProperty swMass = CreateMassProperty(bodies, jointTransform);
-            MassPropertySnapshot massProperty = ReadMassProperty(swMass);
+            MassPropertySnapshot massProperty = ReadLinkLocalMassProperty(
+                bodies,
+                jointTransform);
             double[] expectedMoment = ConvertSolidWorksMomentToUrdfConvention(
                 massProperty.Moment);
 
@@ -628,6 +674,37 @@ namespace SW2URDF.URDFExport
                 new InertialValidationRow("iyz", "kg*m^2", expectedMoment[4], urdfMoment[4]),
                 new InertialValidationRow("izz", "kg*m^2", expectedMoment[5], urdfMoment[5])
             };
+        }
+
+        private InertialValidationRow BuildCenterOfMassBoundsValidationRow(Link link)
+        {
+            LinkLocalBoundingBox box = CreateLinkLocalBoundingBox(link);
+            if (!box.IsUsable)
+            {
+                return InertialValidationRow.Diagnostic(
+                    "origin.within_selected_geometry_bounds",
+                    "geometry",
+                    "WARN",
+                    "Selected component bounds could not be calculated.");
+            }
+
+            double[] center = link.Inertial.Origin.GetXYZ();
+            const double tolerance = 1e-6;
+            bool inside = center[0] >= box.MinX - tolerance &&
+                center[0] <= box.MaxX + tolerance &&
+                center[1] >= box.MinY - tolerance &&
+                center[1] <= box.MaxY + tolerance &&
+                center[2] >= box.MinZ - tolerance &&
+                center[2] <= box.MaxZ + tolerance;
+            return InertialValidationRow.Diagnostic(
+                "origin.within_selected_geometry_bounds",
+                "geometry",
+                inside ? "PASS" : "FAIL",
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "COM=({0:G9},{1:G9},{2:G9}); bounds=[{3:G9},{4:G9}]x[{5:G9},{6:G9}]x[{7:G9},{8:G9}] m.",
+                    center[0], center[1], center[2],
+                    box.MinX, box.MaxX, box.MinY, box.MaxY, box.MinZ, box.MaxZ));
         }
 
         internal static List<InertialValidationRow> BuildPhysicalInertiaValidationRows(Link link)
@@ -974,13 +1051,20 @@ namespace SW2URDF.URDFExport
 
         internal static double[] ConvertSolidWorksMomentToUrdfConvention(double[] solidWorksMoment)
         {
+            if (solidWorksMoment == null || solidWorksMoment.Length != 9)
+            {
+                throw new ArgumentException(
+                    "A SolidWorks inertia tensor must contain exactly nine values.",
+                    "solidWorksMoment");
+            }
+
             return new double[]
             {
                 solidWorksMoment[0],
-                -solidWorksMoment[1],
-                -solidWorksMoment[2],
+                solidWorksMoment[1],
+                solidWorksMoment[2],
                 solidWorksMoment[4],
-                -solidWorksMoment[5],
+                solidWorksMoment[5],
                 solidWorksMoment[8]
             };
         }
@@ -1356,24 +1440,104 @@ namespace SW2URDF.URDFExport
 
         private MassProperty CreateMassProperty(List<Body2> bodies, MathTransform coordinateSystemTransform)
         {
-            if (bodies.Count == 0)
+            return CreateMassPropertyInCoordinateSystem(
+                ActiveSWModel,
+                coordinateSystemTransform,
+                bodies);
+        }
+
+        private MassPropertySnapshot ReadLinkLocalMassProperty(
+            IList<Body2> bodies,
+            MathTransform linkFrameToDocument)
+        {
+            MathTransform globalFrameToDocument = GetCoordinateSystemTransform(
+                assemblyGlobalCoordinateSystemName);
+            if (globalFrameToDocument == null)
             {
-                throw new Exception("Cannot compute mass properties because no solid bodies were found");
+                throw new Exception("Cannot compute mass properties because global coordinate system " +
+                    assemblyGlobalCoordinateSystemName + " was not found");
             }
 
-            MassProperty swMass = ActiveSWModel.Extension.CreateMassProperty();
-            bool addedBodies = swMass.AddBodies(bodies.ToArray());
-            if (!addedBodies)
+            MassProperty swMass = CreateMassPropertyInCoordinateSystem(
+                ActiveSWModel,
+                globalFrameToDocument,
+                bodies);
+            MassPropertySnapshot globalSnapshot = ReadMassProperty(swMass);
+            return MassPropertyFrameConverter.Convert(
+                globalSnapshot,
+                MathOps.GetTransformation(globalFrameToDocument),
+                MathOps.GetTransformation(linkFrameToDocument));
+        }
+
+        private static MassProperty CreateMassPropertyInCoordinateSystem(
+            ModelDoc2 model,
+            MathTransform coordinateSystemTransform,
+            IList<Body2> bodies)
+        {
+            if (coordinateSystemTransform == null)
             {
-                throw new Exception("Failed to add bodies to swMass");
-            }
-            bool coordinateSystemSet = swMass.SetCoordinateSystem(coordinateSystemTransform);
-            if (!coordinateSystemSet)
-            {
-                throw new Exception("SolidWorks rejected the requested mass-property coordinate system");
+                throw new ArgumentNullException("coordinateSystemTransform");
             }
 
+            MassProperty swMass = CreateSystemUnitMassProperty(model);
+            if (bodies != null)
+            {
+                if (bodies.Count == 0)
+                {
+                    throw new Exception(
+                        "Cannot compute mass properties because no solid bodies were found");
+                }
+                if (!swMass.AddBodies(bodies.ToArray()))
+                {
+                    throw new Exception("Failed to add bodies to the mass-property object");
+                }
+            }
+
+            if (!swMass.SetCoordinateSystem(coordinateSystemTransform))
+            {
+                throw new Exception(
+                    "SolidWorks rejected the requested mass-property coordinate system");
+            }
             return swMass;
+        }
+
+        private static MassProperty CreateSystemUnitMassProperty(ModelDoc2 model)
+        {
+            if (model == null)
+            {
+                throw new ArgumentNullException("model");
+            }
+
+            MassProperty swMass = model.Extension.CreateMassProperty();
+            if (swMass == null)
+            {
+                throw new Exception("SolidWorks could not create a mass-property object");
+            }
+
+            // Make the API contract explicit instead of depending on its default value.
+            // URDF requires meters, kilograms, and kg*m^2.
+            swMass.UseSystemUnits = true;
+            return swMass;
+        }
+
+        private static void ApplyMassPropertyToLink(Link link, IMassProperty swMass)
+        {
+            ApplyMassPropertyToLink(link, ReadMassProperty(swMass));
+        }
+
+        private static void ApplyMassPropertyToLink(
+            Link link,
+            MassPropertySnapshot massProperty)
+        {
+            if (link == null)
+            {
+                throw new ArgumentNullException("link");
+            }
+
+            link.Inertial.Mass.Value = massProperty.Mass;
+            link.Inertial.Origin.SetXYZ(massProperty.CenterOfMass);
+            link.Inertial.Origin.SetRPY(new double[] { 0, 0, 0 });
+            link.Inertial.Inertia.SetSolidWorksMomentMatrix(massProperty.Moment);
         }
 
         private static MassPropertySnapshot ReadMassProperty(IMassProperty swMass)
@@ -1389,22 +1553,6 @@ namespace SW2URDF.URDFExport
             double mass = swMass.Mass;
             double[] centerOfMass = (double[])swMass.CenterOfMass;
             return new MassPropertySnapshot(mass, centerOfMass, moment);
-        }
-
-        private sealed class MassPropertySnapshot
-        {
-            public MassPropertySnapshot(double mass, double[] centerOfMass, double[] moment)
-            {
-                Mass = mass;
-                CenterOfMass = centerOfMass;
-                Moment = moment;
-            }
-
-            public double Mass { get; private set; }
-
-            public double[] CenterOfMass { get; private set; }
-
-            public double[] Moment { get; private set; }
         }
 
         private static void ComputeVisualCollisionProperties(Link link)

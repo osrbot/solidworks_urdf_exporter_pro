@@ -55,14 +55,14 @@ namespace SW2URDF.URDFExport
         public LinkNode rightClickedNode;
         private LinkTreeSession linkTreeSession;
         private bool closingAfterSuccessfulExport;
-        private bool closingProgrammatically;
-        private int pendingCloseReason =
-            (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_UnknownReason;
-        private LinkNode pendingCloseProjection;
+        private readonly ExportSessionCloseCoordinator closeCoordinator =
+            new ExportSessionCloseCoordinator();
         [NonSerialized]
         private readonly IExportSessionDraftStore exportSessionDraftStore;
         private readonly string activeModelPath;
         private readonly ContextMenuStrip docMenu;
+        [NonSerialized]
+        private readonly TreeSelectionUpdateGuard treeSelectionUpdateGuard;
 
         //General objects required for the PropertyManager page
 
@@ -99,8 +99,6 @@ namespace SW2URDF.URDFExport
         [field: NonSerialized]
         internal event EventHandler Closed;
 
-        private bool automaticallySwitched = false;
-
         //Each object in the page needs a unique ID
 
         private const int GroupID = 1;
@@ -136,21 +134,14 @@ namespace SW2URDF.URDFExport
 
         public void Close(bool ok)
         {
-            closingProgrammatically = true;
-            try
-            {
-                PMPage.Close(ok);
-            }
-            finally
-            {
-                closingProgrammatically = false;
-            }
+            PMPage.Close(ok);
         }
 
         //The following runs when a new instance of the class is created
         public ExportPropertyManager(SldWorks swAppPtr)
         {
             exportSessionDraftStore = new FileExportSessionDraftStore();
+            treeSelectionUpdateGuard = new TreeSelectionUpdateGuard();
             swApp = swAppPtr;
             ActiveSWModel = swApp.ActiveDoc;
             activeModelPath = ActiveSWModel.GetPathName();
@@ -499,30 +490,12 @@ namespace SW2URDF.URDFExport
         void IPropertyManagerPage2Handler9.OnClose(int Reason)
         {
             logger.Info("URDF property manager close requested with reason " + Reason + ".");
-            if (ShouldRejectExternalClose(Reason))
-            {
-                logger.Warn(
-                    "SolidWorks requested an external close of the URDF property manager " +
-                    "while the Link tree was being edited. The close request was rejected.");
-                throw new COMException(
-                    "The URDF Link tree is still being edited.",
-                    1);
-            }
-
             try
             {
-                pendingCloseReason = Reason;
-                // Preserve the committed in-memory tree before touching the SolidWorks selection
-                // context. Component Preview can invalidate that COM context during page teardown.
-                pendingCloseProjection = linkTreeSession == null
-                    ? null
-                    : linkTreeSession.CreateProjection();
-                if (!closingAfterSuccessfulExport)
-                {
-                    SaveActiveNode();
-                    CommitLinkTreeProjection();
-                    pendingCloseProjection = linkTreeSession.CreateProjection();
-                }
+                closeCoordinator.Capture(
+                    Reason,
+                    CaptureCurrentLinkTreeProjection(),
+                    closingAfterSuccessfulExport);
             }
             catch (Exception e)
             {
@@ -530,40 +503,71 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private bool ShouldRejectExternalClose(int reason)
+        private LinkNode CaptureCurrentLinkTreeProjection()
         {
-            if (closingAfterSuccessfulExport || closingProgrammatically)
+            if (Tree != null && Tree.Nodes.Count > 0)
             {
-                return false;
+                try
+                {
+                    return (LinkNode)((LinkNode)Tree.Nodes[0]).Clone();
+                }
+                catch (Exception exception)
+                {
+                    logger.Warn(
+                        "The closing PropertyManager tree could not be cloned; " +
+                        "falling back to the committed Link-tree session.",
+                        exception);
+                }
             }
 
-            return reason ==
-                    (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_UnknownReason ||
-                reason ==
-                    (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_Closed;
+            try
+            {
+                return linkTreeSession == null ? null : linkTreeSession.CreateProjection();
+            }
+            catch (Exception exception)
+            {
+                logger.Warn("The Link-tree close fallback could not be captured.", exception);
+                return null;
+            }
         }
 
         private void CompletePropertyManagerClose()
         {
-            if (closingAfterSuccessfulExport || pendingCloseProjection == null)
+            ExportSessionCloseAction action = closeCoordinator.BeginFinalization(
+                (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_Okay,
+                out LinkNode projection);
+            if (action == ExportSessionCloseAction.None)
             {
                 return;
             }
 
-            if (pendingCloseReason ==
-                (int)swPropertyManagerPageCloseReasons_e.swPropertyManagerPageClose_Okay)
+            if (action == ExportSessionCloseAction.SaveConfiguration)
             {
-                logger.Info("Configuration saved");
-                if (!SaveConfigTree(ActiveSWModel, pendingCloseProjection, false))
+                bool saved = false;
+                try
+                {
+                    saved = SaveConfigTree(ActiveSWModel, projection, false);
+                }
+                catch (Exception exception)
+                {
+                    logger.Error(
+                        "URDF configuration persistence failed after closing.",
+                        exception);
+                }
+
+                if (!saved)
                 {
                     logger.Error("URDF configuration could not be persisted after closing.");
-                    SaveExportSessionDraft(pendingCloseProjection);
+                    SaveExportSessionDraft(projection);
+                    return;
                 }
+
+                logger.Info("Configuration saved after closing the PropertyManager.");
                 return;
             }
 
             logger.Info("Configuration editing ended without a formal save; preserving a draft.");
-            SaveExportSessionDraft(pendingCloseProjection);
+            SaveExportSessionDraft(projection);
         }
 
         void IPropertyManagerPage2Handler9.OnGainedFocus(int Id)
@@ -605,6 +609,11 @@ namespace SW2URDF.URDFExport
 
         void IPropertyManagerPage2Handler9.OnSelectionboxListChanged(int Id, int Count)
         {
+            if (Id == SelectionID)
+            {
+                UpdateSelectedNodeCadBindings();
+            }
+
             // Move focus to next selection box if right-mouse button pressed
             PMPage.SetCursor((int)swPropertyManagerPageCursors_e.swPropertyManagerPageCursors_Advance);
         }
@@ -618,11 +627,21 @@ namespace SW2URDF.URDFExport
 
         void IPropertyManagerPage2Handler9.OnTextboxChanged(int Id, string Text)
         {
+            LinkNode node = Tree == null ? null : Tree.SelectedNode as LinkNode;
+            if (node == null)
+            {
+                return;
+            }
+
             if (Id == TextBoxLinkNameID)
             {
-                LinkNode node = (LinkNode)Tree.SelectedNode;
-                node.Text = PMTextBoxLinkName.Text;
-                node.Name = PMTextBoxLinkName.Text;
+                node.Link.Name = Text ?? string.Empty;
+                node.Text = node.Link.Name;
+                node.Name = node.Link.Name;
+            }
+            else if (Id == TextBoxJointNameID && !node.IsBaseNode)
+            {
+                node.Link.Joint.Name = Text ?? string.Empty;
             }
         }
 
@@ -641,11 +660,10 @@ namespace SW2URDF.URDFExport
         {
             try
             {
-                if (!automaticallySwitched && e.Node != null)
+                if (!treeSelectionUpdateGuard.IsSuppressed && e.Node != null)
                 {
                     SwitchActiveNodes((LinkNode)e.Node);
                 }
-                automaticallySwitched = false;
             }
             catch (Exception ex)
             {
@@ -1250,8 +1268,7 @@ namespace SW2URDF.URDFExport
 
         void IPropertyManagerPage2Handler9.OnComboboxSelectionChanged(int Id, int Item)
         {
-            logger.Info("OnComboboxSelectionChanged called. This method no longer throws an " +
-                "Exception. It just silently does nothing. Ok, except for this logging message");
+            UpdateSelectedNodeComboValue(Id, Item);
         }
 
         void IPropertyManagerPage2Handler9.OnGroupCheck(int Id, bool Checked)
@@ -1381,17 +1398,35 @@ namespace SW2URDF.URDFExport
             catch (Exception exception)
             {
                 logger.Error("Exception caught after closing the property manager.", exception);
-                ShowPropertyManagerError(
-                    "There was a problem finalizing the property manager close.",
-                    "\u5b8c\u6210\u5c5e\u6027\u7ba1\u7406\u5668\u5173\u95ed\u64cd\u4f5c\u65f6\u53d1\u751f\u9519\u8bef\u3002",
-                    exception);
             }
             finally
             {
-                EventHandler closed = Closed;
-                if (closed != null)
+                NotifyClosed();
+            }
+        }
+
+        private void NotifyClosed()
+        {
+            if (!closeCoordinator.TryClaimClosedNotification())
+            {
+                return;
+            }
+
+            EventHandler closed = Closed;
+            if (closed == null)
+            {
+                return;
+            }
+
+            foreach (EventHandler handler in closed.GetInvocationList())
+            {
+                try
                 {
-                    closed(this, EventArgs.Empty);
+                    handler(this, EventArgs.Empty);
+                }
+                catch (Exception exception)
+                {
+                    logger.Warn("A PropertyManager close subscriber failed.", exception);
                 }
             }
         }

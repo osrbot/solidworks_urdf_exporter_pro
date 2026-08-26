@@ -60,14 +60,20 @@ namespace SW2URDF.UI
         private bool jointUnitInputsResetForCurrentChange;
         private readonly Dictionary<string, Size> buttonDesignSizes;
         private readonly IExportSessionDraftStore exportSessionDraftStore;
+        private readonly TreeSelectionUpdateGuard treeSelectionUpdateGuard;
         private Button buttonUsageGuide;
+        private Label labelLinkCoordinateSystem;
+        private ComboBox comboBoxLinkCoordinateSystem;
+        private ToolTip packagePathToolTip;
         private bool suppressRecoveryDraftOnClose;
 
         private AssemblyExportForm()
         {
             exportSessionDraftStore = new FileExportSessionDraftStore();
+            treeSelectionUpdateGuard = new TreeSelectionUpdateGuard();
             InitializeComponent();
             ChineseUiText.Apply(this);
+            InitializeLinkCoordinateSystemControls();
             InitializeUsageGuideButton();
             InitializeCommonMaterialNames();
             buttonDesignSizes = CaptureButtonDesignSizes();
@@ -79,6 +85,50 @@ namespace SW2URDF.UI
             textBoxIyz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
             comboBoxJointType.TextChanged += ComboBoxJointTypeTextChanged;
             UpdateInertiaMatrixMirrorBoxes();
+        }
+
+        private void InitializeLinkCoordinateSystemControls()
+        {
+            const int addedHeight = 18;
+            foreach (Control control in groupBox5.Controls)
+            {
+                if (control != label15)
+                {
+                    control.Top += addedHeight;
+                }
+            }
+
+            groupBox5.Height += addedHeight;
+            groupBox4.Top = groupBox5.Bottom + 8;
+
+            labelLinkCoordinateSystem = new Label
+            {
+                Name = "labelLinkCoordinateSystem",
+                AutoSize = true,
+                Location = new Point(8, 20),
+                Text = ChineseUiText.Translate("Link frame", "Link 坐标系")
+            };
+            comboBoxLinkCoordinateSystem = new ComboBox
+            {
+                Name = "comboBoxLinkCoordinateSystem",
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Location = new Point(110, 16),
+                Size = new Size(groupBox5.ClientSize.Width - 120, 21),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                TabIndex = 2
+            };
+            comboBoxLinkCoordinateSystem.SelectionChangeCommitted +=
+                LinkCoordinateSystemSelectionChangeCommitted;
+            groupBox5.Controls.Add(labelLinkCoordinateSystem);
+            groupBox5.Controls.Add(comboBoxLinkCoordinateSystem);
+
+            if (components == null)
+            {
+                components = new System.ComponentModel.Container();
+            }
+            packagePathToolTip = new ToolTip(components);
+            labelRosPackageNameHint.AutoSize = false;
+            labelRosPackageNameHint.AutoEllipsis = true;
         }
 
         private void InitializeUsageGuideButton()
@@ -201,6 +251,7 @@ namespace SW2URDF.UI
             UpdateRosPackageNameHint();
             Exporter.UpdateReferenceGeometries();
             FillJointTree();
+            SelectFirstJointNodeForEditing();
         }
 
         private void ButtonJointNextClick(object sender, EventArgs e)
@@ -209,8 +260,6 @@ namespace SW2URDF.UI
             {
                 SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link.Joint);
             }
-            previouslySelectedNode = null; // Need to clear this for the link properties page
-
             string errors = CheckJointsForErrors();
             if (!string.IsNullOrWhiteSpace(errors))
             {
@@ -220,15 +269,15 @@ namespace SW2URDF.UI
                 return;
             }
 
-            while (treeViewJointTree.Nodes.Count > 0)
-            {
-                LinkNode node = (LinkNode)treeViewJointTree.Nodes[0];
-                treeViewJointTree.Nodes.Remove(node);
-                BaseNode.Nodes.Add(node);
-            }
+            MoveJointTreeNodesToBaseNode();
             ChangeAllNodeFont(BaseNode, new Font(treeViewJointTree.Font, FontStyle.Regular));
 
-            FillLinkTree();
+            using (treeSelectionUpdateGuard.Suppress())
+            {
+                FillLinkTree();
+                treeViewLinkProperties.SelectedNode = BaseNode;
+            }
+            DisplayLinkNode(BaseNode);
             panelLinkProperties.Visible = true;
             ResetLinkPanelScroll();
             Focus();
@@ -342,12 +391,7 @@ namespace SW2URDF.UI
             {
                 SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link.Joint);
             }
-            while (treeViewJointTree.Nodes.Count > 0)
-            {
-                LinkNode node = (LinkNode)treeViewJointTree.Nodes[0];
-                treeViewJointTree.Nodes.Remove(node);
-                BaseNode.Nodes.Add(node);
-            }
+            MoveJointTreeNodesToBaseNode();
             if (SaveConfigTree(ActiveSWModel, BaseNode, true))
             {
                 CloseWithoutRecoveryDraft();
@@ -377,6 +421,7 @@ namespace SW2URDF.UI
             ChangeAllNodeFont(BaseNode, new Font(treeViewJointTree.Font, FontStyle.Regular));
             FillJointTree();
             panelLinkProperties.Visible = false;
+            SelectFirstJointNodeForEditing();
         }
 
         private void ButtonLinksFinishClick(object sender, EventArgs e)
@@ -506,7 +551,55 @@ namespace SW2URDF.UI
         private void UpdateRosPackageNameHint()
         {
             string sanitized = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
-            labelRosPackageNameHint.Text = "ROS1/" + sanitized + " | ROS2/" + sanitized;
+            labelRosPackageNameHint.Text = "ROS1/2: " + sanitized;
+            packagePathToolTip.SetToolTip(
+                labelRosPackageNameHint,
+                "ROS1/" + sanitized + " | ROS2/" + sanitized);
+        }
+
+        private void LinkCoordinateSystemSelectionChangeCommitted(object sender, EventArgs e)
+        {
+            LinkNode node = treeViewLinkProperties.SelectedNode as LinkNode;
+            if (node == null || node.Link == null || node.Link.isFixedFrame)
+            {
+                return;
+            }
+
+            string previousCoordinateSystem = node.Link.Joint.CoordinateSystemName;
+            string selectedCoordinateSystem = comboBoxLinkCoordinateSystem.Text;
+            if (string.Equals(
+                previousCoordinateSystem,
+                selectedCoordinateSystem,
+                StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            try
+            {
+                SaveLinkDataFromPropertyBoxes(node.Link);
+                // Save the other edited fields, but let the exporter change the frame
+                // transactionally so a failed SolidWorks recomputation can roll back.
+                node.Link.Joint.CoordinateSystemName = previousCoordinateSystem;
+                Exporter.RecomputeLinkCoordinateSystem(
+                    node,
+                    selectedCoordinateSystem);
+                FillLinkPropertyBoxes(node.Link);
+                logger.Info("Changed Link coordinate system for " + node.Link.Name +
+                    " from " + previousCoordinateSystem + " to " + selectedCoordinateSystem);
+            }
+            catch (Exception exception)
+            {
+                FillLinkPropertyBoxes(node.Link);
+                logger.Warn("Could not change Link coordinate system for " + node.Link.Name, exception);
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "The Link coordinate system could not be changed:\r\n",
+                        "无法修改 Link 坐标系：\r\n") + exception.Message,
+                    ChineseUiText.Translate("Link coordinate system", "Link 坐标系"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
 
         private string CheckLinksForErrors(Link baseLink)
@@ -531,6 +624,16 @@ namespace SW2URDF.UI
 
         private void TreeViewLinkPropertiesAfterSelect(object sender, TreeViewEventArgs e)
         {
+            if (treeSelectionUpdateGuard.IsSuppressed)
+            {
+                return;
+            }
+
+            DisplayLinkNode((LinkNode)e.Node);
+        }
+
+        private void DisplayLinkNode(LinkNode node)
+        {
             ClearInertiaPreview();
             Font fontRegular = new Font(treeViewJointTree.Font, FontStyle.Regular);
             Font fontBold = new Font(treeViewJointTree.Font, FontStyle.Bold);
@@ -539,7 +642,6 @@ namespace SW2URDF.UI
                 SaveLinkDataFromPropertyBoxes(previouslySelectedNode.Link);
                 previouslySelectedNode.NodeFont = fontRegular;
             }
-            LinkNode node = (LinkNode)e.Node;
             node.NodeFont = fontBold;
             node.Text = node.Text;
             ActiveSWModel.ClearSelection2(true);
@@ -782,8 +884,8 @@ namespace SW2URDF.UI
                 "Show inertia ellipsoid",
                 "\u663e\u793a\u60ef\u6027\u692d\u7403");
             labelInertiaPreviewStatus.Text = ChineseUiText.Translate(
-                "R a / G b / B c: principal semi-axes",
-                "\u7ea2a / \u7effb / \u84ddc\uff1a\u4e3b\u60ef\u6027\u534a\u8f74");
+                "R a / G b / B c: principal semi-axes (mm)",
+                "\u7ea2a / \u7effb / \u84ddc\uff1a\u4e3b\u60ef\u6027\u534a\u8f74 (mm)");
         }
 
         private void AssemblyExportFormClosed(object sender, FormClosedEventArgs e)
@@ -835,12 +937,7 @@ namespace SW2URDF.UI
                 {
                     SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link.Joint);
                 }
-                while (treeViewJointTree.Nodes.Count > 0)
-                {
-                    LinkNode node = (LinkNode)treeViewJointTree.Nodes[0];
-                    treeViewJointTree.Nodes.Remove(node);
-                    BaseNode.Nodes.Add(node);
-                }
+                MoveJointTreeNodesToBaseNode();
             }
 
             ApplyEditedMeshReductionToExportTree();
@@ -935,6 +1032,16 @@ namespace SW2URDF.UI
 
         private void TreeViewJointtreeAfterSelect(object sender, TreeViewEventArgs e)
         {
+            if (treeSelectionUpdateGuard.IsSuppressed)
+            {
+                return;
+            }
+
+            DisplayJointNode((LinkNode)e.Node);
+        }
+
+        private void DisplayJointNode(LinkNode node)
+        {
             Font fontRegular = new Font(treeViewJointTree.Font, FontStyle.Regular);
             Font fontBold = new Font(treeViewJointTree.Font, FontStyle.Bold);
             if (previouslySelectedNode != null && !previouslySelectedNode.IsBaseNode)
@@ -945,7 +1052,6 @@ namespace SW2URDF.UI
             {
                 previouslySelectedNode.NodeFont = fontRegular;
             }
-            LinkNode node = (LinkNode)e.Node;
             ActiveSWModel.ClearSelection2(true);
             SelectionMgr manager = ActiveSWModel.SelectionManager;
 
@@ -959,6 +1065,37 @@ namespace SW2URDF.UI
             node.Text = node.Text;
             FillJointPropertyBoxes(node.Link.Joint);
             previouslySelectedNode = node;
+        }
+
+        private void SelectFirstJointNodeForEditing()
+        {
+            if (treeViewJointTree.Nodes.Count == 0)
+            {
+                previouslySelectedNode = null;
+                FillJointPropertyBoxes(null);
+                return;
+            }
+
+            LinkNode node = (LinkNode)treeViewJointTree.Nodes[0];
+            using (treeSelectionUpdateGuard.Suppress())
+            {
+                treeViewJointTree.SelectedNode = node;
+            }
+            DisplayJointNode(node);
+        }
+
+        private void MoveJointTreeNodesToBaseNode()
+        {
+            using (treeSelectionUpdateGuard.Suppress())
+            {
+                while (treeViewJointTree.Nodes.Count > 0)
+                {
+                    LinkNode node = (LinkNode)treeViewJointTree.Nodes[0];
+                    treeViewJointTree.Nodes.Remove(node);
+                    BaseNode.Nodes.Add(node);
+                }
+                previouslySelectedNode = null;
+            }
         }
 
         private void ComboBoxAxisSelectedIndexChanged(object sender, EventArgs e)
@@ -1035,11 +1172,23 @@ namespace SW2URDF.UI
                 PositionJointFooterControls();
                 PositionLinkFooterButtons();
                 PositionUsageGuideButton();
+                PositionRosPackageNameHint();
             }
             finally
             {
                 applyingLayoutFixes = false;
             }
+        }
+
+        private void PositionRosPackageNameHint()
+        {
+            int right = buttonUsageGuide == null
+                ? ClientSize.Width - 12
+                : buttonUsageGuide.Left - 8;
+            right = Math.Min(right, groupBox5.Right);
+            labelRosPackageNameHint.Width = Math.Max(
+                80,
+                right - labelRosPackageNameHint.Left);
         }
 
         private void PositionUsageGuideButton()

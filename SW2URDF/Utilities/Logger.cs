@@ -23,7 +23,9 @@ namespace SW2URDF.Utilities
 
     public static class Logger
     {
-        private static bool Initialized = false;
+        internal const string LogFileEnvironmentVariable = "SW2URDF_LOG_FILE";
+        private static readonly object InitializationLock = new object();
+        private static volatile bool Initialized = false;
 
         public static void Setup()
         {
@@ -32,6 +34,20 @@ namespace SW2URDF.Utilities
                 return;
             }
 
+            lock (InitializationLock)
+            {
+                if (Initialized)
+                {
+                    return;
+                }
+
+                SetupCore();
+                Initialized = true;
+            }
+        }
+
+        private static void SetupCore()
+        {
             Hierarchy hierarchy = (Hierarchy)LogManager.GetRepository();
 
             // This ConversionPattern is slow because any location-based parameter in log4net is
@@ -44,13 +60,13 @@ namespace SW2URDF.Utilities
             patternLayout.AddConverter("filename", typeof(FileNamePatternConverter));
             patternLayout.ActivateOptions();
 
-            string homeDir = Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%");
-            string logFileName = Path.Combine(homeDir, "sw2urdf_logs", "sw2urdf.log");
+            string logFileName = GetConfiguredLogFileName();
             PrepareFreshLogFile(logFileName);
             RollingFileAppender roller = new RollingFileAppender
             {
                 AppendToFile = true,
                 File = logFileName,
+                ImmediateFlush = true,
                 Layout = patternLayout,
                 Encoding = new UTF8Encoding(false),
                 MaxSizeRollBackups = 5,
@@ -68,7 +84,6 @@ namespace SW2URDF.Utilities
 
             hierarchy.Root.Level = Level.Info;
             hierarchy.Configured = true;
-            Initialized = true;
             ILog logger = LogManager.GetLogger(
                 MethodBase.GetCurrentMethod().DeclaringType);
             logger.Info("\n" + String.Concat(Enumerable.Repeat("-", 80)));
@@ -80,6 +95,19 @@ namespace SW2URDF.Utilities
             logger.Info("Build version " + Versioning.Version.GetBuildVersion());
             logger.Info("Build time UTC " + Versioning.Version.GetBuildTimeUtc());
             logger.Info("Dirty state " + Versioning.Version.GetDirtyState());
+        }
+
+        private static string GetConfiguredLogFileName()
+        {
+            string configuredPath = Environment.GetEnvironmentVariable(
+                LogFileEnvironmentVariable);
+            if (!String.IsNullOrWhiteSpace(configuredPath))
+            {
+                return Path.GetFullPath(configuredPath);
+            }
+
+            string homeDir = Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%");
+            return Path.Combine(homeDir, "sw2urdf_logs", "sw2urdf.log");
         }
 
         private static void PrepareFreshLogFile(string filename)

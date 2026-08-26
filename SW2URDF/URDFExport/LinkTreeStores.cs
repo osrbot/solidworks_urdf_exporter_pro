@@ -41,6 +41,15 @@ namespace SW2URDF.URDFExport
                 node.WhyIncomplete);
         }
 
+        public void NormalizeRoot(Guid id)
+        {
+            LinkConfigurationState state;
+            if (states.TryGetValue(id, out state))
+            {
+                state.NormalizeAsRoot();
+            }
+        }
+
         public void CreateDefault(Guid id)
         {
             Link link = new Link();
@@ -249,6 +258,11 @@ namespace SW2URDF.URDFExport
             NeedsSaving = true;
             WhyIncomplete = reason;
             configuration.isIncomplete = true;
+        }
+
+        public void NormalizeAsRoot()
+        {
+            LinkTreeRootJointPolicy.Normalize(configuration);
         }
 
         public bool RequiresJointKinematics()
