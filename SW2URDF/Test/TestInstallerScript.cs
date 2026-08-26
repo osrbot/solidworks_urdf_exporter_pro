@@ -349,6 +349,82 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestPropertyManagerCapturesRecoveryProjectionBeforeSolidWorksSelection()
+        {
+            string propertyManager = ReadRepositoryFile(
+                "SW2URDF", "URDFExport", "ExportPropertyManager.cs");
+            int onClose = propertyManager.IndexOf(
+                "void IPropertyManagerPage2Handler9.OnClose(int Reason)",
+                StringComparison.Ordinal);
+            int onCloseEnd = propertyManager.IndexOf(
+                "private bool ShouldRejectExternalClose",
+                onClose,
+                StringComparison.Ordinal);
+
+            Assert.True(onClose >= 0);
+            Assert.True(onCloseEnd > onClose);
+            string onCloseBody = propertyManager.Substring(onClose, onCloseEnd - onClose);
+            int recoveryProjection = onCloseBody.IndexOf(
+                "linkTreeSession.CreateProjection()",
+                StringComparison.Ordinal);
+            int solidWorksSelection = onCloseBody.IndexOf(
+                "SaveActiveNode()",
+                StringComparison.Ordinal);
+
+            Assert.True(recoveryProjection >= 0);
+            Assert.True(solidWorksSelection > recoveryProjection);
+        }
+
+        [Fact]
+        public void TestLinkTreeApplyCreatesRecoveryCheckpoint()
+        {
+            string extension = ReadRepositoryFile(
+                "SW2URDF", "URDFExport", "ExportPropertyManagerExtension.cs");
+            int openCanvas = extension.IndexOf(
+                "private void OpenLinkTreeCanvas()",
+                StringComparison.Ordinal);
+            int openCanvasEnd = extension.IndexOf(
+                "private void ReplaceLinkTreeRoot",
+                openCanvas,
+                StringComparison.Ordinal);
+
+            Assert.True(openCanvas >= 0);
+            Assert.True(openCanvasEnd > openCanvas);
+            string openCanvasBody = extension.Substring(openCanvas, openCanvasEnd - openCanvas);
+            int refreshProjection = openCanvasBody.IndexOf(
+                "RefreshLinkTreeProjection(selectedNodeId)",
+                StringComparison.Ordinal);
+            int recoveryCheckpoint = openCanvasBody.IndexOf(
+                "SaveExportSessionDraft(linkTreeSession.CreateProjection())",
+                StringComparison.Ordinal);
+
+            Assert.True(recoveryCheckpoint >= 0);
+            Assert.True(refreshProjection > recoveryCheckpoint);
+        }
+
+        [Fact]
+        public void TestRecoveryDraftPersistenceDoesNotReadSolidWorksSelectionState()
+        {
+            string extension = ReadRepositoryFile(
+                "SW2URDF", "URDFExport", "ExportPropertyManagerExtension.cs");
+            int saveDraft = extension.IndexOf(
+                "private void SaveExportSessionDraft(LinkNode root)",
+                StringComparison.Ordinal);
+            int saveDraftEnd = extension.IndexOf(
+                "private void ClearExportSessionDraft()",
+                saveDraft,
+                StringComparison.Ordinal);
+
+            Assert.True(saveDraft >= 0);
+            Assert.True(saveDraftEnd > saveDraft);
+            string saveDraftBody = extension.Substring(saveDraft, saveDraftEnd - saveDraft);
+            Assert.DoesNotContain("RetrieveSWComponentPIDs", saveDraftBody);
+            Assert.DoesNotContain("ActiveSWModel", saveDraftBody);
+            Assert.Contains("activeModelPath", saveDraftBody);
+            Assert.Contains("exportSessionDraftStore.Save(", saveDraftBody);
+        }
+
+        [Fact]
         public void TestDisplayStateCallbacksRejectUnexpectedComObjects()
         {
             string eventHandling = ReadRepositoryFile("SW2URDF", "SW", "EventHandling.cs");

@@ -61,6 +61,7 @@ namespace SW2URDF.URDFExport
         private LinkNode pendingCloseProjection;
         [NonSerialized]
         private readonly IExportSessionDraftStore exportSessionDraftStore;
+        private readonly string activeModelPath;
         private readonly ContextMenuStrip docMenu;
 
         //General objects required for the PropertyManager page
@@ -152,6 +153,7 @@ namespace SW2URDF.URDFExport
             exportSessionDraftStore = new FileExportSessionDraftStore();
             swApp = swAppPtr;
             ActiveSWModel = swApp.ActiveDoc;
+            activeModelPath = ActiveSWModel.GetPathName();
             Exporter = new ExportHelper(swApp);
             Exporter.URDFRobot = new Robot();
             Exporter.URDFRobot.Name = ActiveSWModel.GetTitle();
@@ -510,7 +512,11 @@ namespace SW2URDF.URDFExport
             try
             {
                 pendingCloseReason = Reason;
-                pendingCloseProjection = null;
+                // Preserve the committed in-memory tree before touching the SolidWorks selection
+                // context. Component Preview can invalidate that COM context during page teardown.
+                pendingCloseProjection = linkTreeSession == null
+                    ? null
+                    : linkTreeSession.CreateProjection();
                 if (!closingAfterSuccessfulExport)
                 {
                     SaveActiveNode();

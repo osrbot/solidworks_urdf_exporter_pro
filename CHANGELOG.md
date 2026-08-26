@@ -2,6 +2,17 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## 2026-08-26
+
+### Fixed
+
+- Checkpointed accepted Link-tree canvas edits immediately and retained an in-memory fallback
+  before reading SolidWorks selections during PropertyManager close, so entering and leaving the
+  Component Preview window cannot discard the edited tree or prevent recovery on the next launch.
+- Decoupled recovery-draft file persistence from live SolidWorks component selection and PID
+  refresh calls, allowing a valid committed snapshot to be saved while SolidWorks tears down or
+  replaces the PropertyManager for native preview commands.
+
 ## 2026-08-25
 
 ### Added

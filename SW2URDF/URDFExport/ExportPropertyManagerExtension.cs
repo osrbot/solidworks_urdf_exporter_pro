@@ -68,6 +68,7 @@ namespace SW2URDF.URDFExport
                     PMComputeJointLimits.Checked = true;
                     logger.Info("Joint configuration changed; joint limit recomputation was enabled.");
                 }
+                SaveExportSessionDraft(linkTreeSession.CreateProjection());
                 RefreshLinkTreeProjection(selectedNodeId);
             }
             catch (Exception exception)
@@ -167,13 +168,12 @@ namespace SW2URDF.URDFExport
         {
             try
             {
-                if (root == null || ActiveSWModel == null)
+                if (root == null || String.IsNullOrWhiteSpace(activeModelPath))
                 {
                     return;
                 }
-                CommonSwOperations.RetrieveSWComponentPIDs(ActiveSWModel, root);
                 if (exportSessionDraftStore.Save(
-                    ActiveSWModel.GetPathName(),
+                    activeModelPath,
                     root,
                     Exporter.RosPackageName,
                     Exporter.SavePath))
@@ -191,9 +191,9 @@ namespace SW2URDF.URDFExport
         {
             try
             {
-                if (ActiveSWModel != null)
+                if (!String.IsNullOrWhiteSpace(activeModelPath))
                 {
-                    exportSessionDraftStore.Delete(ActiveSWModel.GetPathName());
+                    exportSessionDraftStore.Delete(activeModelPath);
                 }
             }
             catch (Exception exception)
@@ -673,7 +673,7 @@ namespace SW2URDF.URDFExport
                 out string errorMessage);
 
             bool restoredDraft = exportSessionDraftStore.TryLoad(
-                ActiveSWModel.GetPathName(),
+                activeModelPath,
                 out ExportSessionDraft draft);
             if (restoredDraft)
             {
