@@ -1085,7 +1085,7 @@ namespace SW2URDF.URDFExport
 
         private static void UseCylinderCollisionGeometry(Link link, LinkLocalBoundingBox box)
         {
-            int axis = box.LongestAxisIndex;
+            int axis = box.CylinderAxisIndex;
             int uAxis = (axis + 1) % 3;
             int vAxis = (axis + 2) % 3;
             double radius = Math.Max(box.GetDimension(uAxis), box.GetDimension(vAxis)) / 2.0;
@@ -1684,7 +1684,7 @@ namespace SW2URDF.URDFExport
 
             const int segments = 24;
             Directory.CreateDirectory(Path.GetDirectoryName(filename));
-            int axis = box.LongestAxisIndex;
+            int axis = box.CylinderAxisIndex;
             int uAxis = (axis + 1) % 3;
             int vAxis = (axis + 2) % 3;
             double[] center = box.Center;
@@ -2157,6 +2157,32 @@ namespace SW2URDF.URDFExport
                         return 0;
                     }
                     return Depth >= Height ? 1 : 2;
+                }
+            }
+
+            public int CylinderAxisIndex
+            {
+                get
+                {
+                    int bestAxis = 0;
+                    double bestRadialMismatch = Double.PositiveInfinity;
+                    for (int axis = 0; axis < 3; axis++)
+                    {
+                        int firstRadialAxis = (axis + 1) % 3;
+                        int secondRadialAxis = (axis + 2) % 3;
+                        double firstRadius = GetDimension(firstRadialAxis);
+                        double secondRadius = GetDimension(secondRadialAxis);
+                        double scale = Math.Max(firstRadius, secondRadius);
+                        double mismatch = scale > MinimumDimension
+                            ? Math.Abs(firstRadius - secondRadius) / scale
+                            : Double.PositiveInfinity;
+                        if (mismatch < bestRadialMismatch)
+                        {
+                            bestAxis = axis;
+                            bestRadialMismatch = mismatch;
+                        }
+                    }
+                    return bestAxis;
                 }
             }
 

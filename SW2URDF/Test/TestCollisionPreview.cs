@@ -45,7 +45,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestCylinderDimensionsMatchExporterLongestAxisRule()
+        public void TestCylinderDimensionsUseAxisWithClosestRadialDimensions()
         {
             ExportHelper.LinkLocalBoundingBox box = CreateBox(-2.0, -1.0, -1.5, 4.0, 3.0, 1.5);
 
@@ -55,23 +55,14 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestCylinderWireframeUsesTwoCirclesAndFourAxialLines()
+        public void TestCylinderDimensionsUseWheelThicknessAsAxis()
         {
-            ExportHelper.LinkLocalBoundingBox box = CreateBox(-2.0, -1.0, -1.5, 4.0, 3.0, 1.5);
+            ExportHelper.LinkLocalBoundingBox box =
+                CreateBox(-0.02, -0.10, -0.10, 0.02, 0.10, 0.10);
 
-            double[][] circles = CollisionPreview.BuildCylinderCircleDimensions(box);
-            double[][] lines = CollisionPreview.BuildCylinderLineDimensions(box);
+            double[] result = CollisionPreview.BuildCylinderDimensions(box);
 
-            Assert.Equal(2, circles.Length);
-            Assert.Equal(4, lines.Length);
-            Assert.Equal(-2.0, circles[0][0], 12);
-            Assert.Equal(4.0, circles[1][0], 12);
-            Assert.All(lines, line =>
-            {
-                Assert.Equal(6.0, line[3] - line[0], 12);
-                Assert.Equal(0.0, line[4] - line[1], 12);
-                Assert.Equal(0.0, line[5] - line[2], 12);
-            });
+            Assert.Equal(new[] { -0.02, 0.0, 0.0, 1.0, 0.0, 0.0, 0.10, 0.04 }, result);
         }
 
         [Fact]

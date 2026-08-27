@@ -101,8 +101,8 @@ namespace SW2URDF.UI
                                 displayContext.LinkToDisplayTarget,
                                 displayContext.DisplayTarget);
                             status = ChineseUiText.Translate(
-                                "Cylinder collision wireframe preview shown.",
-                                "已显示圆柱碰撞线框预览。");
+                                "Solid cylinder collision preview shown.",
+                                "已显示实体圆柱碰撞预览。");
                             break;
                         case CollisionMeshStrategy.SpherePrimitive:
                             displayedBodyCount = ShowSphere(modeler, link,
@@ -209,7 +209,7 @@ namespace SW2URDF.UI
         internal static double[] BuildCylinderDimensions(ExportHelper.LinkLocalBoundingBox box)
         {
             RequireUsableBox(box);
-            int axis = box.LongestAxisIndex;
+            int axis = box.CylinderAxisIndex;
             int uAxis = (axis + 1) % 3;
             int vAxis = (axis + 2) % 3;
             double[] center = box.Center;
@@ -222,43 +222,6 @@ namespace SW2URDF.UI
             dimensions[6] = Math.Max(box.GetDimension(uAxis), box.GetDimension(vAxis)) / 2.0;
             dimensions[7] = box.GetDimension(axis);
             return dimensions;
-        }
-
-        internal static double[][] BuildCylinderCircleDimensions(ExportHelper.LinkLocalBoundingBox box)
-        {
-            double[] cylinder = BuildCylinderDimensions(box);
-            double[] axis = { cylinder[3], cylinder[4], cylinder[5] };
-            double[] majorAxis = CreateOrthogonalAxis(axis, 1);
-            double[] minorAxis = Cross(axis, majorAxis);
-            double[] baseCenter = { cylinder[0], cylinder[1], cylinder[2] };
-            double[] topCenter = AddScaled(baseCenter, axis, cylinder[7]);
-            return new[]
-            {
-                BuildCircleDimensions(baseCenter, cylinder[6], majorAxis, minorAxis),
-                BuildCircleDimensions(topCenter, cylinder[6], majorAxis, minorAxis)
-            };
-        }
-
-        internal static double[][] BuildCylinderLineDimensions(ExportHelper.LinkLocalBoundingBox box)
-        {
-            double[] cylinder = BuildCylinderDimensions(box);
-            double[] axis = { cylinder[3], cylinder[4], cylinder[5] };
-            double[] majorAxis = CreateOrthogonalAxis(axis, 1);
-            double[] minorAxis = Cross(axis, majorAxis);
-            double[] baseCenter = { cylinder[0], cylinder[1], cylinder[2] };
-            double[] topCenter = AddScaled(baseCenter, axis, cylinder[7]);
-            double[][] radialDirections =
-            {
-                majorAxis, Scale(majorAxis, -1.0), minorAxis, Scale(minorAxis, -1.0)
-            };
-            double[][] lines = new double[radialDirections.Length][];
-            for (int index = 0; index < radialDirections.Length; index++)
-            {
-                lines[index] = BuildLineDimensions(
-                    AddScaled(baseCenter, radialDirections[index], cylinder[6]),
-                    AddScaled(topCenter, radialDirections[index], cylinder[6]));
-            }
-            return lines;
         }
 
         internal static double[][] BuildSphereCircleDimensions(ExportHelper.LinkLocalBoundingBox box)
@@ -290,18 +253,28 @@ namespace SW2URDF.UI
         private int ShowCylinder(Modeler modeler, Link link, MathTransform transform,
             object displayTarget)
         {
-            ExportHelper.LinkLocalBoundingBox box = exporter.CreateLinkLocalBoundingBox(link);
-            double[][] circles = BuildCylinderCircleDimensions(box);
-            double[][] lines = BuildCylinderLineDimensions(box);
-            foreach (double[] circle in circles)
+            Body2 body = null;
+            try
             {
-                AddCircle(modeler, circle, transform, displayTarget);
+                double[] dimensions = BuildCylinderDimensions(
+                    exporter.CreateLinkLocalBoundingBox(link));
+                body = modeler.CreateBodyFromCyl(dimensions) as Body2;
+                if (body == null)
+                {
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "SolidWorks could not create the solid cylinder collision preview.",
+                        "SolidWorks 无法创建实体圆柱碰撞预览。"));
+                }
+
+                Body2 ownedBody = body;
+                body = null;
+                AddBody(ownedBody, transform, DrawingColor.OrangeRed, displayTarget);
+                return 1;
             }
-            foreach (double[] line in lines)
+            finally
             {
-                AddLine(modeler, line, transform, displayTarget);
+                ReleaseComObject(body);
             }
-            return circles.Length + lines.Length;
         }
 
         private int ShowSphere(Modeler modeler, Link link, MathTransform transform,
@@ -474,63 +447,6 @@ namespace SW2URDF.UI
         private static double[] BuildLineDimensions(double[] start, double[] end)
         {
             return new[] { start[0], start[1], start[2], end[0], end[1], end[2] };
-        }
-
-        private static double[] CreateOrthogonalAxis(double[] axis, int preferredAxis)
-        {
-            double[] candidate = new double[3];
-            candidate[preferredAxis] = 1.0;
-            if (Math.Abs(Dot(axis, candidate)) > 0.5)
-            {
-                candidate = new double[3];
-                candidate[(preferredAxis + 1) % 3] = 1.0;
-            }
-            return Normalize(Subtract(candidate, Scale(axis, Dot(axis, candidate))));
-        }
-
-        private static double[] AddScaled(double[] point, double[] direction, double scale)
-        {
-            return new[]
-            {
-                point[0] + direction[0] * scale,
-                point[1] + direction[1] * scale,
-                point[2] + direction[2] * scale
-            };
-        }
-
-        private static double[] Subtract(double[] left, double[] right)
-        {
-            return new[] { left[0] - right[0], left[1] - right[1], left[2] - right[2] };
-        }
-
-        private static double[] Scale(double[] value, double scale)
-        {
-            return new[] { value[0] * scale, value[1] * scale, value[2] * scale };
-        }
-
-        private static double Dot(double[] left, double[] right)
-        {
-            return left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
-        }
-
-        private static double[] Cross(double[] left, double[] right)
-        {
-            return new[]
-            {
-                left[1] * right[2] - left[2] * right[1],
-                left[2] * right[0] - left[0] * right[2],
-                left[0] * right[1] - left[1] * right[0]
-            };
-        }
-
-        private static double[] Normalize(double[] value)
-        {
-            double length = Math.Sqrt(Dot(value, value));
-            if (length <= 1e-12)
-            {
-                throw new InvalidOperationException("Cannot normalize a zero-length vector.");
-            }
-            return Scale(value, 1.0 / length);
         }
 
         private static bool IsMeshStrategy(CollisionMeshStrategy strategy)
