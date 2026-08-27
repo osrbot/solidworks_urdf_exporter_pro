@@ -171,12 +171,15 @@ jobs:
           fi
           release_lock="$(mktemp)"
           git show "${source_sha}:SW2URDF/packages.release.lock.json" > "$release_lock"
-          if [[ "$(jq -S -c '.packages | sort_by(.id, .version)' "$release_lock")" !=
-                "$(jq -S -c '.packageInputs | sort_by(.id, .version)' "$provenance_path")" ||
-                "$(jq -r '.nuget.version' "$release_lock")" !=
-                "$(jq -r '.tools.nuget.version' "$provenance_path")" ||
-                "$(jq -r '.nuget.sha256' "$release_lock")" !=
-                "$(jq -r '.tools.nuget.sha256' "$provenance_path")" ]]; then
+          locked_packages="$(jq -S -c '.packages | sort_by(.id, .version)' "$release_lock")"
+          provenance_packages="$(jq -S -c '.packageInputs | sort_by(.id, .version)' "$provenance_path")"
+          locked_nuget_version="$(jq -r '.nuget.version' "$release_lock")"
+          provenance_nuget_version="$(jq -r '.tools.nuget.version' "$provenance_path")"
+          locked_nuget_sha256="$(jq -r '.nuget.sha256' "$release_lock")"
+          provenance_nuget_sha256="$(jq -r '.tools.nuget.sha256' "$provenance_path")"
+          if [[ "$locked_packages" != "$provenance_packages" ||
+                "$locked_nuget_version" != "$provenance_nuget_version" ||
+                "$locked_nuget_sha256" != "$provenance_nuget_sha256" ]]; then
             echo "Installer provenance does not match the source commit's release lock." >&2
             exit 1
           fi
