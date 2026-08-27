@@ -71,6 +71,10 @@ namespace SW2URDF.URDFExport
         private UserProgressBar progressBar;
         private Stopwatch exportStopwatch;
         private int exportStageNumber;
+        public event EventHandler<ExportProgressEventArgs> ExportProgressChanged;
+
+        [XmlIgnore]
+        public ExportResultSummary LastExportSummary { get; private set; }
         private static readonly int[][] BoxTriangleIndices = new[]
         {
             new[] { 0, 2, 1 },
@@ -179,6 +183,7 @@ namespace SW2URDF.URDFExport
         public bool ExportRobot(bool exportSTL = true, MeshExportFormat meshFormat = MeshExportFormat.STL)
         {
             ExportErrorWhy = "";
+            LastExportSummary = null;
             exportStopwatch = Stopwatch.StartNew();
             exportStageNumber = 0;
             logger.Info("Beginning the export process");
@@ -200,6 +205,8 @@ namespace SW2URDF.URDFExport
             bool visibilityMayHaveChanged = false;
             List<string> hiddenComponents = null;
             List<MeshExportRecord> meshRecords = new List<MeshExportRecord>();
+            URDFPackage exportedPackage = null;
+            ExportOutputSnapshot outputBeforeExport = null;
             try
             {
                 int progressBarBound = GetMeshExportLinks(URDFRobot.BaseLink).Count;
@@ -213,6 +220,8 @@ namespace SW2URDF.URDFExport
                 logger.Info("Creating package directories with ROS package name " + RosPackageName +
                     ", robot name " + PackageName + " and save path " + SavePath);
                 URDFPackage package = new URDFPackage(PackageName, RosPackageName, SavePath);
+                exportedPackage = package;
+                outputBeforeExport = ExportOutputSnapshot.Capture(package);
                 package.CreateDirectories();
                 URDFRobot.Name = PackageName;
                 string windowsURDFFileName = package.WindowsRobotsDirectory + URDFRobot.Name + ".urdf";
@@ -337,6 +346,19 @@ namespace SW2URDF.URDFExport
                 logger.Error("Export process failed after " +
                     OperationHeartbeat.FormatElapsed(exportStopwatch.Elapsed));
                 return false;
+            }
+            try
+            {
+                LastExportSummary = ExportResultSummary.Create(
+                    exportedPackage,
+                    outputBeforeExport,
+                    exportStopwatch.Elapsed);
+            }
+            catch (Exception summaryException)
+            {
+                // Reporting is auxiliary. It must never turn a completed export into
+                // a failure after the ROS packages have already been written.
+                logger.Warn("Could not calculate the export result summary", summaryException);
             }
             logger.Info("Export process completed successfully for ROS package " + RosPackageName +
                 " and robot " + PackageName + "; elapsed " +
@@ -1258,7 +1280,7 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private LinkLocalBoundingBox CreateLinkLocalBoundingBox(Link link)
+        internal LinkLocalBoundingBox CreateLinkLocalBoundingBox(Link link)
         {
             LinkLocalBoundingBox box = new LinkLocalBoundingBox();
             if (link == null || link.SWComponents == null || link.SWComponents.Count == 0 ||
@@ -1288,7 +1310,7 @@ namespace SW2URDF.URDFExport
             return box;
         }
 
-        private IList<LinkLocalBoundingBox> CreateComponentLocalBoundingBoxes(Link link)
+        internal IList<LinkLocalBoundingBox> CreateComponentLocalBoundingBoxes(Link link)
         {
             List<LinkLocalBoundingBox> boxes = new List<LinkLocalBoundingBox>();
             if (link == null || link.SWComponents == null || link.SWComponents.Count == 0 ||
@@ -3089,6 +3111,27 @@ namespace SW2URDF.URDFExport
             if (progressBar != null)
             {
                 progressBar.UpdateTitle(title);
+            }
+            EventHandler<ExportProgressEventArgs> handler = ExportProgressChanged;
+            if (handler != null)
+            {
+                ExportProgressEventArgs eventArgs = new ExportProgressEventArgs(
+                    title,
+                    exportStopwatch == null ? TimeSpan.Zero : exportStopwatch.Elapsed);
+                foreach (EventHandler<ExportProgressEventArgs> subscriber in
+                    handler.GetInvocationList())
+                {
+                    try
+                    {
+                        subscriber(this, eventArgs);
+                    }
+                    catch (Exception exception)
+                    {
+                        logger.Warn(
+                            "An export progress observer failed; the export will continue.",
+                            exception);
+                    }
+                }
             }
         }
 

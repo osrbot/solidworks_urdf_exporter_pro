@@ -13,7 +13,10 @@ The OSRBot-maintained build keeps the original SolidWorks add-in workflow and ad
 - ROS1 and ROS2 package output from the same export flow.
 - SolidWorks mass-property based inertia export and per-link validation logs.
 - Collision strategy selection for visual mesh, simplified mesh, accurate mesh, primitive boxes/cylinders/spheres, component boxes, and convex hulls.
+- Live SolidWorks overlays for box, cylinder, sphere, and component-box collision strategies; the collision wireframe and COM/inertia preview can be shown together while choosing a strategy.
 - STL mesh reduction ratio control for lighter exported mesh packages.
+- Automatic SolidWorks component appearance loading with explicit user overrides for URDF material, color, and texture image.
+- Export progress and a completion summary containing the changed file count, total size, elapsed time, and output directory.
 - Automatic Link tree configuration loading from the SolidWorks assembly feature `URDF Export Configuration (v1.5)`.
 - Transactional Link tree canvas for adding, renaming, moving, box-selecting, copying, and pasting Link groups before export.
 - Automatic per-assembly recovery of edits when an exporter window is closed before the configuration is formally saved.
@@ -147,6 +150,10 @@ For fast review after export, check:
 
 Use `ComponentBoxes` as the default collision strategy for robotics simulation. It is usually much lighter and more stable than detailed mesh collision.
 
+On the Link properties page, click `Preview collision` to overlay the current primitive or component-box strategy on the SolidWorks assembly. While the overlay is active, changing the strategy refreshes it immediately. Keep `Show inertia ellipsoid` enabled at the same time to inspect the Link COM, inertia principal axes, CAD geometry, and collision coverage in one view. Mesh and convex-hull strategies still require an exported-file viewer and report that limitation instead of showing a misleading approximation.
+
+Collision geometry and inertia remain separate responsibilities. Selecting a cylinder, sphere, box, or component-box collision strategy changes only the URDF `<collision>` geometry. The inertia ellipsoid continues to come from the selected SolidWorks bodies, material density, COM, and COM inertia tensor. Visual overlap is therefore a coverage sanity check, not a replacement for mass-property validation.
+
 Use `BoxPrimitive` for box-like chassis, batteries, plates, and brackets. Use `CylinderPrimitive` for wheels, tubes, shafts, and lidar barrels. Use `SpherePrimitive` for spherical sensors or markers.
 
 Use `ConvexHull` when the link is too complex for one primitive but still needs a single simple collision approximation.
@@ -154,6 +161,10 @@ Use `ConvexHull` when the link is too complex for one primitive but still needs 
 Use `SimplifiedMesh` when primitives do not fit and the collision STL still needs to be smaller. Use `AccurateMesh` only when full collision detail matters more than simulator performance. Use `VisualMesh` mostly for viewer compatibility or when collision accuracy is not important.
 
 Common material names available in the exporter include `black`, `white`, `gray`, `dark_gray`, `red`, `green`, `blue`, `yellow`, `orange`, `silver`, `aluminum`, `steel`, `plastic_black`, `rubber_black`, and `transparent_blue`.
+
+When a Link is first computed, the exporter reads the selected SolidWorks component appearance before falling back to the component document appearance. Valid texture image paths returned by SolidWorks are loaded automatically. Editing the material name, RGBA values, or texture path in the exporter turns that value into a user-owned override, so later recomputation does not silently replace it. STL does not carry UV coordinates; use 3DXML or a simulator-specific material workflow when mapped texture fidelity matters.
+
+During package generation, a non-cancelable progress dialog shows the current export stage and elapsed time without allowing exporter re-entry. On success, the completion dialog reports files created or changed by this run, their total size, total elapsed time, and the export root. Existing unrelated files in a reused output directory are excluded by comparing the directory state before and after export.
 
 ## Development
 

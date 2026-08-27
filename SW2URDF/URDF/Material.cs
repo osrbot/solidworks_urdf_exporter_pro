@@ -16,6 +16,9 @@ namespace SW2URDF.URDF
         [DataMember]
         public readonly URDFAttribute NameAttribute;
 
+        [DataMember]
+        public bool AppearanceAutomaticallyResolved { get; set; }
+
         public string Name
         {
             get => (string)NameAttribute.Value;
@@ -27,6 +30,7 @@ namespace SW2URDF.URDF
             Color = new Color();
             Texture = new Texture();
             NameAttribute = new URDFAttribute("name", true, "");
+            AppearanceAutomaticallyResolved = false;
 
             Attributes.Add(NameAttribute);
             ChildElements.Add(Color);

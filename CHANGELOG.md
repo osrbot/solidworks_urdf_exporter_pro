@@ -4,6 +4,26 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## 2026-08-27
 
+### Added
+
+- Added live SolidWorks collision overlays for Link-local box, cylinder, sphere, and per-component
+  box strategies. Collision wireframes can remain visible with the COM/inertia preview, and an
+  active overlay refreshes immediately when the user changes strategy.
+- Added automatic SolidWorks component/document appearance loading, including valid texture image
+  paths, while preserving explicit URDF material, RGBA, and texture overrides made by the user.
+- Added a non-reentrant export progress window and a completion summary with changed file count,
+  total size, elapsed time, and output root. File statistics use pre/post export snapshots instead
+  of timestamp tolerances.
+
+### Changed
+
+- Replaced temporary solid collision-preview bodies with lightweight line and circle wire bodies,
+  avoiding preview-side appearance mutations and reducing SolidWorks graphics side effects.
+- Added an explicit COM marker to the inertia preview and kept the selected SolidWorks components at
+  their original appearance so CAD, collision, COM, and inertia overlays can be compared directly.
+- Tightened the Link page DPI layout so the Link-frame selector, inertia units, collision preview,
+  and color controls remain separated at scaled desktop resolutions.
+
 ### Fixed
 
 - Fixed a SolidWorks 2023 `IMassProperty` read-order defect that could return a zero center of mass
@@ -18,6 +38,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
 - Stopped export before writing meshes or URDF when any inertial validation fails, including a
   calculated Link COM outside the selected SolidWorks component bounds; the error identifies the
   affected Link and failed check.
+- Isolated export-progress observers from the core export transaction so a UI reporting failure
+  cannot turn a completed package write into an export failure.
 
 ## 2026-08-26
 

@@ -1579,19 +1579,9 @@ namespace SW2URDF.URDFExport
             link.Collision.Origin.SetXYZ(new double[3] { 0, 0, 0 });
             link.Collision.Origin.SetRPY(new double[3] { 0, 0, 0 });
 
-            if (link.SWComponents.Count == 0)
-            {
-                return;
-            }
-
-            ModelDoc2 mainCompdoc = link.SWComponents[0].GetModelDoc2();
-
-            // [ R, G, B, Ambient, Diffuse, Specular, Shininess, Transparency, Emission ]
-            double[] values = mainCompdoc.MaterialPropertyValues;
-            link.Visual.Material.Color.Red = values[0];
-            link.Visual.Material.Color.Green = values[1];
-            link.Visual.Material.Color.Blue = values[2];
-            link.Visual.Material.Color.Alpha = 1.0 - values[7];
+            // SolidWorks provides the initial appearance. A named URDF material is a
+            // user-owned override and must not be replaced during a later export pass.
+            SolidWorksAppearanceResolver.ResolveIfUnset(link);
         }
 
         //Method which builds a single link

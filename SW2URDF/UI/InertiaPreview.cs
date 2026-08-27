@@ -7,6 +7,7 @@ using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Runtime.InteropServices;
 using DrawingColor = System.Drawing.Color;
 
@@ -21,15 +22,14 @@ namespace SW2URDF.UI
 
     internal sealed class InertiaPreview : IDisposable
     {
-        private const double PreviewTransparency = 0.75;
         private const double PrincipalAxisLengthScale = 1.15;
-        private static readonly log4net.ILog logger = Logger.GetLogger();
+        private const int InertiaCurveCount = 6;
+        private const int ComMarkerCurveCount = 3;
+        internal const int ExpectedCurveCount = InertiaCurveCount + ComMarkerCurveCount;
 
         private readonly SldWorks swApp;
         private readonly ModelDoc2 model;
         private readonly List<Body2> temporaryBodies = new List<Body2>();
-        private readonly List<ComponentAppearanceState> componentAppearanceStates =
-            new List<ComponentAppearanceState>();
 
         public InertiaPreview(SldWorks swApp, ModelDoc2 model)
         {
@@ -108,8 +108,6 @@ namespace SW2URDF.UI
                     Normalize(axes[i]);
                 }
 
-                MakeLinkComponentsTransparent(link);
-
                 Modeler modeler = (Modeler)swApp.GetModeler();
                 AddEllipse(modeler, center, ellipsoid.SemiAxes[0], ellipsoid.SemiAxes[1],
                     axes[0], axes[1], DrawingColor.Red);
@@ -123,8 +121,9 @@ namespace SW2URDF.UI
                     DrawingColor.LimeGreen);
                 AddPrincipalAxis(modeler, center, axes[2], ellipsoid.SemiAxes[2],
                     DrawingColor.DodgerBlue);
+                AddComMarker(modeler, center, ellipsoid.SemiAxes.Max());
                 model.GraphicsRedraw2();
-                if (temporaryBodies.Count == 6)
+                if (temporaryBodies.Count == ExpectedCurveCount)
                 {
                     return true;
                 }
@@ -133,7 +132,7 @@ namespace SW2URDF.UI
                 Hide();
                 failureKind = InertiaPreviewFailureKind.DisplayUnavailable;
                 error = "SolidWorks displayed only " + displayedCurveCount +
-                    " of 6 inertia preview curves.";
+                    " of " + ExpectedCurveCount + " inertia and COM preview curves.";
                 return false;
             }
             catch (Exception e)
@@ -166,7 +165,6 @@ namespace SW2URDF.UI
                 }
             }
             temporaryBodies.Clear();
-            RestoreComponentAppearances();
             if (model != null)
             {
                 model.GraphicsRedraw2();
@@ -212,6 +210,24 @@ namespace SW2URDF.UI
             DrawingColor color)
         {
             double halfLength = semiAxis * PrincipalAxisLengthScale;
+            AddLine(modeler, center, direction, halfLength, color);
+        }
+
+        private void AddComMarker(Modeler modeler, double[] center, double largestSemiAxis)
+        {
+            double halfLength = Math.Max(0.0025, largestSemiAxis * 0.12);
+            AddLine(modeler, center, new[] { 1.0, 0.0, 0.0 }, halfLength, DrawingColor.Gold);
+            AddLine(modeler, center, new[] { 0.0, 1.0, 0.0 }, halfLength, DrawingColor.Gold);
+            AddLine(modeler, center, new[] { 0.0, 0.0, 1.0 }, halfLength, DrawingColor.Gold);
+        }
+
+        private void AddLine(
+            Modeler modeler,
+            double[] center,
+            double[] direction,
+            double halfLength,
+            DrawingColor color)
+        {
             double[] start =
             {
                 center[0] - direction[0] * halfLength,
@@ -289,68 +305,6 @@ namespace SW2URDF.UI
             return result == 0;
         }
 
-        internal static double[] BuildTransparentAppearance(double[] source)
-        {
-            double[] appearance = source == null || source.Length < 9
-                ? new[] { 0.5, 0.5, 0.5, 0.3, 0.7, 0.2, 0.1, 0.0, 0.0 }
-                : (double[])source.Clone();
-            appearance[7] = PreviewTransparency;
-            return appearance;
-        }
-
-        private void MakeLinkComponentsTransparent(Link link)
-        {
-            model.ClearSelection2(true);
-            foreach (Component2 component in link.SWComponents)
-            {
-                if (component == null)
-                {
-                    continue;
-                }
-
-                try
-                {
-                    object original = component.MaterialPropertyValues;
-                    double[] originalValues = original as double[];
-
-                    componentAppearanceStates.Add(new ComponentAppearanceState(
-                        component,
-                        originalValues == null ? null : (double[])originalValues.Clone()));
-                    component.MaterialPropertyValues = BuildTransparentAppearance(originalValues);
-                }
-                catch (Exception ex)
-                {
-                    logger.Warn("Could not make component transparent for inertia preview", ex);
-                }
-            }
-        }
-
-        private void RestoreComponentAppearances()
-        {
-            foreach (ComponentAppearanceState state in componentAppearanceStates)
-            {
-                try
-                {
-                    if (state.OriginalAppearance != null)
-                    {
-                        state.Component.MaterialPropertyValues =
-                            (double[])state.OriginalAppearance.Clone();
-                    }
-                    else
-                    {
-                        state.Component.RemoveMaterialProperty2(
-                            (int)swInConfigurationOpts_e.swThisConfiguration,
-                            null);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.Warn("Could not restore component appearance after inertia preview", ex);
-                }
-            }
-            componentAppearanceStates.Clear();
-        }
-
         private static void ReleaseComObject(object value)
         {
             if (value != null && Marshal.IsComObject(value))
@@ -374,16 +328,5 @@ namespace SW2URDF.UI
             vector[2] /= length;
         }
 
-        private sealed class ComponentAppearanceState
-        {
-            public ComponentAppearanceState(Component2 component, double[] originalAppearance)
-            {
-                Component = component;
-                OriginalAppearance = originalAppearance;
-            }
-
-            public Component2 Component { get; private set; }
-            public double[] OriginalAppearance { get; private set; }
-        }
     }
 }

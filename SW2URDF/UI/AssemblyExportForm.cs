@@ -51,6 +51,7 @@ namespace SW2URDF.UI
         private readonly Control[] linkBoxes;
         private readonly LinkNode BaseNode;
         private readonly InertiaPreview inertiaPreview;
+        private readonly CollisionPreview collisionPreview;
         private bool updatingMaterialColorControls;
         private bool meshReductionRatioEdited;
         private double meshReductionRatioForExport;
@@ -66,6 +67,10 @@ namespace SW2URDF.UI
         private ComboBox comboBoxLinkCoordinateSystem;
         private ToolTip packagePathToolTip;
         private bool suppressRecoveryDraftOnClose;
+        private Button buttonShowCollisionPreview;
+        private Label labelCollisionPreviewStatus;
+        private bool collisionPreviewEnabled;
+        private bool ownedResourcesDisposed;
 
         private AssemblyExportForm()
         {
@@ -80,6 +85,7 @@ namespace SW2URDF.UI
             enableLayoutFixes = true;
             ApplyHighDpiLayoutFixes();
             InitializeCollisionStrategyComboBox();
+            InitializeCollisionPreviewControls();
             textBoxIxy.TextChanged += InertiaMatrixOffDiagonalTextChanged;
             textBoxIxz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
             textBoxIyz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
@@ -167,6 +173,61 @@ namespace SW2URDF.UI
                     comboBoxMaterials.Items.Add(materialName);
                 }
             }
+            label34.Text = ChineseUiText.Translate(
+                "Texture image (optional)",
+                "纹理图片（可选）");
+            packagePathToolTip.SetToolTip(
+                comboBoxMaterials,
+                ChineseUiText.Translate(
+                    "The selected Link first uses its SolidWorks component appearance. You can override the URDF material name here.",
+                    "默认读取所选 Link 的 SolidWorks 组件外观，也可在此覆盖 URDF 材质名称。"));
+            packagePathToolTip.SetToolTip(
+                textBoxTexture,
+                ChineseUiText.Translate(
+                    "Only an existing image file is exported. STL has no UV coordinates; use 3DXML when appearance fidelity matters.",
+                    "仅会导出实际存在的图片文件。STL 不含 UV 坐标，重视外观时请使用 3DXML。"));
+        }
+
+        private void InitializeCollisionPreviewControls()
+        {
+            buttonShowCollisionPreview = new Button
+            {
+                Name = "buttonShowCollisionPreview",
+                Location = new Point(comboBoxCollisionStrategy.Left, comboBoxCollisionStrategy.Bottom + 7),
+                Size = new Size(comboBoxCollisionStrategy.Width, 24),
+                Text = ChineseUiText.Translate("Preview collision", "预览碰撞体"),
+                UseVisualStyleBackColor = true,
+                TabIndex = comboBoxCollisionStrategy.TabIndex + 1
+            };
+            labelCollisionPreviewStatus = new Label
+            {
+                Name = "labelCollisionPreviewStatus",
+                AutoEllipsis = true,
+                Location = new Point(
+                    comboBoxCollisionStrategy.Left,
+                    buttonShowCollisionPreview.Bottom + 4),
+                Size = new Size(comboBoxCollisionStrategy.Width, 38),
+                Text = ChineseUiText.Translate(
+                    "Overlay is not displayed",
+                    "未显示碰撞体叠加层")
+            };
+            packagePathToolTip.SetToolTip(
+                buttonShowCollisionPreview,
+                ChineseUiText.Translate(
+                    "Show this collision strategy over the SolidWorks geometry. The inertia ellipsoid can remain visible for comparison.",
+                    "在 SolidWorks 几何体上叠加当前碰撞策略；可同时保留惯性椭球进行对照。"));
+            packagePathToolTip.SetToolTip(
+                comboBoxCollisionStrategy,
+                ChineseUiText.Translate(
+                    "Changing the strategy refreshes an active collision preview immediately.",
+                    "碰撞预览开启时，切换策略会立即刷新叠加层。"));
+            buttonShowCollisionPreview.Click += ButtonShowCollisionPreviewClick;
+            comboBoxCollisionStrategy.SelectionChangeCommitted +=
+                CollisionStrategySelectionChangeCommitted;
+            groupBox4.Controls.Add(buttonShowCollisionPreview);
+            groupBox4.Controls.Add(labelCollisionPreviewStatus);
+            buttonShowCollisionPreview.BringToFront();
+            labelCollisionPreviewStatus.BringToFront();
         }
 
         private void ButtonUsageGuideClick(object sender, EventArgs e)
@@ -189,6 +250,7 @@ namespace SW2URDF.UI
             ActiveSWModel = swApp.ActiveDoc;
             inertiaPreview = new InertiaPreview(swApp, ActiveSWModel);
             Exporter = exporter;
+            collisionPreview = new CollisionPreview(swApp, ActiveSWModel, Exporter);
             AutoUpdatingForm = false;
             FormClosing += AssemblyExportFormClosing;
             FormClosed += AssemblyExportFormClosed;
@@ -449,6 +511,7 @@ namespace SW2URDF.UI
         private void FinishExport(bool exportSTL)
         {
             ClearInertiaPreview();
+            ClearCollisionPreview();
             logger.Info("Completing URDF export");
             Exporter.RosPackageName = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
             textBoxRosPackageName.Text = Exporter.RosPackageName;
@@ -510,13 +573,14 @@ namespace SW2URDF.UI
                 }
             }
 
-            FolderBrowserDialog folderBrowserDialog = new FolderBrowserDialog
+            using (FolderBrowserDialog folderBrowserDialog = new FolderBrowserDialog
             {
                 SelectedPath = Directory.Exists(Exporter.SavePath) ? Exporter.SavePath : "",
                 Description = ChineseUiText.Translate(
                     "Select the export root directory for the ROS 1 and ROS 2 packages",
                     "\u9009\u62e9 ROS 1 \u548c ROS 2 \u529f\u80fd\u5305\u7684\u5bfc\u51fa\u6839\u76ee\u5f55")
-            };
+            })
+            {
 
             bool saveResult = DialogResult.OK == folderBrowserDialog.ShowDialog();
             if (saveResult)
@@ -539,7 +603,28 @@ namespace SW2URDF.UI
                 {
                     meshFormat = MeshExportFormat.STL;
                 }
-                if (!Exporter.ExportRobot(exportSTL, meshFormat))
+                bool exportSucceeded;
+                using (ExportProgressForm progressForm = new ExportProgressForm())
+                {
+                    EventHandler<ExportProgressEventArgs> progressHandler =
+                        (progressSender, progress) => progressForm.UpdateProgress(progress);
+                    Exporter.ExportProgressChanged += progressHandler;
+                    progressForm.Show(this);
+                    progressForm.Refresh();
+                    Enabled = false;
+                    try
+                    {
+                        exportSucceeded = Exporter.ExportRobot(exportSTL, meshFormat);
+                    }
+                    finally
+                    {
+                        Enabled = true;
+                        Exporter.ExportProgressChanged -= progressHandler;
+                        progressForm.Close();
+                    }
+                }
+
+                if (!exportSucceeded)
                 {
                     logger.Error(Exporter.ExportErrorWhy);
                     MessageBox.Show(
@@ -550,9 +635,20 @@ namespace SW2URDF.UI
                     return;
                 }
 
+                if (Exporter.LastExportSummary != null)
+                {
+                    MessageBox.Show(
+                        Exporter.LastExportSummary.FormatDetails(),
+                        ChineseUiText.Translate(
+                            "URDF export completed",
+                            "URDF 导出完成"),
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+
                 CloseWithoutRecoveryDraft();
             }
-            folderBrowserDialog.Dispose();
+            }
         }
 
         private void TextBoxRosPackageNameTextChanged(object sender, EventArgs e)
@@ -599,6 +695,10 @@ namespace SW2URDF.UI
                 FillLinkPropertyBoxes(node.Link);
                 logger.Info("Changed Link coordinate system for " + node.Link.Name +
                     " from " + previousCoordinateSystem + " to " + selectedCoordinateSystem);
+                if (collisionPreviewEnabled)
+                {
+                    RefreshCollisionPreview();
+                }
             }
             catch (Exception exception)
             {
@@ -647,6 +747,7 @@ namespace SW2URDF.UI
         private void DisplayLinkNode(LinkNode node)
         {
             ClearInertiaPreview();
+            ClearCollisionPreview();
             Font fontRegular = new Font(treeViewJointTree.Font, FontStyle.Regular);
             Font fontBold = new Font(treeViewJointTree.Font, FontStyle.Bold);
             if (previouslySelectedNode != null)
@@ -889,6 +990,101 @@ namespace SW2URDF.UI
             }
         }
 
+        private void ButtonShowCollisionPreviewClick(object sender, EventArgs e)
+        {
+            if (collisionPreviewEnabled)
+            {
+                ClearCollisionPreview();
+                return;
+            }
+
+            collisionPreviewEnabled = true;
+            RefreshCollisionPreview();
+        }
+
+        private void CollisionStrategySelectionChangeCommitted(object sender, EventArgs e)
+        {
+            LinkNode node = treeViewLinkProperties.SelectedNode as LinkNode;
+            if (node != null && node.Link != null && !node.Link.isFixedFrame)
+            {
+                node.Link.CollisionMeshStrategy = GetSelectedCollisionStrategy();
+            }
+            if (collisionPreviewEnabled)
+            {
+                RefreshCollisionPreview();
+            }
+        }
+
+        private void RefreshCollisionPreview()
+        {
+            LinkNode node = treeViewLinkProperties.SelectedNode as LinkNode;
+            if (node == null || node.Link == null || node.Link.isFixedFrame)
+            {
+                ClearCollisionPreview();
+                return;
+            }
+
+            try
+            {
+                SaveLinkDataFromPropertyBoxes(node.Link);
+                MathTransform coordinateTransform =
+                    Exporter.GetCoordinateSystemTransform(node.Link.Joint.CoordinateSystemName);
+                if (collisionPreview.Show(
+                    node.Link,
+                    GetSelectedCollisionStrategy(),
+                    coordinateTransform,
+                    out string status,
+                    out string error))
+                {
+                    labelCollisionPreviewStatus.Text = status;
+                    buttonShowCollisionPreview.Text = collisionPreview.IsVisible
+                        ? ChineseUiText.Translate("Hide collision overlay", "隐藏碰撞体")
+                        : ChineseUiText.Translate("Refresh collision", "刷新碰撞体");
+                    return;
+                }
+
+                labelCollisionPreviewStatus.Text = String.IsNullOrWhiteSpace(error)
+                    ? status
+                    : error;
+                if (!String.IsNullOrWhiteSpace(error))
+                {
+                    logger.Warn("Collision preview failed for link " + node.Link.Name + ": " + error);
+                }
+                buttonShowCollisionPreview.Text = ChineseUiText.Translate(
+                    "Refresh collision",
+                    "刷新碰撞体");
+            }
+            catch (Exception exception)
+            {
+                collisionPreview.Hide();
+                labelCollisionPreviewStatus.Text = ChineseUiText.Translate(
+                    "Collision preview failed",
+                    "碰撞体预览失败");
+                logger.Warn("Could not refresh collision preview for link " + node.Link.Name, exception);
+            }
+        }
+
+        private void ClearCollisionPreview()
+        {
+            collisionPreviewEnabled = false;
+            if (collisionPreview != null)
+            {
+                collisionPreview.Hide();
+            }
+            if (buttonShowCollisionPreview != null)
+            {
+                buttonShowCollisionPreview.Text = ChineseUiText.Translate(
+                    "Preview collision",
+                    "预览碰撞体");
+            }
+            if (labelCollisionPreviewStatus != null)
+            {
+                labelCollisionPreviewStatus.Text = ChineseUiText.Translate(
+                    "Overlay is not displayed",
+                    "未显示碰撞体叠加层");
+            }
+        }
+
         private void ClearInertiaPreview()
         {
             inertiaPreview.Hide();
@@ -902,7 +1098,50 @@ namespace SW2URDF.UI
 
         private void AssemblyExportFormClosed(object sender, FormClosedEventArgs e)
         {
-            inertiaPreview.Dispose();
+            DisposeOwnedResources();
+        }
+
+        private void DisposeOwnedResources()
+        {
+            if (ownedResourcesDisposed)
+            {
+                return;
+            }
+            ownedResourcesDisposed = true;
+            Application.ThreadException -= ExceptionHandler;
+            AppDomain.CurrentDomain.UnhandledException -= UnhandledException;
+            if (inertiaPreview != null)
+            {
+                inertiaPreview.Dispose();
+            }
+            if (collisionPreview != null)
+            {
+                collisionPreview.Dispose();
+            }
+            if (packagePathToolTip != null)
+            {
+                packagePathToolTip.Dispose();
+            }
+            if (buttonUsageGuide != null)
+            {
+                buttonUsageGuide.Dispose();
+            }
+            if (labelLinkCoordinateSystem != null)
+            {
+                labelLinkCoordinateSystem.Dispose();
+            }
+            if (comboBoxLinkCoordinateSystem != null)
+            {
+                comboBoxLinkCoordinateSystem.Dispose();
+            }
+            if (buttonShowCollisionPreview != null)
+            {
+                buttonShowCollisionPreview.Dispose();
+            }
+            if (labelCollisionPreviewStatus != null)
+            {
+                labelCollisionPreviewStatus.Dispose();
+            }
         }
 
         private void AssemblyExportFormClosing(object sender, FormClosingEventArgs e)

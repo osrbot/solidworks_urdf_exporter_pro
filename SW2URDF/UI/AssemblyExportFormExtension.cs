@@ -314,6 +314,10 @@ namespace SW2URDF.UI
         {
             if (!Link.isFixedFrame)
             {
+                string previousMaterialName = Link.Visual.Material.Name;
+                string previousTexture = Link.Visual.Material.Texture.wFilename;
+                double[] previousColor = Link.Visual.Material.Color.GetColor();
+
                 Link.Inertial.Origin.Update(textBoxInertialOriginX,
                                             textBoxInertialOriginY,
                                             textBoxInertialOriginZ,
@@ -345,11 +349,36 @@ namespace SW2URDF.UI
                                                   domainUpDownBlue,
                                                   domainUpDownAlpha);
 
+                if (!String.Equals(previousMaterialName, Link.Visual.Material.Name,
+                        StringComparison.Ordinal) ||
+                    !String.Equals(previousTexture, Link.Visual.Material.Texture.wFilename,
+                        StringComparison.Ordinal) ||
+                    !ColorsEqual(previousColor, Link.Visual.Material.Color.GetColor()))
+                {
+                    Link.Visual.Material.AppearanceAutomaticallyResolved = false;
+                }
+
                 Link.STLQualityFine = radioButtonFine.Checked;
                 Link.MeshReductionRatio = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
                 Link.CollisionMeshStrategy = GetSelectedCollisionStrategy();
                 Link.Joint.CoordinateSystemName = comboBoxLinkCoordinateSystem.Text;
             }
+        }
+
+        private static bool ColorsEqual(double[] left, double[] right)
+        {
+            if (left == null || right == null || left.Length != right.Length)
+            {
+                return false;
+            }
+            for (int index = 0; index < left.Length; index++)
+            {
+                if (Math.Abs(left[index] - right[index]) > 1e-12)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         //Saves data from text boxes back into a joint

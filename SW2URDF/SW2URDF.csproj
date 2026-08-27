@@ -328,7 +328,9 @@
     <Compile Include="GlobalSuppressions.cs" />
     <Compile Include="Legacy\SerialNode.cs" />
     <Compile Include="UI\ChineseUiText.cs" />
+    <Compile Include="UI\CollisionPreview.cs" />
     <Compile Include="UI\ConfigurationSaveInteraction.cs" />
+    <Compile Include="UI\ExportProgressForm.cs" />
     <Compile Include="UI\InertiaPreview.cs" />
     <Compile Include="UI\UrdfExportTutorialContent.cs" />
     <Compile Include="UI\UrdfExportTutorialController.cs" />
@@ -351,16 +353,19 @@
     <Compile Include="Test\TestCommon.cs" />
     <Compile Include="Test\TestCSVImportExport.cs" />
     <Compile Include="Test\TestAssemblyExportLayout.cs" />
+    <Compile Include="Test\TestCollisionPreview.cs" />
     <Compile Include="Test\TestTreeSelectionUpdateGuard.cs" />
     <Compile Include="Test\TestExportSessionCloseCoordinator.cs" />
     <Compile Include="Test\TestExportSessionDraftStore.cs" />
     <Compile Include="Test\TestUrdfExportTutorial.cs" />
     <Compile Include="Test\TestExportHelper.cs" />
+    <Compile Include="Test\TestExportProgress.cs" />
     <Compile Include="Test\TestInstallerScript.cs" />
     <Compile Include="Test\TestInertiaEllipsoid.cs" />
     <Compile Include="Test\TestInertiaConvention.cs" />
     <Compile Include="Test\TestMassPropertyFrameConverter.cs" />
     <Compile Include="Test\TestSolidWorksInertiaApiIntegration.cs" />
+    <Compile Include="Test\TestSolidWorksAppearanceResolver.cs" />
     <Compile Include="Test\TestInertiaPreview.cs" />
     <Compile Include="Test\TestLogger.cs" />
     <Compile Include="Test\TestLinkTreeCanvas.cs" />
@@ -387,6 +392,7 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <Compile Include="ROS\ROSFiles.cs" />
+    <Compile Include="URDFExport\ExportProgress.cs" />
     <Compile Include="UI\TreeMergedEventArgs.cs" />
     <Compile Include="UI\TreeMergeWPF.xaml.cs">
       <DependentUpon>TreeMergeWPF.xaml</DependentUpon>
@@ -414,6 +420,7 @@
     <Compile Include="URDFExport\LinkTreeStores.cs" />
     <Compile Include="URDFExport\LinkTreeValidation.cs" />
     <Compile Include="URDFExport\MassPropertyFrameConverter.cs" />
+    <Compile Include="URDFExport\SolidWorksAppearanceResolver.cs" />
     <Compile Include="URDFExport\JointConfigurationPolicy.cs" />
     <Compile Include="URDFExport\MimicGraphValidator.cs" />
     <Compile Include="URDFExport\LinkTreeSession.cs" />

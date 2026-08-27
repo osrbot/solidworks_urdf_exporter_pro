@@ -14,6 +14,10 @@
         /// otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
+            if (disposing)
+            {
+                DisposeOwnedResources();
+            }
             if (disposing && (components != null))
             {
                 components.Dispose();

@@ -30,11 +30,13 @@ namespace SW2URDF.Test
                 AssertMimicControlsDoNotOverlapFooter(form);
                 AssertFooterButtonsFitText(form);
                 AssertInertiaMatrixMirrors(form);
+                AssertCollisionPreviewDoesNotCoverColorControls(form);
 
                 form.ClientSize = new Size(1600, 900);
                 form.PerformLayout();
                 AssertLinkPageGeometry(form);
                 AssertInertiaMatrixMirrors(form);
+                AssertCollisionPreviewDoesNotCoverColorControls(form);
                 AssertJointFooterGeometry(form);
                 AssertJointFooterTextFits(form);
                 AssertMimicControlsDoNotOverlapFooter(form);
@@ -44,6 +46,7 @@ namespace SW2URDF.Test
                 form.PerformLayout();
                 AssertLinkPageGeometry(form);
                 AssertInertiaMatrixMirrors(form);
+                AssertCollisionPreviewDoesNotCoverColorControls(form);
                 AssertJointFooterGeometry(form);
                 AssertJointFooterTextFits(form);
                 AssertMimicControlsDoNotOverlapFooter(form);
@@ -53,6 +56,7 @@ namespace SW2URDF.Test
                 form.PerformLayout();
                 AssertLinkPageGeometry(form);
                 AssertInertiaMatrixMirrors(form);
+                AssertCollisionPreviewDoesNotCoverColorControls(form);
                 AssertJointFooterGeometry(form);
                 AssertJointFooterTextFits(form);
                 AssertMimicControlsDoNotOverlapFooter(form);
@@ -307,6 +311,20 @@ namespace SW2URDF.Test
             Assert.True((control.Anchor & AnchorStyles.Bottom) == AnchorStyles.Bottom);
         }
 
+        private static void AssertCollisionPreviewDoesNotCoverColorControls(
+            AssemblyExportForm form)
+        {
+            Button previewButton = GetControl<Button>(form, "buttonShowCollisionPreview");
+            Label previewStatus = GetControl<Label>(form, "labelCollisionPreviewStatus");
+            DomainUpDown red = GetControl<DomainUpDown>(form, "domainUpDownRed");
+            DomainUpDown blue = GetControl<DomainUpDown>(form, "domainUpDownBlue");
+            DomainUpDown alpha = GetControl<DomainUpDown>(form, "domainUpDownAlpha");
+
+            Assert.False(previewButton.Bounds.IntersectsWith(red.Bounds));
+            Assert.False(previewStatus.Bounds.IntersectsWith(blue.Bounds));
+            Assert.False(previewStatus.Bounds.IntersectsWith(alpha.Bounds));
+        }
+
         private static void AssertLinkPageGeometry(AssemblyExportForm form)
         {
             Panel panel = GetControl<Panel>(form, "panelLinkProperties");
@@ -321,6 +339,11 @@ namespace SW2URDF.Test
             Button finishButton = GetControl<Button>(form, "buttonLinksFinish");
             ComboBox collisionStrategy = GetControl<ComboBox>(form, "comboBoxCollisionStrategy");
             Label collisionStrategyLabel = GetControl<Label>(form, "labelCollisionStrategy");
+            Button collisionPreviewButton =
+                GetControl<Button>(form, "buttonShowCollisionPreview");
+            Label collisionPreviewStatus =
+                GetControl<Label>(form, "labelCollisionPreviewStatus");
+            GroupBox meshFormatGroup = GetControl<GroupBox>(form, "groupBox1");
             ComboBox linkCoordinateSystem =
                 GetControl<ComboBox>(form, "comboBoxLinkCoordinateSystem");
             Label linkCoordinateSystemLabel =
@@ -359,6 +382,10 @@ namespace SW2URDF.Test
             Assert.True(collisionStrategy.Left > visualYaw.Right);
             Assert.True(collisionStrategy.Right < colorRed.Left);
             Assert.True(collisionStrategyLabel.Bottom <= collisionStrategy.Top);
+            Assert.Equal(collisionStrategy.Left, collisionPreviewButton.Left);
+            Assert.True(collisionPreviewButton.Bottom <= collisionPreviewStatus.Top);
+            Assert.True(collisionPreviewStatus.Bottom < meshFormatGroup.Top);
+            Assert.True(collisionPreviewStatus.Right < meshGroup.ClientSize.Width);
         }
 
         private static void AssertControlRowsDoNotOverlap(
