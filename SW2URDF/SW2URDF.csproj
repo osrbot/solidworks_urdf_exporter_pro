@@ -332,6 +332,8 @@
     <Compile Include="UI\ConfigurationSaveInteraction.cs" />
     <Compile Include="UI\ExportProgressForm.cs" />
     <Compile Include="UI\InertiaPreview.cs" />
+    <Compile Include="UI\MaterialAppearancePresets.cs" />
+    <Compile Include="UI\TemporaryBodyDisplayContext.cs" />
     <Compile Include="UI\UrdfExportTutorialContent.cs" />
     <Compile Include="UI\UrdfExportTutorialController.cs" />
     <Compile Include="UI\UrdfExportTutorialForm.cs" />

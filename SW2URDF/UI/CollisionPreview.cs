@@ -61,6 +61,20 @@ namespace SW2URDF.UI
             Modeler modeler = null;
             try
             {
+                if (!TemporaryBodyDisplayContext.TryCreate(
+                    swApp,
+                    model,
+                    link,
+                    linkCoordinateTransform,
+                    out TemporaryBodyDisplayContext displayContext,
+                    out string displayContextError))
+                {
+                    status = ChineseUiText.Translate(
+                        "Collision preview is unavailable.", "碰撞预览不可用。");
+                    error = displayContextError;
+                    return false;
+                }
+
                 modeler = swApp.GetModeler() as Modeler;
                 if (modeler == null)
                 {
@@ -69,41 +83,52 @@ namespace SW2URDF.UI
                 }
 
                 int displayedBodyCount;
-                switch (strategy)
+                using (displayContext)
                 {
-                    case CollisionMeshStrategy.Primitive:
-                    case CollisionMeshStrategy.BoxPrimitive:
-                        displayedBodyCount = ShowBox(modeler, link, linkCoordinateTransform);
-                        status = ChineseUiText.Translate(
-                            "Box collision wireframe preview shown.",
-                            "已显示盒体碰撞线框预览。");
-                        break;
-                    case CollisionMeshStrategy.CylinderPrimitive:
-                        displayedBodyCount = ShowCylinder(modeler, link, linkCoordinateTransform);
-                        status = ChineseUiText.Translate(
-                            "Cylinder collision wireframe preview shown.",
-                            "已显示圆柱碰撞线框预览。");
-                        break;
-                    case CollisionMeshStrategy.SpherePrimitive:
-                        displayedBodyCount = ShowSphere(modeler, link, linkCoordinateTransform);
-                        status = ChineseUiText.Translate(
-                            "Sphere collision preview shown as three wire circles.",
-                            "已用三个线框圆显示球体碰撞预览。");
-                        break;
-                    case CollisionMeshStrategy.ComponentBoxes:
-                        displayedBodyCount = ShowComponentBoxes(modeler, link, linkCoordinateTransform);
-                        status = ChineseUiText.Translate(
-                            "Component box wireframe preview shown (" +
-                                displayedBodyCount.ToString(CultureInfo.InvariantCulture) + ").",
-                            "已显示组件盒体线框预览（" +
-                                displayedBodyCount.ToString(CultureInfo.InvariantCulture) + " 个）。");
-                        break;
-                    default:
-                        status = ChineseUiText.Translate(
-                            "Live preview is unavailable for this collision strategy.",
-                            "此碰撞策略暂不支持实时预览。");
-                        error = status;
-                        return false;
+                    switch (strategy)
+                    {
+                        case CollisionMeshStrategy.Primitive:
+                        case CollisionMeshStrategy.BoxPrimitive:
+                            displayedBodyCount = ShowBox(modeler, link,
+                                displayContext.LinkToDisplayTarget,
+                                displayContext.DisplayTarget);
+                            status = ChineseUiText.Translate(
+                                "Box collision wireframe preview shown.",
+                                "已显示盒体碰撞线框预览。");
+                            break;
+                        case CollisionMeshStrategy.CylinderPrimitive:
+                            displayedBodyCount = ShowCylinder(modeler, link,
+                                displayContext.LinkToDisplayTarget,
+                                displayContext.DisplayTarget);
+                            status = ChineseUiText.Translate(
+                                "Cylinder collision wireframe preview shown.",
+                                "已显示圆柱碰撞线框预览。");
+                            break;
+                        case CollisionMeshStrategy.SpherePrimitive:
+                            displayedBodyCount = ShowSphere(modeler, link,
+                                displayContext.LinkToDisplayTarget,
+                                displayContext.DisplayTarget);
+                            status = ChineseUiText.Translate(
+                                "Sphere collision preview shown as three wire circles.",
+                                "已用三个线框圆显示球体碰撞预览。");
+                            break;
+                        case CollisionMeshStrategy.ComponentBoxes:
+                            displayedBodyCount = ShowComponentBoxes(modeler, link,
+                                displayContext.LinkToDisplayTarget,
+                                displayContext.DisplayTarget);
+                            status = ChineseUiText.Translate(
+                                "Component box wireframe preview shown (" +
+                                    displayedBodyCount.ToString(CultureInfo.InvariantCulture) + ").",
+                                "已显示组件盒体线框预览（" +
+                                    displayedBodyCount.ToString(CultureInfo.InvariantCulture) + " 个）。");
+                            break;
+                        default:
+                            status = ChineseUiText.Translate(
+                                "Live preview is unavailable for this collision strategy.",
+                                "此碰撞策略暂不支持实时预览。");
+                            error = status;
+                            return false;
+                    }
                 }
 
                 model.GraphicsRedraw2();
@@ -251,31 +276,47 @@ namespace SW2URDF.UI
 
         internal static bool IsDisplaySuccess(int result) { return result == 0; }
 
-        private int ShowBox(Modeler modeler, Link link, MathTransform transform)
+        private int ShowBox(Modeler modeler, Link link, MathTransform transform,
+            object displayTarget)
         {
             double[][] edges = BuildBoxEdgeDimensions(exporter.CreateLinkLocalBoundingBox(link));
-            foreach (double[] edge in edges) { AddLine(modeler, edge, transform); }
+            foreach (double[] edge in edges)
+            {
+                AddLine(modeler, edge, transform, displayTarget);
+            }
             return edges.Length;
         }
 
-        private int ShowCylinder(Modeler modeler, Link link, MathTransform transform)
+        private int ShowCylinder(Modeler modeler, Link link, MathTransform transform,
+            object displayTarget)
         {
             ExportHelper.LinkLocalBoundingBox box = exporter.CreateLinkLocalBoundingBox(link);
             double[][] circles = BuildCylinderCircleDimensions(box);
             double[][] lines = BuildCylinderLineDimensions(box);
-            foreach (double[] circle in circles) { AddCircle(modeler, circle, transform); }
-            foreach (double[] line in lines) { AddLine(modeler, line, transform); }
+            foreach (double[] circle in circles)
+            {
+                AddCircle(modeler, circle, transform, displayTarget);
+            }
+            foreach (double[] line in lines)
+            {
+                AddLine(modeler, line, transform, displayTarget);
+            }
             return circles.Length + lines.Length;
         }
 
-        private int ShowSphere(Modeler modeler, Link link, MathTransform transform)
+        private int ShowSphere(Modeler modeler, Link link, MathTransform transform,
+            object displayTarget)
         {
             double[][] circles = BuildSphereCircleDimensions(exporter.CreateLinkLocalBoundingBox(link));
-            foreach (double[] circle in circles) { AddCircle(modeler, circle, transform); }
+            foreach (double[] circle in circles)
+            {
+                AddCircle(modeler, circle, transform, displayTarget);
+            }
             return circles.Length;
         }
 
-        private int ShowComponentBoxes(Modeler modeler, Link link, MathTransform transform)
+        private int ShowComponentBoxes(Modeler modeler, Link link, MathTransform transform,
+            object displayTarget)
         {
             IList<ExportHelper.LinkLocalBoundingBox> boxes =
                 exporter.CreateComponentLocalBoundingBoxes(link);
@@ -289,13 +330,14 @@ namespace SW2URDF.UI
             {
                 foreach (double[] edge in BuildBoxEdgeDimensions(box))
                 {
-                    AddLine(modeler, edge, transform);
+                    AddLine(modeler, edge, transform, displayTarget);
                 }
             }
             return boxes.Count;
         }
 
-        private void AddLine(Modeler modeler, double[] dimensions, MathTransform transform)
+        private void AddLine(Modeler modeler, double[] dimensions, MathTransform transform,
+            object displayTarget)
         {
             Curve sourceCurve = null;
             Curve trimmedCurve = null;
@@ -329,7 +371,7 @@ namespace SW2URDF.UI
                     (int)swCreateWireBodyOptions_e.swCreateWireBodyByDefault);
                 Body2 ownedBody = body;
                 body = null;
-                AddBody(ownedBody, transform, DrawingColor.OrangeRed);
+                AddBody(ownedBody, transform, DrawingColor.OrangeRed, displayTarget);
             }
             finally
             {
@@ -339,7 +381,8 @@ namespace SW2URDF.UI
             }
         }
 
-        private void AddCircle(Modeler modeler, double[] dimensions, MathTransform transform)
+        private void AddCircle(Modeler modeler, double[] dimensions, MathTransform transform,
+            object displayTarget)
         {
             object curve = null;
             Body2 body = null;
@@ -360,7 +403,7 @@ namespace SW2URDF.UI
                     (int)swCreateWireBodyOptions_e.swCreateWireBodyByDefault);
                 Body2 ownedBody = body;
                 body = null;
-                AddBody(ownedBody, transform, DrawingColor.OrangeRed);
+                AddBody(ownedBody, transform, DrawingColor.OrangeRed, displayTarget);
             }
             finally
             {
@@ -369,7 +412,8 @@ namespace SW2URDF.UI
             }
         }
 
-        private void AddBody(Body2 body, MathTransform transform, DrawingColor color)
+        private void AddBody(Body2 body, MathTransform transform, DrawingColor color,
+            object displayTarget)
         {
             if (body == null)
             {
@@ -386,7 +430,7 @@ namespace SW2URDF.UI
                         "SolidWorks could not transform the temporary collision body.",
                         "SolidWorks 无法变换临时碰撞体。"));
                 }
-                int result = body.Display3(model, ColorTranslator.ToOle(color),
+                int result = body.Display3(displayTarget, ColorTranslator.ToOle(color),
                     (int)swTempBodySelectOptions_e.swTempBodySelectOptionNone);
                 if (!IsDisplaySuccess(result))
                 {

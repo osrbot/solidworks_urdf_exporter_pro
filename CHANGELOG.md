@@ -26,6 +26,17 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Fixed
 
+- Fixed collision and inertia previews that reported success but remained invisible in assembly
+  documents. Temporary bodies now use a visible top-level component as their SolidWorks display
+  context and are transformed from the Link frame into that component's local frame.
+- Kept primitive collision previews visible when the Link's own component is hidden. The live
+  SolidWorks regression now exercises box, cylinder, and sphere previews against a hidden Link
+  component without changing the component's appearance.
+- Rejected visible display anchors that do not expose a valid component transform instead of
+  silently treating a missing transform as the assembly identity.
+- Linked built-in material presets to their RGBA values and URDF material IDs. Explicitly choosing
+  a color preset now clears an older texture that would otherwise override the selected color.
+- Released temporary preview transforms and the inertia preview Modeler COM reference after use.
 - Fixed a SolidWorks 2023 `IMassProperty` read-order defect that could return a zero center of mass
   after reading the COM inertia tensor from the same COM object. The exporter now reads mass/COM
   and the COM tensor from independent mass-property objects, then explicitly converts both from

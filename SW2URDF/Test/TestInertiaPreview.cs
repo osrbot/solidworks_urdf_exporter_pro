@@ -1,3 +1,4 @@
+using MathNet.Numerics.LinearAlgebra;
 using SW2URDF.UI;
 using SW2URDF.URDF;
 using Xunit;
@@ -6,6 +7,48 @@ namespace SW2URDF.Test
 {
     public class TestInertiaPreview
     {
+        [Fact]
+        public void TestAssemblyDisplayTransformConvertsLinkFrameToComponentFrame()
+        {
+            Matrix<double> linkToDocument = Matrix<double>.Build.DenseIdentity(4);
+            linkToDocument[0, 3] = 13.0;
+            linkToDocument[1, 3] = 2.0;
+            Matrix<double> componentToDocument = Matrix<double>.Build.DenseIdentity(4);
+            componentToDocument[0, 3] = 10.0;
+
+            Matrix<double> result = TemporaryBodyDisplayContext.BuildLinkToDisplayTarget(
+                linkToDocument,
+                componentToDocument);
+
+            Assert.Equal(3.0, result[0, 3], 12);
+            Assert.Equal(2.0, result[1, 3], 12);
+            Assert.Equal(0.0, result[2, 3], 12);
+        }
+
+        [Fact]
+        public void TestSolidWorksTransformArrayUsesColumnMajorRotationAndTranslationSlots()
+        {
+            Matrix<double> transform = Matrix<double>.Build.DenseIdentity(4);
+            transform[0, 0] = 0.0;
+            transform[1, 0] = 1.0;
+            transform[0, 1] = -1.0;
+            transform[1, 1] = 0.0;
+            transform[0, 3] = 4.0;
+            transform[1, 3] = 5.0;
+            transform[2, 3] = 6.0;
+
+            double[] result = TemporaryBodyDisplayContext.ToSolidWorksTransformData(transform);
+
+            Assert.Equal(new[]
+            {
+                0.0, 1.0, 0.0,
+                -1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0,
+                4.0, 5.0, 6.0,
+                1.0, 0.0, 0.0, 0.0
+            }, result);
+        }
+
         [Theory]
         [InlineData(0, true)]
         [InlineData(1, false)]

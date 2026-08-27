@@ -176,16 +176,47 @@ namespace SW2URDF.UI
             label34.Text = ChineseUiText.Translate(
                 "Texture image (optional)",
                 "纹理图片（可选）");
+            label28.Text = ChineseUiText.Translate(
+                "Appearance preset / URDF material ID",
+                "外观预设 / URDF 材质 ID");
+            label29.Text = ChineseUiText.Translate(
+                "Appearance color (RGBA)",
+                "外观颜色（RGBA）");
             packagePathToolTip.SetToolTip(
                 comboBoxMaterials,
                 ChineseUiText.Translate(
-                    "The selected Link first uses its SolidWorks component appearance. You can override the URDF material name here.",
-                    "默认读取所选 Link 的 SolidWorks 组件外观，也可在此覆盖 URDF 材质名称。"));
+                    "SolidWorks appearance is loaded first. Choosing a built-in preset applies its RGBA, clears the old texture, and uses the same text as the URDF material ID; typing a custom ID does not change color.",
+                    "首次读取 SolidWorks 外观。选择内置预设会同步应用 RGBA、清除旧纹理，并将同名文本作为 URDF 材质 ID；手输自定义 ID 不会改色。"));
             packagePathToolTip.SetToolTip(
                 textBoxTexture,
                 ChineseUiText.Translate(
                     "Only an existing image file is exported. STL has no UV coordinates; use 3DXML when appearance fidelity matters.",
                     "仅会导出实际存在的图片文件。STL 不含 UV 坐标，重视外观时请使用 3DXML。"));
+            comboBoxMaterials.SelectionChangeCommitted +=
+                MaterialPresetSelectionChangeCommitted;
+        }
+
+        private void MaterialPresetSelectionChangeCommitted(object sender, EventArgs e)
+        {
+            if (!MaterialAppearancePresets.TryGet(comboBoxMaterials.Text, out double[] rgba))
+            {
+                return;
+            }
+
+            updatingMaterialColorControls = true;
+            try
+            {
+                domainUpDownRed.Text = rgba[0].ToString("G5", URDFAttribute.URDFNumberFormat);
+                domainUpDownGreen.Text = rgba[1].ToString("G5", URDFAttribute.URDFNumberFormat);
+                domainUpDownBlue.Text = rgba[2].ToString("G5", URDFAttribute.URDFNumberFormat);
+                domainUpDownAlpha.Text = rgba[3].ToString("G5", URDFAttribute.URDFNumberFormat);
+            }
+            finally
+            {
+                updatingMaterialColorControls = false;
+            }
+            textBoxTexture.Text = String.Empty;
+            UpdateMaterialColorPreview();
         }
 
         private void InitializeCollisionPreviewControls()

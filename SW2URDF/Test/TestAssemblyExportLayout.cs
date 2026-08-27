@@ -10,6 +10,37 @@ namespace SW2URDF.Test
     public class TestAssemblyExportLayout
     {
         [Fact]
+        public void TestMaterialPresetUpdatesRgbaAndClearsOldTexture()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                ComboBox materials = GetControl<ComboBox>(form, "comboBoxMaterials");
+                TextBox texture = GetControl<TextBox>(form, "textBoxTexture");
+                texture.Text = "old-texture.png";
+                materials.Text = "green";
+
+                MethodInfo applyPreset = typeof(AssemblyExportForm).GetMethod(
+                    "MaterialPresetSelectionChangeCommitted",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(applyPreset);
+                applyPreset.Invoke(form, new object[] { materials, EventArgs.Empty });
+
+                Assert.Equal(String.Empty, texture.Text);
+                Assert.Equal("0.05", GetControl<DomainUpDown>(form, "domainUpDownRed").Text);
+                Assert.Equal("0.6", GetControl<DomainUpDown>(form, "domainUpDownGreen").Text);
+                Assert.Equal("0.1", GetControl<DomainUpDown>(form, "domainUpDownBlue").Text);
+                Assert.Equal("1", GetControl<DomainUpDown>(form, "domainUpDownAlpha").Text);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
         public void TestLinkPageUsesHighDpiSafeAnchoring()
         {
             AssemblyExportForm form = (AssemblyExportForm)

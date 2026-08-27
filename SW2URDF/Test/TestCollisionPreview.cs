@@ -188,7 +188,22 @@ namespace SW2URDF.Test
                 Assert.NotNull(assembly);
                 object[] components = assembly.GetComponents(false) as object[];
                 Assert.NotNull(components);
-                component = components.Cast<Component2>().FirstOrDefault(candidate =>
+                object[] topLevelComponents = assembly.GetComponents(true) as object[];
+                component = (topLevelComponents ?? new object[0])
+                    .Cast<Component2>()
+                    .FirstOrDefault(candidate =>
+                    {
+                        try
+                        {
+                            double[] box = candidate.GetBox(false, false);
+                            return candidate.IsHidden(false) && box != null && box.Length >= 6;
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    });
+                component = component ?? components.Cast<Component2>().FirstOrDefault(candidate =>
                 {
                     try
                     {
@@ -215,6 +230,13 @@ namespace SW2URDF.Test
                 Link link = new Link { Name = "preview_test_link" };
                 link.Joint.CoordinateSystemName = coordinateSystemName;
                 link.SWComponents.Add(component);
+                using (TemporaryBodyDisplayContext context =
+                    CreateDisplayContext(swApp, model, link, coordinateTransform))
+                {
+                    Component2 displayTarget = context.DisplayTarget as Component2;
+                    Assert.NotNull(displayTarget);
+                    Assert.False(displayTarget.IsHidden(false));
+                }
                 double[] before = CloneAppearance(component.MaterialPropertyValues);
                 ExportHelper.LinkLocalBoundingBox previewBounds =
                     exporter.CreateLinkLocalBoundingBox(link);
@@ -223,16 +245,24 @@ namespace SW2URDF.Test
                 using (CollisionPreview preview =
                     new CollisionPreview(swApp, model, exporter))
                 {
-                    Assert.True(preview.Show(
-                        link,
+                    foreach (CollisionMeshStrategy strategy in new[]
+                    {
                         CollisionMeshStrategy.BoxPrimitive,
-                        coordinateTransform,
-                        out string status,
-                        out string error),
-                        error ?? status);
-                    Assert.True(preview.IsVisible);
-                    preview.Hide();
-                    Assert.False(preview.IsVisible);
+                        CollisionMeshStrategy.CylinderPrimitive,
+                        CollisionMeshStrategy.SpherePrimitive
+                    })
+                    {
+                        Assert.True(preview.Show(
+                            link,
+                            strategy,
+                            coordinateTransform,
+                            out string status,
+                            out string error),
+                            strategy + ": " + (error ?? status));
+                        Assert.True(preview.IsVisible);
+                        preview.Hide();
+                        Assert.False(preview.IsVisible);
+                    }
                 }
 
                 Assert.Equal(before, CloneAppearance(component.MaterialPropertyValues));
@@ -241,6 +271,24 @@ namespace SW2URDF.Test
             {
                 ReleaseComObject(coordinateTransform);
             }
+        }
+
+        private static TemporaryBodyDisplayContext CreateDisplayContext(
+            SldWorks swApp,
+            ModelDoc2 model,
+            Link link,
+            MathTransform coordinateTransform)
+        {
+            Assert.True(
+                TemporaryBodyDisplayContext.TryCreate(
+                    swApp,
+                    model,
+                    link,
+                    coordinateTransform,
+                    out TemporaryBodyDisplayContext context,
+                    out string error),
+                error);
+            return context;
         }
 
         private static double[] CloneAppearance(object values)

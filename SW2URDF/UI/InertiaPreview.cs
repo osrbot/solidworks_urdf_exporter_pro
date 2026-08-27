@@ -88,40 +88,66 @@ namespace SW2URDF.UI
 
             try
             {
-                Matrix<double> linkTransform = MathOps.GetTransformation(linkCoordinateTransform);
-                Matrix<double> inertialTransform = MathOps.GetTransformation(
-                    link.Inertial.Origin.GetXYZ(),
-                    link.Inertial.Origin.GetRPY());
-                Matrix<double> globalTransform = linkTransform * inertialTransform;
-                Matrix<double> globalRotation = globalTransform.SubMatrix(0, 3, 0, 3);
-                double[] center =
+                if (!TemporaryBodyDisplayContext.TryCreate(
+                    swApp,
+                    model,
+                    link,
+                    linkCoordinateTransform,
+                    out TemporaryBodyDisplayContext displayContext,
+                    out string displayContextError))
                 {
-                    globalTransform[0, 3],
-                    globalTransform[1, 3],
-                    globalTransform[2, 3]
-                };
-
-                double[][] axes = new double[3][];
-                for (int i = 0; i < axes.Length; i++)
-                {
-                    axes[i] = (globalRotation * ellipsoid.PrincipalAxes.Column(i)).ToArray();
-                    Normalize(axes[i]);
+                    error = displayContextError;
+                    failureKind = InertiaPreviewFailureKind.DisplayUnavailable;
+                    return false;
                 }
 
-                Modeler modeler = (Modeler)swApp.GetModeler();
-                AddEllipse(modeler, center, ellipsoid.SemiAxes[0], ellipsoid.SemiAxes[1],
-                    axes[0], axes[1], DrawingColor.Red);
-                AddEllipse(modeler, center, ellipsoid.SemiAxes[0], ellipsoid.SemiAxes[2],
-                    axes[0], axes[2], DrawingColor.LimeGreen);
-                AddEllipse(modeler, center, ellipsoid.SemiAxes[1], ellipsoid.SemiAxes[2],
-                    axes[1], axes[2], DrawingColor.DodgerBlue);
-                AddPrincipalAxis(modeler, center, axes[0], ellipsoid.SemiAxes[0],
-                    DrawingColor.Red);
-                AddPrincipalAxis(modeler, center, axes[1], ellipsoid.SemiAxes[1],
-                    DrawingColor.LimeGreen);
-                AddPrincipalAxis(modeler, center, axes[2], ellipsoid.SemiAxes[2],
-                    DrawingColor.DodgerBlue);
-                AddComMarker(modeler, center, ellipsoid.SemiAxes.Max());
+                using (displayContext)
+                {
+                    Matrix<double> linkTransform = MathOps.GetTransformation(
+                        displayContext.LinkToDisplayTarget);
+                    Matrix<double> inertialTransform = MathOps.GetTransformation(
+                        link.Inertial.Origin.GetXYZ(),
+                        link.Inertial.Origin.GetRPY());
+                    Matrix<double> displayTransform = linkTransform * inertialTransform;
+                    Matrix<double> displayRotation = displayTransform.SubMatrix(0, 3, 0, 3);
+                    double[] center =
+                    {
+                        displayTransform[0, 3],
+                        displayTransform[1, 3],
+                        displayTransform[2, 3]
+                    };
+
+                    double[][] axes = new double[3][];
+                    for (int i = 0; i < axes.Length; i++)
+                    {
+                        axes[i] = (displayRotation * ellipsoid.PrincipalAxes.Column(i)).ToArray();
+                        Normalize(axes[i]);
+                    }
+
+                    Modeler modeler = null;
+                    try
+                    {
+                        modeler = (Modeler)swApp.GetModeler();
+                        AddEllipse(modeler, center, ellipsoid.SemiAxes[0], ellipsoid.SemiAxes[1],
+                            axes[0], axes[1], DrawingColor.Red, displayContext.DisplayTarget);
+                        AddEllipse(modeler, center, ellipsoid.SemiAxes[0], ellipsoid.SemiAxes[2],
+                            axes[0], axes[2], DrawingColor.LimeGreen, displayContext.DisplayTarget);
+                        AddEllipse(modeler, center, ellipsoid.SemiAxes[1], ellipsoid.SemiAxes[2],
+                            axes[1], axes[2], DrawingColor.DodgerBlue, displayContext.DisplayTarget);
+                        AddPrincipalAxis(modeler, center, axes[0], ellipsoid.SemiAxes[0],
+                            DrawingColor.Red, displayContext.DisplayTarget);
+                        AddPrincipalAxis(modeler, center, axes[1], ellipsoid.SemiAxes[1],
+                            DrawingColor.LimeGreen, displayContext.DisplayTarget);
+                        AddPrincipalAxis(modeler, center, axes[2], ellipsoid.SemiAxes[2],
+                            DrawingColor.DodgerBlue, displayContext.DisplayTarget);
+                        AddComMarker(modeler, center, ellipsoid.SemiAxes.Max(),
+                            displayContext.DisplayTarget);
+                    }
+                    finally
+                    {
+                        ReleaseComObject(modeler);
+                    }
+                }
                 model.GraphicsRedraw2();
                 if (temporaryBodies.Count == ExpectedCurveCount)
                 {
@@ -183,7 +209,8 @@ namespace SW2URDF.UI
             double minorRadius,
             double[] majorAxis,
             double[] minorAxis,
-            DrawingColor color)
+            DrawingColor color,
+            object displayTarget)
         {
             object curve = null;
             try
@@ -194,7 +221,7 @@ namespace SW2URDF.UI
                     minorRadius,
                     majorAxis,
                     minorAxis);
-                AddWireBody(modeler, curve, color);
+                AddWireBody(modeler, curve, color, displayTarget);
             }
             finally
             {
@@ -207,18 +234,26 @@ namespace SW2URDF.UI
             double[] center,
             double[] direction,
             double semiAxis,
-            DrawingColor color)
+            DrawingColor color,
+            object displayTarget)
         {
             double halfLength = semiAxis * PrincipalAxisLengthScale;
-            AddLine(modeler, center, direction, halfLength, color);
+            AddLine(modeler, center, direction, halfLength, color, displayTarget);
         }
 
-        private void AddComMarker(Modeler modeler, double[] center, double largestSemiAxis)
+        private void AddComMarker(
+            Modeler modeler,
+            double[] center,
+            double largestSemiAxis,
+            object displayTarget)
         {
             double halfLength = Math.Max(0.0025, largestSemiAxis * 0.12);
-            AddLine(modeler, center, new[] { 1.0, 0.0, 0.0 }, halfLength, DrawingColor.Gold);
-            AddLine(modeler, center, new[] { 0.0, 1.0, 0.0 }, halfLength, DrawingColor.Gold);
-            AddLine(modeler, center, new[] { 0.0, 0.0, 1.0 }, halfLength, DrawingColor.Gold);
+            AddLine(modeler, center, new[] { 1.0, 0.0, 0.0 }, halfLength,
+                DrawingColor.Gold, displayTarget);
+            AddLine(modeler, center, new[] { 0.0, 1.0, 0.0 }, halfLength,
+                DrawingColor.Gold, displayTarget);
+            AddLine(modeler, center, new[] { 0.0, 0.0, 1.0 }, halfLength,
+                DrawingColor.Gold, displayTarget);
         }
 
         private void AddLine(
@@ -226,7 +261,8 @@ namespace SW2URDF.UI
             double[] center,
             double[] direction,
             double halfLength,
-            DrawingColor color)
+            DrawingColor color,
+            object displayTarget)
         {
             double[] start =
             {
@@ -259,7 +295,7 @@ namespace SW2URDF.UI
                     throw new InvalidOperationException(
                         "SolidWorks could not trim an inertia principal axis.");
                 }
-                AddWireBody(modeler, trimmedCurve, color);
+                AddWireBody(modeler, trimmedCurve, color, displayTarget);
             }
             finally
             {
@@ -268,7 +304,11 @@ namespace SW2URDF.UI
             }
         }
 
-        private void AddWireBody(Modeler modeler, object curve, DrawingColor color)
+        private void AddWireBody(
+            Modeler modeler,
+            object curve,
+            DrawingColor color,
+            object displayTarget)
         {
             Body2 body = modeler.CreateWireBody(
                 curve,
@@ -281,7 +321,7 @@ namespace SW2URDF.UI
             try
             {
                 int result = body.Display3(
-                    model,
+                    displayTarget,
                     ColorTranslator.ToOle(color),
                     (int)swTempBodySelectOptions_e.swTempBodySelectOptionNone);
                 if (!IsDisplaySuccess(result))

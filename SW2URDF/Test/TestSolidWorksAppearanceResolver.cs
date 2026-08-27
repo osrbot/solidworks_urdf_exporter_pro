@@ -1,5 +1,6 @@
 using Moq;
 using SolidWorks.Interop.sldworks;
+using SW2URDF.UI;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
@@ -12,6 +13,23 @@ namespace SW2URDF.Test
 {
     public class TestSolidWorksAppearanceResolver
     {
+        [Fact]
+        public void BuiltInMaterialPresetMapsNameToIndependentRgbaCopy()
+        {
+            Assert.True(MaterialAppearancePresets.TryGet("green", out double[] first));
+            Assert.Equal(new[] { 0.05, 0.60, 0.10, 1.0 }, first);
+
+            first[0] = 1.0;
+            Assert.True(MaterialAppearancePresets.TryGet("GREEN", out double[] second));
+            Assert.Equal(0.05, second[0], 12);
+        }
+
+        [Fact]
+        public void CustomMaterialIdDoesNotInventAnAppearancePreset()
+        {
+            Assert.False(MaterialAppearancePresets.TryGet("my_robot_finish", out _));
+        }
+
         [Fact]
         public void ParsesSolidWorksRgbAndTransparency()
         {
