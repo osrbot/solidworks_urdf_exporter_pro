@@ -1,4 +1,5 @@
 using SW2URDF.URDFExport;
+using SW2URDF.UI;
 using System;
 using System.IO;
 using Xunit;
@@ -7,6 +8,17 @@ namespace SW2URDF.Test
 {
     public class TestExportProgress
     {
+        [Fact]
+        public void TestExportProgressWindowStaysAboveSolidWorks()
+        {
+            using (ExportProgressForm form = new ExportProgressForm())
+            {
+                Assert.True(form.TopMost);
+                Assert.False(form.ShowInTaskbar);
+                Assert.False(form.ControlBox);
+            }
+        }
+
         [Theory]
         [InlineData(0, "0 B")]
         [InlineData(1024, "1 KiB")]

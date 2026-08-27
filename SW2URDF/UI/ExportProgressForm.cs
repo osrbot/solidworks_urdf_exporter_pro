@@ -19,6 +19,7 @@ namespace SW2URDF.UI
             StartPosition = FormStartPosition.CenterParent;
             ControlBox = false;
             ShowInTaskbar = false;
+            TopMost = true;
             ClientSize = new Size(460, 118);
 
             labelStage = new Label
