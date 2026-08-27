@@ -262,6 +262,165 @@ namespace SW2URDF.Test
             }
         }
 
+        [Fact]
+        public void TestDocumentFrameConversionProducesExpectedLinkLocalMassProperties()
+        {
+            if (!string.Equals(
+                System.Environment.GetEnvironmentVariable(
+                    "SW2URDF_RUN_SW_INTEGRATION_TESTS"),
+                "1",
+                StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            string coordinateSystemName =
+                System.Environment.GetEnvironmentVariable(
+                    "SW2URDF_TEST_COORDINATE_SYSTEM");
+            string componentName =
+                System.Environment.GetEnvironmentVariable(
+                    "SW2URDF_TEST_COMPONENT_NAME");
+            if (string.IsNullOrWhiteSpace(coordinateSystemName) ||
+                string.IsNullOrWhiteSpace(componentName))
+            {
+                return;
+            }
+
+            SldWorks swApp = null;
+            ModelDoc2 model = null;
+            MathTransform coordinateSystem = null;
+            MassProperty centerMassProperty = null;
+            MassProperty inertiaMassProperty = null;
+            bool closeModelAfterTest = false;
+            bool closeApplicationAfterTest = false;
+            try
+            {
+                try
+                {
+                    swApp = (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
+                }
+                catch (COMException)
+                {
+                    swApp = (SldWorks)Activator.CreateInstance(
+                        Type.GetTypeFromProgID("SldWorks.Application"));
+                    swApp.Visible = false;
+                    closeApplicationAfterTest = true;
+                }
+                model = (ModelDoc2)swApp.ActiveDoc;
+                if (model == null)
+                {
+                    string modelPath = System.Environment.GetEnvironmentVariable(
+                        "SW2URDF_TEST_MODEL_PATH");
+                    int errors = 0;
+                    int warnings = 0;
+                    model = (ModelDoc2)swApp.OpenDoc6(
+                        modelPath,
+                        (int)swDocumentTypes_e.swDocASSEMBLY,
+                        (int)swOpenDocOptions_e.swOpenDocOptions_ReadOnly,
+                        string.Empty,
+                        ref errors,
+                        ref warnings);
+                    closeModelAfterTest = model != null;
+                }
+                Assert.NotNull(model);
+                coordinateSystem = (MathTransform)model.Extension
+                    .GetCoordinateSystemTransformByName(coordinateSystemName);
+                Assert.NotNull(coordinateSystem);
+
+                AssemblyDoc assembly = (AssemblyDoc)model;
+                Component2[] components = ((object[])assembly.GetComponents(false))
+                    .Cast<Component2>()
+                    .ToArray();
+                Component2 component = components
+                    .FirstOrDefault(value => string.Equals(
+                        value.Name2,
+                        componentName,
+                        StringComparison.Ordinal));
+                Assert.True(
+                    component != null,
+                    "Component not found. Available components: " +
+                    string.Join(", ", components.Select(value => value.Name2)));
+
+                object[] bodies2 = (object[])component.GetBodies2(
+                    (int)swBodyType_e.swSolidBody);
+                Assert.NotNull(bodies2);
+                centerMassProperty = (MassProperty)model.Extension.CreateMassProperty();
+                Assert.NotNull(centerMassProperty);
+                centerMassProperty.UseSystemUnits = true;
+                Assert.True(centerMassProperty.AddBodies(
+                    CreateDispatchWrappers(bodies2)));
+                double[] documentCenter = (double[])centerMassProperty.CenterOfMass;
+                double mass = centerMassProperty.Mass;
+
+                inertiaMassProperty = (MassProperty)model.Extension.CreateMassProperty();
+                Assert.NotNull(inertiaMassProperty);
+                inertiaMassProperty.UseSystemUnits = true;
+                Assert.True(inertiaMassProperty.AddBodies(
+                    CreateDispatchWrappers(bodies2)));
+                double[] documentMoment = (double[])inertiaMassProperty.GetMomentOfInertia(
+                    (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass);
+                double[] apiPrincipalMoments =
+                    (double[])inertiaMassProperty.PrincipleMomentsOfInertia;
+                MassPropertySnapshot converted = MassPropertyFrameConverter.Convert(
+                    new MassPropertySnapshot(mass, documentCenter, documentMoment),
+                    MathNet.Numerics.LinearAlgebra.Matrix<double>.Build.DenseIdentity(4),
+                    MathOps.GetTransformation(coordinateSystem));
+                string coordinateSystemData = string.Join(
+                    ",",
+                    ((double[])coordinateSystem.ArrayData).Select(value =>
+                        value.ToString("G17", System.Globalization.CultureInfo.InvariantCulture)));
+
+                string expectedCenterText = System.Environment.GetEnvironmentVariable(
+                    "SW2URDF_TEST_EXPECTED_COM");
+                if (!string.IsNullOrWhiteSpace(expectedCenterText))
+                {
+                    double[] expectedCenter = expectedCenterText
+                        .Split(',')
+                        .Select(value => double.Parse(
+                            value,
+                            System.Globalization.CultureInfo.InvariantCulture))
+                        .ToArray();
+                    Assert.Equal(3, expectedCenter.Length);
+                    for (int i = 0; i < 3; i++)
+                    {
+                        Assert.True(
+                            Math.Abs(converted.CenterOfMass[i] - expectedCenter[i]) <= 1e-8,
+                            string.Format(
+                                "Link-local COM mismatch on axis {0}: " +
+                                "api={1:G17}, expected={2:G17}; transform={3}",
+                                i,
+                                converted.CenterOfMass[i],
+                                expectedCenter[i],
+                                coordinateSystemData));
+                    }
+                }
+
+                Inertia convertedInertia = new Inertia();
+                convertedInertia.SetSolidWorksMomentMatrix(converted.Moment);
+                AssertPrincipalMomentsMatch(
+                    convertedInertia,
+                    converted.Mass,
+                    apiPrincipalMoments);
+            }
+            finally
+            {
+                string modelTitle = model == null ? null : model.GetTitle();
+                ReleaseComObject(inertiaMassProperty);
+                ReleaseComObject(centerMassProperty);
+                ReleaseComObject(coordinateSystem);
+                if (closeModelAfterTest && !string.IsNullOrWhiteSpace(modelTitle))
+                {
+                    swApp.CloseDoc(modelTitle);
+                }
+                ReleaseComObject(model);
+                if (closeApplicationAfterTest && swApp != null)
+                {
+                    swApp.ExitApp();
+                }
+                ReleaseComObject(swApp);
+            }
+        }
+
         private static void AssertPrincipalMomentsMatch(
             Inertia inertia,
             double mass,

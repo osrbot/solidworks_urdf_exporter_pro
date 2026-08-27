@@ -82,11 +82,21 @@ The eight tutorial steps follow the actual export order:
 Each non-root Link uses its child-Joint coordinate system as its own URDF Link frame; the root Link
 uses `Origin_global` or another explicitly selected root frame. These frames must exist as
 SolidWorks coordinate-system features. On the Link properties page, use the `Link frame` selector
-to choose from the frames currently available in the model. The exporter asks SolidWorks to
-calculate mass, COM, and the COM inertia tensor directly in that Link frame. A frame change
-recomputes the COM in meters, rotates the center-of-mass inertia tensor in `kg*m^2`, and updates the adjacent Joint
-origins. It does not apply a parallel-axis offset because URDF stores inertia about the COM. Mass
-and principal moments must therefore remain unchanged when only the Link frame changes.
+to choose from the frames currently available in the model. The exporter reads mass/COM and the
+COM inertia tensor from independent SolidWorks mass-property objects in system units, then
+explicitly converts both from the document frame to that Link frame. Using separate objects avoids
+a SolidWorks 2023 read-order defect where reading the tensor and COM from one object can invalidate
+one of the cached results. A frame change recomputes the COM in meters, rotates the center-of-mass
+inertia tensor in `kg*m^2`, and updates the adjacent Joint origins. It does not apply a
+parallel-axis offset because URDF stores inertia about the COM. Mass and principal moments must
+therefore remain unchanged when only the Link frame changes.
+
+Before writing meshes or URDF, the exporter requires every numeric and physical inertial check to
+pass, including checking that every computed COM is inside the selected component bounds in Link
+coordinates. A failure stops the export and identifies the affected Link and check instead of
+producing a package with displaced inertia. The bounds check catches frame and component-selection
+errors; for concave or hollow geometry, a physically valid COM may lie in an empty cavity while
+still remaining inside the body's convex region.
 
 The companion window is intentionally instructional: it does not automate clicks, save files, alter CAD bindings, or mutate the model. This keeps the tutorial version-independent and lets the user verify each engineering decision in the real exporter.
 

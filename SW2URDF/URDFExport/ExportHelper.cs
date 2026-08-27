@@ -243,6 +243,23 @@ namespace SW2URDF.URDFExport
                 logger.Info("Creating Gazebo launch file in " + package.WindowsLaunchDirectory);
                 gazebo.WriteFile(package.WindowsLaunchDirectory);
 
+                List<InertialValidationRecord> inertialRecords =
+                    new List<InertialValidationRecord>();
+                if (ComputeInertialValues)
+                {
+                    inertialRecords = LogInertialValidation(
+                        URDFRobot.BaseLink,
+                        windowsInertialValidationCsvFileName);
+                    EnsureNoBlockingInertialFailures(inertialRecords);
+                }
+                else
+                {
+                    WriteInertialValidationCsv(
+                        windowsInertialValidationCsvFileName,
+                        inertialRecords);
+                    logger.Info("Skipped inertial API validation because inertial computation is disabled");
+                }
+
                 logger.Info("Saving existing STL preferences");
                 SaveUserPreferences();
                 preferencesSaved = true;
@@ -266,8 +283,6 @@ namespace SW2URDF.URDFExport
                 logger.Info("Beginning individual files export");
                 ExportFiles(URDFRobot.BaseLink, package, exportSTL, meshFormat, meshRecords);
 
-                List<InertialValidationRecord> inertialRecords =
-                    LogInertialValidation(URDFRobot.BaseLink, windowsInertialValidationCsvFileName);
                 WriteMeshManifestCsv(windowsMeshManifestCsvFileName, meshRecords);
                 logger.Info("Wrote mesh manifest CSV with " + meshRecords.Count + " rows to " +
                     windowsMeshManifestCsvFileName);
@@ -2188,11 +2203,10 @@ namespace SW2URDF.URDFExport
             }
             Matrix<double> globalTransform = MathOps.GetTransformation(coordSysTransform);
 
-            MassProperty swMass = CreateMassPropertyInCoordinateSystem(
-                ActiveSWModel,
-                coordSysTransform,
-                null);
-            ApplyMassPropertyToLink(URDFRobot.BaseLink, swMass);
+            MassPropertySnapshot massProperty = ReadLinkLocalMassProperty(
+                null,
+                coordSysTransform);
+            ApplyMassPropertyToLink(URDFRobot.BaseLink, massProperty);
             LocalizeVisualAndCollision(URDFRobot.BaseLink, globalTransform);
 
             //Creating package directories

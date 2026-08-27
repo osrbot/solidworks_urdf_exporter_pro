@@ -223,6 +223,41 @@ namespace SW2URDF.Test
                 csv);
         }
 
+        [Fact]
+        public void TestExportGuardRejectsCenterOfMassOutsideSelectedGeometry()
+        {
+            ExportHelper.InertialValidationRecord record =
+                new ExportHelper.InertialValidationRecord(
+                    "front_left_link",
+                    "Origin_front_left_joint",
+                    ExportHelper.InertialValidationRow.Diagnostic(
+                        "origin.within_selected_geometry_bounds",
+                        "geometry",
+                        "FAIL",
+                        "COM is outside the selected geometry."));
+
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+                ExportHelper.EnsureNoBlockingInertialFailures(new[] { record }));
+
+            Assert.Contains("front_left_link", error.Message);
+        }
+
+        [Fact]
+        public void TestExportGuardAllowsValidCenterOfMass()
+        {
+            ExportHelper.InertialValidationRecord record =
+                new ExportHelper.InertialValidationRecord(
+                    "front_left_link",
+                    "Origin_front_left_joint",
+                    ExportHelper.InertialValidationRow.Diagnostic(
+                        "origin.within_selected_geometry_bounds",
+                        "geometry",
+                        "PASS",
+                        "COM is inside the selected geometry."));
+
+            ExportHelper.EnsureNoBlockingInertialFailures(new[] { record });
+        }
+
         private static void AssertPrincipalMomentsMatch(
             Inertia inertia,
             double mass,

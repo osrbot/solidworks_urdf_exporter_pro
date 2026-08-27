@@ -2,6 +2,23 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## 2026-08-27
+
+### Fixed
+
+- Fixed a SolidWorks 2023 `IMassProperty` read-order defect that could return a zero center of mass
+  after reading the COM inertia tensor from the same COM object. The exporter now reads mass/COM
+  and the COM tensor from independent mass-property objects, then explicitly converts both from
+  the document frame to the selected Link frame.
+- Unified assembly and part mass-property export on the same document-to-Link frame conversion
+  route, with system units enabled for every SolidWorks mass-property query.
+- Added a live SolidWorks integration test that verifies the converted COM and requires tensor
+  eigenvalues to match the API principal moments for every wheel coordinate-system orientation in
+  the four-wheel example.
+- Stopped export before writing meshes or URDF when any inertial validation fails, including a
+  calculated Link COM outside the selected SolidWorks component bounds; the error identifies the
+  affected Link and failed check.
+
 ## 2026-08-26
 
 ### Fixed

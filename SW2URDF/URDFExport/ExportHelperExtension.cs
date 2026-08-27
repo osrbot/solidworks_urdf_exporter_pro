@@ -85,8 +85,9 @@ namespace SW2URDF.URDFExport
             Link.isFixedFrame = false;
 
             //Get link properties from SolidWorks part
-            IMassProperty swMass = CreateSystemUnitMassProperty(swModel);
-            ApplyMassPropertyToLink(Link, swMass);
+            ApplyMassPropertyToLink(
+                Link,
+                ReadDocumentFrameMassProperty(swModel, null));
 
             // Will this ever not be zeros?
             Link.Visual.Origin.SetXYZ(new double[3] { 0, 0, 0 });
@@ -376,7 +377,8 @@ namespace SW2URDF.URDFExport
             List<Body2> bodies = GetBodies(link.SWComponents);
 
             logger.Info("Computing inertial properties for link " + link.Name +
-                " from " + bodies.Count + " solid bodies directly in Link coordinate system " +
+                " from " + bodies.Count + " solid bodies in the document frame, then " +
+                "explicitly transforming COM and tensor to Link coordinate system " +
                 link.Joint.CoordinateSystemName);
             MassPropertySnapshot massProperty = ReadLinkLocalMassProperty(
                 bodies,
@@ -430,6 +432,41 @@ namespace SW2URDF.URDFExport
             WriteInertialValidationCsv(csvFileName, records);
             logger.Info("Wrote inertial validation CSV with " + records.Count + " rows to " + csvFileName);
             return records;
+        }
+
+        internal static void EnsureNoBlockingInertialFailures(
+            IEnumerable<InertialValidationRecord> records)
+        {
+            if (records == null)
+            {
+                throw new ArgumentNullException("records");
+            }
+
+            string[] failures = records
+                .Where(record => record != null &&
+                    record.Row != null &&
+                    !record.Row.Passed)
+                .Select(record => String.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0} ({1})",
+                    record.LinkName,
+                    record.Row.Quantity))
+                .Where(value => !String.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .ToArray();
+            if (failures.Length == 0)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException(ChineseUiText.Translate(
+                "Export stopped because inertial validation failed: " +
+                String.Join(", ", failures) +
+                ". Check the selected components, Link coordinate systems, and validation CSV.",
+                "\u5bfc\u51fa\u5df2\u505c\u6b62\uff1a\u60ef\u6027\u6821\u9a8c\u5931\u8d25\uff1a" +
+                String.Join(", ", failures) +
+                "\u3002\u8bf7\u68c0\u67e5\u7ec4\u4ef6\u9009\u62e9\u3001Link \u5750\u6807\u7cfb\u548c\u6821\u9a8c CSV\u3002"));
         }
 
         internal void RecomputeLinkCoordinateSystem(
@@ -530,6 +567,14 @@ namespace SW2URDF.URDFExport
             catch (Exception e)
             {
                 logger.Warn("Could not validate inertial values for link " + link.Name, e);
+                records.Add(new InertialValidationRecord(
+                    link.Name,
+                    GetValidationCoordinateSystemName(link),
+                    InertialValidationRow.Diagnostic(
+                        "validation.completed",
+                        "internal",
+                        "FAIL",
+                        e.Message)));
             }
 
             foreach (Link child in link.Children)
@@ -576,8 +621,8 @@ namespace SW2URDF.URDFExport
             StringBuilder builder = new StringBuilder();
             builder.AppendLine("Inertial validation for link '" + link.Name + "'");
             builder.AppendLine("Coordinate system: " + coordinateSystemName);
-            builder.AppendLine("SolidWorks source: MassProperty calculated directly in the selected Link " +
-                "coordinate system; tensor entries preserved directly for URDF.");
+            builder.AppendLine("SolidWorks source: MassProperty calculated in the document frame, then COM " +
+                "and the COM inertia tensor explicitly transformed to the selected Link coordinate system.");
             builder.AppendLine("Units: mass kg, origin m, inertia kg*m^2. SolidWorks UI equivalent: origin m*1000, inertia kg*m^2*1e6.");
             builder.AppendLine(string.Format(CultureInfo.InvariantCulture,
                 "{0,-35} {1,-10} {2,-8} {3,18} {4,18} {5,18} {6,14} {7,8} {8}",
@@ -1437,35 +1482,23 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private MassProperty CreateMassProperty(List<Body2> bodies, MathTransform coordinateSystemTransform)
-        {
-            return CreateMassPropertyInCoordinateSystem(
-                ActiveSWModel,
-                coordinateSystemTransform,
-                bodies);
-        }
-
         private MassPropertySnapshot ReadLinkLocalMassProperty(
             IList<Body2> bodies,
             MathTransform linkFrameToDocument)
         {
-            MassProperty swMass = CreateMassPropertyInCoordinateSystem(
+            MassPropertySnapshot documentSnapshot = ReadDocumentFrameMassProperty(
                 ActiveSWModel,
-                linkFrameToDocument,
                 bodies);
-            return ReadMassProperty(swMass);
+            return MassPropertyFrameConverter.Convert(
+                documentSnapshot,
+                Matrix<double>.Build.DenseIdentity(4),
+                MathOps.GetTransformation(linkFrameToDocument));
         }
 
-        private static MassProperty CreateMassPropertyInCoordinateSystem(
+        private static MassProperty CreateDocumentFrameMassProperty(
             ModelDoc2 model,
-            MathTransform coordinateSystemTransform,
             IList<Body2> bodies)
         {
-            if (coordinateSystemTransform == null)
-            {
-                throw new ArgumentNullException("coordinateSystemTransform");
-            }
-
             MassProperty swMass = CreateSystemUnitMassProperty(model);
             if (bodies != null)
             {
@@ -1483,12 +1516,26 @@ namespace SW2URDF.URDFExport
                 }
             }
 
-            if (!swMass.SetCoordinateSystem(coordinateSystemTransform))
-            {
-                throw new Exception(
-                    "SolidWorks rejected the requested mass-property coordinate system");
-            }
             return swMass;
+        }
+
+        private static MassPropertySnapshot ReadDocumentFrameMassProperty(
+            ModelDoc2 model,
+            IList<Body2> bodies)
+        {
+            // SW2023 invalidates one cached result depending on whether CenterOfMass or
+            // GetMomentOfInertia is read first. Keep those reads on separate COM objects.
+            // SolidWorks owns their COM lifetime; explicitly releasing either RCW can terminate
+            // the host after several Link queries.
+            MassProperty centerMassProperty = CreateDocumentFrameMassProperty(model, bodies);
+            double[] centerOfMass = (double[])centerMassProperty.CenterOfMass;
+            double mass = centerMassProperty.Mass;
+
+            MassProperty inertiaMassProperty = CreateDocumentFrameMassProperty(model, bodies);
+            double[] moment = (double[])inertiaMassProperty.GetMomentOfInertia(
+                (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass);
+
+            return new MassPropertySnapshot(mass, centerOfMass, moment);
         }
 
         private static MassProperty CreateSystemUnitMassProperty(ModelDoc2 model)
@@ -1510,11 +1557,6 @@ namespace SW2URDF.URDFExport
             return swMass;
         }
 
-        private static void ApplyMassPropertyToLink(Link link, IMassProperty swMass)
-        {
-            ApplyMassPropertyToLink(link, ReadMassProperty(swMass));
-        }
-
         private static void ApplyMassPropertyToLink(
             Link link,
             MassPropertySnapshot massProperty)
@@ -1528,21 +1570,6 @@ namespace SW2URDF.URDFExport
             link.Inertial.Origin.SetXYZ(massProperty.CenterOfMass);
             link.Inertial.Origin.SetRPY(new double[] { 0, 0, 0 });
             link.Inertial.Inertia.SetSolidWorksMomentMatrix(massProperty.Moment);
-        }
-
-        private static MassPropertySnapshot ReadMassProperty(IMassProperty swMass)
-        {
-            if (swMass == null)
-            {
-                throw new ArgumentNullException("swMass");
-            }
-
-            // SW2023 can return a zero tensor if CenterOfMass is read before the inertia tensor.
-            double[] moment = (double[])swMass.GetMomentOfInertia(
-                (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass);
-            double mass = swMass.Mass;
-            double[] centerOfMass = (double[])swMass.CenterOfMass;
-            return new MassPropertySnapshot(mass, centerOfMass, moment);
         }
 
         private static void ComputeVisualCollisionProperties(Link link)
