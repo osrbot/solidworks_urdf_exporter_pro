@@ -1274,15 +1274,15 @@ namespace SW2URDF.URDFExport
             }
 
             Matrix<double> globalToLink = MathOps.GetTransformation(linkTransform).Inverse();
+            HashSet<string> visitedComponents =
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (Component2 comp in link.SWComponents)
             {
-                if (comp == null)
-                {
-                    continue;
-                }
-
-                double[] componentBox = comp.GetBox(false, false);
-                IncludeTransformedBoxCorners(box, globalToLink, componentBox);
+                IncludeComponentGeometryRecursive(
+                    box,
+                    globalToLink,
+                    comp,
+                    visitedComponents);
             }
 
             return box;
@@ -1304,22 +1304,248 @@ namespace SW2URDF.URDFExport
             }
 
             Matrix<double> globalToLink = MathOps.GetTransformation(linkTransform).Inverse();
+            HashSet<string> visitedComponents =
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (Component2 comp in link.SWComponents)
             {
-                if (comp == null)
+                AddComponentLocalBoundingBoxesRecursive(
+                    boxes,
+                    globalToLink,
+                    comp,
+                    visitedComponents);
+            }
+
+            return boxes;
+        }
+
+        private bool IncludeComponentGeometryRecursive(
+            LinkLocalBoundingBox targetBox,
+            Matrix<double> globalToLink,
+            Component2 component,
+            ISet<string> visitedComponents)
+        {
+            if (component == null ||
+                !visitedComponents.Add(GetComponentGeometryIdentity(component)))
+            {
+                return false;
+            }
+
+            LinkLocalBoundingBox componentGeometry = new LinkLocalBoundingBox();
+            bool includedBranch = IncludeComponentBodyTessellation(
+                componentGeometry,
+                globalToLink,
+                component);
+            targetBox.Include(componentGeometry);
+
+            object[] children = GetComponentChildren(component);
+            if (children != null)
+            {
+                foreach (Component2 child in children)
+                {
+                    includedBranch = IncludeComponentGeometryRecursive(
+                        targetBox,
+                        globalToLink,
+                        child,
+                        visitedComponents) || includedBranch;
+                }
+            }
+
+            if (!includedBranch)
+            {
+                LinkLocalBoundingBox fallback = new LinkLocalBoundingBox();
+                IncludeTransformedBoxCorners(
+                    fallback,
+                    globalToLink,
+                    GetComponentBox(component));
+                targetBox.Include(fallback);
+                includedBranch = fallback.IsUsable;
+            }
+
+            return includedBranch;
+        }
+
+        private bool AddComponentLocalBoundingBoxesRecursive(
+            ICollection<LinkLocalBoundingBox> boxes,
+            Matrix<double> globalToLink,
+            Component2 component,
+            ISet<string> visitedComponents)
+        {
+            if (component == null ||
+                !visitedComponents.Add(GetComponentGeometryIdentity(component)))
+            {
+                return false;
+            }
+
+            LinkLocalBoundingBox box = new LinkLocalBoundingBox();
+            bool includedBranch = IncludeComponentBodyTessellation(
+                box,
+                globalToLink,
+                component);
+            if (box.IsUsable)
+            {
+                boxes.Add(box);
+            }
+
+            object[] children = GetComponentChildren(component);
+            if (children != null)
+            {
+                foreach (Component2 child in children)
+                {
+                    includedBranch = AddComponentLocalBoundingBoxesRecursive(
+                        boxes,
+                        globalToLink,
+                        child,
+                        visitedComponents) || includedBranch;
+                }
+            }
+
+            if (!includedBranch)
+            {
+                LinkLocalBoundingBox fallback = new LinkLocalBoundingBox();
+                IncludeTransformedBoxCorners(
+                    fallback,
+                    globalToLink,
+                    GetComponentBox(component));
+                if (fallback.IsUsable)
+                {
+                    boxes.Add(fallback);
+                    includedBranch = true;
+                }
+            }
+
+            return includedBranch;
+        }
+
+        private bool IncludeComponentBodyTessellation(
+            LinkLocalBoundingBox targetBox,
+            Matrix<double> globalToLink,
+            Component2 component)
+        {
+            object[] bodies;
+            try
+            {
+                object bodyInfo;
+                bodies = component.GetBodies3(
+                    (int)swBodyType_e.swSolidBody,
+                    out bodyInfo) as object[];
+            }
+            catch (Exception e)
+            {
+                logger.Debug("Body tessellation is unavailable for component " +
+                    GetComponentGeometryIdentity(component), e);
+                return false;
+            }
+            if (bodies == null || bodies.Length == 0)
+            {
+                return false;
+            }
+
+            Matrix<double> componentToLink;
+            try
+            {
+                MathTransform componentTransform = component.Transform2;
+                Matrix<double> componentToGlobal = componentTransform == null
+                    ? Matrix<double>.Build.DenseIdentity(4)
+                    : MathOps.GetTransformation(componentTransform);
+                componentToLink = globalToLink * componentToGlobal;
+            }
+            catch (Exception e)
+            {
+                logger.Debug("Component transform is unavailable for " +
+                    GetComponentGeometryIdentity(component), e);
+                return false;
+            }
+            bool includedPoint = false;
+
+            foreach (Body2 body in bodies)
+            {
+                if (body == null)
                 {
                     continue;
                 }
 
-                LinkLocalBoundingBox box = new LinkLocalBoundingBox();
-                IncludeTransformedBoxCorners(box, globalToLink, comp.GetBox(false, false));
-                if (box.IsUsable)
+                try
                 {
-                    boxes.Add(box);
+                    Tessellation tessellation = body.GetTessellation(null) as Tessellation;
+                    if (tessellation == null)
+                    {
+                        continue;
+                    }
+                    tessellation.ImprovedQuality = true;
+                    if (!tessellation.Tessellate())
+                    {
+                        continue;
+                    }
+
+                    int vertexCount = tessellation.GetVertexCount();
+                    for (int index = 0; index < vertexCount; index++)
+                    {
+                        double[] point = tessellation.GetVertexPoint(index) as double[];
+                        if (point == null || point.Length < 3)
+                        {
+                            continue;
+                        }
+                        IncludeTransformedPoint(
+                            targetBox,
+                            componentToLink,
+                            point[0],
+                            point[1],
+                            point[2]);
+                        includedPoint = true;
+                    }
+                }
+                catch (Exception e)
+                {
+                    logger.Debug("Body tessellation failed for component " +
+                        GetComponentGeometryIdentity(component), e);
                 }
             }
 
-            return boxes;
+            return includedPoint;
+        }
+
+        private object[] GetComponentChildren(Component2 component)
+        {
+            try
+            {
+                return component.GetChildren() as object[];
+            }
+            catch (Exception e)
+            {
+                logger.Debug("Could not enumerate child components for " +
+                    GetComponentGeometryIdentity(component), e);
+                return null;
+            }
+        }
+
+        private double[] GetComponentBox(Component2 component)
+        {
+            try
+            {
+                return component.GetBox(false, false);
+            }
+            catch (Exception e)
+            {
+                logger.Debug("Component bounding box is unavailable for " +
+                    GetComponentGeometryIdentity(component), e);
+                return null;
+            }
+        }
+
+        private static string GetComponentGeometryIdentity(Component2 component)
+        {
+            try
+            {
+                string name = component.Name2;
+                return String.IsNullOrWhiteSpace(name)
+                    ? "<component-id:" + component.GetID().ToString(CultureInfo.InvariantCulture) + ">"
+                    : name;
+            }
+            catch
+            {
+                return "<unresolved-component:" +
+                    component.GetHashCode().ToString(CultureInfo.InvariantCulture) + ">";
+            }
         }
 
         private static void IncludeTransformedBoxCorners(
@@ -1877,8 +2103,11 @@ namespace SW2URDF.URDFExport
         internal class LinkLocalBoundingBox
         {
             private const double MinimumDimension = 1e-9;
+            private const double DuplicatePointTolerance = 1e-12;
+            private static readonly double[][] SupportDirections = CreateSupportDirections();
             private bool hasPoint;
-            private readonly List<double[]> points = new List<double[]>();
+            private readonly double[][] supportPoints = new double[SupportDirections.Length][];
+            private readonly double[] supportScores = CreateInitialSupportScores();
 
             public double MinX { get; private set; }
             public double MinY { get; private set; }
@@ -1890,7 +2119,7 @@ namespace SW2URDF.URDFExport
             public double Width => MaxX - MinX;
             public double Depth => MaxY - MinY;
             public double Height => MaxZ - MinZ;
-            public IReadOnlyList<double[]> Points => points;
+            public IReadOnlyList<double[]> Points => GetDistinctSupportPoints();
             public double[] Center => new[]
             {
                 (MinX + MaxX) / 2.0,
@@ -1927,7 +2156,17 @@ namespace SW2URDF.URDFExport
                 {
                     return;
                 }
-                points.Add(new[] { x, y, z });
+
+                for (int index = 0; index < SupportDirections.Length; index++)
+                {
+                    double[] direction = SupportDirections[index];
+                    double score = direction[0] * x + direction[1] * y + direction[2] * z;
+                    if (score > supportScores[index])
+                    {
+                        supportScores[index] = score;
+                        supportPoints[index] = new[] { x, y, z };
+                    }
+                }
 
                 if (!hasPoint)
                 {
@@ -1944,6 +2183,76 @@ namespace SW2URDF.URDFExport
                 MaxX = Math.Max(MaxX, x);
                 MaxY = Math.Max(MaxY, y);
                 MaxZ = Math.Max(MaxZ, z);
+            }
+
+            public void Include(LinkLocalBoundingBox other)
+            {
+                if (other == null || !other.hasPoint)
+                {
+                    return;
+                }
+                foreach (double[] point in other.Points)
+                {
+                    Include(point[0], point[1], point[2]);
+                }
+            }
+
+            private IReadOnlyList<double[]> GetDistinctSupportPoints()
+            {
+                List<double[]> result = new List<double[]>();
+                foreach (double[] point in supportPoints)
+                {
+                    if (point == null || ContainsPoint(result, point))
+                    {
+                        continue;
+                    }
+                    result.Add(point);
+                }
+                return result;
+            }
+
+            private static bool ContainsPoint(IEnumerable<double[]> points, double[] candidate)
+            {
+                foreach (double[] point in points)
+                {
+                    if (Math.Abs(point[0] - candidate[0]) <= DuplicatePointTolerance &&
+                        Math.Abs(point[1] - candidate[1]) <= DuplicatePointTolerance &&
+                        Math.Abs(point[2] - candidate[2]) <= DuplicatePointTolerance)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            private static double[][] CreateSupportDirections()
+            {
+                List<double[]> directions = new List<double[]>();
+                for (int x = -1; x <= 1; x++)
+                {
+                    for (int y = -1; y <= 1; y++)
+                    {
+                        for (int z = -1; z <= 1; z++)
+                        {
+                            if (x == 0 && y == 0 && z == 0)
+                            {
+                                continue;
+                            }
+                            directions.Add(new[] { (double)x, (double)y, (double)z });
+                        }
+                    }
+                }
+                return directions.ToArray();
+            }
+
+            private static double[] CreateInitialSupportScores()
+            {
+                double[] scores = new double[SupportDirections.Length];
+                for (int index = 0; index < scores.Length; index++)
+                {
+                    scores[index] = Double.NegativeInfinity;
+                }
+                return scores;
             }
 
             public double[][] CreateCornerVertices()

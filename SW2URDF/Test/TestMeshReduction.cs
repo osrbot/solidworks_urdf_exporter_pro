@@ -461,6 +461,48 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestBoundingBoxKeepsExtremaWhileBoundingConvexHullInput()
+        {
+            ExportHelper.LinkLocalBoundingBox box = new ExportHelper.LinkLocalBoundingBox();
+            for (int index = 0; index < 5000; index++)
+            {
+                double angle = index * Math.PI * 2.0 / 5000.0;
+                box.Include(
+                    2.0 * Math.Cos(angle),
+                    3.0 * Math.Sin(angle),
+                    -4.0 + 8.0 * index / 4999.0);
+            }
+
+            Assert.Equal(-2.0, box.MinX, 5);
+            Assert.Equal(2.0, box.MaxX, 5);
+            Assert.Equal(-3.0, box.MinY, 5);
+            Assert.Equal(3.0, box.MaxY, 5);
+            Assert.Equal(-4.0, box.MinZ, 12);
+            Assert.Equal(4.0, box.MaxZ, 12);
+            Assert.InRange(box.Points.Count, 6, 26);
+        }
+
+        [Fact]
+        public void TestBoundingBoxMergePreservesChildExtrema()
+        {
+            ExportHelper.LinkLocalBoundingBox parent = new ExportHelper.LinkLocalBoundingBox();
+            parent.Include(-1.0, -2.0, -3.0);
+            parent.Include(1.0, 2.0, 3.0);
+            ExportHelper.LinkLocalBoundingBox child = new ExportHelper.LinkLocalBoundingBox();
+            child.Include(-7.0, -5.0, -4.0);
+            child.Include(6.0, 8.0, 9.0);
+
+            parent.Include(child);
+
+            Assert.Equal(-7.0, parent.MinX, 12);
+            Assert.Equal(-5.0, parent.MinY, 12);
+            Assert.Equal(-4.0, parent.MinZ, 12);
+            Assert.Equal(6.0, parent.MaxX, 12);
+            Assert.Equal(8.0, parent.MaxY, 12);
+            Assert.Equal(9.0, parent.MaxZ, 12);
+        }
+
+        [Fact]
         public void TestOriginValidationAllowsUrdfRounding()
         {
             ExportHelper.InertialValidationRow row =
