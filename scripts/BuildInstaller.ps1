@@ -1,7 +1,8 @@
 param(
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
-    [string]$SolidWorksInstallDir = "E:\Solidworks 2023\SOLIDWORKS Crop\SOLIDWORKS"
+    [string]$SolidWorksInstallDir = "E:\Solidworks 2023\SOLIDWORKS Crop\SOLIDWORKS",
+    [string]$InnoCompilerPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -94,25 +95,36 @@ if (-not $MSBuild) {
 }
 $MSBuild = [System.IO.Path]::GetFullPath($MSBuild)
 
-$ISCC = @(
-    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
-) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+$ISCC = $null
+if (-not [string]::IsNullOrWhiteSpace($InnoCompilerPath)) {
+    if (-not (Test-Path -LiteralPath $InnoCompilerPath -PathType Leaf)) {
+        throw "The requested Inno Setup compiler does not exist: $InnoCompilerPath"
+    }
+    $ISCC = $InnoCompilerPath
+} else {
+    $ISCC = @(
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+    ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+}
 if (-not $ISCC) {
-    throw "Inno Setup compiler was not found. Install Inno Setup 6.3 or newer."
+    throw "Inno Setup compiler was not found. Install Inno Setup 6.3.3 or pass -InnoCompilerPath."
 }
 $ISCC = [System.IO.Path]::GetFullPath($ISCC)
 $InnoWhatsNew = Join-Path (Split-Path -Parent $ISCC) "whatsnew.htm"
 $InnoVersionMatch = if (Test-Path -LiteralPath $InnoWhatsNew) {
     [regex]::Match(
         [System.IO.File]::ReadAllText($InnoWhatsNew),
-        '<summary>Inno Setup (?<version>[0-9]+\.[0-9]+)')
+        '(?:<summary>Inno Setup |class="ver">)(?<version>[0-9]+\.[0-9]+(?:\.[0-9]+)?)')
 } else {
     $null
 }
-if ($null -eq $InnoVersionMatch -or -not $InnoVersionMatch.Success -or
-    ([version]$InnoVersionMatch.Groups['version'].Value) -lt [version]'6.3') {
-    throw "Inno Setup 6.3 or newer is required by the x64compatible installer target."
+if ($null -eq $InnoVersionMatch -or -not $InnoVersionMatch.Success) {
+    throw "Unable to determine the Inno Setup compiler version from $InnoWhatsNew."
+}
+$InnoVersion = [version]$InnoVersionMatch.Groups['version'].Value
+if ($InnoVersion -lt [version]'6.3' -or $InnoVersion -gt [version]'6.3.3') {
+    throw "Release packaging requires Inno Setup 6.3.0 through 6.3.3 so CI can inspect the installer payload. Pass a compatible compiler with -InnoCompilerPath."
 }
 
 $LockPath = Join-Path $SourceRepoRoot "SW2URDF\packages.release.lock.json"
