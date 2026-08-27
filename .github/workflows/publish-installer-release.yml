@@ -252,7 +252,7 @@ jobs:
             echo "publish=true"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create immutable GitHub release
+      - name: Create draft GitHub release candidate
         if: steps.installer.outputs.publish == 'true'
         shell: bash
         env:
@@ -270,14 +270,29 @@ jobs:
           set -euo pipefail
 
           notes="$(mktemp)"
+          release_date_display="${RELEASE_DATE:0:4}-${RELEASE_DATE:4:2}-${RELEASE_DATE:6:2}"
           {
-            echo "SW2URDF installer build ${RELEASE_DATE}."
+            echo "# SW2URDF ${release_date_display} release candidate"
+            echo
+            echo "> Draft only. Publish after the maintainer has completed manual SolidWorks testing and explicitly approved this candidate."
             echo
             echo "- Asset: \`${INSTALLER_FILE}\`"
             echo "- Source commit: \`${RELEASE_COMMIT}\`"
             echo "- Artifact commit: \`${RELEASE_ARTIFACT_SHA}\`"
             echo
-            echo "This release is created automatically from committed installer artifacts under \`INSTALL/OUTPUT\`."
+            echo "## Changes"
+            echo
+            git show "${RELEASE_SOURCE_SHA}:CHANGELOG.md" |
+              awk -v heading="## ${release_date_display}" '
+                $0 == heading { found = 1; next }
+                found && /^## / { exit }
+                found { print }
+              '
+            echo
+            echo "## Candidate validation"
+            echo
+            echo "- Installer checksum, provenance, payload manifest, and every extracted payload hash were verified by CI."
+            echo "- Public publication remains a separate maintainer-approved action."
           } > "$notes"
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
@@ -302,4 +317,3 @@ jobs:
             --target "$RELEASE_SOURCE_SHA" \
             --title "SW2URDF installer ${RELEASE_DATE}" \
             --notes-file "$notes"
-          gh release edit "$RELEASE_TAG" --draft=false
