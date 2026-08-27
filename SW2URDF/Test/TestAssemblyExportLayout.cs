@@ -325,6 +325,8 @@ namespace SW2URDF.Test
                 GetControl<ComboBox>(form, "comboBoxLinkCoordinateSystem");
             Label linkCoordinateSystemLabel =
                 GetControl<Label>(form, "labelLinkCoordinateSystem");
+            Label inertialOriginLabel = GetControl<Label>(form, "label36");
+            Label inertiaMatrixLabel = GetControl<Label>(form, "label44");
             Label inertiaPreviewStatus =
                 GetControl<Label>(form, "labelInertiaPreviewStatus");
             TextBox visualYaw = GetControl<TextBox>(form, "textBoxVisualOriginYaw");
@@ -345,10 +347,29 @@ namespace SW2URDF.Test
             Assert.Equal(ComboBoxStyle.DropDownList, linkCoordinateSystem.DropDownStyle);
             Assert.True(linkCoordinateSystemLabel.Right < linkCoordinateSystem.Left);
             Assert.True(linkCoordinateSystem.Right <= inertiaGroup.ClientSize.Width);
+            AssertControlRowsDoNotOverlap(
+                linkCoordinateSystem,
+                inertialOriginLabel,
+                "Link frame selector overlaps the inertial origin heading.");
+            AssertControlRowsDoNotOverlap(
+                linkCoordinateSystem,
+                inertiaMatrixLabel,
+                "Link frame selector overlaps the inertia matrix heading.");
             Assert.Contains("mm", inertiaPreviewStatus.Text);
             Assert.True(collisionStrategy.Left > visualYaw.Right);
             Assert.True(collisionStrategy.Right < colorRed.Left);
             Assert.True(collisionStrategyLabel.Bottom <= collisionStrategy.Top);
+        }
+
+        private static void AssertControlRowsDoNotOverlap(
+            Control upperControl,
+            Control lowerControl,
+            string message)
+        {
+            int actualGap = lowerControl.Top - upperControl.Bottom;
+            Assert.True(
+                actualGap >= 4,
+                String.Format("{0} Actual gap: {1}px.", message, actualGap));
         }
 
         private static void AssertLinkFooterBelowContent(AssemblyExportForm form)

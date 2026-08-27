@@ -89,38 +89,50 @@ namespace SW2URDF.UI
 
         private void InitializeLinkCoordinateSystemControls()
         {
-            const int addedHeight = 18;
-            foreach (Control control in groupBox5.Controls)
-            {
-                if (control != label15)
-                {
-                    control.Top += addedHeight;
-                }
-            }
-
-            groupBox5.Height += addedHeight;
-            groupBox4.Top = groupBox5.Bottom + 8;
+            Control[] existingContentControls = groupBox5.Controls
+                .Cast<Control>()
+                .Where(control => control != label15)
+                .ToArray();
 
             labelLinkCoordinateSystem = new Label
             {
                 Name = "labelLinkCoordinateSystem",
                 AutoSize = true,
-                Location = new Point(8, 20),
                 Text = ChineseUiText.Translate("Link frame", "Link 坐标系")
             };
             comboBoxLinkCoordinateSystem = new ComboBox
             {
                 Name = "comboBoxLinkCoordinateSystem",
                 DropDownStyle = ComboBoxStyle.DropDownList,
-                Location = new Point(110, 16),
                 Size = new Size(groupBox5.ClientSize.Width - 120, 21),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 TabIndex = 2
             };
+            int frameRowTop = Math.Max(16, label15.Bottom + 4);
+            comboBoxLinkCoordinateSystem.Location = new Point(110, frameRowTop);
+            labelLinkCoordinateSystem.Location = new Point(
+                8,
+                frameRowTop + Math.Max(
+                    0,
+                    (comboBoxLinkCoordinateSystem.Height -
+                        labelLinkCoordinateSystem.PreferredHeight) / 2));
             comboBoxLinkCoordinateSystem.SelectionChangeCommitted +=
                 LinkCoordinateSystemSelectionChangeCommitted;
             groupBox5.Controls.Add(labelLinkCoordinateSystem);
             groupBox5.Controls.Add(comboBoxLinkCoordinateSystem);
+
+            const int minimumRowGap = 4;
+            int firstContentTop = existingContentControls.Min(control => control.Top);
+            int contentOffset = Math.Max(
+                0,
+                comboBoxLinkCoordinateSystem.Bottom + minimumRowGap - firstContentTop);
+            foreach (Control control in existingContentControls)
+            {
+                control.Top += contentOffset;
+            }
+
+            groupBox5.Height += contentOffset;
+            groupBox4.Top = groupBox5.Bottom + 3;
 
             if (components == null)
             {
@@ -1331,7 +1343,7 @@ namespace SW2URDF.UI
             const int rightMargin = 12;
             const int bottomMargin = 4;
             const int horizontalGap = 8;
-            const int verticalGap = 12;
+            const int verticalGap = 8;
             ResizeButtonToText(buttonLinksCancel);
             ResizeButtonToText(buttonLinksPrevious);
             ResizeButtonToText(buttonLinksExportUrdfOnly);
