@@ -1,6 +1,14 @@
 using MathNet.Numerics.LinearAlgebra;
+using SolidWorks.Interop.sldworks;
+using SolidWorks.Interop.swconst;
 using SW2URDF.UI;
 using SW2URDF.URDF;
+using SW2URDF.URDFExport;
+using System;
+using System.Linq;
+using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
+using System.Threading;
 using Xunit;
 
 namespace SW2URDF.Test
@@ -110,6 +118,130 @@ namespace SW2URDF.Test
                 Assert.False(success);
                 Assert.Equal(InertiaPreviewFailureKind.DisplayUnavailable, failureKind);
                 Assert.Contains("coordinate system", error);
+            }
+        }
+
+        [Fact]
+        public void TestLiveInertiaPreviewUsesVisibleAssemblyDisplayHost()
+        {
+            if (!String.Equals(
+                System.Environment.GetEnvironmentVariable("SW2URDF_RUN_SW_INTEGRATION_TESTS"),
+                "1",
+                StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Exception failure = null;
+            var staThread = new Thread(() =>
+            {
+                try
+                {
+                    RunLiveInertiaPreviewUsesVisibleAssemblyDisplayHost();
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                }
+            });
+            staThread.SetApartmentState(ApartmentState.STA);
+            staThread.Start();
+            staThread.Join();
+
+            if (failure != null)
+            {
+                ExceptionDispatchInfo.Capture(failure).Throw();
+            }
+        }
+
+        private static void RunLiveInertiaPreviewUsesVisibleAssemblyDisplayHost()
+        {
+            SldWorks swApp = null;
+            ModelDoc2 model = null;
+            Component2 component = null;
+            MathTransform coordinateTransform = null;
+            int? originalVisibility = null;
+            try
+            {
+                swApp = (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
+                model = swApp.ActiveDoc as ModelDoc2;
+                AssemblyDoc assembly = model as AssemblyDoc;
+                Assert.NotNull(assembly);
+                object[] topLevelComponents = assembly.GetComponents(true) as object[];
+                component = (topLevelComponents ?? new object[0])
+                    .Cast<Component2>()
+                    .FirstOrDefault(candidate =>
+                    {
+                        try
+                        {
+                            double[] box = candidate.GetBox(false, false);
+                            return box != null && box.Length >= 6;
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    });
+                Assert.NotNull(component);
+
+                originalVisibility = component.Visible;
+                component.Visible = (int)swComponentVisibilityState_e.swComponentHidden;
+                model.GraphicsRedraw2();
+                Assert.True(component.IsHidden(false));
+
+                string coordinateSystemName =
+                    System.Environment.GetEnvironmentVariable("SW2URDF_TEST_COORDINATE_SYSTEM");
+                if (String.IsNullOrWhiteSpace(coordinateSystemName))
+                {
+                    coordinateSystemName = "Origin_global";
+                }
+                ExportHelper exporter = new ExportHelper(swApp);
+                coordinateTransform = exporter.GetCoordinateSystemTransform(coordinateSystemName);
+                Assert.NotNull(coordinateTransform);
+
+                Link link = new Link { Name = "inertia_preview_test_link" };
+                link.Joint.CoordinateSystemName = coordinateSystemName;
+                link.SWComponents.Add(component);
+                link.Inertial.Mass.Value = 1.0;
+                link.Inertial.Inertia.Ixx = 0.001;
+                link.Inertial.Inertia.Iyy = 0.0012;
+                link.Inertial.Inertia.Izz = 0.0014;
+
+                using (InertiaPreview preview = new InertiaPreview(swApp, model))
+                {
+                    Assert.True(
+                        preview.Show(
+                            link,
+                            coordinateTransform,
+                            out InertiaEllipsoid ellipsoid,
+                            out string error),
+                        error);
+                    Assert.NotNull(ellipsoid);
+                    Assert.True(preview.IsVisible);
+                    preview.Hide();
+                    Assert.False(preview.IsVisible);
+                }
+            }
+            finally
+            {
+                if (component != null && originalVisibility.HasValue)
+                {
+                    try
+                    {
+                        component.Visible = originalVisibility.Value;
+                        model?.GraphicsRedraw2();
+                    }
+                    catch { }
+                }
+                ReleaseComObject(coordinateTransform);
+            }
+        }
+
+        private static void ReleaseComObject(object value)
+        {
+            if (value != null && Marshal.IsComObject(value))
+            {
+                Marshal.ReleaseComObject(value);
             }
         }
     }

@@ -347,10 +347,15 @@ namespace SW2URDF.UI
 
         private static void ReleaseComObject(object value)
         {
-            if (value != null && Marshal.IsComObject(value))
+            try
             {
-                Marshal.FinalReleaseComObject(value);
+                if (value != null && Marshal.IsComObject(value))
+                {
+                    Marshal.ReleaseComObject(value);
+                }
             }
+            catch (InvalidComObjectException) { }
+            catch (COMException) { }
         }
 
         private static void Normalize(double[] vector)

@@ -1,4 +1,5 @@
 using SolidWorks.Interop.sldworks;
+using SolidWorks.Interop.swconst;
 using SW2URDF.UI;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
@@ -180,14 +181,13 @@ namespace SW2URDF.Test
             ModelDoc2 model = null;
             Component2 component = null;
             MathTransform coordinateTransform = null;
+            int? originalVisibility = null;
             try
             {
                 swApp = (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
                 model = swApp.ActiveDoc as ModelDoc2;
                 AssemblyDoc assembly = model as AssemblyDoc;
                 Assert.NotNull(assembly);
-                object[] components = assembly.GetComponents(false) as object[];
-                Assert.NotNull(components);
                 object[] topLevelComponents = assembly.GetComponents(true) as object[];
                 component = (topLevelComponents ?? new object[0])
                     .Cast<Component2>()
@@ -196,26 +196,20 @@ namespace SW2URDF.Test
                         try
                         {
                             double[] box = candidate.GetBox(false, false);
-                            return candidate.IsHidden(false) && box != null && box.Length >= 6;
+                            return box != null && box.Length >= 6;
                         }
                         catch
                         {
                             return false;
                         }
                     });
-                component = component ?? components.Cast<Component2>().FirstOrDefault(candidate =>
-                {
-                    try
-                    {
-                        double[] box = candidate.GetBox(false, false);
-                        return box != null && box.Length >= 6;
-                    }
-                    catch
-                    {
-                        return false;
-                    }
-                });
-                Assert.NotNull(component);
+                Assert.True(
+                    component != null,
+                    "The live collision preview test requires a top-level component with usable geometry.");
+                originalVisibility = component.Visible;
+                component.Visible = (int)swComponentVisibilityState_e.swComponentHidden;
+                model.GraphicsRedraw2();
+                Assert.True(component.IsHidden(false));
 
                 string coordinateSystemName =
                     System.Environment.GetEnvironmentVariable("SW2URDF_TEST_COORDINATE_SYSTEM");
@@ -269,6 +263,15 @@ namespace SW2URDF.Test
             }
             finally
             {
+                if (component != null && originalVisibility.HasValue)
+                {
+                    try
+                    {
+                        component.Visible = originalVisibility.Value;
+                        model?.GraphicsRedraw2();
+                    }
+                    catch { }
+                }
                 ReleaseComObject(coordinateTransform);
             }
         }

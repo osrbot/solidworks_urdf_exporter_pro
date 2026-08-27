@@ -4,6 +4,7 @@ using SolidWorks.Interop.swconst;
 using SW2URDF.URDF;
 using SW2URDF.Utilities;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 
@@ -18,15 +19,18 @@ namespace SW2URDF.UI
     internal sealed class TemporaryBodyDisplayContext : IDisposable
     {
         private readonly bool ownsTransform;
+        private readonly bool ownsDisplayTarget;
 
         private TemporaryBodyDisplayContext(
             object displayTarget,
             MathTransform linkToDisplayTarget,
-            bool ownsTransform)
+            bool ownsTransform,
+            bool ownsDisplayTarget)
         {
             DisplayTarget = displayTarget;
             LinkToDisplayTarget = linkToDisplayTarget;
             this.ownsTransform = ownsTransform;
+            this.ownsDisplayTarget = ownsDisplayTarget;
         }
 
         public object DisplayTarget { get; }
@@ -51,7 +55,7 @@ namespace SW2URDF.UI
 
             if (model.GetType() != (int)swDocumentTypes_e.swDocASSEMBLY)
             {
-                context = new TemporaryBodyDisplayContext(model, linkToDocument, false);
+                context = new TemporaryBodyDisplayContext(model, linkToDocument, false, false);
                 return true;
             }
 
@@ -65,11 +69,15 @@ namespace SW2URDF.UI
             }
 
             AssemblyDoc assembly = model as AssemblyDoc;
-            Component2 preferredComponent = GetTopLevelComponent(component);
+            Component2 preferredComponent = GetTopLevelComponent(
+                component,
+                out bool ownsPreferredComponent);
             if (!TryResolveVisibleDisplayComponent(
                 assembly,
                 preferredComponent,
+                ownsPreferredComponent,
                 out Component2 displayComponent,
+                out bool ownsDisplayComponent,
                 out Matrix<double> componentToDocumentMatrix))
             {
                 error = "The assembly has no visible top-level component with a valid transform for the temporary-body display context.";
@@ -83,6 +91,7 @@ namespace SW2URDF.UI
 
             MathUtility mathUtility = null;
             MathTransform linkToComponent = null;
+            bool displayComponentTransferred = false;
             try
             {
                 mathUtility = swApp.GetMathUtility() as MathUtility;
@@ -101,7 +110,9 @@ namespace SW2URDF.UI
                 context = new TemporaryBodyDisplayContext(
                     displayComponent,
                     linkToComponent,
-                    true);
+                    true,
+                    ownsDisplayComponent);
+                displayComponentTransferred = true;
                 linkToComponent = null;
                 return true;
             }
@@ -109,6 +120,10 @@ namespace SW2URDF.UI
             {
                 ReleaseComReference(linkToComponent);
                 ReleaseComReference(mathUtility);
+                if (ownsDisplayComponent && !displayComponentTransferred)
+                {
+                    ReleaseComReference(displayComponent);
+                }
             }
         }
 
@@ -148,67 +163,134 @@ namespace SW2URDF.UI
             {
                 ReleaseComReference(LinkToDisplayTarget);
             }
+            if (ownsDisplayTarget)
+            {
+                ReleaseComReference(DisplayTarget);
+            }
         }
 
-        private static Component2 GetTopLevelComponent(Component2 component)
+        private static Component2 GetTopLevelComponent(
+            Component2 component,
+            out bool ownsResult)
         {
             Component2 current = component;
+            bool ownsCurrent = false;
             while (true)
             {
-                Component2 parent = current.GetParent();
+                Component2 parent;
+                try
+                {
+                    parent = current.GetParent();
+                }
+                catch
+                {
+                    if (ownsCurrent)
+                    {
+                        ReleaseComReference(current);
+                    }
+                    throw;
+                }
                 if (parent == null)
                 {
+                    ownsResult = ownsCurrent;
                     return current;
                 }
+                if (ownsCurrent)
+                {
+                    ReleaseComReference(current);
+                }
                 current = parent;
+                ownsCurrent = true;
             }
         }
 
         private static bool TryResolveVisibleDisplayComponent(
             AssemblyDoc assembly,
             Component2 preferredComponent,
+            bool ownsPreferredComponent,
             out Component2 displayComponent,
+            out bool ownsDisplayComponent,
             out Matrix<double> componentToDocument)
         {
             displayComponent = null;
+            ownsDisplayComponent = false;
             componentToDocument = null;
 
             object[] topLevelComponents = assembly == null
                 ? null
                 : assembly.GetComponents(true) as object[];
-            var candidates = new[] { preferredComponent }.Concat(
-                topLevelComponents == null
-                    ? Enumerable.Empty<Component2>()
-                    : topLevelComponents.OfType<Component2>());
-            foreach (Component2 candidate in candidates)
+            var candidates = new List<DisplayComponentCandidate>();
+            if (preferredComponent != null)
             {
-                if (!IsVisible(candidate))
-                {
-                    continue;
-                }
+                candidates.Add(new DisplayComponentCandidate(
+                    preferredComponent,
+                    ownsPreferredComponent));
+            }
+            if (topLevelComponents != null)
+            {
+                candidates.AddRange(topLevelComponents
+                    .OfType<Component2>()
+                    .Select(candidate => new DisplayComponentCandidate(candidate, true)));
+            }
 
-                MathTransform transform = null;
-                try
+            try
+            {
+                foreach (DisplayComponentCandidate candidateReference in candidates)
                 {
-                    transform = candidate.Transform2;
-                    if (transform == null)
+                    Component2 candidate = candidateReference.Component;
+                    if (!IsVisible(candidate))
                     {
                         continue;
                     }
-                    componentToDocument = MathOps.GetTransformation(transform);
-                    displayComponent = candidate;
-                    return true;
+
+                    MathTransform transform = null;
+                    try
+                    {
+                        transform = candidate.Transform2;
+                        if (transform == null)
+                        {
+                            continue;
+                        }
+                        componentToDocument = MathOps.GetTransformation(transform);
+                        displayComponent = candidate;
+                        ownsDisplayComponent = candidateReference.OwnsReference;
+                        candidateReference.OwnsReference = false;
+                        return true;
+                    }
+                    catch (COMException)
+                    {
+                        componentToDocument = null;
+                    }
+                    finally
+                    {
+                        ReleaseComReference(transform);
+                    }
                 }
-                catch (COMException)
+                return false;
+            }
+            finally
+            {
+                foreach (DisplayComponentCandidate candidate in candidates)
                 {
-                    componentToDocument = null;
-                }
-                finally
-                {
-                    ReleaseComReference(transform);
+                    if (candidate.OwnsReference)
+                    {
+                        ReleaseComReference(candidate.Component);
+                    }
                 }
             }
-            return false;
+        }
+
+        private sealed class DisplayComponentCandidate
+        {
+            public DisplayComponentCandidate(Component2 component, bool ownsReference)
+            {
+                Component = component;
+                OwnsReference = ownsReference;
+            }
+
+            public Component2 Component { get; }
+
+            public bool OwnsReference { get; set; }
         }
 
         private static bool IsVisible(Component2 component)
