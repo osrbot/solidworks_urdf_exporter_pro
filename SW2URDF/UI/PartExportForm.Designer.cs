@@ -57,9 +57,6 @@
             this.label18 = new System.Windows.Forms.Label();
             this.label17 = new System.Windows.Forms.Label();
             this.label16 = new System.Windows.Forms.Label();
-            this.label34 = new System.Windows.Forms.Label();
-            this.button_texturebrowse = new System.Windows.Forms.Button();
-            this.textBox_texture = new System.Windows.Forms.TextBox();
             this.label26 = new System.Windows.Forms.Label();
             this.domainUpDown_alpha = new System.Windows.Forms.DomainUpDown();
             this.label25 = new System.Windows.Forms.Label();
@@ -356,32 +353,6 @@
             this.label16.TabIndex = 27;
             this.label16.Text = "Roll";
             // 
-            // label34
-            // 
-            this.label34.AutoSize = true;
-            this.label34.Location = new System.Drawing.Point(9, 179);
-            this.label34.Name = "label34";
-            this.label34.Size = new System.Drawing.Size(43, 13);
-            this.label34.TabIndex = 60;
-            this.label34.Text = "Texture";
-            // 
-            // button_texturebrowse
-            // 
-            this.button_texturebrowse.Location = new System.Drawing.Point(398, 192);
-            this.button_texturebrowse.Name = "button_texturebrowse";
-            this.button_texturebrowse.Size = new System.Drawing.Size(75, 23);
-            this.button_texturebrowse.TabIndex = 59;
-            this.button_texturebrowse.Text = "Browse...";
-            this.button_texturebrowse.UseVisualStyleBackColor = true;
-            this.button_texturebrowse.Click += new System.EventHandler(this.ButtonTextureBrowseClick);
-            // 
-            // textBox_texture
-            // 
-            this.textBox_texture.Location = new System.Drawing.Point(17, 195);
-            this.textBox_texture.Name = "textBox_texture";
-            this.textBox_texture.Size = new System.Drawing.Size(352, 20);
-            this.textBox_texture.TabIndex = 58;
-            // 
             // label26
             // 
             this.label26.AutoSize = true;
@@ -546,9 +517,9 @@
             // comboBox_materials
             // 
             this.comboBox_materials.FormattingEnabled = true;
-            this.comboBox_materials.Location = new System.Drawing.Point(91, 141);
+            this.comboBox_materials.Location = new System.Drawing.Point(17, 146);
             this.comboBox_materials.Name = "comboBox_materials";
-            this.comboBox_materials.Size = new System.Drawing.Size(121, 21);
+            this.comboBox_materials.Size = new System.Drawing.Size(195, 21);
             this.comboBox_materials.TabIndex = 48;
             // 
             // textBox_visual_origin_roll
@@ -561,7 +532,7 @@
             // label28
             // 
             this.label28.AutoSize = true;
-            this.label28.Location = new System.Drawing.Point(7, 144);
+            this.label28.Location = new System.Drawing.Point(9, 130);
             this.label28.Name = "label28";
             this.label28.Size = new System.Drawing.Size(73, 13);
             this.label28.TabIndex = 47;
@@ -583,7 +554,7 @@
             // 
             // button_cancel
             // 
-            this.button_cancel.Location = new System.Drawing.Point(12, 675);
+            this.button_cancel.Location = new System.Drawing.Point(12, 615);
             this.button_cancel.Name = "button_cancel";
             this.button_cancel.Size = new System.Drawing.Size(75, 23);
             this.button_cancel.TabIndex = 65;
@@ -593,7 +564,7 @@
             // 
             // button_finish
             // 
-            this.button_finish.Location = new System.Drawing.Point(480, 675);
+            this.button_finish.Location = new System.Drawing.Point(480, 615);
             this.button_finish.Name = "button_finish";
             this.button_finish.Size = new System.Drawing.Size(75, 23);
             this.button_finish.TabIndex = 64;
@@ -762,12 +733,9 @@
             this.groupBox2.Controls.Add(this.label19);
             this.groupBox2.Controls.Add(this.textBox_visual_origin_z);
             this.groupBox2.Controls.Add(this.textBox_visual_origin_yaw);
-            this.groupBox2.Controls.Add(this.label34);
             this.groupBox2.Controls.Add(this.textBox_visual_origin_pitch);
-            this.groupBox2.Controls.Add(this.button_texturebrowse);
             this.groupBox2.Controls.Add(this.label28);
             this.groupBox2.Controls.Add(this.textBox_visual_origin_roll);
-            this.groupBox2.Controls.Add(this.textBox_texture);
             this.groupBox2.Controls.Add(this.comboBox_materials);
             this.groupBox2.Controls.Add(this.label26);
             this.groupBox2.Controls.Add(this.label20);
@@ -789,7 +757,7 @@
             this.groupBox2.Controls.Add(this.label30);
             this.groupBox2.Location = new System.Drawing.Point(12, 286);
             this.groupBox2.Name = "groupBox2";
-            this.groupBox2.Size = new System.Drawing.Size(543, 236);
+            this.groupBox2.Size = new System.Drawing.Size(543, 176);
             this.groupBox2.TabIndex = 62;
             this.groupBox2.TabStop = false;
             // 
@@ -853,7 +821,7 @@
             this.groupBox3.Controls.Add(this.textBox_collision_origin_x);
             this.groupBox3.Controls.Add(this.textBox_collision_origin_z);
             this.groupBox3.Controls.Add(this.textBox_collision_origin_y);
-            this.groupBox3.Location = new System.Drawing.Point(12, 528);
+            this.groupBox3.Location = new System.Drawing.Point(12, 468);
             this.groupBox3.Name = "groupBox3";
             this.groupBox3.Size = new System.Drawing.Size(543, 141);
             this.groupBox3.TabIndex = 67;
@@ -948,7 +916,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(569, 705);
+            this.ClientSize = new System.Drawing.Size(569, 645);
             this.Controls.Add(this.checkBox_rotate);
             this.Controls.Add(this.button_savename_browse);
             this.Controls.Add(this.textBox_save_as);
@@ -1004,7 +972,6 @@
         private System.Windows.Forms.Label label18;
         private System.Windows.Forms.Label label17;
         private System.Windows.Forms.Label label16;
-        private System.Windows.Forms.TextBox textBox_texture;
         private System.Windows.Forms.DomainUpDown domainUpDown_alpha;
         private System.Windows.Forms.Label label33;
         private System.Windows.Forms.Label label32;
@@ -1029,8 +996,6 @@
         private System.Windows.Forms.Label label24;
         private System.Windows.Forms.Label label25;
         private System.Windows.Forms.Label label26;
-        private System.Windows.Forms.Label label34;
-        private System.Windows.Forms.Button button_texturebrowse;
         private System.Windows.Forms.Label label37;
         private System.Windows.Forms.Label label38;
         private System.Windows.Forms.Label label39;

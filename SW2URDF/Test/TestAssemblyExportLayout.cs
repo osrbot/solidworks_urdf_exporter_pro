@@ -35,7 +35,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestMaterialPresetUpdatesRgbaAndClearsOldTexture()
+        public void TestMaterialPresetUpdatesRgbaWithoutTextureEditor()
         {
             AssemblyExportForm form = (AssemblyExportForm)
                 Activator.CreateInstance(typeof(AssemblyExportForm), true);
@@ -43,8 +43,6 @@ namespace SW2URDF.Test
             try
             {
                 ComboBox materials = GetControl<ComboBox>(form, "comboBoxMaterials");
-                TextBox texture = GetControl<TextBox>(form, "textBoxTexture");
-                texture.Text = "old-texture.png";
                 materials.Text = "green";
 
                 MethodInfo applyPreset = typeof(AssemblyExportForm).GetMethod(
@@ -53,11 +51,69 @@ namespace SW2URDF.Test
                 Assert.NotNull(applyPreset);
                 applyPreset.Invoke(form, new object[] { materials, EventArgs.Empty });
 
-                Assert.Equal(String.Empty, texture.Text);
+                Assert.Null(typeof(AssemblyExportForm).GetField(
+                    "textBoxTexture",
+                    BindingFlags.Instance | BindingFlags.NonPublic));
+                Assert.Null(typeof(AssemblyExportForm).GetField(
+                    "buttonTextureBrowse",
+                    BindingFlags.Instance | BindingFlags.NonPublic));
                 Assert.Equal("0.05", GetControl<DomainUpDown>(form, "domainUpDownRed").Text);
                 Assert.Equal("0.6", GetControl<DomainUpDown>(form, "domainUpDownGreen").Text);
                 Assert.Equal("0.1", GetControl<DomainUpDown>(form, "domainUpDownBlue").Text);
                 Assert.Equal("1", GetControl<DomainUpDown>(form, "domainUpDownAlpha").Text);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestPartMaterialPresetUpdatesRgbaWithoutTextureEditor()
+        {
+            PartExportForm form = (PartExportForm)
+                Activator.CreateInstance(typeof(PartExportForm), true);
+
+            try
+            {
+                ComboBox materials = GetPrivateControl<ComboBox>(
+                    form,
+                    typeof(PartExportForm),
+                    "comboBox_materials");
+                materials.Text = "blue";
+
+                MethodInfo applyPreset = typeof(PartExportForm).GetMethod(
+                    "MaterialPresetSelectionChangeCommitted",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(applyPreset);
+                applyPreset.Invoke(form, new object[] { materials, EventArgs.Empty });
+
+                Assert.Null(typeof(PartExportForm).GetField(
+                    "textBox_texture",
+                    BindingFlags.Instance | BindingFlags.NonPublic));
+                Assert.Null(typeof(PartExportForm).GetField(
+                    "button_texturebrowse",
+                    BindingFlags.Instance | BindingFlags.NonPublic));
+                Assert.Equal("0.05", GetPrivateControl<DomainUpDown>(
+                    form, typeof(PartExportForm), "domainUpDown_red").Text);
+                Assert.Equal("0.2", GetPrivateControl<DomainUpDown>(
+                    form, typeof(PartExportForm), "domainUpDown_green").Text);
+                Assert.Equal("0.8", GetPrivateControl<DomainUpDown>(
+                    form, typeof(PartExportForm), "domainUpDown_blue").Text);
+                Assert.Equal("1", GetPrivateControl<DomainUpDown>(
+                    form, typeof(PartExportForm), "domainUpDown_alpha").Text);
+
+                GroupBox visual = GetPrivateControl<GroupBox>(
+                    form, typeof(PartExportForm), "groupBox2");
+                GroupBox collision = GetPrivateControl<GroupBox>(
+                    form, typeof(PartExportForm), "groupBox3");
+                Button finish = GetPrivateControl<Button>(
+                    form, typeof(PartExportForm), "button_finish");
+                Label materialIdLabel = GetPrivateControl<Label>(
+                    form, typeof(PartExportForm), "label28");
+                Assert.True(materialIdLabel.Bottom <= materials.Top);
+                Assert.True(visual.Bottom < collision.Top);
+                Assert.True(collision.Bottom < finish.Top);
             }
             finally
             {
@@ -348,7 +404,16 @@ namespace SW2URDF.Test
         private static T GetControl<T>(AssemblyExportForm form, string fieldName)
             where T : Control
         {
-            FieldInfo field = typeof(AssemblyExportForm).GetField(
+            return GetPrivateControl<T>(form, typeof(AssemblyExportForm), fieldName);
+        }
+
+        private static T GetPrivateControl<T>(
+            Form form,
+            Type formType,
+            string fieldName)
+            where T : Control
+        {
+            FieldInfo field = formType.GetField(
                 fieldName,
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(field);

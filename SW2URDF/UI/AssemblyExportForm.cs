@@ -173,25 +173,17 @@ namespace SW2URDF.UI
                     comboBoxMaterials.Items.Add(materialName);
                 }
             }
-            label34.Text = ChineseUiText.Translate(
-                "Texture image (optional)",
-                "纹理图片（可选）");
             label28.Text = ChineseUiText.Translate(
-                "Appearance preset / URDF material ID",
-                "外观预设 / URDF 材质 ID");
+                "URDF material ID (preset updates RGBA)",
+                "URDF 材质 ID（选择预设会同步 RGBA）");
             label29.Text = ChineseUiText.Translate(
                 "Appearance color (RGBA)",
                 "外观颜色（RGBA）");
             packagePathToolTip.SetToolTip(
                 comboBoxMaterials,
                 ChineseUiText.Translate(
-                    "SolidWorks appearance is loaded first. Choosing a built-in preset applies its RGBA, clears the old texture, and uses the same text as the URDF material ID; typing a custom ID does not change color.",
-                    "首次读取 SolidWorks 外观。选择内置预设会同步应用 RGBA、清除旧纹理，并将同名文本作为 URDF 材质 ID；手输自定义 ID 不会改色。"));
-            packagePathToolTip.SetToolTip(
-                textBoxTexture,
-                ChineseUiText.Translate(
-                    "Only an existing image file is exported. STL has no UV coordinates; use 3DXML when appearance fidelity matters.",
-                    "仅会导出实际存在的图片文件。STL 不含 UV 坐标，重视外观时请使用 3DXML。"));
+                    "This value is the URDF material ID. Choosing a built-in ID applies its RGBA automatically; a custom ID keeps the current RGBA.",
+                    "此字段是 URDF 材质 ID。选择内置 ID 会自动应用对应 RGBA；自定义 ID 保持当前 RGBA。"));
             comboBoxMaterials.SelectionChangeCommitted +=
                 MaterialPresetSelectionChangeCommitted;
         }
@@ -215,7 +207,6 @@ namespace SW2URDF.UI
             {
                 updatingMaterialColorControls = false;
             }
-            textBoxTexture.Text = String.Empty;
             UpdateMaterialColorPreview();
         }
 
@@ -304,8 +295,7 @@ namespace SW2URDF.UI
                 textBoxIxx, textBoxIxy, textBoxIxz, textBoxIyy, textBoxIyz, textBoxIzz,
                 textBoxMass,
                 domainUpDownRed, domainUpDownGreen, domainUpDownBlue, domainUpDownAlpha,
-                comboBoxMaterials,
-                textBoxTexture
+                comboBoxMaterials
             };
 
             List<TextBox> numericTextBoxes = new List<TextBox>() {
@@ -1292,19 +1282,6 @@ namespace SW2URDF.UI
             foreach (LinkNode child in node.Nodes)
             {
                 ApplyMeshReductionToTree(child, ratio);
-            }
-        }
-
-        private void ButtonTextureBrowseClick(object sender, EventArgs e)
-        {
-            OpenFileDialog openFileDialog1 = new OpenFileDialog
-            {
-                RestoreDirectory = true
-            };
-
-            if (openFileDialog1.ShowDialog() == DialogResult.OK)
-            {
-                textBoxTexture.Text = openFileDialog1.FileName;
             }
         }
 

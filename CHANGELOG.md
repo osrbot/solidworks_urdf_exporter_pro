@@ -19,6 +19,12 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Changed
 
+- Removed texture-image editing from both assembly and part exporter pages. Existing serialized
+  texture metadata remains readable and exportable for backward compatibility, but normal edits no
+  longer overwrite it through a hidden field.
+- Reframed the material-name field as the URDF material ID. Selecting a built-in ID now visibly
+  drives the corresponding RGBA values in both assembly and part exporters; custom IDs keep the
+  current RGBA.
 - The Simplified Chinese PropertyManager now explains every URDF Joint type while preserving the
   canonical English value used for configuration persistence and export.
 - The Link child-count field now explicitly identifies direct, next-level child Links and explains

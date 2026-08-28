@@ -88,7 +88,6 @@ namespace SW2URDF.UI
                                                 InertiaDisplayFormat);
 
                 Link.Visual.Material.FillBoxes(comboBoxMaterials);
-                textBoxTexture.Text = Link.Visual.Material.Texture.wFilename;
 
                 Link.Visual.Material.Color.FillBoxes(domainUpDownRed,
                                                      domainUpDownGreen,
@@ -315,7 +314,6 @@ namespace SW2URDF.UI
             if (!Link.isFixedFrame)
             {
                 string previousMaterialName = Link.Visual.Material.Name;
-                string previousTexture = Link.Visual.Material.Texture.wFilename;
                 double[] previousColor = Link.Visual.Material.Color.GetColor();
 
                 Link.Inertial.Origin.Update(textBoxInertialOriginX,
@@ -342,7 +340,6 @@ namespace SW2URDF.UI
                                              textBoxIzz);
 
                 Link.Visual.Material.Name = comboBoxMaterials.Text;
-                Link.Visual.Material.Texture.wFilename = textBoxTexture.Text;
 
                 Link.Visual.Material.Color.Update(domainUpDownRed,
                                                   domainUpDownGreen,
@@ -350,8 +347,6 @@ namespace SW2URDF.UI
                                                   domainUpDownAlpha);
 
                 if (!String.Equals(previousMaterialName, Link.Visual.Material.Name,
-                        StringComparison.Ordinal) ||
-                    !String.Equals(previousTexture, Link.Visual.Material.Texture.wFilename,
                         StringComparison.Ordinal) ||
                     !ColorsEqual(previousColor, Link.Visual.Material.Color.GetColor()))
                 {

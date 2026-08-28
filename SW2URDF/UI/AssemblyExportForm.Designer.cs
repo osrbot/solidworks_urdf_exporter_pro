@@ -98,9 +98,7 @@
             this.label19 = new System.Windows.Forms.Label();
             this.textBoxVisualOriginZ = new System.Windows.Forms.TextBox();
             this.textBoxVisualOriginYaw = new System.Windows.Forms.TextBox();
-            this.label34 = new System.Windows.Forms.Label();
             this.textBoxVisualOriginPitch = new System.Windows.Forms.TextBox();
-            this.buttonTextureBrowse = new System.Windows.Forms.Button();
             this.label28 = new System.Windows.Forms.Label();
             this.textBoxVisualOriginRoll = new System.Windows.Forms.TextBox();
             this.comboBoxMaterials = new System.Windows.Forms.ComboBox();
@@ -124,7 +122,6 @@
             this.label23 = new System.Windows.Forms.Label();
             this.textBoxVisualOriginY = new System.Windows.Forms.TextBox();
             this.label30 = new System.Windows.Forms.Label();
-            this.textBoxTexture = new System.Windows.Forms.TextBox();
             this.colorDialogMaterial = new System.Windows.Forms.ColorDialog();
             this.treeViewLinkProperties = new System.Windows.Forms.TreeView();
             this.buttonJointNext = new System.Windows.Forms.Button();
@@ -704,9 +701,7 @@
             this.groupBox4.Controls.Add(this.label19);
             this.groupBox4.Controls.Add(this.textBoxVisualOriginZ);
             this.groupBox4.Controls.Add(this.textBoxVisualOriginYaw);
-            this.groupBox4.Controls.Add(this.label34);
             this.groupBox4.Controls.Add(this.textBoxVisualOriginPitch);
-            this.groupBox4.Controls.Add(this.buttonTextureBrowse);
             this.groupBox4.Controls.Add(this.label28);
             this.groupBox4.Controls.Add(this.textBoxVisualOriginRoll);
             this.groupBox4.Controls.Add(this.comboBoxMaterials);
@@ -730,10 +725,9 @@
             this.groupBox4.Controls.Add(this.label23);
             this.groupBox4.Controls.Add(this.textBoxVisualOriginY);
             this.groupBox4.Controls.Add(this.label30);
-            this.groupBox4.Controls.Add(this.textBoxTexture);
             this.groupBox4.Location = new System.Drawing.Point(494, 278);
             this.groupBox4.Name = "groupBox4";
-            this.groupBox4.Size = new System.Drawing.Size(568, 305);
+            this.groupBox4.Size = new System.Drawing.Size(568, 253);
             this.groupBox4.TabIndex = 72;
             this.groupBox4.TabStop = false;
             //
@@ -882,31 +876,12 @@
             this.textBoxVisualOriginYaw.Size = new System.Drawing.Size(66, 19);
             this.textBoxVisualOriginYaw.TabIndex = 45;
             // 
-            // label34
-            // 
-            this.label34.AutoSize = true;
-            this.label34.Location = new System.Drawing.Point(7, 254);
-            this.label34.Name = "label34";
-            this.label34.Size = new System.Drawing.Size(134, 12);
-            this.label34.TabIndex = 60;
-            this.label34.Text = "Texture (Replaces Color)";
-            // 
             // textBoxVisualOriginPitch
             // 
             this.textBoxVisualOriginPitch.Location = new System.Drawing.Point(148, 79);
             this.textBoxVisualOriginPitch.Name = "textBoxVisualOriginPitch";
             this.textBoxVisualOriginPitch.Size = new System.Drawing.Size(66, 19);
             this.textBoxVisualOriginPitch.TabIndex = 44;
-            // 
-            // buttonTextureBrowse
-            // 
-            this.buttonTextureBrowse.Location = new System.Drawing.Point(398, 276);
-            this.buttonTextureBrowse.Name = "buttonTextureBrowse";
-            this.buttonTextureBrowse.Size = new System.Drawing.Size(75, 21);
-            this.buttonTextureBrowse.TabIndex = 59;
-            this.buttonTextureBrowse.Text = "Browse...";
-            this.buttonTextureBrowse.UseVisualStyleBackColor = true;
-            this.buttonTextureBrowse.Click += new System.EventHandler(this.ButtonTextureBrowseClick);
             // 
             // label28
             // 
@@ -1110,13 +1085,6 @@
             this.label30.Size = new System.Drawing.Size(25, 12);
             this.label30.TabIndex = 53;
             this.label30.Text = "Red";
-            // 
-            // textBoxTexture
-            // 
-            this.textBoxTexture.Location = new System.Drawing.Point(16, 278);
-            this.textBoxTexture.Name = "textBoxTexture";
-            this.textBoxTexture.Size = new System.Drawing.Size(352, 19);
-            this.textBoxTexture.TabIndex = 58;
             // 
             // treeViewLinkProperties
             // 
@@ -2016,12 +1984,9 @@
         private System.Windows.Forms.Label label19;
         private System.Windows.Forms.TextBox textBoxVisualOriginZ;
         private System.Windows.Forms.TextBox textBoxVisualOriginYaw;
-        private System.Windows.Forms.Label label34;
         private System.Windows.Forms.TextBox textBoxVisualOriginPitch;
-        private System.Windows.Forms.Button buttonTextureBrowse;
         private System.Windows.Forms.Label label28;
         private System.Windows.Forms.TextBox textBoxVisualOriginRoll;
-        private System.Windows.Forms.TextBox textBoxTexture;
         private System.Windows.Forms.ComboBox comboBoxMaterials;
         private System.Windows.Forms.Label label26;
         private System.Windows.Forms.Label label20;

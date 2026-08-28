@@ -21,6 +21,7 @@ THE SOFTWARE.
 */
 
 using SolidWorks.Interop.sldworks;
+using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
 using System.IO;
@@ -36,11 +37,53 @@ namespace SW2URDF.UI
 
         public ExportHelper Exporter;
 
-        public PartExportForm(SldWorks iSwApp)
+        private PartExportForm()
         {
             InitializeComponent();
             ChineseUiText.Apply(this);
+            InitializeMaterialIdControl();
+        }
+
+        public PartExportForm(SldWorks iSwApp)
+            : this()
+        {
             Exporter = new ExportHelper(iSwApp);
+        }
+
+        private void InitializeMaterialIdControl()
+        {
+            label28.Text = ChineseUiText.Translate(
+                "URDF material ID (preset updates RGBA)",
+                "URDF 材质 ID（选择预设会同步 RGBA）");
+            foreach (string materialName in UsageGuideForm.CommonMaterialNames)
+            {
+                if (!comboBox_materials.Items.Contains(materialName))
+                {
+                    comboBox_materials.Items.Add(materialName);
+                }
+            }
+            comboBox_materials.SelectionChangeCommitted += MaterialPresetSelectionChangeCommitted;
+        }
+
+        private void MaterialPresetSelectionChangeCommitted(object sender, EventArgs e)
+        {
+            if (!MaterialAppearancePresets.TryGet(comboBox_materials.Text, out double[] rgba))
+            {
+                return;
+            }
+
+            domainUpDown_red.Text = rgba[0].ToString(
+                GeneralDisplayFormat,
+                URDFAttribute.URDFNumberFormat);
+            domainUpDown_green.Text = rgba[1].ToString(
+                GeneralDisplayFormat,
+                URDFAttribute.URDFNumberFormat);
+            domainUpDown_blue.Text = rgba[2].ToString(
+                GeneralDisplayFormat,
+                URDFAttribute.URDFNumberFormat);
+            domainUpDown_alpha.Text = rgba[3].ToString(
+                GeneralDisplayFormat,
+                URDFAttribute.URDFNumberFormat);
         }
 
         #region Basic event handelers
@@ -62,20 +105,6 @@ namespace SW2URDF.UI
         }
 
         #endregion Basic event handelers
-
-        private void ButtonTextureBrowseClick(object sender, EventArgs e)
-        {
-            OpenFileDialog openFileDialog1 = new OpenFileDialog
-            {
-                RestoreDirectory = true,
-                InitialDirectory = Path.GetDirectoryName(textBox_save_as.Text)
-            };
-
-            if (openFileDialog1.ShowDialog() == DialogResult.OK)
-            {
-                textBox_texture.Text = openFileDialog1.FileName;
-            }
-        }
 
         #region Form event handlers
 
@@ -109,7 +138,6 @@ namespace SW2URDF.UI
                                                           textBox_visual_origin_yaw);
 
             Exporter.URDFRobot.BaseLink.Visual.Material.Name = comboBox_materials.Text;
-            Exporter.URDFRobot.BaseLink.Visual.Material.Texture.wFilename = textBox_texture.Text;
 
             Exporter.URDFRobot.BaseLink.Visual.Material.Color.Update(domainUpDown_red,
                                                                   domainUpDown_green,
