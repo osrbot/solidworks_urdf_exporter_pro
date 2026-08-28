@@ -67,6 +67,29 @@ namespace SW2URDF.Test
             Assert.Equal(expected, InertiaPreview.IsDisplaySuccess(result));
         }
 
+        [Theory]
+        [InlineData((int)swDocumentTypes_e.swDocPART, "host.SLDASM", true)]
+        [InlineData((int)swDocumentTypes_e.swDocASSEMBLY, "host.SLDPRT", false)]
+        [InlineData(-1, "host.SLDPRT", true)]
+        [InlineData(-1, "host.sldprt", true)]
+        [InlineData(-1, "host.SLDASM", false)]
+        [InlineData(-1, "", false)]
+        public void TestTemporaryBodyHostMustBePartInstance(
+            int documentType,
+            string path,
+            bool expected)
+        {
+            int? resolvedDocumentType = documentType < 0
+                ? (int?)null
+                : documentType;
+
+            Assert.Equal(
+                expected,
+                TemporaryBodyDisplayContext.IsPartDocument(
+                    resolvedDocumentType,
+                    path));
+        }
+
         [Fact]
         public void TestPreviewUsesCuboidAndThreePrincipalAxisBodies()
         {
@@ -235,21 +258,12 @@ namespace SW2URDF.Test
                 object[] topLevelComponents = assembly.GetComponents(true) as object[];
                 Component2[] usableComponents = (topLevelComponents ?? new object[0])
                     .Cast<Component2>()
-                    .Where(candidate =>
-                    {
-                        try
-                        {
-                            double[] box = candidate.GetBox(false, false);
-                            return box != null && box.Length >= 6;
-                        }
-                        catch
-                        {
-                            return false;
-                        }
-                    })
+                    .Where(candidate => candidate != null)
                     .Take(2)
                     .ToArray();
-                Assert.Equal(2, usableComponents.Length);
+                Assert.True(
+                    usableComponents.Length >= 2,
+                    "The live inertia preview test requires two top-level components.");
                 component = usableComponents[0];
                 displayHost = usableComponents[1];
 
@@ -278,6 +292,26 @@ namespace SW2URDF.Test
                 link.Inertial.Inertia.Ixx = 0.001;
                 link.Inertial.Inertia.Iyy = 0.0012;
                 link.Inertial.Inertia.Izz = 0.0014;
+
+                Assert.True(
+                    TemporaryBodyDisplayContext.TryCreate(
+                        swApp,
+                        model,
+                        link,
+                        coordinateTransform,
+                        out TemporaryBodyDisplayContext displayContext,
+                        out string displayContextError),
+                    displayContextError);
+                using (displayContext)
+                {
+                    Component2 displayTarget = displayContext.DisplayTarget as Component2;
+                    Assert.NotNull(displayTarget);
+                    ModelDoc2 displayTargetModel = displayTarget.GetModelDoc2() as ModelDoc2;
+                    Assert.NotNull(displayTargetModel);
+                    Assert.Equal(
+                        (int)swDocumentTypes_e.swDocPART,
+                        displayTargetModel.GetType());
+                }
 
                 using (InertiaPreview preview = new InertiaPreview(swApp, model))
                 {

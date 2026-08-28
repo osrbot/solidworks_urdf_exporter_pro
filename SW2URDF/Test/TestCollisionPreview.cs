@@ -238,6 +238,11 @@ namespace SW2URDF.Test
                     Component2 displayTarget = context.DisplayTarget as Component2;
                     Assert.NotNull(displayTarget);
                     Assert.False(displayTarget.IsHidden(false));
+                    ModelDoc2 displayTargetModel = displayTarget.GetModelDoc2() as ModelDoc2;
+                    Assert.NotNull(displayTargetModel);
+                    Assert.Equal(
+                        (int)swDocumentTypes_e.swDocPART,
+                        displayTargetModel.GetType());
                 }
                 double[] before = CloneAppearance(component.MaterialPropertyValues);
                 ExportHelper.LinkLocalBoundingBox previewBounds =

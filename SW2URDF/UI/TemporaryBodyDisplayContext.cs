@@ -5,6 +5,7 @@ using SW2URDF.URDF;
 using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 
@@ -72,7 +73,7 @@ namespace SW2URDF.UI
             Component2 preferredComponent = GetTopLevelComponent(
                 component,
                 out bool ownsPreferredComponent);
-            if (!TryResolveVisibleDisplayComponent(
+            if (!TryResolveVisiblePartDisplayComponent(
                 assembly,
                 preferredComponent,
                 ownsPreferredComponent,
@@ -80,7 +81,9 @@ namespace SW2URDF.UI
                 out bool ownsDisplayComponent,
                 out Matrix<double> componentToDocumentMatrix))
             {
-                error = "The assembly has no visible top-level component with a valid transform for the temporary-body display context.";
+                error = ChineseUiText.Translate(
+                    "The assembly has no visible top-level part instance with a valid transform. SolidWorks Display3 cannot use a subassembly as a temporary-body host.",
+                    "装配体中没有带有效变换的可见顶层零件实例。SolidWorks Display3 不能使用子装配体作为临时实体宿主。");
                 return false;
             }
 
@@ -204,7 +207,7 @@ namespace SW2URDF.UI
             }
         }
 
-        private static bool TryResolveVisibleDisplayComponent(
+        private static bool TryResolveVisiblePartDisplayComponent(
             AssemblyDoc assembly,
             Component2 preferredComponent,
             bool ownsPreferredComponent,
@@ -228,9 +231,19 @@ namespace SW2URDF.UI
             }
             if (topLevelComponents != null)
             {
-                candidates.AddRange(topLevelComponents
-                    .OfType<Component2>()
-                    .Select(candidate => new DisplayComponentCandidate(candidate, true)));
+                foreach (Component2 candidate in topLevelComponents.OfType<Component2>())
+                {
+                    if (ReferenceEquals(candidate, preferredComponent))
+                    {
+                        continue;
+                    }
+                    if (IsSameComponent(candidate, preferredComponent))
+                    {
+                        ReleaseComReference(candidate);
+                        continue;
+                    }
+                    candidates.Add(new DisplayComponentCandidate(candidate, true));
+                }
             }
 
             try
@@ -238,7 +251,7 @@ namespace SW2URDF.UI
                 foreach (DisplayComponentCandidate candidateReference in candidates)
                 {
                     Component2 candidate = candidateReference.Component;
-                    if (!IsVisible(candidate))
+                    if (!IsVisible(candidate) || !IsPartInstance(candidate))
                     {
                         continue;
                     }
@@ -277,6 +290,68 @@ namespace SW2URDF.UI
                         ReleaseComReference(candidate.Component);
                     }
                 }
+            }
+        }
+
+        internal static bool IsPartDocument(int? documentType, string path)
+        {
+            if (documentType.HasValue)
+            {
+                return documentType.Value == (int)swDocumentTypes_e.swDocPART;
+            }
+
+            return String.Equals(
+                Path.GetExtension(path ?? String.Empty),
+                ".SLDPRT",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPartInstance(Component2 component)
+        {
+            if (component == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                ModelDoc2 componentModel = component.GetModelDoc2() as ModelDoc2;
+                if (componentModel != null)
+                {
+                    return IsPartDocument(componentModel.GetType(), null);
+                }
+            }
+            catch (COMException)
+            {
+                // Lightweight components can have no loaded ModelDoc2; use the file type below.
+            }
+
+            try
+            {
+                return IsPartDocument(null, component.GetPathName());
+            }
+            catch (COMException)
+            {
+                return false;
+            }
+        }
+
+        private static bool IsSameComponent(Component2 left, Component2 right)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+            try
+            {
+                return String.Equals(
+                    left.Name2,
+                    right.Name2,
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch (COMException)
+            {
+                return false;
             }
         }
 

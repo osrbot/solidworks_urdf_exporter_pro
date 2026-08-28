@@ -32,6 +32,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Fixed
 
+- Prevented inertia and collision temporary-body previews from selecting a top-level subassembly
+  as the SolidWorks `Display3` host. Preview host resolution now requires a visible top-level part
+  instance, avoiding `Display3` error code 3 when Link components are nested in production
+  subassemblies.
 - Restored each Link component branch to its pre-export visible or hidden state after STL/3DXML
   generation instead of unconditionally hiding the exported components.
 - Avoided direct per-component `Component2.Visible` writes during cleanup, which can block older or
