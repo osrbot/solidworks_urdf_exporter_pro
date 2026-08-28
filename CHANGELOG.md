@@ -6,6 +6,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Added
 
+- Added explicit whole-tree automatic Link coloring. Link depth moves through a cool-to-warm
+  palette, normalized left/right counterparts share stable colors, and every generated material
+  ID plus RGBA value is persisted through the existing URDF configuration model. Individual Links
+  can still be overridden with the existing material ID, RGBA fields, or color picker.
 - Added complete temporary-body collision previews for every collision strategy. Box, cylinder,
   sphere, component-box, and convex-hull strategies now create visible SolidWorks BREP/sheet
   bodies instead of relying on document line style or external STL re-import.

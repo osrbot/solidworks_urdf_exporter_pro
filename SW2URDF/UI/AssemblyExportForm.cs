@@ -69,6 +69,7 @@ namespace SW2URDF.UI
         private bool suppressRecoveryDraftOnClose;
         private Button buttonShowCollisionPreview;
         private Label labelCollisionPreviewStatus;
+        private Button buttonAutomaticLinkColors;
         private bool collisionPreviewEnabled;
         private bool ownedResourcesDisposed;
 
@@ -81,6 +82,7 @@ namespace SW2URDF.UI
             InitializeLinkCoordinateSystemControls();
             InitializeUsageGuideButton();
             InitializeCommonMaterialNames();
+            InitializeAutomaticLinkColorControls();
             buttonDesignSizes = CaptureButtonDesignSizes();
             enableLayoutFixes = true;
             ApplyHighDpiLayoutFixes();
@@ -208,6 +210,97 @@ namespace SW2URDF.UI
                 updatingMaterialColorControls = false;
             }
             UpdateMaterialColorPreview();
+        }
+
+        private void InitializeAutomaticLinkColorControls()
+        {
+            buttonMaterialColorPick.Left = 478;
+            buttonMaterialColorPick.Width = 76;
+            buttonAutomaticLinkColors = new Button
+            {
+                Name = "buttonAutomaticLinkColors",
+                Location = new Point(buttonMaterialColorPick.Left, domainUpDownAlpha.Top + 2),
+                Size = new Size(buttonMaterialColorPick.Width, buttonMaterialColorPick.Height),
+                Text = ChineseUiText.Translate("Auto Links", "自动配色"),
+                UseVisualStyleBackColor = true,
+                TabIndex = buttonMaterialColorPick.TabIndex + 1
+            };
+            packagePathToolTip.SetToolTip(
+                buttonAutomaticLinkColors,
+                ChineseUiText.Translate(
+                    "Color every Link deterministically. Link level moves from cool to warm colors; left/right counterparts share a color. Manual RGBA edits remain available.",
+                    "按稳定规则为整棵 Link 树配色：层级由冷色过渡到暖色，左右对应 Link 使用相同颜色；之后仍可手动修改 RGBA。"));
+            buttonAutomaticLinkColors.Click += ButtonAutomaticLinkColorsClick;
+            groupBox4.Controls.Add(buttonAutomaticLinkColors);
+            buttonAutomaticLinkColors.BringToFront();
+        }
+
+        private void ButtonAutomaticLinkColorsClick(object sender, EventArgs e)
+        {
+            if (BaseNode == null)
+            {
+                return;
+            }
+
+            LinkNode selectedNode = treeViewLinkProperties.SelectedNode as LinkNode ??
+                previouslySelectedNode;
+            if (previouslySelectedNode != null)
+            {
+                SaveLinkDataFromPropertyBoxes(previouslySelectedNode.Link);
+            }
+
+            int coloredLinks = ApplyAutomaticLinkColors(BaseNode);
+            if (selectedNode != null)
+            {
+                FillLinkPropertyBoxes(selectedNode.Link);
+            }
+
+            if (ActiveSWModel != null && !SaveConfigTree(ActiveSWModel, BaseNode, false))
+            {
+                logger.Warn("Automatic Link colors were applied in memory but the configuration was not saved.");
+                return;
+            }
+            logger.Info("Applied and saved automatic colors for " + coloredLinks + " Links.");
+        }
+
+        internal static int ApplyAutomaticLinkColors(LinkNode root)
+        {
+            if (root == null)
+            {
+                return 0;
+            }
+
+            int maximumDepth = GetMaximumLinkDepth(root, 0);
+            return ApplyAutomaticLinkColors(root, 0, maximumDepth);
+        }
+
+        private static int ApplyAutomaticLinkColors(
+            LinkNode node,
+            int depth,
+            int maximumDepth)
+        {
+            AutomaticLinkColorScheme.Apply(
+                node.Link,
+                AutomaticLinkColorScheme.GetAssignment(
+                    node.Link == null ? String.Empty : node.Link.Name,
+                    depth,
+                    maximumDepth));
+            int count = node.Link == null ? 0 : 1;
+            foreach (LinkNode child in node.Nodes)
+            {
+                count += ApplyAutomaticLinkColors(child, depth + 1, maximumDepth);
+            }
+            return count;
+        }
+
+        private static int GetMaximumLinkDepth(LinkNode node, int depth)
+        {
+            int maximum = depth;
+            foreach (LinkNode child in node.Nodes)
+            {
+                maximum = Math.Max(maximum, GetMaximumLinkDepth(child, depth + 1));
+            }
+            return maximum;
         }
 
         private void InitializeCollisionPreviewControls()
@@ -1162,6 +1255,10 @@ namespace SW2URDF.UI
             if (labelCollisionPreviewStatus != null)
             {
                 labelCollisionPreviewStatus.Dispose();
+            }
+            if (buttonAutomaticLinkColors != null)
+            {
+                buttonAutomaticLinkColors.Dispose();
             }
         }
 

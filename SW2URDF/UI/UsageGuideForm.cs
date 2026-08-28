@@ -124,8 +124,9 @@ namespace SW2URDF.UI
             builder.AppendLine("2. 在配置树里整理 Link/Joint 层级，命名尽量保持 ROS 友好: 小写、下划线、无空格。");
             builder.AppendLine("   复杂层级可点 编辑 Link 树... 进入自由画布，再点 大纲编辑，用 #/##/### 批量写出父子层级。");
             builder.AppendLine("3. 在画布检查 Joint 名称和类型，点击应用，再回属性页配置新增 Link 的组件、坐标系和轴。");
-            builder.AppendLine("4. 选好碰撞策略、材质名、网格精简比例后导出。");
-            builder.AppendLine("5. 重新打开同一个装配体时，插件会优先加载保存在装配体内的 Link 树配置；不用从头重新建树。");
+            builder.AppendLine("4. 可用“自动配色”为整棵 Link 树生成稳定层级颜色，再按需手动修改单个 Link 的材质 ID 或 RGBA。");
+            builder.AppendLine("5. 选好碰撞策略、材质 ID、网格精简比例后导出。");
+            builder.AppendLine("6. 重新打开同一个装配体时，插件会优先加载保存在装配体内的 Link 树配置；不用从头重新建树。");
             builder.AppendLine();
             builder.AppendLine("碰撞策略怎么选");
             builder.AppendLine();
@@ -171,8 +172,9 @@ namespace SW2URDF.UI
             builder.AppendLine("2. Arrange the Link/Joint hierarchy in the configuration tree. Keep names ROS-friendly: lowercase, underscores, no spaces.");
             builder.AppendLine("   For a complex hierarchy, open Edit Link Tree..., then use Outline Edit to write parent-child levels with #/##/### headings.");
             builder.AppendLine("3. Review Joint names and types on the canvas, apply it, then assign components, coordinate systems, and axes for new Links on the property page.");
-            builder.AppendLine("4. Pick collision strategy, material name, color, and STL reduction ratio, then export.");
-            builder.AppendLine("5. When the same assembly is reopened, the saved Link tree configuration is loaded from the assembly so the tree does not have to be rebuilt from scratch.");
+            builder.AppendLine("4. Optionally use Auto Links for stable level-based colors, then override any Link material ID or RGBA manually.");
+            builder.AppendLine("5. Pick collision strategy, material ID, color, and STL reduction ratio, then export.");
+            builder.AppendLine("6. When the same assembly is reopened, the saved Link tree configuration is loaded from the assembly so the tree does not have to be rebuilt from scratch.");
             builder.AppendLine();
             builder.AppendLine("Choosing a collision strategy");
             builder.AppendLine();

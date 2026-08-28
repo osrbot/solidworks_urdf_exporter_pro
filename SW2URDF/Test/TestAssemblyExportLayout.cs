@@ -122,6 +122,39 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestAutomaticLinkColorButtonIsAvailableWithoutCoveringColorControls()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                GroupBox meshGroup = GetControl<GroupBox>(form, "groupBox4");
+                Button automaticColors = GetControl<Button>(
+                    form,
+                    "buttonAutomaticLinkColors");
+                Button pickColor = GetControl<Button>(form, "buttonMaterialColorPick");
+                DomainUpDown alpha = GetControl<DomainUpDown>(form, "domainUpDownAlpha");
+                Label meshReduction = GetControl<Label>(form, "labelMeshReduction");
+
+                Assert.True(meshGroup.Controls.Contains(automaticColors));
+                Assert.True(automaticColors.Enabled);
+                Assert.False(automaticColors.Bounds.IntersectsWith(pickColor.Bounds));
+                Assert.False(automaticColors.Bounds.IntersectsWith(alpha.Bounds));
+                Assert.True(automaticColors.Bottom <= meshReduction.Top);
+                Assert.True(automaticColors.Right <= meshGroup.ClientSize.Width);
+                Assert.False(String.IsNullOrWhiteSpace(automaticColors.Text));
+                Assert.True(automaticColors.Width >= TextRenderer.MeasureText(
+                    automaticColors.Text,
+                    automaticColors.Font).Width + 8);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
         public void TestLinkPageUsesHighDpiSafeAnchoring()
         {
             AssemblyExportForm form = (AssemblyExportForm)

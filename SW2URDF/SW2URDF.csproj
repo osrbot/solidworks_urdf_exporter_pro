@@ -355,6 +355,7 @@
     <Compile Include="Test\TestCommon.cs" />
     <Compile Include="Test\TestCSVImportExport.cs" />
     <Compile Include="Test\TestAssemblyExportLayout.cs" />
+    <Compile Include="Test\TestAutomaticLinkColorScheme.cs" />
     <Compile Include="Test\TestCollisionPreview.cs" />
     <Compile Include="Test\TestTreeSelectionUpdateGuard.cs" />
     <Compile Include="Test\TestExportSessionCloseCoordinator.cs" />
@@ -415,6 +416,7 @@
     <Compile Include="URDFExport\ConfigurationSerialization.cs" />
     <Compile Include="URDFExport\ExportSessionCloseCoordinator.cs" />
     <Compile Include="URDFExport\ExportSessionDraftStore.cs" />
+    <Compile Include="URDFExport\AutomaticLinkColorScheme.cs" />
     <Compile Include="URDFExport\ExportHelper.cs" />
     <Compile Include="URDFExport\ExportHelperExtension.cs" />
     <Compile Include="URDFExport\ExportHelperReport.cs" />
