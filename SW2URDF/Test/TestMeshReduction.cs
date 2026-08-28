@@ -396,6 +396,7 @@ namespace SW2URDF.Test
                 Assert.True(File.Exists(tempFile));
                 Assert.Equal((uint)96, ReadBinaryStlTriangleCount(tempFile));
                 Assert.Equal(ExportHelper.EstimateBinaryStlSizeBytes(96), new FileInfo(tempFile).Length);
+                AssertCylinderCapNormalsPointOutward(tempFile, 2);
             }
             finally
             {
@@ -715,6 +716,35 @@ namespace SW2URDF.Test
             {
                 reader.ReadBytes(80);
                 return reader.ReadUInt32();
+            }
+        }
+
+        private static void AssertCylinderCapNormalsPointOutward(string filename, int axis)
+        {
+            using (BinaryReader reader = new BinaryReader(File.OpenRead(filename)))
+            {
+                reader.ReadBytes(80);
+                uint triangleCount = reader.ReadUInt32();
+                Assert.Equal((uint)96, triangleCount);
+                for (uint triangleIndex = 0; triangleIndex < triangleCount; triangleIndex++)
+                {
+                    float[] normal =
+                    {
+                        reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()
+                    };
+                    reader.ReadBytes(36);
+                    reader.ReadUInt16();
+
+                    uint segmentTriangle = triangleIndex % 4;
+                    if (segmentTriangle == 2)
+                    {
+                        Assert.True(normal[axis] < -0.99f);
+                    }
+                    else if (segmentTriangle == 3)
+                    {
+                        Assert.True(normal[axis] > 0.99f);
+                    }
+                }
             }
         }
     }

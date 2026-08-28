@@ -1709,8 +1709,8 @@ namespace SW2URDF.URDFExport
 
                     WriteBinaryStlTriangle(writer, bottom0, bottom1, top1);
                     WriteBinaryStlTriangle(writer, bottom0, top1, top0);
-                    WriteBinaryStlTriangle(writer, bottomCenter, bottom0, bottom1);
-                    WriteBinaryStlTriangle(writer, topCenter, top1, top0);
+                    WriteBinaryStlTriangle(writer, bottomCenter, bottom1, bottom0);
+                    WriteBinaryStlTriangle(writer, topCenter, top0, top1);
                 }
             }
         }
