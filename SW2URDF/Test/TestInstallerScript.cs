@@ -54,7 +54,8 @@ namespace SW2URDF.Test
             Assert.Contains("worktree remove", buildScript);
             Assert.Contains("local-build-from-immutable-git-worktree", buildScript);
             Assert.Contains("$StagedSolidWorksDirectory", buildScript);
-            Assert.Contains("Inno Setup 6.3 or newer is required", buildScript);
+            Assert.Contains("Inno Setup compiler was not found", buildScript);
+            Assert.Contains("requires Inno Setup 6.3.0 through 6.3.3", buildScript);
             Assert.Contains("Source changed during packaging. The installer was not promoted", buildScript);
             Assert.Contains("$PostBuildChanges", buildScript);
             Assert.Contains("$BuildStatusExitCode", buildScript);
@@ -129,7 +130,7 @@ namespace SW2URDF.Test
             Assert.Contains("if: steps.installer.outputs.publish == 'true'", workflow);
             Assert.Contains("RELEASE_COMMIT", workflow);
             Assert.Contains("git log -1 --format=%ct", workflow);
-            Assert.Contains("gh release edit", workflow);
+            Assert.Contains("gh release create", workflow);
             Assert.Contains("group: publish-installer-release", workflow);
             Assert.Contains("git rev-parse --verify", workflow);
             Assert.Contains("artifact_parent", workflow);
@@ -145,7 +146,9 @@ namespace SW2URDF.Test
             Assert.Contains("Extracted installer payload hash mismatch", workflow);
             Assert.Contains("--json isDraft", workflow);
             Assert.Contains("--draft", workflow);
-            Assert.Contains("--draft=false", workflow);
+            Assert.DoesNotContain("--draft=false", workflow);
+            Assert.DoesNotContain("gh release edit", workflow);
+            Assert.Contains("Draft only. Publish after the maintainer", workflow);
             Assert.Contains("Daily releases are immutable", workflow);
             Assert.Contains("Removing an incomplete draft", workflow);
             Assert.Contains("--cleanup-tag", workflow);

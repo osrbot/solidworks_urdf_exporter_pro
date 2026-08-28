@@ -2,6 +2,46 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## 2026-08-28
+
+### Added
+
+- Added complete temporary-body collision previews for every collision strategy. Box, cylinder,
+  sphere, component-box, and convex-hull strategies now create visible SolidWorks BREP/sheet
+  bodies instead of relying on document line style or external STL re-import.
+- Added a faceted convex-hull preview built from the same in-memory Link-local vertices and
+  triangles used by the convex-hull STL writer. SolidWorks sews the triangle sheets when possible
+  and safely displays the sheets when sewing is unavailable.
+- Added Live SolidWorks 2023 coverage for all eight collision strategies. The test verifies that
+  every strategy creates bounded temporary geometry while the source component remains hidden,
+  preserves component appearance, restores mixed component visibility, and cleans up every
+  temporary body.
+
+### Changed
+
+- Box and per-component box previews now use solid orange-red temporary bodies, matching the
+  established cylinder and sphere preview behavior and remaining distinguishable in wireframe,
+  hidden-line, and shaded views.
+- VisualMesh and AccurateMesh previews use copied SolidWorks bodies as temporary display geometry.
+  SimplifiedMesh uses the same non-destructive CAD-shape preview but now explicitly states that the
+  final STL is generated with coarser tessellation tolerances and can contain fewer facets.
+- Made the Live collision regression self-contained: it can start SolidWorks, open the four-wheel
+  example, run the API checks, close the test document, and exit the test-owned process.
+- Updated release workflow tests to enforce draft-only GitHub candidates. Online publication still
+  requires the maintainer's manual SolidWorks validation and explicit approval.
+
+### Fixed
+
+- Restored each Link component branch to its pre-export visible or hidden state after STL/3DXML
+  generation instead of unconditionally hiding the exported components.
+- Avoided direct per-component `Component2.Visible` writes during cleanup, which can block older or
+  nested SolidWorks assemblies. Visibility restoration now uses the native batched Show/Hide path
+  and always clears the temporary selection.
+- Removed the obsolete collision-wireframe construction path so preview ownership, transforms,
+  display, hiding, and COM release all follow one temporary-body lifecycle.
+- Updated stale installer assertions for the pinned Inno Setup 6.3.0-6.3.3 toolchain and the
+  draft-candidate release workflow.
+
 ## 2026-08-27
 
 ### Added

@@ -5,6 +5,7 @@ using SW2URDF.UI;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
+using System.IO;
 using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
@@ -23,26 +24,6 @@ namespace SW2URDF.Test
             double[] result = CollisionPreview.BuildBoxDimensions(box);
 
             Assert.Equal(new[] { 1.0, 1.0, -3.0, 0.0, 0.0, 1.0, 4.0, 6.0, 8.0 }, result);
-        }
-
-        [Fact]
-        public void TestBoxWireframeContainsTwelveNonZeroEdges()
-        {
-            ExportHelper.LinkLocalBoundingBox box = CreateBox(-1.0, -2.0, -3.0, 3.0, 4.0, 5.0);
-
-            double[][] edges = CollisionPreview.BuildBoxEdgeDimensions(box);
-
-            Assert.Equal(12, edges.Length);
-            Assert.All(edges, edge =>
-            {
-                Assert.Equal(6, edge.Length);
-                double lengthSquared =
-                    Math.Pow(edge[3] - edge[0], 2.0) +
-                    Math.Pow(edge[4] - edge[1], 2.0) +
-                    Math.Pow(edge[5] - edge[2], 2.0);
-                Assert.True(lengthSquared > 0.0);
-            });
-            Assert.Equal(12, edges.Select(NormalizeEdge).Distinct().Count());
         }
 
         [Fact]
@@ -77,22 +58,25 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestConvexHullWireframeContainsUniqueNonZeroEdges()
+        public void TestConvexHullContainsOnlyValidNonDegenerateTriangles()
         {
             ExportHelper.LinkLocalBoundingBox box =
                 CreateBox(-1.0, -2.0, -3.0, 3.0, 4.0, 5.0);
 
-            double[][] edges = CollisionPreview.BuildConvexHullEdgeDimensions(box);
+            ExportHelper.ConvexHullGeometry geometry =
+                ExportHelper.BuildConvexHullGeometry(box);
 
-            Assert.True(edges.Length >= 12);
-            Assert.Equal(edges.Length, edges.Select(NormalizeEdge).Distinct().Count());
-            Assert.All(edges, edge =>
+            Assert.True(geometry.Vertices.Count >= 4);
+            Assert.True(geometry.Triangles.Count >= 4);
+            Assert.All(geometry.Triangles, triangle =>
             {
-                Assert.Equal(6, edge.Length);
-                Assert.True(
-                    Math.Pow(edge[3] - edge[0], 2.0) +
-                    Math.Pow(edge[4] - edge[1], 2.0) +
-                    Math.Pow(edge[5] - edge[2], 2.0) > 0.0);
+                Assert.Equal(3, triangle.Length);
+                Assert.All(triangle, index => Assert.InRange(
+                    index, 0, geometry.Vertices.Count - 1));
+                Assert.True(TriangleAreaSquared(
+                    geometry.Vertices[triangle[0]],
+                    geometry.Vertices[triangle[1]],
+                    geometry.Vertices[triangle[2]]) > 1e-20);
             });
         }
 
@@ -166,10 +150,43 @@ namespace SW2URDF.Test
             MathTransform coordinateTransform = null;
             int? originalVisibility = null;
             int? originalDisplayHostVisibility = null;
+            bool ownsApplication = false;
+            bool openedTestDocument = false;
             try
             {
-                swApp = (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
+                try
+                {
+                    swApp = (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
+                }
+                catch (COMException)
+                {
+                    swApp = (SldWorks)Activator.CreateInstance(
+                        Type.GetTypeFromProgID("SldWorks.Application"));
+                    swApp.Visible = true;
+                    ownsApplication = true;
+                }
                 model = swApp.ActiveDoc as ModelDoc2;
+                if (!(model is AssemblyDoc))
+                {
+                    int openErrors = 0;
+                    int openWarnings = 0;
+                    string assemblyPath = Path.Combine(
+                        SW2URDFTest.GetModelDirectory(SW2URDFTest.ModelName4Wheeler),
+                        "4_WHEELER.SLDASM");
+                    model = swApp.OpenDoc6(
+                        assemblyPath,
+                        (int)swDocumentTypes_e.swDocASSEMBLY,
+                        (int)swOpenDocOptions_e.swOpenDocOptions_Silent,
+                        String.Empty,
+                        ref openErrors,
+                        ref openWarnings) as ModelDoc2;
+                    Assert.True(
+                        model != null,
+                        "SolidWorks could not open the collision preview test assembly. " +
+                        "errors=" + openErrors + ", warnings=" + openWarnings +
+                        ", path=" + assemblyPath);
+                    openedTestDocument = true;
+                }
                 AssemblyDoc assembly = model as AssemblyDoc;
                 Assert.NotNull(assembly);
                 object[] topLevelComponents = assembly.GetComponents(true) as object[];
@@ -250,11 +267,18 @@ namespace SW2URDF.Test
                             out string error),
                             strategy + ": " + (error ?? status));
                         Assert.True(preview.IsVisible);
+                        Assert.True(preview.TemporaryBodyCount > 0);
+                        Assert.True(
+                            preview.TryGetDisplayedBounds(out double[] displayedBounds),
+                            strategy + " did not create bounded temporary geometry.");
+                        Assert.True(displayedBounds.All(value =>
+                            !Double.IsNaN(value) && !Double.IsInfinity(value)));
+                        Assert.True(component.IsHidden(false));
                         if (strategy == CollisionMeshStrategy.SimplifiedMesh)
                         {
                             Assert.True(
-                                status.IndexOf("approximate", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                status.Contains("近似"));
+                                status.IndexOf("coarse", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                status.Contains("粗化"));
                         }
                         preview.Hide();
                         Assert.False(preview.IsVisible);
@@ -262,6 +286,18 @@ namespace SW2URDF.Test
                 }
 
                 Assert.Equal(before, CloneAppearance(component.MaterialPropertyValues));
+
+                var visibilitySnapshot = ExportHelper.CaptureComponentVisibility(
+                    new[] { component, displayHost });
+                component.Visible = (int)swComponentVisibilityState_e.swComponentVisible;
+                displayHost.Visible = (int)swComponentVisibilityState_e.swComponentHidden;
+                ExportHelper.RestoreComponentVisibility(model, visibilitySnapshot);
+                Assert.Equal(
+                    (int)swComponentVisibilityState_e.swComponentHidden,
+                    component.Visible);
+                Assert.Equal(
+                    (int)swComponentVisibilityState_e.swComponentVisible,
+                    displayHost.Visible);
             }
             finally
             {
@@ -284,6 +320,17 @@ namespace SW2URDF.Test
                     catch { }
                 }
                 ReleaseComObject(coordinateTransform);
+                if (openedTestDocument && swApp != null)
+                {
+                    try { swApp.CloseDoc(model == null ? String.Empty : model.GetTitle()); }
+                    catch { }
+                }
+                if (ownsApplication && swApp != null)
+                {
+                    try { swApp.ExitApp(); }
+                    catch { }
+                    ReleaseComObject(swApp);
+                }
             }
         }
 
@@ -319,18 +366,18 @@ namespace SW2URDF.Test
             }
         }
 
-        private static string NormalizeEdge(double[] edge)
+        private static double TriangleAreaSquared(double[] first, double[] second, double[] third)
         {
-            string start = String.Join(",", edge.Take(3).Select(FormatCoordinate));
-            string end = String.Join(",", edge.Skip(3).Take(3).Select(FormatCoordinate));
-            return String.CompareOrdinal(start, end) <= 0
-                ? start + "|" + end
-                : end + "|" + start;
-        }
-
-        private static string FormatCoordinate(double value)
-        {
-            return value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+            double abX = second[0] - first[0];
+            double abY = second[1] - first[1];
+            double abZ = second[2] - first[2];
+            double acX = third[0] - first[0];
+            double acY = third[1] - first[1];
+            double acZ = third[2] - first[2];
+            double crossX = abY * acZ - abZ * acY;
+            double crossY = abZ * acX - abX * acZ;
+            double crossZ = abX * acY - abY * acX;
+            return crossX * crossX + crossY * crossY + crossZ * crossZ;
         }
 
         private static ExportHelper.LinkLocalBoundingBox CreateBox(

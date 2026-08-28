@@ -29,6 +29,41 @@ namespace SW2URDF.UI
 
         public bool IsVisible { get { return temporaryBodies.Count > 0; } }
 
+        internal int TemporaryBodyCount { get { return temporaryBodies.Count; } }
+
+        internal bool TryGetDisplayedBounds(out double[] bounds)
+        {
+            bounds = null;
+            foreach (Body2 body in temporaryBodies)
+            {
+                double[] bodyBounds = null;
+                try
+                {
+                    bodyBounds = body.GetBodyBox() as double[];
+                }
+                catch (COMException) { }
+                if (bodyBounds == null || bodyBounds.Length < 6)
+                {
+                    continue;
+                }
+                if (bounds == null)
+                {
+                    bounds = (double[])bodyBounds.Clone();
+                    continue;
+                }
+                bounds[0] = Math.Min(bounds[0], bodyBounds[0]);
+                bounds[1] = Math.Min(bounds[1], bodyBounds[1]);
+                bounds[2] = Math.Min(bounds[2], bodyBounds[2]);
+                bounds[3] = Math.Max(bounds[3], bodyBounds[3]);
+                bounds[4] = Math.Max(bounds[4], bodyBounds[4]);
+                bounds[5] = Math.Max(bounds[5], bodyBounds[5]);
+            }
+            return bounds != null &&
+                bounds[3] > bounds[0] &&
+                bounds[4] > bounds[1] &&
+                bounds[5] > bounds[2];
+        }
+
         public bool Show(Link link, CollisionMeshStrategy strategy,
             MathTransform linkCoordinateTransform, out string status, out string error)
         {
@@ -81,8 +116,8 @@ namespace SW2URDF.UI
                                 displayContext.LinkToDisplayTarget,
                                 displayContext.DisplayTarget);
                             status = ChineseUiText.Translate(
-                                "Box collision wireframe preview shown.",
-                                "已显示盒体碰撞线框预览。");
+                                "Solid box collision preview shown.",
+                                "已显示实体盒体碰撞预览。");
                             break;
                         case CollisionMeshStrategy.CylinderPrimitive:
                             displayedBodyCount = ShowCylinder(modeler, link,
@@ -105,9 +140,9 @@ namespace SW2URDF.UI
                                 displayContext.LinkToDisplayTarget,
                                 displayContext.DisplayTarget);
                             status = ChineseUiText.Translate(
-                                "Component box wireframe preview shown (" +
+                                "Solid component-box collision preview shown (" +
                                     displayedBodyCount.ToString(CultureInfo.InvariantCulture) + ").",
-                                "已显示组件盒体线框预览（" +
+                                "已显示实体组件盒体碰撞预览（" +
                                     displayedBodyCount.ToString(CultureInfo.InvariantCulture) + " 个）。");
                             break;
                         case CollisionMeshStrategy.ConvexHull:
@@ -115,8 +150,8 @@ namespace SW2URDF.UI
                                 displayContext.LinkToDisplayTarget,
                                 displayContext.DisplayTarget);
                             status = ChineseUiText.Translate(
-                                "Convex hull collision wireframe preview shown.",
-                                "已显示凸包碰撞线框预览。");
+                                "Faceted convex hull collision preview shown.",
+                                "已显示分面凸包碰撞体预览。");
                             break;
                         case CollisionMeshStrategy.VisualMesh:
                             displayedBodyCount = ShowComponentBodies(
@@ -145,8 +180,8 @@ namespace SW2URDF.UI
                                 displayContext.LinkToDisplayTarget,
                                 displayContext.DisplayTarget);
                             status = ChineseUiText.Translate(
-                                "Approximate simplified-mesh preview shown from unsimplified SolidWorks bodies; the final STL may differ.",
-                                "已使用未简化的 SolidWorks 实体显示近似预览；最终简化 STL 可能不同。");
+                                "CAD shape preview shown. The final coarse-tessellation STL uses the selected tolerance and may have fewer facets.",
+                                "已显示 CAD 外形预览；最终粗化三角化 STL 使用所选公差，分面数量可能更少。");
                             break;
                         default:
                             status = ChineseUiText.Translate(
@@ -203,35 +238,6 @@ namespace SW2URDF.UI
             };
         }
 
-        internal static double[][] BuildBoxEdgeDimensions(ExportHelper.LinkLocalBoundingBox box)
-        {
-            RequireUsableBox(box);
-            double[][] corners =
-            {
-                new[] { box.MinX, box.MinY, box.MinZ },
-                new[] { box.MaxX, box.MinY, box.MinZ },
-                new[] { box.MaxX, box.MaxY, box.MinZ },
-                new[] { box.MinX, box.MaxY, box.MinZ },
-                new[] { box.MinX, box.MinY, box.MaxZ },
-                new[] { box.MaxX, box.MinY, box.MaxZ },
-                new[] { box.MaxX, box.MaxY, box.MaxZ },
-                new[] { box.MinX, box.MaxY, box.MaxZ }
-            };
-            int[][] edgeIndices =
-            {
-                new[] { 0, 1 }, new[] { 1, 2 }, new[] { 2, 3 }, new[] { 3, 0 },
-                new[] { 4, 5 }, new[] { 5, 6 }, new[] { 6, 7 }, new[] { 7, 4 },
-                new[] { 0, 4 }, new[] { 1, 5 }, new[] { 2, 6 }, new[] { 3, 7 }
-            };
-            double[][] edges = new double[edgeIndices.Length][];
-            for (int index = 0; index < edges.Length; index++)
-            {
-                edges[index] = BuildLineDimensions(
-                    corners[edgeIndices[index][0]], corners[edgeIndices[index][1]]);
-            }
-            return edges;
-        }
-
         internal static double[] BuildCylinderDimensions(ExportHelper.LinkLocalBoundingBox box)
         {
             RequireUsableBox(box);
@@ -258,26 +264,6 @@ namespace SW2URDF.UI
             return new[] { center[0], center[1], center[2], radius };
         }
 
-        internal static double[][] BuildConvexHullEdgeDimensions(
-            ExportHelper.LinkLocalBoundingBox box)
-        {
-            ExportHelper.ConvexHullGeometry geometry =
-                ExportHelper.BuildConvexHullGeometry(box);
-            HashSet<string> uniqueEdges = new HashSet<string>();
-            List<double[]> edges = new List<double[]>();
-            foreach (int[] triangle in geometry.Triangles)
-            {
-                if (triangle == null || triangle.Length < 3)
-                {
-                    continue;
-                }
-                AddConvexHullEdge(geometry.Vertices, triangle[0], triangle[1], uniqueEdges, edges);
-                AddConvexHullEdge(geometry.Vertices, triangle[1], triangle[2], uniqueEdges, edges);
-                AddConvexHullEdge(geometry.Vertices, triangle[2], triangle[0], uniqueEdges, edges);
-            }
-            return edges.ToArray();
-        }
-
         internal static Matrix<double> BuildBodyToDisplayTarget(
             Matrix<double> linkToDisplayTarget,
             Matrix<double> linkToDocument,
@@ -296,12 +282,19 @@ namespace SW2URDF.UI
         private int ShowBox(Modeler modeler, Link link, MathTransform transform,
             object displayTarget)
         {
-            double[][] edges = BuildBoxEdgeDimensions(exporter.CreateLinkLocalBoundingBox(link));
-            foreach (double[] edge in edges)
+            Body2 body = null;
+            try
             {
-                AddLine(modeler, edge, transform, displayTarget);
+                body = CreateBoxBody(modeler, exporter.CreateLinkLocalBoundingBox(link));
+                Body2 ownedBody = body;
+                body = null;
+                AddBody(ownedBody, transform, DrawingColor.OrangeRed, displayTarget);
+                return 1;
             }
-            return edges.Length;
+            finally
+            {
+                ReleaseComObject(body);
+            }
         }
 
         private int ShowCylinder(Modeler modeler, Link link, MathTransform transform,
@@ -388,30 +381,248 @@ namespace SW2URDF.UI
             }
             foreach (ExportHelper.LinkLocalBoundingBox box in boxes)
             {
-                foreach (double[] edge in BuildBoxEdgeDimensions(box))
+                Body2 body = null;
+                try
                 {
-                    AddLine(modeler, edge, transform, displayTarget);
+                    body = CreateBoxBody(modeler, box);
+                    Body2 ownedBody = body;
+                    body = null;
+                    AddBody(ownedBody, transform, DrawingColor.OrangeRed, displayTarget);
+                }
+                finally
+                {
+                    ReleaseComObject(body);
                 }
             }
             return boxes.Count;
         }
 
+        private static Body2 CreateBoxBody(
+            Modeler modeler,
+            ExportHelper.LinkLocalBoundingBox box)
+        {
+            double[] dimensions = BuildBoxDimensions(box);
+            Body2 body;
+            try
+            {
+                body = modeler.CreateBodyFromBox3(dimensions);
+            }
+            catch (COMException exception) when (
+                exception.ErrorCode == unchecked((int)0x8002000D))
+            {
+                body = modeler.ICreateBodyFromBox2(ref dimensions[0]);
+                if (body == null)
+                {
+                    body = modeler.CreateBodyFromBox(dimensions) as Body2;
+                }
+            }
+            if (body == null)
+            {
+                throw new InvalidOperationException(ChineseUiText.Translate(
+                    "SolidWorks could not create the solid box collision preview.",
+                    "SolidWorks 无法创建实体盒体碰撞预览。"));
+            }
+            return body;
+        }
+
         private int ShowConvexHull(Modeler modeler, Link link, MathTransform transform,
             object displayTarget)
         {
-            double[][] edges = BuildConvexHullEdgeDimensions(
+            ExportHelper.ConvexHullGeometry geometry = ExportHelper.BuildConvexHullGeometry(
                 exporter.CreateLinkLocalBoundingBox(link));
-            if (edges.Length == 0)
+            if (geometry.Triangles == null || geometry.Triangles.Count == 0)
             {
                 throw new InvalidOperationException(ChineseUiText.Translate(
-                    "No usable convex hull edges were found.",
-                    "未找到可用的凸包边线。"));
+                    "No usable convex hull faces were found.",
+                    "未找到可用的凸包面。"));
             }
-            foreach (double[] edge in edges)
+
+            List<Body2> triangleSheets = new List<Body2>();
+            List<Body2> sewnBodies = new List<Body2>();
+            try
             {
-                AddLine(modeler, edge, transform, displayTarget);
+                foreach (int[] triangle in geometry.Triangles)
+                {
+                    Body2 sheet = CreateTriangleSheet(modeler, geometry.Vertices, triangle);
+                    if (sheet != null)
+                    {
+                        triangleSheets.Add(sheet);
+                    }
+                }
+                if (triangleSheets.Count == 0)
+                {
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "SolidWorks could not create the convex hull faces.",
+                        "SolidWorks 无法创建凸包面。"));
+                }
+
+                sewnBodies.AddRange(SewTriangleSheets(modeler, triangleSheets));
+                IList<Body2> bodiesToDisplay = sewnBodies.Count > 0
+                    ? (IList<Body2>)sewnBodies
+                    : triangleSheets;
+                int displayedBodyCount = bodiesToDisplay.Count;
+                while (bodiesToDisplay.Count > 0)
+                {
+                    Body2 previewBody = bodiesToDisplay[0];
+                    bodiesToDisplay.RemoveAt(0);
+                    AddBody(previewBody, transform, DrawingColor.OrangeRed, displayTarget);
+                }
+                return displayedBodyCount;
             }
-            return edges.Length;
+            finally
+            {
+                ReleaseComObjects(sewnBodies);
+                ReleaseComObjects(triangleSheets);
+            }
+        }
+
+        private static Body2 CreateTriangleSheet(
+            Modeler modeler,
+            IList<double[]> vertices,
+            int[] triangle)
+        {
+            if (vertices == null || triangle == null || triangle.Length < 3 ||
+                triangle[0] < 0 || triangle[1] < 0 || triangle[2] < 0 ||
+                triangle[0] >= vertices.Count ||
+                triangle[1] >= vertices.Count ||
+                triangle[2] >= vertices.Count)
+            {
+                return null;
+            }
+            double[] first = vertices[triangle[0]];
+            double[] second = vertices[triangle[1]];
+            double[] third = vertices[triangle[2]];
+            double[] firstEdge = Subtract(second, first);
+            double[] secondEdge = Subtract(third, first);
+            double[] normal = Normalize(Cross(firstEdge, secondEdge));
+            double[] reference = Normalize(firstEdge);
+            if (normal == null || reference == null)
+            {
+                return null;
+            }
+
+            Surface surface = null;
+            List<Curve> sourceCurves = new List<Curve>();
+            List<Curve> trimmedCurves = new List<Curve>();
+            Body2 body = null;
+            try
+            {
+                surface = modeler.CreatePlanarSurface2(first, normal, reference) as Surface;
+                if (surface == null)
+                {
+                    return null;
+                }
+                double[][] points = { first, second, third, first };
+                for (int index = 0; index < 3; index++)
+                {
+                    double[] direction = Subtract(points[index + 1], points[index]);
+                    Curve source = modeler.CreateLine(points[index], direction) as Curve;
+                    if (source == null)
+                    {
+                        return null;
+                    }
+                    sourceCurves.Add(source);
+                    Curve trimmed = source.CreateTrimmedCurve2(
+                        points[index][0], points[index][1], points[index][2],
+                        points[index + 1][0], points[index + 1][1], points[index + 1][2]);
+                    if (trimmed == null)
+                    {
+                        return null;
+                    }
+                    trimmedCurves.Add(trimmed);
+                }
+                body = surface.CreateTrimmedSheet5(trimmedCurves.ToArray(), true, 0.00001)
+                    as Body2;
+                Body2 result = body;
+                body = null;
+                return result;
+            }
+            finally
+            {
+                ReleaseComObject(body);
+                ReleaseComObjects(trimmedCurves);
+                ReleaseComObjects(sourceCurves);
+                ReleaseComObject(surface);
+            }
+        }
+
+        private static IList<Body2> SewTriangleSheets(Modeler modeler, IList<Body2> sheets)
+        {
+            List<Body2> bodies = new List<Body2>();
+            int error = 0;
+            object result = null;
+            try
+            {
+                result = modeler.CreateBodiesFromSheets2(
+                    new List<Body2>(sheets).ToArray(),
+                    (int)swSheetSewingOption_e.swSewToSolidOrSheets,
+                    0.000001,
+                    ref error);
+                Body2 singleBody = result as Body2;
+                if (singleBody != null)
+                {
+                    bodies.Add(singleBody);
+                    result = null;
+                    return bodies;
+                }
+                object[] resultArray = result as object[];
+                if (resultArray != null)
+                {
+                    foreach (object candidate in resultArray)
+                    {
+                        Body2 body = candidate as Body2;
+                        if (body != null)
+                        {
+                            bodies.Add(body);
+                        }
+                    }
+                    result = null;
+                }
+                return bodies;
+            }
+            catch (COMException)
+            {
+                ReleaseComObjects(bodies);
+                bodies.Clear();
+                return bodies;
+            }
+            finally
+            {
+                ReleaseComObject(result);
+            }
+        }
+
+        private static double[] Subtract(double[] left, double[] right)
+        {
+            return new[]
+            {
+                left[0] - right[0],
+                left[1] - right[1],
+                left[2] - right[2]
+            };
+        }
+
+        private static double[] Cross(double[] left, double[] right)
+        {
+            return new[]
+            {
+                left[1] * right[2] - left[2] * right[1],
+                left[2] * right[0] - left[0] * right[2],
+                left[0] * right[1] - left[1] * right[0]
+            };
+        }
+
+        private static double[] Normalize(double[] vector)
+        {
+            double length = Math.Sqrt(
+                vector[0] * vector[0] +
+                vector[1] * vector[1] +
+                vector[2] * vector[2]);
+            if (Double.IsNaN(length) || Double.IsInfinity(length) || length <= 1e-12)
+            {
+                return null;
+            }
+            return new[] { vector[0] / length, vector[1] / length, vector[2] / length };
         }
 
         private int ShowComponentBodies(
@@ -570,51 +781,6 @@ namespace SW2URDF.UI
             return displayedBodyCount;
         }
 
-        private void AddLine(Modeler modeler, double[] dimensions, MathTransform transform,
-            object displayTarget)
-        {
-            Curve sourceCurve = null;
-            Curve trimmedCurve = null;
-            Body2 body = null;
-            try
-            {
-                double[] start = { dimensions[0], dimensions[1], dimensions[2] };
-                double[] direction =
-                {
-                    dimensions[3] - dimensions[0],
-                    dimensions[4] - dimensions[1],
-                    dimensions[5] - dimensions[2]
-                };
-                sourceCurve = modeler.CreateLine(start, direction) as Curve;
-                if (sourceCurve == null)
-                {
-                    throw new InvalidOperationException(ChineseUiText.Translate(
-                        "SolidWorks could not create a collision preview line.",
-                        "SolidWorks 无法创建碰撞预览线。"));
-                }
-                trimmedCurve = sourceCurve.CreateTrimmedCurve2(
-                    dimensions[0], dimensions[1], dimensions[2],
-                    dimensions[3], dimensions[4], dimensions[5]);
-                if (trimmedCurve == null)
-                {
-                    throw new InvalidOperationException(ChineseUiText.Translate(
-                        "SolidWorks could not trim a collision preview line.",
-                        "SolidWorks 无法裁剪碰撞预览线。"));
-                }
-                body = modeler.CreateWireBody(trimmedCurve,
-                    (int)swCreateWireBodyOptions_e.swCreateWireBodyByDefault);
-                Body2 ownedBody = body;
-                body = null;
-                AddBody(ownedBody, transform, DrawingColor.OrangeRed, displayTarget);
-            }
-            finally
-            {
-                ReleaseComObject(body);
-                ReleaseComObject(trimmedCurve);
-                ReleaseComObject(sourceCurve);
-            }
-        }
-
         private void AddBody(Body2 body, MathTransform transform, DrawingColor color,
             object displayTarget)
         {
@@ -663,34 +829,6 @@ namespace SW2URDF.UI
             }
         }
 
-        private static double[] BuildLineDimensions(double[] start, double[] end)
-        {
-            return new[] { start[0], start[1], start[2], end[0], end[1], end[2] };
-        }
-
-        private static void AddConvexHullEdge(
-            IList<double[]> vertices,
-            int firstIndex,
-            int secondIndex,
-            ISet<string> uniqueEdges,
-            ICollection<double[]> edges)
-        {
-            if (vertices == null || firstIndex < 0 || secondIndex < 0 ||
-                firstIndex >= vertices.Count || secondIndex >= vertices.Count ||
-                firstIndex == secondIndex)
-            {
-                return;
-            }
-            int minimum = Math.Min(firstIndex, secondIndex);
-            int maximum = Math.Max(firstIndex, secondIndex);
-            string key = minimum.ToString(CultureInfo.InvariantCulture) + ":" +
-                maximum.ToString(CultureInfo.InvariantCulture);
-            if (uniqueEdges.Add(key))
-            {
-                edges.Add(BuildLineDimensions(vertices[firstIndex], vertices[secondIndex]));
-            }
-        }
-
         private static string GetComponentIdentity(Component2 component)
         {
             try
@@ -726,6 +864,18 @@ namespace SW2URDF.UI
             }
             catch (InvalidComObjectException) { }
             catch (COMException) { }
+        }
+
+        private static void ReleaseComObjects<T>(IEnumerable<T> values)
+        {
+            if (values == null)
+            {
+                return;
+            }
+            foreach (T value in values)
+            {
+                ReleaseComObject(value);
+            }
         }
 
         private static void ReleaseComReference(object value)

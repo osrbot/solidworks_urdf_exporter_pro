@@ -35,6 +35,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Xml.Serialization;
@@ -2523,6 +2524,8 @@ namespace SW2URDF.URDFExport
 
         private T ExecuteWithVisibleLinkComponents<T>(Link link, Func<T> operation)
         {
+            List<ComponentVisibilityState> visibilityBeforeExport =
+                CaptureComponentVisibility(link.SWComponents);
             bool visibilityMayHaveChanged = false;
             Exception operationFailure = null;
             try
@@ -2542,7 +2545,7 @@ namespace SW2URDF.URDFExport
                 {
                     try
                     {
-                        CommonSwOperations.HideComponents(ActiveSWModel, link.SWComponents);
+                        RestoreComponentVisibility(ActiveSWModel, visibilityBeforeExport);
                     }
                     catch (Exception cleanupException)
                     {
@@ -2561,6 +2564,107 @@ namespace SW2URDF.URDFExport
                     }
                 }
             }
+        }
+
+        internal static List<ComponentVisibilityState> CaptureComponentVisibility(
+            IEnumerable<Component2> rootComponents)
+        {
+            List<ComponentVisibilityState> states = new List<ComponentVisibilityState>();
+            HashSet<string> visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Component2 component in rootComponents ?? new Component2[0])
+            {
+                CaptureComponentVisibilityRecursive(component, states, visited);
+            }
+            return states;
+        }
+
+        private static void CaptureComponentVisibilityRecursive(
+            Component2 component,
+            ICollection<ComponentVisibilityState> states,
+            ISet<string> visited)
+        {
+            if (component == null)
+            {
+                return;
+            }
+            string identity;
+            try
+            {
+                identity = component.Name2;
+            }
+            catch (COMException)
+            {
+                identity = component.GetHashCode().ToString(CultureInfo.InvariantCulture);
+            }
+            if (String.IsNullOrWhiteSpace(identity))
+            {
+                identity = component.GetHashCode().ToString(CultureInfo.InvariantCulture);
+            }
+            if (!visited.Add(identity ?? String.Empty))
+            {
+                return;
+            }
+
+            states.Add(new ComponentVisibilityState(component, component.Visible));
+            object[] children = null;
+            try
+            {
+                children = component.GetChildren() as object[];
+            }
+            catch (COMException) { }
+            foreach (object child in children ?? new object[0])
+            {
+                CaptureComponentVisibilityRecursive(child as Component2, states, visited);
+            }
+        }
+
+        internal static void RestoreComponentVisibility(
+            ModelDoc2 model,
+            IList<ComponentVisibilityState> states)
+        {
+            if (model == null || states == null)
+            {
+                return;
+            }
+            try
+            {
+                List<Component2> visibleComponents = states
+                    .Where(state => state.Visibility ==
+                        (int)swComponentVisibilityState_e.swComponentVisible)
+                    .Select(state => state.Component)
+                    .ToList();
+                List<Component2> hiddenComponents = states
+                    .Where(state => state.Visibility ==
+                        (int)swComponentVisibilityState_e.swComponentHidden)
+                    .Select(state => state.Component)
+                    .ToList();
+                if (visibleComponents.Count > 0)
+                {
+                    CommonSwOperations.ShowComponents(model, visibleComponents);
+                }
+                if (hiddenComponents.Count > 0)
+                {
+                    CommonSwOperations.HideComponents(model, hiddenComponents);
+                }
+            }
+            finally
+            {
+                try { model.ClearSelection2(true); }
+                catch (COMException) { }
+                states.Clear();
+            }
+        }
+
+        internal sealed class ComponentVisibilityState
+        {
+            internal ComponentVisibilityState(Component2 component, int visibility)
+            {
+                Component = component;
+                Visibility = visibility;
+            }
+
+            internal Component2 Component { get; private set; }
+            internal int Visibility { get; private set; }
         }
 
         public void ExportLink(bool zIsUp)
