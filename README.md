@@ -19,6 +19,23 @@ Chinese localization, and auditable installer packaging.
 > requirement inherited from the upstream project is SolidWorks 2018 SP5; that statement is not a
 > claim that every version and service pack has been regression-tested.
 
+## Why This Fork Exists
+
+The upstream project established the SolidWorks-to-URDF workflow. This fork keeps that foundation
+but addresses production gaps that accumulated around newer SolidWorks use, complex assemblies,
+physical validation, and release maintenance:
+
+| Production gap | Maintained fork response |
+| --- | --- |
+| Link-tree edits could be lost across preview, PropertyManager, or reopen transitions | Transactional editing, persisted v1.5 configurations, recovery drafts, and stricter duplicate/stale-state validation |
+| Mass properties could be zero, sign-inverted, or expressed in the wrong frame | Explicit system units, one part/assembly frame-conversion path, COM/bounds checks, physical tensor validation, and API-principal-moment comparison |
+| Collision choices were difficult to verify before export | Link-local fitting, temporary SolidWorks previews for every strategy, fallback reporting, and requested/effective strategy records |
+| Visual/material controls and large exports were hard to inspect consistently | SolidWorks appearance loading, deterministic Link coloring, bilingual UI, topmost progress, and export summaries |
+| Historical installers were difficult to reproduce or audit | Hash and provenance sidecars, payload verification, bilingual release notes, and a draft-only manual publication gate |
+
+The fork preserves the upstream Git history, authorship, and MIT license. Detailed changes and
+their commit evidence are recorded in the [Changelog](CHANGELOG.md).
+
 ## Engineering Scope
 
 The exporter keeps three URDF responsibilities separate:

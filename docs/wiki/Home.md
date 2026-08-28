@@ -6,6 +6,24 @@ This is the detailed user and maintainer documentation for the OSRBot-maintained
 [README](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/README.md) for the project
 entry point, support boundaries, and credits.
 
+## Why the Maintained Fork Exists
+
+The upstream exporter supplied the original add-in and URDF pipeline. The maintained fork is needed
+to close production gaps rather than merely repackage the historical binaries:
+
+- Link-tree sessions now have transactional editing, saved v1.5 configurations, recovery drafts,
+  and stricter validation across preview and reopen transitions.
+- Mass, COM, and inertia use explicit units and one frame-conversion route for parts and assemblies,
+  with bounds, physical-tensor, and API-principal-moment checks.
+- Collision strategies are fitted per Link, previewed in SolidWorks, and recorded with any fallback
+  so the requested and actually exported geometry can be distinguished.
+- The maintained workflow adds deterministic Link coloring, Simplified Chinese UI, export progress,
+  validation reports, and reproducible draft-only installer packaging.
+
+The upstream history, authorship, and MIT license remain intact. See the
+[Changelog](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CHANGELOG.md) for dated
+changes and commit evidence.
+
 ## Project Scope
 
 The Windows x64 SolidWorks add-in exports explicitly configured Links, Joints, coordinate systems,

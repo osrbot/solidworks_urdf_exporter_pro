@@ -5,6 +5,22 @@
 这是 OSRBot 维护分支的详细用户与维护文档。项目入口、支持范围和致谢见
 [README](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/README.md)。
 
+## 为什么需要这个维护分支
+
+上游导出器提供了原始插件和 URDF 导出管线。本维护分支的目的不是重新打包历史二进制文件，
+而是补齐生产使用中长期存在的工程缺口：
+
+- Link 树现在具备事务化编辑、v1.5 配置持久化、恢复草稿，以及覆盖预览和重开流程的严格校验。
+- 质量、COM 和惯性统一使用显式单位及零件/装配体坐标转换路线，并执行边界、物理张量和 API
+  主惯量校验。
+- 碰撞策略按 Link 局部拟合、在 SolidWorks 中预览，并记录所有回退，从而区分请求策略和实际
+  导出结果。
+- 维护流程增加确定性 Link 自动配色、简体中文 UI、导出进度、校验报告和可复现的 Draft-only
+  安装包发布管线。
+
+本分支保留上游历史、作者署名和 MIT 许可证。按日期整理的变更与提交证据见
+[Changelog](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CHANGELOG.md)。
+
 ## 项目定位
 
 该插件运行在 Windows x64 SolidWorks 中，将装配体中的 Link、Joint、坐标系、质量属性、

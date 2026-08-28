@@ -6,6 +6,9 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Documentation
 
+- Added matching English and Simplified Chinese "Why This Fork Exists" summaries to the README and
+  Wiki home page, tying the maintained branch to specific legacy production gaps and implemented
+  responses while preserving upstream attribution.
 - Added a complete Simplified Chinese README alongside the canonical English README, with reciprocal
   language navigation and the same support, inertia, collision, build, limitation, and credit
   boundaries.
