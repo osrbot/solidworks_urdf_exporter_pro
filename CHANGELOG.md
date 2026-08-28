@@ -6,6 +6,16 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Documentation
 
+- Added a complete Simplified Chinese README alongside the canonical English README, with reciprocal
+  language navigation and the same support, inertia, collision, build, limitation, and credit
+  boundaries.
+- Published paired English and `-zh-CN` GitHub Wiki pages for every maintained topic and added one
+  bilingual sidebar instead of mixing two languages inside each procedural paragraph.
+- Made repository-maintained bilingual Release Notes the only candidate body source. CI now rejects
+  a source commit that lacks either `## English` or `## 简体中文`, required artifact/source
+  placeholders, or a fully resolved rendered body.
+- Expanded the current draft-candidate notes in both languages. Existing public historical Releases
+  remain immutable; the bilingual policy applies to the current Draft and future candidates.
 - Rebuilt the repository README as a factual project entry point covering supported environments,
   installation boundaries, the eight-step export workflow, inertial and collision conventions,
   generated reports, testing, reproducible packaging, known limits, and the manual release gate.

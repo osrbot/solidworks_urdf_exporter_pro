@@ -148,7 +148,12 @@ namespace SW2URDF.Test
             Assert.Contains("--draft", workflow);
             Assert.DoesNotContain("--draft=false", workflow);
             Assert.DoesNotContain("gh release edit", workflow);
-            Assert.Contains("Draft only. Publish after the maintainer", workflow);
+            Assert.Contains(".github/release-notes/${RELEASE_TAG}.md", workflow);
+            Assert.Contains("reviewed bilingual release notes", workflow);
+            Assert.Contains("## English", workflow);
+            Assert.Contains("## \u7b80\u4f53\u4e2d\u6587", workflow);
+            Assert.Contains("{{INSTALLER_SHA256}}", workflow);
+            Assert.Contains("Release notes contain an unresolved placeholder", workflow);
             Assert.Contains("Daily releases are immutable", workflow);
             Assert.Contains("Removing an incomplete draft", workflow);
             Assert.Contains("--cleanup-tag", workflow);
@@ -159,6 +164,25 @@ namespace SW2URDF.Test
             Assert.DoesNotContain("git tag --force", workflow);
             Assert.DoesNotContain("gh release delete-asset", workflow);
             Assert.DoesNotContain("-printf \"%T@ %p", workflow);
+        }
+
+        [Fact]
+        public void TestReleaseNotesTemplateIsBilingualAndTraceable()
+        {
+            string notes = ReadRepositoryFile(
+                ".github", "release-notes", "v20260827.md");
+
+            Assert.Contains("## English", notes);
+            Assert.Contains("## \u7b80\u4f53\u4e2d\u6587", notes);
+            Assert.Contains("### Added", notes);
+            Assert.Contains("### \u65b0\u589e\u529f\u80fd", notes);
+            Assert.Contains("{{RELEASE_DATE}}", notes);
+            Assert.Contains("{{INSTALLER_FILE}}", notes);
+            Assert.Contains("{{INSTALLER_SHA256}}", notes);
+            Assert.Contains("{{RELEASE_SOURCE_SHA}}", notes);
+            Assert.Contains("{{RELEASE_ARTIFACT_SHA}}", notes);
+            Assert.Contains("Draft only", notes);
+            Assert.Contains("\u5f53\u524d\u4ec5\u4e3a Draft", notes);
         }
 
         [Fact]

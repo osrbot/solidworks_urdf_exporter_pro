@@ -1,71 +1,82 @@
 # Troubleshooting
 
-## 导出器菜单不存在
+**English** | [简体中文](Troubleshooting-zh-CN)
 
-- 确认安装包为 x64，并以管理员身份安装。
-- 完全关闭并重启 SolidWorks；当前安装器不支持热加载。
-- 检查 SolidWorks Add-Ins 中是否存在并启用 SW2URDF。
-- 查看 `%USERPROFILE%\sw2urdf_logs\sw2urdf.log`。
+## Exporter Menu Is Missing
 
-## Link Tree 编辑后丢失
+- Confirm that the installer is x64 and was run as administrator.
+- Exit and restart SolidWorks completely; hot reload is not supported.
+- Check that SW2URDF appears and is enabled in SolidWorks Add-Ins.
+- Inspect `%USERPROFILE%\sw2urdf_logs\sw2urdf.log`.
 
-- 已保存装配体：检查 `%LOCALAPPDATA%\OSRBot\SW2URDF\export-drafts` 是否存在恢复草稿。
-- 未保存装配体：没有稳定完整路径，无法使用按装配体隔离的恢复草稿。
-- 组件被删除、替换或 Save As：persistent reference PID 可能失效，需要重新绑定。
-- `Apply` 与 `Cancel` 是事务边界；取消画布不会提交结构变更。
+## Link Tree Edits Disappeared
 
-## 报重复 Joint，但树中看不出重复
+- Saved assembly: check `%LOCALAPPDATA%\OSRBot\SW2URDF\export-drafts` for a recovery draft.
+- Unsaved assembly: no stable full path exists, so isolated recovery is unavailable.
+- Deleted/replaced/Save As component: the persistent-reference PID can be invalid; rebind manually.
+- `Apply` and `Cancel` are transaction boundaries; canceling the canvas does not commit structure.
 
-- 根 Link 不应拥有 parent Joint；旧配置中的隐藏根 Joint 会在加载修复路径中清除。
-- 检查 Mimic 引用和大小写不同但规范化后冲突的名称。
-- 使用画布/Outline 的完整验证结果，不要只检查当前展开的 UI 分支。
+## Duplicate Joint Reported but Not Visible
 
-## 惯性为零或导出被阻止
+- The root Link must not have a parent Joint; the load-repair path removes hidden legacy root Joints.
+- Check Mimic references and names that collide after case/normalization rules.
+- Use full canvas/Outline validation rather than only the currently expanded UI branch.
 
-1. 在 SolidWorks Mass Properties 中确认所选组件有材料/密度和非零质量。
-2. 确认 Link 绑定的是目标 Body，不是父子组件重复选择或空选择。
-3. 确认 Link frame 坐标系真实存在且选择正确。
-4. 查看 `config/inertial_validation.csv` 的质量、COM、张量、主惯量和误差。
-5. 若提示 COM 超出组件范围，优先检查组件选择和坐标变换，而不是手工修改 URDF 数值。
+## Zero Inertia or Blocked Export
 
-SolidWorks COM/RPC 异常可能使 Live API 测试或预览失败。重启 SolidWorks 后重试；不要把显示层
-故障等同于数值层通过或失败。
+1. Confirm non-zero mass and valid material/density in SolidWorks Mass Properties.
+2. Confirm that the Link binds the intended bodies, without parent/child duplicate selection.
+3. Confirm that the selected Link-frame coordinate system exists and is correct.
+4. Inspect mass, COM, tensor, principal moments, and errors in
+   `config/inertial_validation.csv`.
+5. If COM is outside component bounds, inspect component selection and transforms before manually
+   editing URDF values.
 
-## 惯性预览或碰撞预览不可见
+SolidWorks COM/RPC failures can break Live API tests or previews. Restart SolidWorks and retry. A
+graphics-layer failure neither proves nor disproves numerical validity.
 
-- 临时体需要有效、可见的顶层 Part 显示宿主；顶层子装配体本身不是有效宿主。
-- 尝试线架图、隐藏线可见或着色视图确认显示状态。
-- 切换 Link 后重新开启预览，避免观察旧 Link 的临时体。
-- 预览报错时记录 SolidWorks `Display3` 返回码和日志。
-- 预览不可见不代表正式数值或文件一定错误，继续检查报告；但不要在未确认的情况下发布模型。
+## Inertia or Collision Preview Is Invisible
 
-## 碰撞策略回退
+- Temporary bodies require a valid visible top-level Part display host; a top-level subassembly is
+  not itself a valid host.
+- Try wireframe, hidden-lines-visible, or shaded display mode.
+- After switching Link, re-enable the preview so that old temporary bodies are not mistaken for the
+  current Link.
+- Record the SolidWorks `Display3` return code and log when reporting a failure.
+- Continue checking formal reports, but do not release an unverified model.
 
-打开：
+## Collision Strategy Fell Back
 
-- `config/mesh_manifest.csv`：requested/effective strategy 和文件记录；
-- `config/export_report.md`：fallback 汇总和原因。
+Open:
 
-生成失败会回退到 `VisualMesh`。不要只看 UI 中最后选择的策略。
+- `config/mesh_manifest.csv`: requested/effective strategy and file record;
+- `config/export_report.md`: fallback summary and reason.
 
-## 导出文件缺失或 ROS2 meshes 不完整
+Generation failure falls back to `VisualMesh`. Do not trust only the last strategy selected in UI.
 
-- 优先查看 `export_report.md`；
-- 确认输出目录可写且没有被其他程序锁定；
-- 查看完成摘要中的本次变化文件数；
-- 检查 URDF 的 `package://` 路径与 ROS1/ROS2 包名；
-- 复用旧目录时，摘要只统计本次新增或变更文件，不统计无关旧文件。
+## Missing Files or Incomplete ROS2 Meshes
 
-## 测试失败
+- Read `export_report.md` first.
+- Confirm that the output directory is writable and not locked.
+- Check the completion summary's changed-file count.
+- Verify URDF `package://` paths and ROS1/ROS2 package names.
+- When reusing a directory, the summary counts files created or changed by this run, not unrelated
+  old files.
 
-- Pure tests 不应要求 SolidWorks。
-- Live tests 需要兼容的本地 SolidWorks 和可用 COM/RPC。
-- `RPC 服务器不可用` 通常说明 SolidWorks 进程不可达或由自动化过程终止，不等于被测纯算法失败。
-- TestRunner 使用临时目录中的进程专用 UTF-8 日志，避免与运行中的插件争用常规日志。
+## Test Failures
 
-## 构建问题
+- Pure tests should not require SolidWorks.
+- Live tests need a compatible local SolidWorks and working COM/RPC.
+- `RPC server unavailable` usually means the process is unreachable or automation terminated it; it
+  is not proof of a pure-algorithm failure.
+- TestRunner uses a process-specific UTF-8 log in a temporary directory to avoid locking the normal
+  plug-in log.
 
-- 检查 `SolidWorksInstallDir` 是否指向包含匹配 Interop DLL 的实际安装目录。
-- 使用 x64 和 .NET Framework 4.5.2。
-- 若资源/Interop 工具缺失，安装 Visual Studio `.NET desktop development` 和对应 SolidWorks API Tools。
-- Release 安装包必须使用 Inno Setup 6.3.0–6.3.3；更新版本会被当前可审计打包脚本拒绝。
+## Build Problems
+
+- Point `SolidWorksInstallDir` to the actual installation containing matching Interop DLLs.
+- Build x64 against .NET Framework 4.5.2.
+- Install Visual Studio `.NET desktop development` and matching SolidWorks API Tools if resources or
+  Interop tools are missing.
+- Auditable installer builds currently require Inno Setup 6.3.0-6.3.3; newer versions are rejected
+  by the packaging script.

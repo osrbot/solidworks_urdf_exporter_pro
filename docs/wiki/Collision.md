@@ -1,74 +1,86 @@
 # Collision
 
-## 原则
+**English** | [简体中文](Collision-zh-CN)
 
-Collision 服务仿真接触和物理求解，不应机械复制 Visual。目标是使用尽可能简单的几何，同时
-保留任务相关接触形状。轮胎接地、夹爪接触、底盘离地间隙等关键区域不能因过度简化而丢失。
+## Principle
 
-Collision 和 Inertial 独立：改变碰撞策略不会改变质量、COM 或惯性张量。
+Collision geometry serves contact and physics solving. It should not mechanically duplicate Visual.
+Use the simplest shape that preserves task-relevant contacts such as tire ground contact, gripper
+contact, or chassis clearance.
 
-## 策略
+Collision and Inertial are independent. Changing a Collision strategy never changes mass, COM, or
+the inertia tensor.
 
-| UI/配置策略 | 用途 | 正式输出 |
+## Strategies
+
+| UI/configuration strategy | Typical use | Formal output |
 | --- | --- | --- |
-| `VisualMesh` | 最大兼容或查看 | 复制 Visual mesh 作为 Collision mesh |
-| `SimplifiedMesh` | 原语不适合但希望降低网格成本 | 使用更粗 STL tessellation；失败时回退 |
-| `AccurateMesh` | 必须保留接触细节 | 使用更精细 Collision STL；成本最高 |
-| `BoxPrimitive` | 底盘、板、盒体、支架 | URDF box/对应几何 |
-| `CylinderPrimitive` | 轮子、轴、管、圆柱壳 | URDF cylinder/对应几何 |
-| `SpherePrimitive` | 球形传感器或结构 | URDF sphere/对应几何 |
-| `ComponentBoxes` | 多组件装配体的稳定默认近似 | 多个组件 Link-local 包围盒 |
-| `ConvexHull` | 单一复杂但可凸近似的形状 | 由 Link-local 顶点/三角面生成凸包 STL |
+| `VisualMesh` | Maximum compatibility or inspection | Copies Visual mesh as Collision mesh |
+| `SimplifiedMesh` | Primitives do not fit, lower mesh cost desired | Coarser STL tessellation; fallback on failure |
+| `AccurateMesh` | Contact details are required | Finer Collision STL; highest cost |
+| `BoxPrimitive` | Chassis, plate, box, bracket | Native URDF box/corresponding geometry |
+| `CylinderPrimitive` | Wheel, shaft, tube, cylindrical shell | Native URDF cylinder/corresponding geometry |
+| `SpherePrimitive` | Spherical sensor or structure | Native URDF sphere/corresponding geometry |
+| `ComponentBoxes` | Stable default approximation for assemblies | Multiple component-local boxes |
+| `ConvexHull` | One complex shape that permits a convex approximation | Convex-hull STL from Link-local points/faces |
 
-配置中的历史 `Primitive` 值是兼容入口，不应作为新的用户策略名称传播。
+The historical `Primitive` configuration value is a compatibility alias and should not be promoted
+as a new UI strategy name.
 
-## 推荐顺序
+## Recommended Order
 
-1. 装配体先尝试 `ComponentBoxes`。
-2. 规则外形使用 Box/Cylinder/Sphere。
-3. 单一复杂外形使用 `ConvexHull`。
-4. 原语不满足接触需求时使用 `SimplifiedMesh`。
-5. 只有确实依赖完整表面细节时使用 `AccurateMesh`。
+1. Start with `ComponentBoxes` for an assembly.
+2. Use Box/Cylinder/Sphere for regular shapes.
+3. Use `ConvexHull` for one complex convex approximation.
+4. Use `SimplifiedMesh` when primitives cannot preserve required contacts.
+5. Use `AccurateMesh` only when the task genuinely needs full surface detail.
 
-文件更大不代表仿真更真实。复杂碰撞网格会增加接触对数量、求解成本和数值不稳定风险。
+A larger file is not automatically more realistic. Complex collision meshes increase contact pairs,
+solver cost, and numerical-instability risk.
 
-## 几何拟合
+## Geometry Fitting
 
-原语尺寸来自所选 Body 的 Link-local 几何范围，不来自等效惯性长方体：
+Primitive dimensions come from selected bodies' Link-local geometric bounds, not the
+equivalent-inertia cuboid:
 
-- Box 使用几何包围范围；
-- Cylinder 选择径向尺寸最接近的轴，并以剩余方向作为厚度；
-- Sphere 使用最大包围尺度；
-- ComponentBoxes 为各组件生成独立 box；
-- ConvexHull 使用内存中的 Link-local 点和三角形。
+- Box uses the geometry bounds;
+- Cylinder chooses the axis whose radial dimensions match most closely and uses the remaining
+  dimension as thickness;
+- Sphere uses the largest bound extent;
+- ComponentBoxes creates one box per component;
+- ConvexHull uses in-memory Link-local points and triangles.
 
-这保证碰撞策略响应用户选择的组件，但仍属于近似。应在目标任务视角检查接触区域。
+These choices respond to the components selected by the user but remain approximations. Inspect
+task-relevant contact regions from the intended task viewpoint.
 
-## SolidWorks 预览
+## SolidWorks Preview
 
-所有用户可选策略都有临时显示路径：
+Every user-selectable strategy has a temporary display path:
 
-- 原语、ComponentBoxes 和 ConvexHull 使用 Modeler 创建临时 BREP/sheet body；
-- Visual/Accurate/Simplified mesh 预览复制非破坏性的 CAD body；
-- Simplified 的最终 STL tessellation 可能比预览 CAD body 更粗；
-- 预览不写回装配体，不改变源组件外观，并在关闭/切换时释放临时体。
+- primitives, ComponentBoxes, and ConvexHull use Modeler-created temporary BREP/sheet bodies;
+- Visual/Accurate/Simplified mesh previews copy non-destructive CAD bodies;
+- final Simplified STL tessellation can be coarser than the preview CAD body;
+- previews do not write back to the assembly or mutate source appearance and are released on switch
+  or close.
 
-预览目标是快速选择策略，不承诺 mesh 策略的预览与最终 STL 字节级一致。ConvexHull 预览与
-写出器共享 Link-local 几何构建结果，但最终文件仍应通过 manifest 和外部 Viewer 检查。
+The preview supports strategy selection; it does not promise byte-identical mesh tessellation.
+ConvexHull preview and writer share the same Link-local geometry builder, but the final manifest and
+an external viewer remain the formal file checks.
 
-## STL 与 3DXML
+## STL and 3DXML
 
-原生原语、ComponentBoxes、ConvexHull 和简化碰撞的维护路径以 STL 为基础。3DXML 支持用于
-Visual 交换；不要把它描述为本项目已经验证的通用 Collision/DAE 纹理方案。
+Maintained primitive, ComponentBoxes, ConvexHull, and simplified Collision paths are STL-based.
+3DXML support serves Visual exchange; it is not a verified general Collision or DAE texture path.
 
-## 回退与报告
+## Fallbacks and Reports
 
-策略生成失败时，导出器回退到 `VisualMesh`，并分别记录：
+When strategy generation fails, the exporter falls back to `VisualMesh` and records:
 
-- requested strategy；
-- effective strategy；
-- fallback reason；
-- mesh 文件和统计信息。
+- requested strategy;
+- effective strategy;
+- fallback reason;
+- mesh file and statistics.
 
-检查 `config/mesh_manifest.csv` 和 `config/export_report.md`。如果 effective 与 requested 不同，
-必须先理解回退原因，再接受进入 MuJoCo、Isaac Sim 或其他求解器的模型。
+Inspect `config/mesh_manifest.csv` and `config/export_report.md`. When effective differs from
+requested, understand the fallback before accepting the model in MuJoCo, Isaac Sim, or another
+solver.

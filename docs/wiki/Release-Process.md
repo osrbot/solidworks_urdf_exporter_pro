@@ -1,16 +1,20 @@
 # Release Process
 
-本流程适用于 OSRBot 维护分支。它把“源码提交”“本地专有 API 构建”“CI 检查”“人工 Live
-验证”“公开发布”分开，避免把未经人工测试的候选包直接发布。
+**English** | [简体中文](Release-Process-zh-CN)
 
-## 1. 准备源码
+This process separates source commits, proprietary local API builds, CI verification, manual
+SolidWorks validation, and public publication. It prevents untested candidates from becoming public
+releases.
 
-1. 更新 `CHANGELOG.md`，只记录实际完成内容。
-2. 运行相关 pure tests、布局/序列化/导出测试和可用的 Live SolidWorks 测试。
-3. 提交源码。
-4. 除 `INSTALL/OUTPUT` 产物外，源码工作树必须干净。
+## 1. Prepare Source
 
-## 2. 构建安装包
+1. Update `CHANGELOG.md` with completed work only.
+2. Add `.github/release-notes/vYYYYMMDD.md` with reviewed `## English` and `## 简体中文` sections.
+3. Run relevant pure, serialization, export, layout, and available Live SolidWorks tests.
+4. Commit source.
+5. Except for ignored/generated `INSTALL/OUTPUT` files, the source worktree must be clean.
+
+## 2. Build the Installer
 
 ```powershell
 .\scripts\BuildInstaller.ps1 -Configuration Release -Platform x64 `
@@ -18,18 +22,18 @@
   -InnoCompilerPath "C:\Path\To\Inno Setup 6.3.3\ISCC.exe"
 ```
 
-硬性条件：
+Hard requirements:
 
-- `Release|x64`；
-- Inno Setup 6.3.0–6.3.3；
-- 匹配本机 SolidWorks 的 API 输入；
-- 锁定的 NuGet CLI、source 和 package hashes；
-- 可解析的源码 commit、tree 和 commit time。
+- `Release|x64`;
+- Inno Setup 6.3.0-6.3.3;
+- API inputs matching the local SolidWorks installation;
+- locked NuGet CLI, source, and package hashes;
+- resolvable source commit, tree, and commit time.
 
-脚本在 detached 临时 worktree 中恢复依赖、暂存 SolidWorks API 输入、清空 Release 中间目录、
-构建生产 DLL，并拒绝源码在构建中变化。
+The script restores dependencies in a detached temporary worktree, stages SolidWorks API inputs,
+cleans Release intermediates, builds the production DLL, and rejects source changes during build.
 
-## 3. 产物
+## 3. Artifacts
 
 ```text
 sw2urdfSetup_YYYYMMDD_<source-commit>.exe
@@ -37,52 +41,67 @@ sw2urdfSetup_YYYYMMDD_<source-commit>.exe.sha256
 sw2urdfSetup_YYYYMMDD_<source-commit>.exe.provenance.json
 ```
 
-provenance 包含源码 commit/tree、构建模式、工具和依赖哈希、SolidWorks API 输入及安装 payload
-哈希。它用于可追溯性，但不是：
+Provenance records source commit/tree, build mode, tool/dependency hashes, SolidWorks API inputs, and
+installed-payload hashes. It is traceability metadata, not:
 
-- Authenticode 代码签名；
-- GitHub Hosted Runner 从源码重建二进制的证明；
-- 对所有 SolidWorks 版本的兼容认证。
+- an Authenticode signature;
+- proof that a GitHub-hosted runner rebuilt against proprietary SolidWorks assemblies;
+- certification for every SolidWorks version.
 
-## 4. 产物提交
+## 4. Artifact Commit
 
-- 安装包提交只能包含 `.exe`、`.sha256`、`.provenance.json`；
-- 文件名中的 commit 必须是安装包真实源码父提交；
-- 不覆盖已有不可变候选；
-- 不把无关 CAD、日志、PDB、测试程序集或旧安装包删除混入提交。
+- The artifact commit may contain only `.exe`, `.sha256`, and `.provenance.json`.
+- The filename commit must identify the installer's actual source parent.
+- Never overwrite an existing immutable candidate.
+- Do not mix unrelated CAD files, logs, PDBs, test assemblies, or old-installer deletions into it.
 
-## 5. CI 检查
+## 5. CI Checks
 
-Workflow 检查：
+The workflow validates:
 
-- 文件名和源码 commit 关系；
-- SHA-256 与 provenance；
-- 锁定依赖与工具；
-- Inno 安装包解包清单；
-- 每个 payload 文件哈希；
-- 同日 tag/Release 不可覆盖。
+- installer filename to source-commit relationship;
+- SHA-256 and provenance;
+- locked dependencies and tools;
+- extracted Inno payload list and every payload hash;
+- existence of reviewed bilingual Release Notes in the source commit;
+- immutable daily tag/Release rules.
 
-Hosted CI 不拥有专有 SolidWorks API 构建环境，因此验证并提升可信维护者构建，而不是重新编译
-插件。
+Hosted CI does not have proprietary SolidWorks API build inputs. It verifies and promotes a trusted
+maintainer build instead of rebuilding the plug-in.
 
-## 6. 人工门禁
+## 6. Bilingual Release Notes
 
-CI 只创建 Draft Candidate。公开前维护者必须至少验证：
+`.github/release-notes/vYYYYMMDD.md` is the only Release body source. It must include:
 
-- 安装/升级/卸载和 COM 注册；
-- Link Tree 保存、关闭恢复和重新打开；
-- 每 Link frame、COM、惯性张量与主惯量；
-- Collision 策略选择、预览、正式导出和 fallback 报告；
-- ROS1/ROS2 URDF 与 meshes 完整；
-- 导出进度置顶与完成摘要；
-- 生产模型在目标 Viewer/仿真器中的基本加载。
+- one title containing English and Simplified Chinese;
+- `## English` with changes, validation scope, limitations, and manual-test gate;
+- `## 简体中文` containing the same facts;
+- placeholders for date, installer filename, source commit, and artifact commit.
 
-只有维护者明确说“可以发布到线上 GitHub Release”后，Draft 才能公开。测试完成之前不得因代码
-中写了“fixed”就提前发布。
+CI replaces placeholders but does not translate or invent changes from `CHANGELOG.md`. Missing
+language sections fail closed. Legacy public Releases are not rewritten; this policy applies to the
+current Draft and future candidates.
 
-## 7. Tag 与不可变性
+## 7. Manual Gate
 
-- Tag 使用 `vYYYYMMDD`；
-- 每日公开 Release 不移动、不覆盖；
-- 同日第二个候选必须等待后续日期或按维护策略处理，不能替换已经公开的资产；
-- 发布说明应逐条列出修复、新功能、限制、验证范围和源码 commit。
+CI creates a Draft Candidate only. Before publication, the maintainer must validate at least:
+
+- install/upgrade/uninstall and COM registration;
+- Link Tree save, close recovery, and reopen;
+- per-Link frame, COM, inertia tensor, and principal moments;
+- Collision selection, preview, formal output, and fallback reports;
+- complete ROS1/ROS2 URDF and meshes;
+- topmost export progress and completion summary;
+- basic production-model loading in the intended viewer/simulator.
+
+Only explicit maintainer approval to publish may make the Draft public. A commit message containing
+“fixed” is not publication approval.
+
+## 8. Tags and Immutability
+
+- Tags use `vYYYYMMDD`.
+- A public daily Release is not moved or overwritten.
+- A second same-day candidate must wait for a later date or explicit maintenance policy; it cannot
+  replace published assets.
+- Release Notes list fixes, features, limits, validation scope, and source commit separately in both
+  supported languages.

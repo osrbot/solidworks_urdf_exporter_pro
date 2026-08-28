@@ -269,31 +269,55 @@ jobs:
         run: |
           set -euo pipefail
 
+          notes_template="$(mktemp)"
           notes="$(mktemp)"
           release_date_display="${RELEASE_DATE:0:4}-${RELEASE_DATE:4:2}-${RELEASE_DATE:6:2}"
-          {
-            echo "# SW2URDF ${release_date_display} release candidate"
-            echo
-            echo "> Draft only. Publish after the maintainer has completed manual SolidWorks testing and explicitly approved this candidate."
-            echo
-            echo "- Asset: \`${INSTALLER_FILE}\`"
-            echo "- Source commit: \`${RELEASE_COMMIT}\`"
-            echo "- Artifact commit: \`${RELEASE_ARTIFACT_SHA}\`"
-            echo
-            echo "## Changes"
-            echo
-            git show "${RELEASE_SOURCE_SHA}:CHANGELOG.md" |
-              awk -v heading="## ${release_date_display}" '
-                $0 == heading { found = 1; next }
-                found && /^## / { exit }
-                found { print }
-              '
-            echo
-            echo "## Candidate validation"
-            echo
-            echo "- Installer checksum, provenance, payload manifest, and every extracted payload hash were verified by CI."
-            echo "- Public publication remains a separate maintainer-approved action."
-          } > "$notes"
+          release_notes_path=".github/release-notes/${RELEASE_TAG}.md"
+          if ! git show "${RELEASE_SOURCE_SHA}:${release_notes_path}" > "$notes_template"; then
+            echo "The source commit must contain reviewed bilingual release notes at ${release_notes_path}." >&2
+            exit 1
+          fi
+
+          for required_heading in "## English" "## 简体中文"; do
+            if ! grep -Fqx "$required_heading" "$notes_template"; then
+              echo "Release notes are missing required heading: ${required_heading}" >&2
+              exit 1
+            fi
+          done
+
+          for required_placeholder in \
+            "{{RELEASE_DATE}}" \
+            "{{INSTALLER_FILE}}" \
+            "{{INSTALLER_SHA256}}" \
+            "{{RELEASE_SOURCE_SHA}}" \
+            "{{RELEASE_ARTIFACT_SHA}}"; do
+            if ! grep -Fq "$required_placeholder" "$notes_template"; then
+              echo "Release notes are missing required placeholder: ${required_placeholder}" >&2
+              exit 1
+            fi
+          done
+
+          installer_sha256="$(sha256sum "$INSTALLER_PATH" | awk '{print $1}')"
+          awk \
+            -v release_date="$release_date_display" \
+            -v installer_file="$INSTALLER_FILE" \
+            -v installer_sha256="$installer_sha256" \
+            -v source_sha="$RELEASE_SOURCE_SHA" \
+            -v artifact_sha="$RELEASE_ARTIFACT_SHA" '
+              {
+                gsub(/\{\{RELEASE_DATE\}\}/, release_date)
+                gsub(/\{\{INSTALLER_FILE\}\}/, installer_file)
+                gsub(/\{\{INSTALLER_SHA256\}\}/, installer_sha256)
+                gsub(/\{\{RELEASE_SOURCE_SHA\}\}/, source_sha)
+                gsub(/\{\{RELEASE_ARTIFACT_SHA\}\}/, artifact_sha)
+                print
+              }
+            ' "$notes_template" > "$notes"
+
+          if grep -Eq '\{\{[A-Z0-9_]+\}\}' "$notes"; then
+            echo "Release notes contain an unresolved placeholder." >&2
+            exit 1
+          fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             is_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"

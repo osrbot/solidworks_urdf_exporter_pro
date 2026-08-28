@@ -1,48 +1,54 @@
 # Installation
 
-## 普通用户安装
+**English** | [简体中文](Installation-zh-CN)
 
-1. 从维护分支的 [GitHub Releases](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases)
-   下载已公开的 `sw2urdfSetup_YYYYMMDD_<commit>.exe`。
-2. 如果同时提供 `.sha256`，先校验安装包 SHA-256。
-3. **关闭所有 SolidWorks 进程。** 当前安装器不会主动结束 SolidWorks，也不会把新 DLL 热加载
-   到已运行的进程。
-4. 以管理员身份运行 x64 安装器，选择 English 或简体中文。
-5. 启动 SolidWorks，从 `Tools > Export as URDF` 打开导出器。
+## User Installation
 
-安装器默认安装到 64 位 Program Files 下的
-`SolidWorks Corp\SolidWorks\URDFExporter`，通过 64 位 .NET `RegAsm.exe /codebase` 注册插件。
-卸载器只在当前安装目录仍拥有对应 COM `CodeBase` 时执行注销，避免旧安装器破坏较新的安装。
+1. Download a published `sw2urdfSetup_YYYYMMDD_<commit>.exe` from the maintained fork's
+   [GitHub Releases](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases).
+2. Verify the supplied SHA-256 sidecar when available.
+3. **Close every SolidWorks process.** The installer does not terminate SolidWorks and cannot
+   hot-reload a new DLL into a running process.
+4. Run the x64 installer as administrator and select English or Simplified Chinese.
+5. Restart SolidWorks and open `Tools > Export as URDF`.
 
-## 升级
+The default target is `SolidWorks Corp\SolidWorks\URDFExporter` under 64-bit Program Files. The
+installer registers the add-in with 64-bit .NET `RegAsm.exe /codebase`. The uninstaller removes COM
+registration only when the current `CodeBase` still belongs to that installation directory, so an
+older uninstaller cannot unregister a newer installation.
 
-- 升级前关闭 SolidWorks。
-- 安装器保留用户选择过的安装目录。
-- 保存于装配体中的旧配置可由当前读入器读取，并在后续正式保存时升级为 v1.5。
-- 升级后先用非生产装配体验证 Link Tree、坐标系、惯性和碰撞预览，再处理生产模型。
+## Upgrade
 
-## 支持范围
+- Close SolidWorks before upgrading.
+- The installer remembers a previously selected install directory.
+- Readable legacy assembly configurations load through the compatibility path and upgrade to v1.5
+  only after a later formal save succeeds.
+- Validate Link Tree, frames, inertia, and collision previews on a non-production assembly before
+  upgrading production workflows.
 
-| 项目 | 当前事实 |
+## Support Range
+
+| Item | Current evidence |
 | --- | --- |
-| OS/架构 | Windows x64 |
-| 目标框架 | .NET Framework 4.5.2 |
-| 历史最低 SolidWorks | 2018 SP5 |
-| 当前 Live API 验证重点 | SolidWorks 2023 |
+| OS and architecture | Windows x64 |
+| Target framework | .NET Framework 4.5.2 |
+| Historical minimum SolidWorks | 2018 SP5 |
+| Current Live API verification focus | SolidWorks 2023 |
 
-不能据此推断所有 SolidWorks 版本均受支持。SolidWorks 2017 或更早版本只保留上游项目的
-“可能可用”说明，不属于维护验证承诺。
+This does not imply support for every SolidWorks release or service pack. The upstream statement
+that SolidWorks 2017 or earlier may work is retained as historical information, not a maintained
+compatibility promise.
 
-## 安装后菜单不存在
+## Add-in Menu Is Missing
 
-1. 确认使用的是 x64 安装包并以管理员身份安装。
-2. 完全退出并重启 SolidWorks。
-3. 在 SolidWorks Add-Ins 中确认 SW2URDF 是否存在并已启用。
-4. 检查 `%USERPROFILE%\sw2urdf_logs\sw2urdf.log`。
-5. 若手工构建，确认使用了当前 SolidWorks 安装目录中的 API 程序集。
+1. Confirm that the installer is x64 and was run as administrator.
+2. Exit and restart SolidWorks completely.
+3. Check that SW2URDF appears and is enabled in SolidWorks Add-Ins.
+4. Inspect `%USERPROFILE%\sw2urdf_logs\sw2urdf.log`.
+5. For a source build, confirm that the build used API assemblies from the active SolidWorks install.
 
-## 历史上游版本
+## Historical Upstream Builds
 
-需要原版行为或旧 SolidWorks 安装包时，使用
-[ros/solidworks_urdf_exporter Releases](https://github.com/ros/solidworks_urdf_exporter/releases)，
-不要把维护分支的功能说明套用到旧版二进制。
+For upstream behavior or older installers, use the
+[ros/solidworks_urdf_exporter Releases](https://github.com/ros/solidworks_urdf_exporter/releases).
+Do not assume that maintained-fork documentation describes those older binaries.

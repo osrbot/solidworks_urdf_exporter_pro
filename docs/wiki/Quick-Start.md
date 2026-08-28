@@ -1,76 +1,84 @@
 # Quick Start
 
-## 1. 准备装配体
+**English** | [简体中文](Quick-Start-zh-CN)
 
-- 建议使用装配体副本。
-- 解析轻量化组件，确保参与导出的实体可访问。
-- 为零件设置有效材料或密度。
-- 重建、保存，并在 SolidWorks Mass Properties 中检查质量与质心。
-- 保存装配体；未保存模型没有稳定路径，无法使用按装配体隔离的恢复草稿。
+## 1. Prepare the Assembly
 
-## 2. 创建参考几何
+- Work on a saved assembly copy.
+- Resolve lightweight components so selected bodies are accessible.
+- Assign valid material or density to participating parts.
+- Rebuild, save, and verify mass and COM in SolidWorks Mass Properties.
+- Unsaved models have no stable path and cannot use per-assembly recovery drafts.
 
-用户应在 SolidWorks 中明确创建：
+## 2. Create Reference Geometry
 
-- 根 Link 坐标系，例如 `Origin_global`；
-- 每个非根 Link 对应的 child-Joint 坐标系；
-- 转动或移动 Joint 使用的参考轴。
+Create these features explicitly in SolidWorks:
 
-插件不会从几何猜测一个具有工程含义的坐标系。所有坐标系应遵循一致的右手系约定。
+- a root Link coordinate system such as `Origin_global`;
+- a child-Joint coordinate system for every non-root Link;
+- a reference axis for every revolute or prismatic Joint.
 
-## 3. 建立 Link Tree
+The exporter does not guess an engineering frame from geometry. Use one consistent right-handed
+convention.
 
-打开 `Tools > Export as URDF`：
+## 3. Build the Link Tree
 
-- 首次运行可选择 `Start tutorial`、`Skip once` 或 `Do not remind`；
-- 教程之后仍可从 `Tools > URDF Export Tutorial` 打开；
-- 使用 PropertyManager、自由画布或 Outline 编辑 Link 层级；
-- 每个组件只应绑定到一个 Link，父/子组件引用不能重复承担两个 Link 的几何职责。
+Open `Tools > Export as URDF`:
 
-## 4. 配置 Joint
+- on first use, choose `Start tutorial`, `Skip once`, or `Do not remind`;
+- reopen the tutorial later from `Tools > URDF Export Tutorial`;
+- edit hierarchy through the PropertyManager, free canvas, or Markdown-style Outline;
+- bind each component to one Link only; do not assign both a parent component and its child geometry
+  to different Links.
 
-检查每个非根 Link 的：
+## 4. Configure Joints
 
-- Joint 名称；
-- `fixed`、`revolute`、`continuous`、`prismatic`、`floating`、`planar` 类型；
-- 父/子 Link；
-- Origin、Axis；
-- Limit、Dynamics；
-- 可选 Mimic 关系。
+For every non-root Link, check:
 
-`Automatically Detect` 是导出器配置态，不是合法的最终 URDF Joint 类型。正式导出前必须解析成
-标准类型。
+- Joint name;
+- canonical type: `fixed`, `revolute`, `continuous`, `prismatic`, `floating`, or `planar`;
+- parent and child Link;
+- Origin and Axis;
+- Limit and Dynamics;
+- optional Mimic relationship.
 
-## 5. 校验惯性
+`Automatically Detect` is an exporter configuration state, not a legal final URDF Joint type. It
+must resolve to a canonical type before export.
 
-- 为每个 Link 选择明确存在的 Link 坐标系。
-- 检查质量 `kg`、COM `m`、惯性 `kg*m^2`。
-- 显示 COM/等效惯性体，检查位置和主轴方向。
-- 预览显示失败是显示层问题；数值是否合格以导出校验和报告为准。
+## 5. Validate Inertia
 
-## 6. 选择 Visual 与 Collision
+- Select an explicit existing Link frame for every Link.
+- Check mass in `kg`, COM in `m`, and inertia in `kg*m^2`.
+- Show the COM and equivalent-inertia preview to inspect position and principal-axis direction.
+- A preview display failure is a graphics-layer failure. Numerical validity comes from export guards
+  and reports.
 
-- Visual 用于外观；Collision 用于接触求解。
-- 复杂装配体优先尝试 `ComponentBoxes`。
-- 盒体使用 `BoxPrimitive`，轮子/轴/筒体使用 `CylinderPrimitive`，球形结构使用
-  `SpherePrimitive`。
-- 原语无法满足时，依次考虑 `ConvexHull`、`SimplifiedMesh`；只有确有接触细节需求时使用
-  `AccurateMesh`。
-- 开启碰撞预览检查覆盖关系，但不要把临时预览当作最终 STL 的字节级副本。
+## 6. Choose Visual and Collision
 
-## 7. 导出
+- Visual serves appearance; Collision serves contact solving.
+- Start with `ComponentBoxes` for a multi-component assembly.
+- Use `BoxPrimitive` for box-like structures, `CylinderPrimitive` for wheels/shafts/tubes, and
+  `SpherePrimitive` for spherical geometry.
+- If primitives are insufficient, consider `ConvexHull`, then `SimplifiedMesh`; use `AccurateMesh`
+  only when the task needs detailed contact geometry.
+- Use the collision preview to inspect coverage, but do not treat temporary geometry as a byte-level
+  copy of the final STL.
 
-设置 ROS 包名和输出目录，然后导出 ROS1/ROS2 包。进度窗口保持在 SolidWorks 前方，并阻止
-导出重入。完成窗口显示本次变化文件数、总大小、耗时和输出根目录。
+## 7. Export
 
-## 8. 检查结果
+Set the ROS package name and destination, then export ROS1/ROS2 packages. The progress window remains
+above SolidWorks and blocks export re-entry. The completion summary reports changed file count,
+total size, elapsed time, and output root.
 
-依次查看：
+## 8. Inspect the Result
 
-1. `config/export_report.md`：总览、失败项、碰撞回退；
-2. `config/inertial_validation.csv`：质量、COM、张量和误差；
-3. `config/mesh_manifest.csv`：请求/实际碰撞策略、文件和网格记录；
-4. URDF Viewer、MuJoCo、Isaac Sim 或目标求解器中的 Visual、Collision、Inertia、COM、轴和
-   Joint 运动。
+Review:
 
-导出成功只表示插件校验和文件写入完成，不替代目标仿真器中的工程验证。
+1. `config/export_report.md`: summary, failures, and collision fallbacks;
+2. `config/inertial_validation.csv`: mass, COM, tensor, and errors;
+3. `config/mesh_manifest.csv`: requested/effective strategy, files, and mesh records;
+4. Visual, Collision, Inertia, COM, axes, and Joint motion in a URDF viewer, MuJoCo, Isaac Sim, or
+   the intended solver.
+
+A successful export means the exporter checks and file transaction completed. It does not replace
+task-specific simulator validation.

@@ -1,41 +1,47 @@
 # Link Tree
 
-## 数据所有权
+**English** | [简体中文](Link-Tree-zh-CN)
 
-Link Tree 的三个责任分开保存：
+## Data Ownership
 
-- Topology：Link 层级和稳定节点身份；
-- URDF configuration：名称、Joint、惯性、Visual、Collision 等可复用配置；
-- CAD binding：SolidWorks 对象与 persistent reference PID。
+The Link Tree separates three responsibilities:
 
-画布只操作工作副本。`Cancel` 丢弃结构变更；`Apply` 在完整验证通过后原子提交。UI 投影不是
-独立事实源，配置持久化和 URDF 导出都从已提交会话生成投影。
+- Topology: Link hierarchy and stable node identity;
+- URDF configuration: reusable Link, Joint, Inertial, Visual, and Collision settings;
+- CAD binding: SolidWorks objects and persistent-reference PIDs.
 
-## 装配体配置
+The canvas edits a working copy. `Cancel` discards structural changes; `Apply` commits atomically
+only after complete validation. UI projections are not independent sources of truth. Persistence and
+URDF export project from the committed session.
 
-正式配置保存于装配体特征 `URDF Export Configuration (v1.5)`。旧版本在可读时会载入，只有在
-后续正式保存成功后才升级。插件不会在 PropertyManager 尚未完成时偷偷创建或升级配置特征。
+## Assembly Configuration
 
-重新打开装配体时，组件通过保存的 PID 重连。删除、替换或 Save As 可能使 PID 失效，此时必须
-人工重新绑定，不能假设几何名称相同就等价。
+The formal configuration is stored in the assembly feature `URDF Export Configuration (v1.5)`.
+Readable older formats load through compatibility code and upgrade only after a later formal save
+succeeds. The exporter does not create or upgrade this feature while an unfinished PropertyManager
+session is open.
 
-## 画布操作
+On reopen, components reconnect through saved PIDs. Delete, replace, or Save As operations can
+invalidate a PID. Rebind it manually; matching display names do not prove CAD identity.
 
-- 添加、重命名、拖动重设父级；
-- 自动布局和框选；
-- 复制、粘贴、删除完整分支；
-- `Ctrl+C`、`Ctrl+V`、`Delete` 使用相同分支语义；
-- 父子选择重叠时合并为不重复的分支集合。
+## Canvas Operations
 
-粘贴保留拓扑和可复用 URDF 配置，但主动清除 CAD 组件绑定。将同一个 SolidWorks 实体同时分配
-给两个 Link 会制造错误模型，因此新副本保持 incomplete，直到用户绑定新的组件。
+- add, rename, and drag to change parent;
+- automatic layout and box selection;
+- copy, paste, and delete complete branches;
+- `Ctrl+C`, `Ctrl+V`, and `Delete` use the same branch semantics;
+- overlapping parent/child selections collapse into a non-duplicated branch set.
 
-Joint 重命名会迁移 Mimic 引用；删除仍被 Mimic 引用的 Joint 会被拒绝。重设父级后，旧父子关系
-下计算的 Joint kinematics 和 limits 会被标记为需要重新计算。
+Paste preserves topology and reusable URDF settings but deliberately clears CAD component bindings.
+Assigning one SolidWorks body to two Links produces an invalid model, so pasted Links remain
+incomplete until new components are bound.
 
-## Outline 编辑
+Joint rename migrates Mimic references. Deleting a Joint still referenced by Mimic is rejected.
+Reparenting marks Joint kinematics and limits from the old relationship for recomputation.
 
-一行一个 Link，Markdown 标题深度表示层级：
+## Outline Editing
+
+Use one Link per line; Markdown heading depth defines hierarchy:
 
 ```text
 # base_link
@@ -46,35 +52,40 @@ Joint 重命名会迁移 Mimic 引用；删除仍被 Mimic 引用的 Joint 会�
 ### right_front_wheel_link
 ```
 
-支持 `#base_link` 和 `# base_link`。以下情况不会替换当前有效文档：
+Both `#base_link` and `# base_link` are accepted. The last valid document remains active when input
+contains:
 
-- 非法 ROS 名称；
-- 重复 Link；
-- 多个根节点；
-- 标题层级跳级；
-- 产生悬空 Mimic 的结构。
+- an invalid ROS name;
+- a duplicate Link;
+- multiple roots;
+- a skipped heading level;
+- a structure that would leave a dangling Mimic reference.
 
-新 Link 默认生成 `fixed` Joint；`camera_link` 对应 `camera_joint`，没有 `_link` 后缀的名称追加
-`_joint`。已有节点在无歧义匹配或同位置重命名时尽量保留稳定身份、配置和 CAD 绑定。
+New Links default to a `fixed` Joint. `camera_link` maps to `camera_joint`; names without `_link`
+receive `_joint`. Existing nodes retain stable identity, settings, and CAD binding when an
+unambiguous match or same-position rename exists.
 
-## 自动配色
+## Automatic Link Colors
 
-`Auto Links` 对当前 UI LinkNode 层级应用整树配色：
+`Auto Links` applies one deterministic whole-tree color scheme to the current UI hierarchy:
 
-- 深度由冷色过渡到暖色；
-- 去除 `left/right/lhs/rhs/port/starboard` 侧向词后名称相同的对应 Link 使用相同颜色；
-- 生成的 URDF material ID 和 RGBA 立即通过正常配置路径保存；
-- 用户之后仍可手动覆盖单个 Link。
+- depth moves from cool to warm hues;
+- corresponding names receive the same color after removing side tokens such as
+  `left/right/lhs/rhs/port/starboard`;
+- generated URDF material ID and RGBA persist through the normal configuration path;
+- a user can still override an individual Link afterward.
 
-自动配色只修改 Visual material ID/RGBA，不修改拓扑、CAD 绑定、Collision 或 Inertial。
+Automatic coloring changes only Visual material ID/RGBA. It does not modify topology, CAD binding,
+Collision, or Inertial.
 
-## 恢复草稿
+## Recovery Drafts
 
-窗口在正式保存前关闭时，插件可把当前会话写入：
+When a window closes before formal save, the exporter can checkpoint the session under:
 
 ```text
 %LOCALAPPDATA%\OSRBot\SW2URDF\export-drafts
 ```
 
-草稿按完整装配体路径隔离，并保存 Link/Joint 配置、ROS 包名和最后输出目录。成功保存正式配置或
-完成导出后删除草稿。未保存装配体没有稳定路径，因此不支持该恢复机制。
+Drafts are isolated by the saved assembly's full path and include Link/Joint settings, ROS package
+name, and last output directory. A successful formal save or export removes the draft. Unsaved
+assemblies have no stable path and cannot use this recovery mechanism.

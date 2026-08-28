@@ -1,5 +1,7 @@
 # SolidWorks to URDF Exporter
 
+**English** | [简体中文](README.zh-CN.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-blue.svg)](#supported-environment)
 [![Framework](https://img.shields.io/badge/.NET%20Framework-4.5.2-blueviolet.svg)](#development)
@@ -9,10 +11,6 @@ This repository is the OSRBot-maintained fork of the ROS
 original SolidWorks add-in workflow and adds maintained Link-tree editing, frame-aware mass
 properties, collision strategies and previews, ROS1/ROS2 package output, validation reports,
 Chinese localization, and auditable installer packaging.
-
-本仓库是 ROS 原版 SolidWorks URDF 导出器的持续维护分支。目标不是替代 SolidWorks 的建模
-能力，而是把用户明确配置的 Link、Joint、坐标系、质量属性、Visual 和 Collision 可靠地转换为
-可检查的 URDF/ROS 描述包。
 
 > **Project status**
 >
@@ -190,6 +188,7 @@ not claim to author or validate texture mapping.
 
 ## Documentation
 
+- [Simplified Chinese README / 简体中文 README](README.zh-CN.md)
 - [Installation](docs/wiki/Installation.md)
 - [Quick Start](docs/wiki/Quick-Start.md)
 - [Link Tree](docs/wiki/Link-Tree.md)
@@ -200,8 +199,9 @@ not claim to author or validate texture mapping.
 - [Release Process](docs/wiki/Release-Process.md)
 - [Changelog](CHANGELOG.md)
 
-The files under `docs/wiki` are the version-controlled source for the public GitHub Wiki. Changes to
-behavioral documentation should be reviewed with the code change that introduced the behavior.
+The files under `docs/wiki` are the version-controlled source for the public GitHub Wiki. Canonical
+filenames are English; paired Simplified Chinese pages use the `-zh-CN` suffix. Update both language
+versions in the same change when behavior changes.
 
 ## Development
 
@@ -259,6 +259,10 @@ INSTALL/OUTPUT/sw2urdfSetup_YYYYMMDD_<commit>.exe.provenance.json
 Packaging runs from a detached worktree, verifies pinned NuGet inputs and the staged SolidWorks API
 assemblies, and records payload hashes. The provenance file is a maintainer-build trace; it is not an
 Authenticode signature and CI does not rebuild against proprietary SolidWorks assemblies.
+
+Before building a candidate, add `.github/release-notes/vYYYYMMDD.md` with reviewed `## English` and
+`## 简体中文` sections. CI renders only traceability placeholders and fails closed when either language
+or a required placeholder is missing; it does not machine-translate the Changelog.
 
 ## Known Limits
 
