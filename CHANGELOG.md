@@ -2,7 +2,38 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## Unreleased
+
+### Documentation
+
+- Rebuilt the repository README as a factual project entry point covering supported environments,
+  installation boundaries, the eight-step export workflow, inertial and collision conventions,
+  generated reports, testing, reproducible packaging, known limits, and the manual release gate.
+- Added version-controlled GitHub Wiki sources under `docs/wiki` for installation, quick start,
+  Link-tree editing, inertia, collision, troubleshooting, contribution, and release operations.
+- Corrected two stale README claims: texture editing is no longer exposed by the maintained UI, and
+  all user-facing collision strategies now have a SolidWorks temporary-geometry preview path.
+- Added explicit credit to the upstream ROS project, Stephen Brawner, the historical supporters
+  named by upstream, the recorded 3DXML contributors, and Winter's SolidWorks-to-URDF inertia
+  convention article. These acknowledgements do not imply that the reference article supplied
+  source code to this repository.
+- Documented that the installer does not terminate or hot-reload a running SolidWorks process, that
+  preview geometry is not promised to be byte-identical to final mesh tessellation, and that local
+  provenance is not an Authenticode signature or a hosted-CI rebuild attestation.
+
 ## 2026-08-28
+
+### Commit traceability
+
+- `50b69a1` added deterministic whole-tree Link coloring and persistence.
+- `425c47d` removed the maintained texture-editing controls while retaining legacy metadata reads.
+- `5d48cb1` added Simplified Chinese Joint-type and direct-child-count explanations.
+- `7f1349c` restricted temporary preview hosts to valid visible top-level Part instances.
+- `3e172c9`, `0df4c94`, and `7c59918` completed temporary-body previews across collision strategies,
+  including the sphere display fix.
+- `8fbc64e` made equivalent-inertia principal axes visually distinguishable.
+- `69d280c` added the equivalent-inertia cuboid preview.
+- `7b397bb` corrected cylinder collision STL cap winding.
 
 ### Added
 
@@ -61,6 +92,17 @@ All notable OSRBot-maintained changes to this fork are documented here.
   draft-candidate release workflow.
 
 ## 2026-08-27
+
+### Commit traceability
+
+- `e8a1a41` added the solid cylinder collision preview; `6279afb` hardened temporary-preview
+  lifecycle tests; `ab53da0` restored SolidWorks collision/inertia overlays.
+- `c5e7a85`, `8f63475`, and `add310e` corrected SolidWorks frame conversion, fitted primitive
+  collision geometry from selected bodies, and repaired the Link inertia layout.
+- `937d8f0` added the live export validation workflow; `56dad5f` kept export progress above
+  SolidWorks.
+- `51638f1`, `47db07e`, `87ff0aa`, and `6bddcd9` made installer payloads inspectable and restored the
+  rule that online publication requires explicit maintainer approval after manual validation.
 
 ### Added
 

@@ -1,251 +1,296 @@
 # SolidWorks to URDF Exporter
 
-Authored and maintained by [Stephen Brawner](brawner@gmail.com). Past supporters include [PickNik Consulting](https://picknik.ai), Verb Surgical, Open Robotics, and Willow Garage. 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20x64-blue.svg)](#supported-environment)
+[![Framework](https://img.shields.io/badge/.NET%20Framework-4.5.2-blueviolet.svg)](#development)
 
-## OSRBot Maintained Fork
+This repository is the OSRBot-maintained fork of the ROS
+[`solidworks_urdf_exporter`](https://github.com/ros/solidworks_urdf_exporter). It keeps the
+original SolidWorks add-in workflow and adds maintained Link-tree editing, frame-aware mass
+properties, collision strategies and previews, ROS1/ROS2 package output, validation reports,
+Chinese localization, and auditable installer packaging.
 
-This fork is maintained at <https://github.com/osrbot/solidworks_urdf_exporter_pro>.
+本仓库是 ROS 原版 SolidWorks URDF 导出器的持续维护分支。目标不是替代 SolidWorks 的建模
+能力，而是把用户明确配置的 Link、Joint、坐标系、质量属性、Visual 和 Collision 可靠地转换为
+可检查的 URDF/ROS 描述包。
 
-Current version maintainer: `kitso666 <kitso@osrbot.com>`.
+> **Project status**
+>
+> This is a community-maintained fork, not an official Dassault Systemes or ROS distribution.
+> Current maintenance and live API verification focus on SolidWorks 2023. The historical minimum
+> requirement inherited from the upstream project is SolidWorks 2018 SP5; that statement is not a
+> claim that every version and service pack has been regression-tested.
 
-The OSRBot-maintained build keeps the original SolidWorks add-in workflow and adds:
+## Engineering Scope
 
-- ROS1 and ROS2 package output from the same export flow.
-- SolidWorks mass-property based inertia export and per-link validation logs.
-- Collision strategy selection for visual mesh, simplified mesh, accurate mesh, primitive boxes/cylinders/spheres, component boxes, and convex hulls.
-- Live SolidWorks overlays for box, cylinder, sphere, and component-box collision strategies; the collision wireframe and COM/inertia preview can be shown together while choosing a strategy.
-- STL mesh reduction ratio control for lighter exported mesh packages.
-- Automatic SolidWorks component appearance loading with explicit user overrides for URDF material, color, and texture image.
-- Export progress and a completion summary containing the changed file count, total size, elapsed time, and output directory.
-- Automatic Link tree configuration loading from the SolidWorks assembly feature `URDF Export Configuration (v1.5)`.
-- Transactional Link tree canvas for adding, renaming, moving, box-selecting, copying, and pasting Link groups before export.
-- Automatic per-assembly recovery of edits when an exporter window is closed before the configuration is formally saved.
-- Markdown-style Link tree outline editing, where heading depth (`#`, `##`, `###`) defines the Link hierarchy.
-- Chinese UI localization and safer UTF-8 English export logs.
-- Built-in usage guide with collision strategy recommendations, common URDF material names, project URL, and maintainer information.
-- First-use, eight-step companion tutorial that follows the real assembly export workflow without modifying the SolidWorks model automatically.
+The exporter keeps three URDF responsibilities separate:
 
-## Latest Release
+| URDF data | Engineering objective | Exporter behavior |
+| --- | --- | --- |
+| `visual` | Preserve appearance and recognizable geometry | Exports STL or 3DXML visual geometry and URDF material ID/RGBA |
+| `collision` | Keep contact geometry simple while preserving task-relevant shape | Supports mesh, primitive, component-box, and convex-hull strategies with requested/effective strategy reporting |
+| `inertial` | Preserve mass, center of mass, and inertia tensor | Reads SolidWorks mass properties in system units and converts them into the selected Link frame |
 
-For the OSRBot fork, use the latest GitHub Release asset named:
+Collision selection never changes the mass-property source. A collision preview is an engineering
+preview of the selected strategy, not proof that the final simulator behavior is correct. The
+generated package reports remain authoritative for what was actually exported.
+
+## Main Features
+
+- Generates matching `ROS1/<package>` and `ROS2/<package>` description packages.
+- Stores Link/Joint configuration in the assembly feature
+  `URDF Export Configuration (v1.5)` and migrates older readable configurations when saved.
+- Provides a transactional Link-tree canvas with add, rename, reparent, automatic layout, box
+  selection, and branch copy/paste/delete.
+- Provides Markdown-style Link-tree outline editing where `#`, `##`, and `###` define hierarchy.
+- Restores recoverable unsaved sessions from `%LOCALAPPDATA%\OSRBot\SW2URDF\export-drafts` for
+  assemblies that have a stable saved path.
+- Uses per-Link SolidWorks coordinate systems for mass, COM, Joint origins, and inertia conversion.
+- Validates finite values, tensor symmetry and physical principal moments before export.
+- Supports `VisualMesh`, `SimplifiedMesh`, `AccurateMesh`, box/cylinder/sphere primitives,
+  `ComponentBoxes`, and `ConvexHull` collision strategies.
+- Shows temporary SolidWorks collision bodies for every user-facing collision strategy and an
+  independent COM/equivalent-inertia preview.
+- Records collision fallbacks instead of silently presenting the requested strategy as successful.
+- Loads SolidWorks component/document appearance when no explicit user override exists.
+- Treats material name as the URDF material ID; built-in IDs update RGBA, and manual RGBA remains
+  editable per Link.
+- Provides whole-tree automatic Link coloring: hierarchy progresses from cool to warm colors, while
+  normalized left/right counterparts receive the same stable color.
+- Shows a topmost, non-reentrant export progress window and a completion summary with changed file
+  count, total size, elapsed time, and output directory.
+- Includes Simplified Chinese UI text for the maintained workflow while preserving canonical URDF
+  names and Joint type values in saved data and output.
+
+See the [Wiki](https://github.com/osrbot/solidworks_urdf_exporter_pro/wiki) for detailed behavior and
+limitations.
+
+## Supported Environment
+
+| Item | Supported or verified state |
+| --- | --- |
+| Operating system | Windows x64 |
+| Target framework | .NET Framework 4.5.2 |
+| Historical minimum SolidWorks version | SolidWorks 2018 SP5 |
+| Current live API verification focus | SolidWorks 2023 |
+| Release build | `Release|x64` |
+| Installer languages | English and Simplified Chinese |
+
+SolidWorks 2017 or earlier may work, as noted by the upstream project, but is not a maintained or
+verified target. See the upstream discussion in
+[`ros/solidworks_urdf_exporter#73`](https://github.com/ros/solidworks_urdf_exporter/issues/73).
+
+## Installation
+
+1. Download a published installer from
+   [GitHub Releases](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases). Maintainer
+   builds use the name `sw2urdfSetup_YYYYMMDD_<commit>.exe`.
+2. Verify the accompanying `.sha256` file when it is provided.
+3. Close SolidWorks before installing or upgrading. The current installer registers the add-in but
+   does **not** terminate SolidWorks or hot-reload the DLL into a running process.
+4. Run the x64 installer as an administrator and choose English or Simplified Chinese.
+5. Restart SolidWorks and use `Tools > Export as URDF`.
+
+The public release process is intentionally manual-gated: CI validates a committed maintainer-built
+installer and creates a draft candidate; it does not publish a release until live SolidWorks testing
+has completed and the maintainer explicitly approves publication.
+
+Historical upstream installers remain available from
+[`ros/solidworks_urdf_exporter` releases](https://github.com/ros/solidworks_urdf_exporter/releases).
+
+## Quick Start
+
+1. Work on a saved assembly copy. Resolve components, assign valid material density, rebuild, save,
+   and verify SolidWorks Mass Properties.
+2. Create `Origin_global`, each required Joint coordinate system, and each motion axis using one
+   consistent right-handed convention.
+3. Open `Tools > Export as URDF` and build the Link tree. The first-use tutorial can guide the same
+   real workflow and can later be reopened from `Tools > URDF Export Tutorial`.
+4. Configure Joint names, canonical Joint types, parent/child relationships, origins, axes, limits,
+   dynamics, and optional Mimic relationships.
+5. For every Link, select the intended Link frame and inspect mass, COM, inertia values, and the
+   equivalent inertia preview.
+6. Choose Visual format, collision strategy, material ID/RGBA, and STL reduction. Preview collision
+   coverage in SolidWorks, but treat the exported manifest as the final strategy record.
+7. Export the ROS1 and ROS2 packages.
+8. Review the generated reports before simulation:
+   - `config/export_report.md`
+   - `config/inertial_validation.csv`
+   - `config/mesh_manifest.csv`
+
+## Output Layout
 
 ```text
-sw2urdfSetup_YYYYMMDD_<commit>.exe
+<export-root>/
+|-- ROS1/<package>/
+|   |-- meshes/
+|   |-- urdf/
+|   `-- config/
+`-- ROS2/<package>/
+    |-- meshes/
+    |-- urdf/
+    `-- config/
 ```
 
-Example:
+The report files identify the effective collision strategy, fallbacks, mesh records, and per-Link
+inertial validation results. Reusing an output directory is supported; the completion summary counts
+only files created or changed by the current export.
 
-```text
-INSTALL/OUTPUT/sw2urdfSetup_20260629_598c7dd.exe
-```
+## Inertia Conventions
 
-Release tags use the installer date: `vYYYYMMDD`. Daily releases are immutable: a second installer for the same date is rejected instead of moving a public tag or replacing an already published binary. The installer filename commit suffix and provenance identify the source commit declared by the local maintainer build.
+- Mass-property queries explicitly use SolidWorks system units: kilograms, meters, and
+  `kg*m^2`.
+- The root Link uses `Origin_global` or another explicitly selected root coordinate system.
+- A non-root Link normally uses its child-Joint coordinate system as the URDF Link frame.
+- Mass/COM and the COM inertia tensor are read from independent SolidWorks mass-property objects to
+  avoid a SolidWorks 2023 read-order failure observed in live API testing.
+- COM and tensor orientation are converted from the SolidWorks document frame into the selected
+  Link frame.
+- URDF inertia is stored about the COM. A Link-frame change rotates the COM tensor and changes COM
+  coordinates, but does not apply a parallel-axis shift to the stored URDF tensor.
+- SolidWorks' Mass Properties dialog can present products of inertia using a notation that invites
+  an extra sign flip. The `GetMomentOfInertia` API used here already returns the physical symmetric
+  tensor in the requested frame, so the exporter preserves its off-diagonal signs when writing
+  URDF. An independent eigenvalue check requires the exported tensor to match the API principal
+  moments and catches an accidental second sign conversion.
 
-**SolidWorks 2021**
+The article
+[“掌握 URDF 中的惯性张量：从 SolidWorks 到强化学习机器人的关键一步”](https://zhuanlan.zhihu.com/p/1887859297221845818)
+by Winter is acknowledged as a useful conceptual reference for COM-relative tensors, output frames,
+and the distinction between tensor terms and displayed products of inertia. The implementation and
+its tests remain the source of truth for the API-to-URDF mapping used by this exporter.
 
-https://github.com/ros/solidworks_urdf_exporter/releases/tag/1.6.1
+## Collision Guidance
 
-**SolidWorks 2020**
+Start with `ComponentBoxes` for assemblies. Use `BoxPrimitive` for box-like structures,
+`CylinderPrimitive` for wheels/shafts/tubes, and `SpherePrimitive` for spherical geometry. Use
+`ConvexHull` for one complex approximation, `SimplifiedMesh` when primitives are insufficient, and
+`AccurateMesh` only when detailed contact geometry is necessary.
 
-https://github.com/ros/solidworks_urdf_exporter/releases/tag/1.6.0
+If a requested strategy cannot be generated, the exporter falls back to `VisualMesh` and records
+both requested and effective strategies in `mesh_manifest.csv` and `export_report.md`. Native
+primitive, component-box, convex-hull, and simplified collision generation is intended for STL
+output. 3DXML is primarily a visual interchange path, not the documented collision path.
 
-**SolidWorks 2019 on 2018 SP 5**
+## Appearance and Link Colors
 
-https://github.com/ros/solidworks_urdf_exporter/releases/tag/1.5.1
+The maintained UI exposes one color model:
 
-## SolidWorks Version Requirements
+- URDF material ID identifies the material.
+- Built-in IDs set the corresponding RGBA values.
+- The color picker and numeric RGBA fields directly edit the selected Link.
+- `Auto Links` applies deterministic whole-tree colors and persists material ID/RGBA through the
+  normal configuration model.
+- A manual edit after automatic coloring is an explicit per-Link override.
 
-1. The minimum required version of SolidWorks for use with this add-in is 2018 Service Pack 5. SolidWorks 2017 or earlier may work. See [this issue](https://github.com/ros/solidworks_urdf_exporter/issues/73).
+Texture-image editing was removed from the normal assembly and part UI because STL has no UV
+coordinates and SolidWorks does not provide a convenient DAE export route here. Existing serialized
+texture metadata remains readable/exportable for backward compatibility, but the maintained UI does
+not claim to author or validate texture mapping.
 
-## Usage
+## Documentation
 
-See the [ROS Wiki](http://wiki.ros.org/sw_urdf_exporter) and associated [tutorials](http://wiki.ros.org/sw_urdf_exporter/Tutorials).
+- [Installation](docs/wiki/Installation.md)
+- [Quick Start](docs/wiki/Quick-Start.md)
+- [Link Tree](docs/wiki/Link-Tree.md)
+- [Inertia](docs/wiki/Inertia.md)
+- [Collision](docs/wiki/Collision.md)
+- [Troubleshooting](docs/wiki/Troubleshooting.md)
+- [Contributing](docs/wiki/Contributing.md)
+- [Release Process](docs/wiki/Release-Process.md)
+- [Changelog](CHANGELOG.md)
 
-### First-Use Export Tutorial
-
-The first time `Tools > Export as URDF` is invoked for an assembly, the exporter offers three explicit choices:
-
-- `Start tutorial`: opens the companion checklist and continues into the real exporter.
-- `Skip once`: continues the export and asks again on a later assembly export.
-- `Do not remind`: suppresses future automatic prompts.
-
-The tutorial can always be reopened from `Tools > URDF Export Tutorial`. Progress is stored per Windows user in `%LOCALAPPDATA%\OSRBot\SW2URDF\urdf-export-tutorial-v1.state`; it does not use or modify SolidWorks registry keys. Closing an in-progress tutorial preserves its current step. Completing or permanently dismissing it suppresses automatic prompts, but the Tools menu entry remains available.
-
-The eight tutorial steps follow the actual export order:
-
-1. Prepare an assembly copy, resolve components, assign material density, rebuild, save, and verify SolidWorks mass properties.
-2. Create `Origin_global`, per-Joint coordinate systems, and motion axes using a consistent right-handed convention.
-3. Build and bind the Link tree, including free-canvas editing and Markdown outline editing with `#`, `##`, and `###` headings.
-4. Configure Joint names, types, parent/child relationships, origins, axes, limits, dynamics, and optional Mimic relationships.
-5. Validate mass, center of mass, the COM inertia tensor, rigid-body inequalities, and the inertia ellipsoid.
-6. Select visual/collision geometry, collision strategy, and STL reduction while checking simulator cost and geometric coverage.
-7. Export matching ROS1 and ROS2 packages with complete `urdf` and `meshes` directories.
-8. Review `export_report.md`, `inertial_validation.csv`, and `mesh_manifest.csv`, then inspect Visual, Collision, Inertia, COM, axes, and Joint motion in a URDF viewer.
-
-Each non-root Link uses its child-Joint coordinate system as its own URDF Link frame; the root Link
-uses `Origin_global` or another explicitly selected root frame. These frames must exist as
-SolidWorks coordinate-system features. On the Link properties page, use the `Link frame` selector
-to choose from the frames currently available in the model. The exporter reads mass/COM and the
-COM inertia tensor from independent SolidWorks mass-property objects in system units, then
-explicitly converts both from the document frame to that Link frame. Using separate objects avoids
-a SolidWorks 2023 read-order defect where reading the tensor and COM from one object can invalidate
-one of the cached results. A frame change recomputes the COM in meters, rotates the center-of-mass
-inertia tensor in `kg*m^2`, and updates the adjacent Joint origins. It does not apply a
-parallel-axis offset because URDF stores inertia about the COM. Mass and principal moments must
-therefore remain unchanged when only the Link frame changes.
-
-Before writing meshes or URDF, the exporter requires every numeric and physical inertial check to
-pass, including checking that every computed COM is inside the selected component bounds in Link
-coordinates. A failure stops the export and identifies the affected Link and check instead of
-producing a package with displaced inertia. The bounds check catches frame and component-selection
-errors; for concave or hollow geometry, a physically valid COM may lie in an empty cavity while
-still remaining inside the body's convex region.
-
-The companion window is intentionally instructional: it does not automate clicks, save files, alter CAD bindings, or mutate the model. This keeps the tutorial version-independent and lets the user verify each engineering decision in the real exporter.
-
-### User-Friendly Workflow Features
-
-The exporter stores the Link tree configuration inside the SolidWorks assembly as `URDF Export Configuration (v1.5)`. Existing v1.4 and older configurations are loaded and upgraded when saved. When the same assembly is opened again, the plugin loads the saved Link/Joint tree, names, parent-child structure, and saved link properties automatically. This is the normal path for iterative robot modeling: configure once, reopen, adjust, and export again.
-
-When a saved tree is loaded, SolidWorks component references are reconnected from stored component PIDs. If a part was deleted, replaced, or saved as a new file and can no longer be resolved, the exporter warns which links need inspection before export.
-
-Use `Edit Link Tree...` to open the free canvas. The canvas edits a working copy: `Cancel` discards all structural changes, while `Apply` validates and commits them as one transaction. Topology, URDF configuration, and SolidWorks CAD bindings are stored separately and are combined only when the PropertyManager or exporter requests a projection.
-
-For a large hierarchy, click `Outline Edit` in the canvas and edit one Link per line. Markdown heading depth defines the parent-child relationship:
-
-```text
-# base_link
-## camera_link
-## left_steering_link
-### left_front_wheel_link
-```
-
-Both `#base_link` and `# base_link` are accepted. Existing Links matched by name keep their Joint configuration, reusable URDF values, and SolidWorks CAD bindings. A plain-text rename in the same sibling position also keeps node identity and bindings. New headings create new Links with generated `fixed` Joints; `camera_link` becomes `camera_joint`, while a name without the `_link` suffix receives `_joint`. Joint names and types can then be changed on the canvas. Removing a heading removes that Link from the candidate tree. Invalid ROS names, duplicate names, multiple roots, and skipped heading levels are reported without replacing the canvas document. Apply the outline to update the canvas, then apply the canvas to commit the complete Link tree transaction.
-
-Renaming a Joint updates existing mimic references. Deleting a Joint that is still referenced by a mimic relation is rejected. Reparenting a Link keeps its CAD component assignment but forces Joint kinematics and limits to be recomputed before export, so values calculated for the old relationship cannot be exported silently.
-
-The recompute requirements are saved with the assembly. Closing the PropertyManager or SolidWorks after a topology or Joint-type change does not lose them: the next export automatically enables the required computations and clears each marker only after the computed configuration has been saved and accepted.
-
-The right-side `Branch operations` group keeps `Copy branch`, `Paste branch`, and `Delete branch` in one place. Selecting one Link copies or deletes that Link together with every descendant. A box selection copies the union of all selected branches; overlapping parent/child selections are merged without duplicate nodes. `Ctrl+C`, `Ctrl+V`, and `Delete` use the same branch semantics.
-
-Copy/paste duplicates the selected topology and reusable URDF configuration, including Joint settings, inertia, visual, collision, and mesh options. CAD component bindings are intentionally cleared on pasted Links because assigning the same SolidWorks body to two Links would create an invalid robot model. Pasted Links are marked incomplete until their mirrored or replacement components are assigned in the PropertyManager.
-
-Each paste operation is treated as an independent group. Repeatedly pasting the same symmetric Link group keeps Mimic references inside that paste batch instead of pointing later copies back to the first pasted group. Link and Joint names are generated uniquely and can then be edited normally.
-
-If the PropertyManager or the Joint/Link export window is closed before the current edits are formally saved, the exporter writes a recovery draft under `%LOCALAPPDATA%\OSRBot\SW2URDF\export-drafts`. Drafts are keyed by the complete saved assembly path, so two assemblies with the same filename in different folders do not share state. The next invocation for that assembly restores the draft automatically and reports that recovery occurred. A successful configuration save or completed export deletes the draft so committed assembly data remains authoritative. Unsaved assemblies do not have a stable path and therefore cannot use this recovery mechanism.
-
-Recovery drafts reuse the same v1.5 Link/Joint configuration serializer as the assembly feature and also retain the ROS package name and last export directory. They are local per-user files: this feature does not add or remove SolidWorks registry entries and does not silently write the draft into the assembly.
-
-SolidWorks-owned transitions such as Component Preview are allowed to close the PropertyManager normally. The exporter captures the local Link-tree snapshot during `OnClose`, persists the recovery draft during `AfterClose`, and then releases the add-in owner so the exporter can be opened again without stale-window state.
-
-Joint type validation uses the six standard URDF values: `fixed`, `revolute`, `continuous`, `prismatic`, `floating`, and `planar`. The editor also preserves the exporter-only `Automatically Detect` configuration state; it must resolve to one of the standard values during computation before URDF output. Type changes normalize incompatible saved fields. In particular, fixed and floating Joints remove stale motion data; continuous Joints keep effort, velocity, dynamics, and Mimic settings while removing lower and upper position bounds.
-
-For fast review after export, check:
-
-- `config/export_report.md`: human-readable export summary, fallback warnings, and effective strategies.
-- `config/inertial_validation.csv`: per-link SolidWorks vs URDF mass, COM, inertia tensor, and error values.
-- `config/mesh_manifest.csv`: per-link mesh strategy, estimated mesh size, and generated mesh records.
-
-### Collision Strategy Quick Guide
-
-Use `ComponentBoxes` as the default collision strategy for robotics simulation. It is usually much lighter and more stable than detailed mesh collision.
-
-On the Link properties page, click `Preview collision` to overlay the current primitive or component-box strategy on the SolidWorks assembly. While the overlay is active, changing the strategy refreshes it immediately. Keep `Show inertia ellipsoid` enabled at the same time to inspect the Link COM, inertia principal axes, CAD geometry, and collision coverage in one view. Mesh and convex-hull strategies still require an exported-file viewer and report that limitation instead of showing a misleading approximation.
-
-Collision geometry and inertia remain separate responsibilities. Selecting a cylinder, sphere, box, or component-box collision strategy changes only the URDF `<collision>` geometry. The inertia ellipsoid continues to come from the selected SolidWorks bodies, material density, COM, and COM inertia tensor. Visual overlap is therefore a coverage sanity check, not a replacement for mass-property validation.
-
-Use `BoxPrimitive` for box-like chassis, batteries, plates, and brackets. Use `CylinderPrimitive` for wheels, tubes, shafts, and lidar barrels. Use `SpherePrimitive` for spherical sensors or markers.
-
-Use `ConvexHull` when the link is too complex for one primitive but still needs a single simple collision approximation.
-
-Use `SimplifiedMesh` when primitives do not fit and the collision STL still needs to be smaller. Use `AccurateMesh` only when full collision detail matters more than simulator performance. Use `VisualMesh` mostly for viewer compatibility or when collision accuracy is not important.
-
-Common material names available in the exporter include `black`, `white`, `gray`, `dark_gray`, `red`, `green`, `blue`, `yellow`, `orange`, `silver`, `aluminum`, `steel`, `plastic_black`, `rubber_black`, and `transparent_blue`.
-
-When a Link is first computed, the exporter reads the selected SolidWorks component appearance before falling back to the component document appearance. Valid texture image paths returned by SolidWorks are loaded automatically. Editing the material name, RGBA values, or texture path in the exporter turns that value into a user-owned override, so later recomputation does not silently replace it. STL does not carry UV coordinates; use 3DXML or a simulator-specific material workflow when mapped texture fidelity matters.
-
-During package generation, a non-cancelable progress dialog shows the current export stage and elapsed time without allowing exporter re-entry. On success, the completion dialog reports files created or changed by this run, their total size, total elapsed time, and the export root. Existing unrelated files in a reused output directory are excluded by comparing the directory state before and after export.
+The files under `docs/wiki` are the version-controlled source for the public GitHub Wiki. Changes to
+behavioral documentation should be reviewed with the code change that introduced the behavior.
 
 ## Development
 
-1. Install Visual Studio 2017
-1. Install .NET desktop development
-    1. From Visual Studio: `Tools > Get Tools and Features...`
-    1. Check `.NET desktop development` package
-    1. Select `Modify`
-1. Install the [SolidWorks API tools](https://help.solidworks.com/2019/english/api/sldworksapiprogguide/GettingStarted/SolidWorks_API_Getting_Started_Overview.htm)
-1. Launch Visual Studio with admin privileges. Right click and select `Run as Administrator`
-1. Open `sw2urdf/SW2URDF.sln`  
-1. Enable Debugging
-    1. Right click `SW2URDF` in the Solution Explorer
-    1. Click the `Debug` Tab
-    1. Ensure `Configuration:` is set to `Debug`
-    1. Ensure `Start external program:` is pointing to the SolidWorks executable. For example `C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\SLDWORKS.exe`
+Prerequisites:
 
-### Build Installer
+1. Visual Studio 2017 with `.NET desktop development`.
+2. SolidWorks and the matching SolidWorks API tools/assemblies.
+3. An x64 developer environment. Run Visual Studio as administrator when COM registration or
+   SolidWorks debugging requires it.
 
-From the repository root:
+Open `SW2URDF.sln`. For debugging, configure the `SW2URDF` project to start the installed
+`SLDWORKS.exe` for the target SolidWorks version.
+
+Build the production project with the actual SolidWorks install directory:
 
 ```powershell
-.\scripts\BuildInstaller.ps1
+MSBuild.exe SW2URDF\SW2URDF.csproj /t:Build /p:Configuration=Debug /p:Platform=x64 `
+  "/p:SolidWorksInstallDir=C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS"
 ```
 
-The installer is written to `INSTALL\OUTPUT` and should be named `sw2urdfSetup_YYYYMMDD_<commit>.exe`. Packaging also writes `<installer>.sha256` and `<installer>.provenance.json`; the latter records the full source commit and tree, installer digest, build mode, pinned NuGet inputs, build-tool hashes, the exact staged SolidWorks API inputs, and a SHA256 manifest of every installed DLL and toolbar image.
-
-Packaging accepts only a clean `Release|x64` source tree and requires Inno Setup 6.3.0 through 6.3.3 because the Release workflow independently extracts and hashes every payload file. Keep a compatible compiler beside newer Inno Setup installations and pass it with `-InnoCompilerPath` when necessary. The script creates a detached temporary Git worktree at the recorded source commit, copies the four SolidWorks API build inputs into that worktree, downloads a SHA256-pinned NuGet CLI, restores only `SW2URDF\packages.release.config` through the repository `NuGet.Config`, and verifies every `.nupkg` against `SW2URDF\packages.release.lock.json`. `INSTALL\OUTPUT` artifact changes are excluded from the cleanliness check. Release intermediates start empty, the production DLL uses deterministic compiler settings and commit-derived metadata, and only the completed installer is promoted back to `INSTALL\OUTPUT`. The installer includes runtime DLLs plus the SolidWorks toolbar image assets; test code, test runners, analyzers, XML documentation, PDB files, and the host-provided `solidworkstools.dll` are not shipped.
-
-### Link Tree Architecture
-
-The maintained Link tree implementation lives in `SW2URDF/UI/LinkTreeCanvas`. `LinkTreeSession` owns atomic topology transactions, while `LinkConfigurationStore` and `CadBindingStore` separately own reusable URDF values and SolidWorks object/PID bindings. The canvas depends only on `ILinkTreeCanvasHost` and never owns SolidWorks COM objects.
-
-The former standalone prototype has been retired. Do not duplicate production tree, copy/paste, or validation behavior under `prototypes`; extend the production document/session boundaries and add focused tests instead.
-
-### Tests
-
-Build Debug first, then run the local test runner:
+Run all locally available tests after building Debug:
 
 ```powershell
 TestRunner\bin\x64\Debug\net452\TestRunner.exe
 ```
 
-To run a focused subset:
+Run a focused class or name filter:
 
 ```powershell
-TestRunner\bin\x64\Debug\net452\TestRunner.exe TestAssemblyExportLayout
+TestRunner\bin\x64\Debug\net452\TestRunner.exe TestCollisionPreview
 ```
 
-The test runner assigns a process-specific UTF-8 log under the system temporary directory before loading the plugin assembly. This keeps tests deterministic when SolidWorks is already running and owns the normal `%USERPROFILE%\\sw2urdf_logs\\sw2urdf.log` file.
+Pure tests can run without SolidWorks. Live COM tests require a compatible installed SolidWorks and
+can fail with an RPC/COM error when SolidWorks is unavailable or the automation process terminates.
+Live coverage on SolidWorks 2023 is not evidence of compatibility with every release or service
+pack.
 
-### Release Automation
+## Reproducible Installer Build
 
-The workflow `.github/workflows/publish-installer-release.yml` publishes committed installer artifacts to the GitHub Releases page.
+From a clean source commit:
 
-Trigger:
-
-- Push to `master` or `main` with a changed `INSTALL/OUTPUT/sw2urdfSetup_*.exe`.
-- Manual `workflow_dispatch`, optionally passing an installer path.
-
-Behavior:
-
-- Parses the date from `sw2urdfSetup_YYYYMMDD_<commit>.exe`.
-- Ignores installer deletions and accepts added, modified, or Git-detected renamed artifacts only when exactly one current installer remains in the release commit.
-- Selects the default manual-release artifact by Git commit time rather than checkout file timestamps.
-- Requires the artifact commit to contain only one installer and its two sidecars, then verifies the checksum, source tree, build mode, pinned NuGet lock, and tool/input records. CI also extracts the Inno Setup package and compares every installed file and SHA256 value with the provenance payload manifest.
-- Rejects an existing `vYYYYMMDD` tag or Release; published daily releases are immutable.
-- Creates the Release as a draft with the installer, checksum, and provenance assets, then makes it public only after all uploads succeed. A retry removes only an incomplete draft for the same tag; a public daily Release remains immutable.
-
-The current workflow promotes a locally built maintainer artifact; GitHub Actions does not rebuild the plugin because the proprietary SolidWorks API assemblies are not available on hosted runners. The provenance is therefore an auditable local-build attestation, not a CI-generated binary-source proof or an Authenticode signature.
-
-## Converting mesh format from 3dxml to dae
-
-Executing the following command will convert the format of the exported mesh from 3DXML to DAE, and rewrite the URDF, allowing you to display colored meshes in visualization tools like RViz:
-
-```bash
-pip3 install scikit-robot -U
-convert-urdf-mesh <URDF_PATH> --output <OUTPUT_URDF_PATH>
+```powershell
+.\scripts\BuildInstaller.ps1 -Configuration Release -Platform x64 `
+  -SolidWorksInstallDir "C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS"
 ```
 
-### Trouble Shooting
+The script requires Inno Setup 6.3.0 through 6.3.3 and produces:
 
-1. `AxImp.exe` error - Check the installation of the .Net Tools. If there is no error, install the Windows 10 SDK.
-1. `Resourse.resx` error - Check if `sw2urdf/SW2URDF/Resources.resx` exists and is empty. If empty, delete this file then right click the `SW2URDF` in the Solution Explorer and select `Properties`. Navigate to the Resources tab and click the button to create a new file.
+```text
+INSTALL/OUTPUT/sw2urdfSetup_YYYYMMDD_<commit>.exe
+INSTALL/OUTPUT/sw2urdfSetup_YYYYMMDD_<commit>.exe.sha256
+INSTALL/OUTPUT/sw2urdfSetup_YYYYMMDD_<commit>.exe.provenance.json
+```
+
+Packaging runs from a detached worktree, verifies pinned NuGet inputs and the staged SolidWorks API
+assemblies, and records payload hashes. The provenance file is a maintainer-build trace; it is not an
+Authenticode signature and CI does not rebuild against proprietary SolidWorks assemblies.
+
+## Known Limits
+
+- Installation/upgrading requires SolidWorks to be closed; no automatic process termination or hot
+  reload is implemented.
+- Unsaved assemblies do not have a stable path and cannot use per-assembly recovery drafts.
+- Component persistent IDs can become invalid after delete/replace/save-as operations and then need
+  manual rebinding.
+- Collision previews are temporary SolidWorks geometry. For mesh strategies, preview geometry is not
+  promised to be byte-identical to the final tessellated STL.
+- STL does not carry UV texture coordinates. The maintained UI does not offer texture authoring.
+- Strategy generation can fall back to `VisualMesh`; always review the effective strategy report.
+- The project is provided under the MIT License without warranty. Validate the exported robot in the
+  target simulator before production use.
+
+## Credits and References
+
+This fork preserves the original project history and MIT copyright. It does not replace or obscure
+the work of the upstream authors and contributors.
+
+- Original project: [ROS SolidWorks URDF Exporter](https://github.com/ros/solidworks_urdf_exporter)
+- Original author and historical maintainer: [Stephen Brawner](mailto:brawner@gmail.com)
+- Historical supporters named by the upstream project: [PickNik Consulting](https://picknik.ai),
+  Verb Surgical, Open Robotics, and Willow Garage
+- 3DXML export contribution: Kento Matsuo and the contributors recorded in commit `22cb778`
+- Current OSRBot fork maintainer: `kitso666 <kitso@osrbot.com>`
+- Inertia convention reference: Winter,
+  [“掌握 URDF 中的惯性张量：从 SolidWorks 到强化学习机器人的关键一步”](https://zhuanlan.zhihu.com/p/1887859297221845818)
+- Original ROS documentation: [sw_urdf_exporter](http://wiki.ros.org/sw_urdf_exporter) and
+  [tutorials](http://wiki.ros.org/sw_urdf_exporter/Tutorials)
+
+## License
+
+MIT. See [LICENSE](LICENSE). The original `Copyright 2020 Stephen Brawner` notice and permission
+terms must remain with copies or substantial portions of the software.
