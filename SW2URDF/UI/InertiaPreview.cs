@@ -21,7 +21,8 @@ namespace SW2URDF.UI
 
     internal sealed class InertiaPreview : IDisposable
     {
-        internal const int ExpectedBodyCount = 1;
+        internal const int ExpectedBodyCount = 4;
+        internal const double PrincipalAxisExtensionFactor = 1.15;
 
         private readonly SldWorks swApp;
         private readonly ModelDoc2 model;
@@ -136,7 +137,13 @@ namespace SW2URDF.UI
                             ellipsoid.EquivalentBoxDimensions);
                         Body2 ownedBody = body;
                         body = null;
-                        AddBody(ownedBody, bodyTransform, displayContext.DisplayTarget);
+                        AddBody(ownedBody, bodyTransform, displayContext.DisplayTarget,
+                            DrawingColor.DeepSkyBlue);
+                        AddPrincipalAxes(
+                            modeler,
+                            ellipsoid.EquivalentBoxDimensions,
+                            bodyTransform,
+                            displayContext.DisplayTarget);
                     }
                     finally
                     {
@@ -156,8 +163,8 @@ namespace SW2URDF.UI
                 Hide();
                 failureKind = InertiaPreviewFailureKind.DisplayUnavailable;
                 error = ChineseUiText.Translate(
-                    "SolidWorks did not display the equivalent inertia cuboid.",
-                    "SolidWorks 未能显示惯性等效长方体。") + " (" +
+                    "SolidWorks did not display all inertia preview geometry.",
+                    "SolidWorks 未能显示全部惯性预览几何。") + " (" +
                     displayedBodyCount + "/" + ExpectedBodyCount + ")";
                 return false;
             }
@@ -268,6 +275,29 @@ namespace SW2URDF.UI
             return transform;
         }
 
+        internal static double[][] BuildPrincipalAxisLineDimensions(double[] dimensions)
+        {
+            if (dimensions == null || dimensions.Length != 3 ||
+                !IsFinitePositive(dimensions[0]) ||
+                !IsFinitePositive(dimensions[1]) ||
+                !IsFinitePositive(dimensions[2]))
+            {
+                throw new ArgumentException(
+                    "Principal-axis dimensions must contain three positive values.",
+                    nameof(dimensions));
+            }
+
+            double x = dimensions[0] * PrincipalAxisExtensionFactor / 2.0;
+            double y = dimensions[1] * PrincipalAxisExtensionFactor / 2.0;
+            double z = dimensions[2] * PrincipalAxisExtensionFactor / 2.0;
+            return new[]
+            {
+                new[] { -x, 0.0, 0.0, x, 0.0, 0.0 },
+                new[] { 0.0, -y, 0.0, 0.0, y, 0.0 },
+                new[] { 0.0, 0.0, -z, 0.0, 0.0, z }
+            };
+        }
+
         private static Body2 CreateEquivalentBoxBody(
             Modeler modeler,
             double[] equivalentBoxDimensions)
@@ -291,13 +321,86 @@ namespace SW2URDF.UI
             }
         }
 
-        private void AddBody(Body2 body, MathTransform transform, object displayTarget)
+        private void AddPrincipalAxes(
+            Modeler modeler,
+            double[] dimensions,
+            MathTransform transform,
+            object displayTarget)
+        {
+            double[][] axes = BuildPrincipalAxisLineDimensions(dimensions);
+            DrawingColor[] colors =
+            {
+                DrawingColor.Red,
+                DrawingColor.LimeGreen,
+                DrawingColor.Blue
+            };
+            for (int index = 0; index < axes.Length; index++)
+            {
+                AddPrincipalAxis(modeler, axes[index], transform, displayTarget, colors[index]);
+            }
+        }
+
+        private void AddPrincipalAxis(
+            Modeler modeler,
+            double[] dimensions,
+            MathTransform transform,
+            object displayTarget,
+            DrawingColor color)
+        {
+            Curve sourceCurve = null;
+            Curve trimmedCurve = null;
+            Body2 body = null;
+            try
+            {
+                double[] start = { dimensions[0], dimensions[1], dimensions[2] };
+                double[] direction =
+                {
+                    dimensions[3] - dimensions[0],
+                    dimensions[4] - dimensions[1],
+                    dimensions[5] - dimensions[2]
+                };
+                sourceCurve = modeler.CreateLine(start, direction) as Curve;
+                if (sourceCurve == null)
+                {
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "SolidWorks could not create an inertia principal-axis line.",
+                        "SolidWorks 无法创建惯性主轴线。"));
+                }
+                trimmedCurve = sourceCurve.CreateTrimmedCurve2(
+                    dimensions[0], dimensions[1], dimensions[2],
+                    dimensions[3], dimensions[4], dimensions[5]);
+                if (trimmedCurve == null)
+                {
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "SolidWorks could not trim an inertia principal-axis line.",
+                        "SolidWorks 无法裁剪惯性主轴线。"));
+                }
+                body = modeler.CreateWireBody(
+                    trimmedCurve,
+                    (int)swCreateWireBodyOptions_e.swCreateWireBodyByDefault);
+                Body2 ownedBody = body;
+                body = null;
+                AddBody(ownedBody, transform, displayTarget, color);
+            }
+            finally
+            {
+                ReleaseBody(body);
+                ReleaseComReference(trimmedCurve);
+                ReleaseComReference(sourceCurve);
+            }
+        }
+
+        private void AddBody(
+            Body2 body,
+            MathTransform transform,
+            object displayTarget,
+            DrawingColor color)
         {
             if (body == null)
             {
                 throw new InvalidOperationException(ChineseUiText.Translate(
-                    "SolidWorks could not create the equivalent inertia cuboid.",
-                    "SolidWorks 无法创建惯性等效长方体。"));
+                    "SolidWorks could not create the inertia preview geometry.",
+                    "SolidWorks 无法创建惯性预览几何。"));
             }
 
             try
@@ -305,18 +408,18 @@ namespace SW2URDF.UI
                 if (!body.ApplyTransform(transform))
                 {
                     throw new InvalidOperationException(ChineseUiText.Translate(
-                        "SolidWorks could not transform the equivalent inertia cuboid.",
-                        "SolidWorks 无法变换惯性等效长方体。"));
+                        "SolidWorks could not transform the inertia preview geometry.",
+                        "SolidWorks 无法变换惯性预览几何。"));
                 }
                 int result = body.Display3(
                     displayTarget,
-                    ColorTranslator.ToOle(DrawingColor.DodgerBlue),
+                    ColorTranslator.ToOle(color),
                     (int)swTempBodySelectOptions_e.swTempBodySelectOptionNone);
                 if (!IsDisplaySuccess(result))
                 {
                     throw new InvalidOperationException(ChineseUiText.Translate(
-                        "SolidWorks could not display the equivalent inertia cuboid. Display3 error code: ",
-                        "SolidWorks 无法显示惯性等效长方体。Display3 错误码：") +
+                        "SolidWorks could not display the inertia preview geometry. Display3 error code: ",
+                        "SolidWorks 无法显示惯性预览几何。Display3 错误码：") +
                         result + ".");
                 }
                 temporaryBodies.Add(body);

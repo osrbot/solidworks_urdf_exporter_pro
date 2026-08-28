@@ -68,9 +68,9 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestPreviewUsesOneEquivalentInertiaBody()
+        public void TestPreviewUsesCuboidAndThreePrincipalAxisBodies()
         {
-            Assert.Equal(1, InertiaPreview.ExpectedBodyCount);
+            Assert.Equal(4, InertiaPreview.ExpectedBodyCount);
         }
 
         [Fact]
@@ -85,6 +85,31 @@ namespace SW2URDF.Test
                 0.0, 0.0, 1.0,
                 2.0, 4.0, 6.0
             }, result);
+        }
+
+        [Fact]
+        public void TestPrincipalAxesCrossCenterAndExtendPastCuboidFaces()
+        {
+            double[][] result = InertiaPreview.BuildPrincipalAxisLineDimensions(
+                new[] { 2.0, 4.0, 6.0 });
+            double[][] expected =
+            {
+                new[] { -1.15, 0.0, 0.0, 1.15, 0.0, 0.0 },
+                new[] { 0.0, -2.3, 0.0, 0.0, 2.3, 0.0 },
+                new[] { 0.0, 0.0, -3.45, 0.0, 0.0, 3.45 }
+            };
+
+            Assert.Equal(3, result.Length);
+            for (int axis = 0; axis < expected.Length; axis++)
+            {
+                for (int coordinate = 0; coordinate < expected[axis].Length; coordinate++)
+                {
+                    Assert.InRange(
+                        Math.Abs(result[axis][coordinate] - expected[axis][coordinate]),
+                        0.0,
+                        1e-12);
+                }
+            }
         }
 
         [Fact]
