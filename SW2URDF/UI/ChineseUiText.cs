@@ -162,6 +162,18 @@ namespace SW2URDF.UI
             { "k velocity", "k 速度" }
         };
 
+        private static readonly Dictionary<string, string> JointTypeDescriptions =
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                { "Automatically Detect", "自动识别" },
+                { "revolute", "有限角度转动" },
+                { "continuous", "无约束连续转动" },
+                { "prismatic", "直线滑动" },
+                { "fixed", "固定连接" },
+                { "floating", "六自由度运动" },
+                { "planar", "平面运动" }
+            };
+
         public static bool ShouldUseChinese()
         {
             return IsChinese(CultureInfo.CurrentUICulture) || IsChinese(CultureInfo.CurrentCulture);
@@ -201,6 +213,45 @@ namespace SW2URDF.UI
         public static string Translate(string english, string chinese)
         {
             return ShouldUseChinese() ? chinese : english;
+        }
+
+        public static string JointTypeDisplay(string jointType)
+        {
+            return JointTypeDisplay(jointType, ShouldUseChinese());
+        }
+
+        internal static string JointTypeDisplay(string jointType, bool useChinese)
+        {
+            if (!useChinese || String.IsNullOrWhiteSpace(jointType))
+            {
+                return jointType;
+            }
+
+            string description;
+            return JointTypeDescriptions.TryGetValue(jointType, out description)
+                ? jointType + " / " + description
+                : jointType;
+        }
+
+        public static string JointTypeValue(string displayText)
+        {
+            if (String.IsNullOrWhiteSpace(displayText))
+            {
+                return displayText;
+            }
+
+            foreach (KeyValuePair<string, string> item in JointTypeDescriptions)
+            {
+                if (String.Equals(
+                    displayText,
+                    item.Key + " / " + item.Value,
+                    StringComparison.Ordinal))
+                {
+                    return item.Key;
+                }
+            }
+
+            return displayText;
         }
 
         private static bool IsChinese(CultureInfo culture)

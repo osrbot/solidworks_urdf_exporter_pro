@@ -507,7 +507,8 @@ namespace SW2URDF.URDFExport
                 node.Link.Joint.Name = PMTextBoxJointName.Text;
                 node.Link.Joint.AxisName = PMComboBoxAxes.get_ItemText(-1);
                 node.Link.Joint.CoordinateSystemName = PMComboBoxCoordSys.get_ItemText(-1);
-                node.Link.Joint.Type = PMComboBoxJointType.get_ItemText(-1);
+                node.Link.Joint.Type = ChineseUiText.JointTypeValue(
+                    PMComboBoxJointType.get_ItemText(-1));
                 return;
             }
 
@@ -545,7 +546,8 @@ namespace SW2URDF.URDFExport
                 }
                 else if (!node.IsBaseNode && controlId == ComboBoxJointTypeID)
                 {
-                    node.Link.Joint.Type = PMComboBoxJointType.get_ItemText((short)item);
+                    node.Link.Joint.Type = ChineseUiText.JointTypeValue(
+                        PMComboBoxJointType.get_ItemText((short)item));
                 }
             }
             catch (Exception exception)
@@ -637,7 +639,9 @@ namespace SW2URDF.URDFExport
                 PMComboBoxAxes.AddItems("None");
                 SelectComboBox(PMComboBoxCoordSys, node.Link.Joint.CoordinateSystemName);
                 SelectComboBox(PMComboBoxAxes, node.Link.Joint.AxisName);
-                SelectComboBox(PMComboBoxJointType, node.Link.Joint.Type);
+                SelectComboBox(
+                    PMComboBoxJointType,
+                    ChineseUiText.JointTypeDisplay(node.Link.Joint.Type));
             }
             else
             {

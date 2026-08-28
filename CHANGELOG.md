@@ -19,6 +19,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ### Changed
 
+- The Simplified Chinese PropertyManager now explains every URDF Joint type while preserving the
+  canonical English value used for configuration persistence and export.
+- The Link child-count field now explicitly identifies direct, next-level child Links and explains
+  that deeper descendants are not included.
 - Box and per-component box previews now use solid orange-red temporary bodies, matching the
   established cylinder and sphere preview behavior and remaining distinguishable in wireframe,
   hidden-line, and shaded views.

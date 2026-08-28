@@ -89,6 +89,7 @@ namespace SW2URDF.URDFExport
         private PropertyManagerPageLabel PMLabelCoordSys;
         private PropertyManagerPageLabel PMLabelJointType;
         private PropertyManagerPageLabel PMLabelGlobalCoordsys;
+        private PropertyManagerPageLabel PMLabelChildCount;
         private PropertyManagerPageLabel PMLabelCSVFilename;
 
         private PropertyManagerPageWindowFromHandle PMTree;
@@ -124,6 +125,7 @@ namespace SW2URDF.URDFExport
         private const int ComputeJointLimitsID = 30;
         private const int LoadedCSVFilenameID = 31;
         private const int EditLinkTreeID = 32;
+        private const int LabelChildCountID = 33;
 
         #endregion class variables
 
@@ -1049,7 +1051,12 @@ namespace SW2URDF.URDFExport
                 ComboBoxJointTypeID, (short)controlType, caption, (short)alignment, (int)options, tip);
             PMComboBoxJointType.Style =
                 (int)swPropMgrPageComboBoxStyle_e.swPropMgrPageComboBoxStyle_EditBoxReadOnly;
-            PMComboBoxJointType.AddItems(new List<string>(Joint.SelectableTypes).ToArray());
+            List<string> jointTypeItems = new List<string>();
+            foreach (string jointType in Joint.SelectableTypes)
+            {
+                jointTypeItems.Add(ChineseUiText.JointTypeDisplay(jointType));
+            }
+            PMComboBoxJointType.AddItems(jointTypeItems.ToArray());
 
             //Create the selection box label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
@@ -1087,22 +1094,24 @@ namespace SW2URDF.URDFExport
             //Create the link name text box label
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
             caption = ChineseUiText.Translate(
-                "Number of child links",
-                "\u5b50 Link \u6570\u91cf");
+                "Number of direct child Links",
+                "直接子 Link 数量（下一级）");
             tip = ChineseUiText.Translate(
-                "Enter the number of child links and they will be automatically added",
-                "\u8f93\u5165\u5b50 Link \u6570\u91cf\uff0c\u7cfb\u7edf\u5c06\u81ea\u52a8\u6dfb\u52a0");
+                "Number of Links directly below the current Link; deeper descendants are not counted",
+                "当前 Link 下一级的直接子 Link 数量，不包含更深层后代；修改后会自动增减直接子 Link");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible +
                 (int)swAddControlOptions_e.swControlOptions_Enabled;
+            PMLabelChildCount = (PropertyManagerPageLabel)PMGroup.AddControl2(
+                LabelChildCountID, (short)controlType, caption, (short)alignment, (int)options, tip);
             
             //Create the number box
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Numberbox;
             caption = "";
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
             tip = ChineseUiText.Translate(
-                "Enter the number of child links and they will be automatically added",
-                "\u8f93\u5165\u5b50 Link \u6570\u91cf\uff0c\u7cfb\u7edf\u5c06\u81ea\u52a8\u6dfb\u52a0");
+                "Number of Links directly below the current Link; changing it automatically adds or removes direct child Links",
+                "当前 Link 下一级的直接子 Link 数量，不包含更深层后代；修改后会自动增减直接子 Link");
             options = (int)swAddControlOptions_e.swControlOptions_Enabled +
                 (int)swAddControlOptions_e.swControlOptions_Visible;
             PMNumberBoxChildCount = PMGroup.AddControl2(

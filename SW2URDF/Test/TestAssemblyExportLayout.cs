@@ -9,6 +9,31 @@ namespace SW2URDF.Test
 {
     public class TestAssemblyExportLayout
     {
+        [Theory]
+        [InlineData("Automatically Detect", "自动识别")]
+        [InlineData("revolute", "有限角度转动")]
+        [InlineData("continuous", "无约束连续转动")]
+        [InlineData("prismatic", "直线滑动")]
+        [InlineData("fixed", "固定连接")]
+        [InlineData("floating", "六自由度运动")]
+        [InlineData("planar", "平面运动")]
+        public void TestChineseJointTypeDisplayRoundTripsToUrdfValue(
+            string jointType,
+            string description)
+        {
+            string localized = jointType + " / " + description;
+            Assert.Equal(localized, ChineseUiText.JointTypeDisplay(jointType, true));
+            Assert.Equal(jointType, ChineseUiText.JointTypeDisplay(jointType, false));
+            Assert.Equal(jointType, ChineseUiText.JointTypeValue(localized));
+        }
+
+        [Fact]
+        public void TestUnknownJointTypeDisplayIsPreserved()
+        {
+            Assert.Equal("custom", ChineseUiText.JointTypeDisplay("custom", true));
+            Assert.Equal("custom", ChineseUiText.JointTypeValue("custom"));
+        }
+
         [Fact]
         public void TestMaterialPresetUpdatesRgbaAndClearsOldTexture()
         {
