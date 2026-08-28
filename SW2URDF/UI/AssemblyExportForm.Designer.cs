@@ -675,7 +675,7 @@
             this.buttonShowInertiaPreview.Name = "buttonShowInertiaPreview";
             this.buttonShowInertiaPreview.Size = new System.Drawing.Size(145, 24);
             this.buttonShowInertiaPreview.TabIndex = 34;
-            this.buttonShowInertiaPreview.Text = "Show inertia ellipsoid";
+            this.buttonShowInertiaPreview.Text = "Show inertia cuboid";
             this.buttonShowInertiaPreview.UseVisualStyleBackColor = true;
             this.buttonShowInertiaPreview.Click += new System.EventHandler(this.ButtonShowInertiaPreviewClick);
             // 
@@ -686,7 +686,7 @@
             this.labelInertiaPreviewStatus.Name = "labelInertiaPreviewStatus";
             this.labelInertiaPreviewStatus.Size = new System.Drawing.Size(169, 13);
             this.labelInertiaPreviewStatus.TabIndex = 35;
-            this.labelInertiaPreviewStatus.Text = "R a / G b / B c: principal semi-axes (mm)";
+            this.labelInertiaPreviewStatus.Text = "Equivalent cuboid X/Y/Z (mm)";
             // 
             // groupBox4
             //

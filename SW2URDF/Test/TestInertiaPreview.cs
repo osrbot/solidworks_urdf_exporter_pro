@@ -68,9 +68,47 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestPreviewIncludesInertiaCurvesAndComMarker()
+        public void TestPreviewUsesOneEquivalentInertiaBody()
         {
-            Assert.Equal(9, InertiaPreview.ExpectedCurveCount);
+            Assert.Equal(1, InertiaPreview.ExpectedBodyCount);
+        }
+
+        [Fact]
+        public void TestEquivalentBoxBodyDimensionsUseCenteredSolidWorksBox()
+        {
+            double[] result = InertiaPreview.BuildEquivalentBoxBodyDimensions(
+                new[] { 2.0, 4.0, 6.0 });
+
+            Assert.Equal(new[]
+            {
+                0.0, 0.0, -3.0,
+                0.0, 0.0, 1.0,
+                2.0, 4.0, 6.0
+            }, result);
+        }
+
+        [Fact]
+        public void TestPrincipalAxesAreConvertedToRightHandedRotation()
+        {
+            Matrix<double> leftHanded = Matrix<double>.Build.DenseOfArray(new[,]
+            {
+                { 1.0, 0.0, 0.0 },
+                { 0.0, 1.0, 0.0 },
+                { 0.0, 0.0, -1.0 }
+            });
+
+            Matrix<double> result = InertiaPreview.BuildRightHandedPrincipalAxes(leftHanded);
+
+            Assert.Equal(1.0, result.Determinant(), 12);
+            Matrix<double> orthogonality = result.TransposeThisAndMultiply(result);
+            for (int row = 0; row < 3; row++)
+            {
+                for (int column = 0; column < 3; column++)
+                {
+                    Assert.Equal(row == column ? 1.0 : 0.0,
+                        orthogonality[row, column], 12);
+                }
+            }
         }
 
         [Fact]
@@ -159,8 +197,10 @@ namespace SW2URDF.Test
             SldWorks swApp = null;
             ModelDoc2 model = null;
             Component2 component = null;
+            Component2 displayHost = null;
             MathTransform coordinateTransform = null;
             int? originalVisibility = null;
+            int? originalDisplayHostVisibility = null;
             try
             {
                 swApp = (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
@@ -168,9 +208,9 @@ namespace SW2URDF.Test
                 AssemblyDoc assembly = model as AssemblyDoc;
                 Assert.NotNull(assembly);
                 object[] topLevelComponents = assembly.GetComponents(true) as object[];
-                component = (topLevelComponents ?? new object[0])
+                Component2[] usableComponents = (topLevelComponents ?? new object[0])
                     .Cast<Component2>()
-                    .FirstOrDefault(candidate =>
+                    .Where(candidate =>
                     {
                         try
                         {
@@ -181,13 +221,20 @@ namespace SW2URDF.Test
                         {
                             return false;
                         }
-                    });
-                Assert.NotNull(component);
+                    })
+                    .Take(2)
+                    .ToArray();
+                Assert.Equal(2, usableComponents.Length);
+                component = usableComponents[0];
+                displayHost = usableComponents[1];
 
                 originalVisibility = component.Visible;
+                originalDisplayHostVisibility = displayHost.Visible;
+                displayHost.Visible = (int)swComponentVisibilityState_e.swComponentVisible;
                 component.Visible = (int)swComponentVisibilityState_e.swComponentHidden;
                 model.GraphicsRedraw2();
                 Assert.True(component.IsHidden(false));
+                Assert.False(displayHost.IsHidden(false));
 
                 string coordinateSystemName =
                     System.Environment.GetEnvironmentVariable("SW2URDF_TEST_COORDINATE_SYSTEM");
@@ -229,6 +276,15 @@ namespace SW2URDF.Test
                     try
                     {
                         component.Visible = originalVisibility.Value;
+                        model?.GraphicsRedraw2();
+                    }
+                    catch { }
+                }
+                if (displayHost != null && originalDisplayHostVisibility.HasValue)
+                {
+                    try
+                    {
+                        displayHost.Visible = originalDisplayHostVisibility.Value;
                         model?.GraphicsRedraw2();
                     }
                     catch { }

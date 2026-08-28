@@ -13,6 +13,8 @@ namespace SW2URDF.URDFExport
 
         public double[] SemiAxes { get; private set; }
 
+        public double[] EquivalentBoxDimensions { get; private set; }
+
         public static bool TryCreate(
             double mass,
             Inertia inertia,
@@ -91,6 +93,8 @@ namespace SW2URDF.URDFExport
             double physicalTolerance = Math.Max(principalMoments[0],
                 Math.Max(principalMoments[1], principalMoments[2])) * radiusScale * 1e-9;
             double[] semiAxes = new double[3];
+            double[] equivalentBoxDimensions = new double[3];
+            double equivalentBoxScale = Math.Sqrt(12.0 / 5.0);
             for (int i = 0; i < squaredSemiAxes.Length; i++)
             {
                 if (squaredSemiAxes[i] <= physicalTolerance)
@@ -99,13 +103,15 @@ namespace SW2URDF.URDFExport
                     return false;
                 }
                 semiAxes[i] = Math.Sqrt(squaredSemiAxes[i]);
+                equivalentBoxDimensions[i] = semiAxes[i] * equivalentBoxScale;
             }
 
             ellipsoid = new InertiaEllipsoid
             {
                 PrincipalMoments = principalMoments,
                 PrincipalAxes = decomposition.EigenVectors,
-                SemiAxes = semiAxes
+                SemiAxes = semiAxes,
+                EquivalentBoxDimensions = equivalentBoxDimensions
             };
             return true;
         }

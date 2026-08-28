@@ -36,6 +36,36 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestUniformBoxTensorRecoversEquivalentBoxDimensions()
+        {
+            const double mass = 6.0;
+            double[] dimensions = { 1.0, 2.0, 3.0 };
+            double ixx = mass * (dimensions[1] * dimensions[1] +
+                dimensions[2] * dimensions[2]) / 12.0;
+            double iyy = mass * (dimensions[0] * dimensions[0] +
+                dimensions[2] * dimensions[2]) / 12.0;
+            double izz = mass * (dimensions[0] * dimensions[0] +
+                dimensions[1] * dimensions[1]) / 12.0;
+
+            bool success = InertiaEllipsoid.TryCreate(
+                mass,
+                new[]
+                {
+                    ixx, 0.0, 0.0,
+                    0.0, iyy, 0.0,
+                    0.0, 0.0, izz
+                },
+                out InertiaEllipsoid ellipsoid,
+                out string error);
+
+            Assert.True(success, error);
+            Array.Sort(ellipsoid.EquivalentBoxDimensions);
+            Assert.Equal(dimensions[0], ellipsoid.EquivalentBoxDimensions[0], 10);
+            Assert.Equal(dimensions[1], ellipsoid.EquivalentBoxDimensions[1], 10);
+            Assert.Equal(dimensions[2], ellipsoid.EquivalentBoxDimensions[2], 10);
+        }
+
+        [Fact]
         public void TestRotatedTensorReturnsPositiveEquivalentSemiAxes()
         {
             bool success = InertiaEllipsoid.TryCreate(

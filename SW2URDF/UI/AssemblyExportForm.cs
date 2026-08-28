@@ -245,8 +245,8 @@ namespace SW2URDF.UI
             packagePathToolTip.SetToolTip(
                 buttonShowCollisionPreview,
                 ChineseUiText.Translate(
-                    "Show this collision strategy over the SolidWorks geometry. The inertia ellipsoid can remain visible for comparison.",
-                    "在 SolidWorks 几何体上叠加当前碰撞策略；可同时保留惯性椭球进行对照。"));
+                    "Show this collision strategy over the SolidWorks geometry. The equivalent inertia cuboid can remain visible for comparison.",
+                    "在 SolidWorks 几何体上叠加当前碰撞策略；可同时保留惯性等效长方体进行对照。"));
             packagePathToolTip.SetToolTip(
                 comboBoxCollisionStrategy,
                 ChineseUiText.Translate(
@@ -961,21 +961,21 @@ namespace SW2URDF.UI
                     out InertiaPreviewFailureKind failureKind))
                 {
                     buttonShowInertiaPreview.Text = ChineseUiText.Translate(
-                        "Hide inertia ellipsoid",
-                        "\u9690\u85cf\u60ef\u6027\u692d\u7403");
+                        "Hide equivalent inertia cuboid",
+                        "隐藏惯性等效长方体");
                     labelInertiaPreviewStatus.Text = String.Format(
                         ChineseUiText.Translate(
-                            "Semi-axes R a / G b / B c: {0:0.#}/{1:0.#}/{2:0.#} mm",
-                            "\u534a\u8f74 \u7ea2a/\u7effb/\u84ddc\uff1a{0:0.#}/{1:0.#}/{2:0.#} mm"),
-                        ellipsoid.SemiAxes[0] * 1000.0,
-                        ellipsoid.SemiAxes[1] * 1000.0,
-                        ellipsoid.SemiAxes[2] * 1000.0);
+                            "Equivalent cuboid X / Y / Z: {0:0.#}/{1:0.#}/{2:0.#} mm",
+                            "等效长方体 X / Y / Z：{0:0.#}/{1:0.#}/{2:0.#} mm"),
+                        ellipsoid.EquivalentBoxDimensions[0] * 1000.0,
+                        ellipsoid.EquivalentBoxDimensions[1] * 1000.0,
+                        ellipsoid.EquivalentBoxDimensions[2] * 1000.0);
                     logger.Info(String.Format(
-                        "Displayed inertia ellipsoid for link {0}: semi-axes {1:G6}, {2:G6}, {3:G6} m",
+                        "Displayed equivalent inertia cuboid for link {0}: dimensions {1:G6}, {2:G6}, {3:G6} m",
                         node.Link.Name,
-                        ellipsoid.SemiAxes[0],
-                        ellipsoid.SemiAxes[1],
-                        ellipsoid.SemiAxes[2]));
+                        ellipsoid.EquivalentBoxDimensions[0],
+                        ellipsoid.EquivalentBoxDimensions[1],
+                        ellipsoid.EquivalentBoxDimensions[2]));
                 }
                 else
                 {
@@ -993,8 +993,8 @@ namespace SW2URDF.UI
                     MessageBox.Show(
                         (physicalInertiaInvalid
                             ? ChineseUiText.Translate(
-                                "The inertia values are physically invalid, so no ellipsoid can be computed:\r\n",
-                                "\u60ef\u6027\u53c2\u6570\u672c\u8eab\u4e0d\u6ee1\u8db3\u7269\u7406\u6761\u4ef6\uff0c\u56e0\u6b64\u65e0\u6cd5\u8ba1\u7b97\u692d\u7403\uff1a\r\n")
+                                "The inertia values are physically invalid, so no equivalent cuboid can be computed:\r\n",
+                                "惯性参数不满足物理条件，无法计算惯性等效长方体：\r\n")
                             : ChineseUiText.Translate(
                                 "The inertia values passed physical checks, but SolidWorks could not display the overlay:\r\n",
                                 "\u60ef\u6027\u53c2\u6570\u5df2\u901a\u8fc7\u7269\u7406\u68c0\u67e5\uff0c\u4f46 SolidWorks \u65e0\u6cd5\u663e\u793a\u53e0\u52a0\u5c42\uff1a\r\n")) + error,
@@ -1120,11 +1120,11 @@ namespace SW2URDF.UI
         {
             inertiaPreview.Hide();
             buttonShowInertiaPreview.Text = ChineseUiText.Translate(
-                "Show inertia ellipsoid",
-                "\u663e\u793a\u60ef\u6027\u692d\u7403");
+                "Show equivalent inertia cuboid",
+                "显示惯性等效长方体");
             labelInertiaPreviewStatus.Text = ChineseUiText.Translate(
-                "R a / G b / B c: principal semi-axes (mm)",
-                "\u7ea2a / \u7effb / \u84ddc\uff1a\u4e3b\u60ef\u6027\u534a\u8f74 (mm)");
+                "Equivalent cuboid X / Y / Z dimensions (mm)",
+                "惯性等效长方体 X / Y / Z 尺寸 (mm)");
         }
 
         private void AssemblyExportFormClosed(object sender, FormClosedEventArgs e)

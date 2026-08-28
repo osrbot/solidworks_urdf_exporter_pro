@@ -7,7 +7,6 @@ using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 using System.Runtime.InteropServices;
 using DrawingColor = System.Drawing.Color;
 
@@ -22,10 +21,7 @@ namespace SW2URDF.UI
 
     internal sealed class InertiaPreview : IDisposable
     {
-        private const double PrincipalAxisLengthScale = 1.15;
-        private const int InertiaCurveCount = 6;
-        private const int ComMarkerCurveCount = 3;
-        internal const int ExpectedCurveCount = InertiaCurveCount + ComMarkerCurveCount;
+        internal const int ExpectedBodyCount = 1;
 
         private readonly SldWorks swApp;
         private readonly ModelDoc2 model;
@@ -108,57 +104,61 @@ namespace SW2URDF.UI
                     Matrix<double> inertialTransform = MathOps.GetTransformation(
                         link.Inertial.Origin.GetXYZ(),
                         link.Inertial.Origin.GetRPY());
-                    Matrix<double> displayTransform = linkTransform * inertialTransform;
-                    Matrix<double> displayRotation = displayTransform.SubMatrix(0, 3, 0, 3);
-                    double[] center =
-                    {
-                        displayTransform[0, 3],
-                        displayTransform[1, 3],
-                        displayTransform[2, 3]
-                    };
-
-                    double[][] axes = new double[3][];
-                    for (int i = 0; i < axes.Length; i++)
-                    {
-                        axes[i] = (displayRotation * ellipsoid.PrincipalAxes.Column(i)).ToArray();
-                        Normalize(axes[i]);
-                    }
-
+                    Matrix<double> principalTransform = BuildPrincipalFrameTransform(
+                        ellipsoid.PrincipalAxes);
+                    Matrix<double> bodyToDisplayTarget = linkTransform *
+                        inertialTransform * principalTransform;
                     Modeler modeler = null;
+                    MathUtility mathUtility = null;
+                    MathTransform bodyTransform = null;
+                    Body2 body = null;
                     try
                     {
-                        modeler = (Modeler)swApp.GetModeler();
-                        AddEllipse(modeler, center, ellipsoid.SemiAxes[0], ellipsoid.SemiAxes[1],
-                            axes[0], axes[1], DrawingColor.Red, displayContext.DisplayTarget);
-                        AddEllipse(modeler, center, ellipsoid.SemiAxes[0], ellipsoid.SemiAxes[2],
-                            axes[0], axes[2], DrawingColor.LimeGreen, displayContext.DisplayTarget);
-                        AddEllipse(modeler, center, ellipsoid.SemiAxes[1], ellipsoid.SemiAxes[2],
-                            axes[1], axes[2], DrawingColor.DodgerBlue, displayContext.DisplayTarget);
-                        AddPrincipalAxis(modeler, center, axes[0], ellipsoid.SemiAxes[0],
-                            DrawingColor.Red, displayContext.DisplayTarget);
-                        AddPrincipalAxis(modeler, center, axes[1], ellipsoid.SemiAxes[1],
-                            DrawingColor.LimeGreen, displayContext.DisplayTarget);
-                        AddPrincipalAxis(modeler, center, axes[2], ellipsoid.SemiAxes[2],
-                            DrawingColor.DodgerBlue, displayContext.DisplayTarget);
-                        AddComMarker(modeler, center, ellipsoid.SemiAxes.Max(),
-                            displayContext.DisplayTarget);
+                        modeler = swApp.GetModeler() as Modeler;
+                        mathUtility = swApp.GetMathUtility() as MathUtility;
+                        if (modeler == null || mathUtility == null)
+                        {
+                            throw new InvalidOperationException(ChineseUiText.Translate(
+                                "SolidWorks temporary-body services are unavailable.",
+                                "SolidWorks 临时实体服务不可用。"));
+                        }
+                        bodyTransform = mathUtility.CreateTransform(
+                            TemporaryBodyDisplayContext.ToSolidWorksTransformData(
+                                bodyToDisplayTarget)) as MathTransform;
+                        if (bodyTransform == null)
+                        {
+                            throw new InvalidOperationException(ChineseUiText.Translate(
+                                "SolidWorks could not create the inertia preview transform.",
+                                "SolidWorks 无法创建惯性预览变换。"));
+                        }
+                        body = CreateEquivalentBoxBody(
+                            modeler,
+                            ellipsoid.EquivalentBoxDimensions);
+                        Body2 ownedBody = body;
+                        body = null;
+                        AddBody(ownedBody, bodyTransform, displayContext.DisplayTarget);
                     }
                     finally
                     {
-                        ReleaseComObject(modeler);
+                        ReleaseBody(body);
+                        ReleaseComReference(bodyTransform);
+                        ReleaseComReference(mathUtility);
+                        ReleaseComReference(modeler);
                     }
                 }
                 model.GraphicsRedraw2();
-                if (temporaryBodies.Count == ExpectedCurveCount)
+                if (temporaryBodies.Count == ExpectedBodyCount)
                 {
                     return true;
                 }
 
-                int displayedCurveCount = temporaryBodies.Count;
+                int displayedBodyCount = temporaryBodies.Count;
                 Hide();
                 failureKind = InertiaPreviewFailureKind.DisplayUnavailable;
-                error = "SolidWorks displayed only " + displayedCurveCount +
-                    " of " + ExpectedCurveCount + " inertia and COM preview curves.";
+                error = ChineseUiText.Translate(
+                    "SolidWorks did not display the equivalent inertia cuboid.",
+                    "SolidWorks 未能显示惯性等效长方体。") + " (" +
+                    displayedBodyCount + "/" + ExpectedBodyCount + ")";
                 return false;
             }
             catch (Exception e)
@@ -202,132 +202,121 @@ namespace SW2URDF.UI
             Hide();
         }
 
-        private void AddEllipse(
-            Modeler modeler,
-            double[] center,
-            double majorRadius,
-            double minorRadius,
-            double[] majorAxis,
-            double[] minorAxis,
-            DrawingColor color,
-            object displayTarget)
+        internal static double[] BuildEquivalentBoxBodyDimensions(double[] dimensions)
         {
-            object curve = null;
+            if (dimensions == null || dimensions.Length != 3 ||
+                !IsFinitePositive(dimensions[0]) ||
+                !IsFinitePositive(dimensions[1]) ||
+                !IsFinitePositive(dimensions[2]))
+            {
+                throw new ArgumentException(
+                    "Equivalent inertia cuboid dimensions must contain three positive values.",
+                    nameof(dimensions));
+            }
+            return new[]
+            {
+                0.0, 0.0, -dimensions[2] / 2.0,
+                0.0, 0.0, 1.0,
+                dimensions[0], dimensions[1], dimensions[2]
+            };
+        }
+
+        internal static Matrix<double> BuildRightHandedPrincipalAxes(
+            Matrix<double> principalAxes)
+        {
+            if (principalAxes == null || principalAxes.RowCount != 3 ||
+                principalAxes.ColumnCount != 3)
+            {
+                throw new ArgumentException("Principal axes must be a 3x3 matrix.",
+                    nameof(principalAxes));
+            }
+
+            double[] x = principalAxes.Column(0).ToArray();
+            double[] y = principalAxes.Column(1).ToArray();
+            Normalize(x);
+            double projection = Dot(x, y);
+            for (int i = 0; i < 3; i++)
+            {
+                y[i] -= projection * x[i];
+            }
+            Normalize(y);
+            double[] z = Cross(x, y);
+            Normalize(z);
+
+            Matrix<double> result = Matrix<double>.Build.Dense(3, 3);
+            for (int row = 0; row < 3; row++)
+            {
+                result[row, 0] = x[row];
+                result[row, 1] = y[row];
+                result[row, 2] = z[row];
+            }
+            return result;
+        }
+
+        internal static Matrix<double> BuildPrincipalFrameTransform(
+            Matrix<double> principalAxes)
+        {
+            Matrix<double> rotation = BuildRightHandedPrincipalAxes(principalAxes);
+            Matrix<double> transform = Matrix<double>.Build.DenseIdentity(4);
+            for (int row = 0; row < 3; row++)
+            {
+                for (int column = 0; column < 3; column++)
+                {
+                    transform[row, column] = rotation[row, column];
+                }
+            }
+            return transform;
+        }
+
+        private static Body2 CreateEquivalentBoxBody(
+            Modeler modeler,
+            double[] equivalentBoxDimensions)
+        {
+            double[] bodyDimensions = BuildEquivalentBoxBodyDimensions(
+                equivalentBoxDimensions);
             try
             {
-                curve = modeler.CreateEllipse(
-                    center,
-                    majorRadius,
-                    minorRadius,
-                    majorAxis,
-                    minorAxis);
-                AddWireBody(modeler, curve, color, displayTarget);
+                return modeler.CreateBodyFromBox3(bodyDimensions);
             }
-            finally
+            catch (COMException exception) when (
+                exception.ErrorCode == unchecked((int)0x8002000D))
             {
-                ReleaseComObject(curve);
-            }
-        }
-
-        private void AddPrincipalAxis(
-            Modeler modeler,
-            double[] center,
-            double[] direction,
-            double semiAxis,
-            DrawingColor color,
-            object displayTarget)
-        {
-            double halfLength = semiAxis * PrincipalAxisLengthScale;
-            AddLine(modeler, center, direction, halfLength, color, displayTarget);
-        }
-
-        private void AddComMarker(
-            Modeler modeler,
-            double[] center,
-            double largestSemiAxis,
-            object displayTarget)
-        {
-            double halfLength = Math.Max(0.0025, largestSemiAxis * 0.12);
-            AddLine(modeler, center, new[] { 1.0, 0.0, 0.0 }, halfLength,
-                DrawingColor.Gold, displayTarget);
-            AddLine(modeler, center, new[] { 0.0, 1.0, 0.0 }, halfLength,
-                DrawingColor.Gold, displayTarget);
-            AddLine(modeler, center, new[] { 0.0, 0.0, 1.0 }, halfLength,
-                DrawingColor.Gold, displayTarget);
-        }
-
-        private void AddLine(
-            Modeler modeler,
-            double[] center,
-            double[] direction,
-            double halfLength,
-            DrawingColor color,
-            object displayTarget)
-        {
-            double[] start =
-            {
-                center[0] - direction[0] * halfLength,
-                center[1] - direction[1] * halfLength,
-                center[2] - direction[2] * halfLength
-            };
-            double[] end =
-            {
-                center[0] + direction[0] * halfLength,
-                center[1] + direction[1] * halfLength,
-                center[2] + direction[2] * halfLength
-            };
-
-            Curve baseCurve = null;
-            Curve trimmedCurve = null;
-            try
-            {
-                baseCurve = modeler.CreateLine(center, direction) as Curve;
-                if (baseCurve == null)
+                // SolidWorks 2023 can reject the object SAFEARRAY as locked.
+                Body2 body = modeler.ICreateBodyFromBox2(ref bodyDimensions[0]);
+                if (body != null)
                 {
-                    throw new InvalidOperationException(
-                        "SolidWorks could not create an inertia principal axis.");
+                    return body;
                 }
-                trimmedCurve = baseCurve.CreateTrimmedCurve2(
-                    start[0], start[1], start[2],
-                    end[0], end[1], end[2]);
-                if (trimmedCurve == null)
-                {
-                    throw new InvalidOperationException(
-                        "SolidWorks could not trim an inertia principal axis.");
-                }
-                AddWireBody(modeler, trimmedCurve, color, displayTarget);
-            }
-            finally
-            {
-                ReleaseComObject(trimmedCurve);
-                ReleaseComObject(baseCurve);
+                return modeler.CreateBodyFromBox(bodyDimensions) as Body2;
             }
         }
 
-        private void AddWireBody(
-            Modeler modeler,
-            object curve,
-            DrawingColor color,
-            object displayTarget)
+        private void AddBody(Body2 body, MathTransform transform, object displayTarget)
         {
-            Body2 body = modeler.CreateWireBody(
-                curve,
-                (int)swCreateWireBodyOptions_e.swCreateWireBodyByDefault);
             if (body == null)
             {
-                throw new InvalidOperationException("SolidWorks could not create the inertia preview curve.");
+                throw new InvalidOperationException(ChineseUiText.Translate(
+                    "SolidWorks could not create the equivalent inertia cuboid.",
+                    "SolidWorks 无法创建惯性等效长方体。"));
             }
 
             try
             {
+                if (!body.ApplyTransform(transform))
+                {
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "SolidWorks could not transform the equivalent inertia cuboid.",
+                        "SolidWorks 无法变换惯性等效长方体。"));
+                }
                 int result = body.Display3(
                     displayTarget,
-                    ColorTranslator.ToOle(color),
+                    ColorTranslator.ToOle(DrawingColor.DodgerBlue),
                     (int)swTempBodySelectOptions_e.swTempBodySelectOptionNone);
                 if (!IsDisplaySuccess(result))
                 {
-                    throw new InvalidOperationException(
-                        "SolidWorks could not display the inertia preview curve. Display3 error code: " +
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "SolidWorks could not display the equivalent inertia cuboid. Display3 error code: ",
+                        "SolidWorks 无法显示惯性等效长方体。Display3 错误码：") +
                         result + ".");
                 }
                 temporaryBodies.Add(body);
@@ -335,7 +324,7 @@ namespace SW2URDF.UI
             }
             finally
             {
-                ReleaseComObject(body);
+                ReleaseBody(body);
             }
         }
 
@@ -345,7 +334,20 @@ namespace SW2URDF.UI
             return result == 0;
         }
 
-        private static void ReleaseComObject(object value)
+        private static void ReleaseBody(object value)
+        {
+            try
+            {
+                if (value != null && Marshal.IsComObject(value))
+                {
+                    Marshal.FinalReleaseComObject(value);
+                }
+            }
+            catch (InvalidComObjectException) { }
+            catch (COMException) { }
+        }
+
+        private static void ReleaseComReference(object value)
         {
             try
             {
@@ -371,6 +373,26 @@ namespace SW2URDF.UI
             vector[0] /= length;
             vector[1] /= length;
             vector[2] /= length;
+        }
+
+        private static double Dot(double[] left, double[] right)
+        {
+            return left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
+        }
+
+        private static double[] Cross(double[] left, double[] right)
+        {
+            return new[]
+            {
+                left[1] * right[2] - left[2] * right[1],
+                left[2] * right[0] - left[0] * right[2],
+                left[0] * right[1] - left[1] * right[0]
+            };
+        }
+
+        private static bool IsFinitePositive(double value)
+        {
+            return value > 0.0 && !Double.IsNaN(value) && !Double.IsInfinity(value);
         }
 
     }
