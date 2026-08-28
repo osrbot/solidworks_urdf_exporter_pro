@@ -1,3 +1,4 @@
+using MathNet.Numerics.LinearAlgebra;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SW2URDF.UI;
@@ -78,48 +79,41 @@ namespace SW2URDF.Test
             Assert.Equal(new[] { 1.0, 1.0, 1.0, 4.0, 4.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 }, result[2]);
         }
 
-        [Theory]
-        [InlineData(CollisionMeshStrategy.VisualMesh)]
-        [InlineData(CollisionMeshStrategy.SimplifiedMesh)]
-        [InlineData(CollisionMeshStrategy.AccurateMesh)]
-        public void TestMeshStrategiesReturnExplicitStatusWithoutOverlay(
-            CollisionMeshStrategy strategy)
+        [Fact]
+        public void TestConvexHullWireframeContainsUniqueNonZeroEdges()
         {
-            using (CollisionPreview preview = new CollisionPreview(null, null, null))
-            {
-                bool shown = preview.Show(null, strategy, null, out string status, out string error);
+            ExportHelper.LinkLocalBoundingBox box =
+                CreateBox(-1.0, -2.0, -3.0, 3.0, 4.0, 5.0);
 
-                Assert.False(shown);
-                Assert.False(preview.IsVisible);
+            double[][] edges = CollisionPreview.BuildConvexHullEdgeDimensions(box);
+
+            Assert.True(edges.Length >= 12);
+            Assert.Equal(edges.Length, edges.Select(NormalizeEdge).Distinct().Count());
+            Assert.All(edges, edge =>
+            {
+                Assert.Equal(6, edge.Length);
                 Assert.True(
-                    status.IndexOf("preview", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    status.Contains("预览"));
-                Assert.Null(error);
-            }
+                    Math.Pow(edge[3] - edge[0], 2.0) +
+                    Math.Pow(edge[4] - edge[1], 2.0) +
+                    Math.Pow(edge[5] - edge[2], 2.0) > 0.0);
+            });
         }
 
         [Fact]
-        public void TestConvexHullExplicitlyReportsLivePreviewUnavailable()
+        public void TestBodyTransformMovesDocumentGeometryIntoDisplayTarget()
         {
-            using (CollisionPreview preview = new CollisionPreview(null, null, null))
-            {
-                bool shown = preview.Show(
-                    null,
-                    CollisionMeshStrategy.ConvexHull,
-                    null,
-                    out string status,
-                    out string error);
+            Matrix<double> linkToDisplayTarget = CreateTranslation(2.0, 0.0, 0.0);
+            Matrix<double> linkToDocument = CreateTranslation(10.0, 0.0, 0.0);
+            Matrix<double> componentToDocument = CreateTranslation(12.0, 3.0, 0.0);
 
-                Assert.False(shown);
-                Assert.False(preview.IsVisible);
-                Assert.True(
-                    status.IndexOf("convex hull", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    status.Contains("凸包"));
-                Assert.True(
-                    status.IndexOf("unavailable", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    status.Contains("不支持"));
-                Assert.Null(error);
-            }
+            Matrix<double> result = CollisionPreview.BuildBodyToDisplayTarget(
+                linkToDisplayTarget,
+                linkToDocument,
+                componentToDocument);
+
+            Assert.Equal(4.0, result[0, 3], 12);
+            Assert.Equal(3.0, result[1, 3], 12);
+            Assert.Equal(0.0, result[2, 3], 12);
         }
 
         [Theory]
@@ -133,7 +127,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestLiveBoxPreviewPreservesComponentAppearance()
+        public void TestLiveCollisionStrategiesPreserveComponentAppearance()
         {
             if (!String.Equals(
                 System.Environment.GetEnvironmentVariable("SW2URDF_RUN_SW_INTEGRATION_TESTS"),
@@ -148,7 +142,7 @@ namespace SW2URDF.Test
             {
                 try
                 {
-                    RunLiveBoxPreviewPreservesComponentAppearance();
+                    RunLiveCollisionStrategiesPreserveComponentAppearance();
                 }
                 catch (Exception exception)
                 {
@@ -165,14 +159,16 @@ namespace SW2URDF.Test
             }
         }
 
-        private static void RunLiveBoxPreviewPreservesComponentAppearance()
+        private static void RunLiveCollisionStrategiesPreserveComponentAppearance()
         {
 
             SldWorks swApp = null;
             ModelDoc2 model = null;
             Component2 component = null;
+            Component2 displayHost = null;
             MathTransform coordinateTransform = null;
             int? originalVisibility = null;
+            int? originalDisplayHostVisibility = null;
             try
             {
                 swApp = (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
@@ -180,9 +176,9 @@ namespace SW2URDF.Test
                 AssemblyDoc assembly = model as AssemblyDoc;
                 Assert.NotNull(assembly);
                 object[] topLevelComponents = assembly.GetComponents(true) as object[];
-                component = (topLevelComponents ?? new object[0])
+                Component2[] usableComponents = (topLevelComponents ?? new object[0])
                     .Cast<Component2>()
-                    .FirstOrDefault(candidate =>
+                    .Where(candidate =>
                     {
                         try
                         {
@@ -193,14 +189,21 @@ namespace SW2URDF.Test
                         {
                             return false;
                         }
-                    });
+                    })
+                    .Take(2)
+                    .ToArray();
                 Assert.True(
-                    component != null,
-                    "The live collision preview test requires a top-level component with usable geometry.");
+                    usableComponents.Length >= 2,
+                    "The live collision preview test requires two top-level components with usable geometry.");
+                component = usableComponents[0];
+                displayHost = usableComponents[1];
                 originalVisibility = component.Visible;
+                originalDisplayHostVisibility = displayHost.Visible;
                 component.Visible = (int)swComponentVisibilityState_e.swComponentHidden;
+                displayHost.Visible = (int)swComponentVisibilityState_e.swComponentVisible;
                 model.GraphicsRedraw2();
                 Assert.True(component.IsHidden(false));
+                Assert.False(displayHost.IsHidden(false));
 
                 string coordinateSystemName =
                     System.Environment.GetEnvironmentVariable("SW2URDF_TEST_COORDINATE_SYSTEM");
@@ -234,7 +237,12 @@ namespace SW2URDF.Test
                     {
                         CollisionMeshStrategy.BoxPrimitive,
                         CollisionMeshStrategy.CylinderPrimitive,
-                        CollisionMeshStrategy.SpherePrimitive
+                        CollisionMeshStrategy.SpherePrimitive,
+                        CollisionMeshStrategy.ComponentBoxes,
+                        CollisionMeshStrategy.ConvexHull,
+                        CollisionMeshStrategy.VisualMesh,
+                        CollisionMeshStrategy.AccurateMesh,
+                        CollisionMeshStrategy.SimplifiedMesh
                     })
                     {
                         Assert.True(preview.Show(
@@ -245,6 +253,12 @@ namespace SW2URDF.Test
                             out string error),
                             strategy + ": " + (error ?? status));
                         Assert.True(preview.IsVisible);
+                        if (strategy == CollisionMeshStrategy.SimplifiedMesh)
+                        {
+                            Assert.True(
+                                status.IndexOf("approximate", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                status.Contains("近似"));
+                        }
                         preview.Hide();
                         Assert.False(preview.IsVisible);
                     }
@@ -259,6 +273,15 @@ namespace SW2URDF.Test
                     try
                     {
                         component.Visible = originalVisibility.Value;
+                        model?.GraphicsRedraw2();
+                    }
+                    catch { }
+                }
+                if (displayHost != null && originalDisplayHostVisibility.HasValue)
+                {
+                    try
+                    {
+                        displayHost.Visible = originalDisplayHostVisibility.Value;
                         model?.GraphicsRedraw2();
                     }
                     catch { }
@@ -325,6 +348,15 @@ namespace SW2URDF.Test
             box.Include(minX, minY, minZ);
             box.Include(maxX, maxY, maxZ);
             return box;
+        }
+
+        private static Matrix<double> CreateTranslation(double x, double y, double z)
+        {
+            Matrix<double> matrix = Matrix<double>.Build.DenseIdentity(4);
+            matrix[0, 3] = x;
+            matrix[1, 3] = y;
+            matrix[2, 3] = z;
+            return matrix;
         }
     }
 }

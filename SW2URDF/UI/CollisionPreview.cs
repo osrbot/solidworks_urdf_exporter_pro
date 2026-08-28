@@ -1,7 +1,9 @@
+using MathNet.Numerics.LinearAlgebra;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
+using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -33,20 +35,6 @@ namespace SW2URDF.UI
             Hide();
             error = null;
 
-            if (strategy == CollisionMeshStrategy.ConvexHull)
-            {
-                status = ChineseUiText.Translate(
-                    "Live preview is unavailable for convex hull collision geometry.",
-                    "凸包碰撞几何暂不支持实时预览。");
-                return false;
-            }
-            if (IsMeshStrategy(strategy))
-            {
-                status = ChineseUiText.Translate(
-                    "Live preview is unavailable for mesh collision strategies.",
-                    "网格碰撞策略暂不支持实时预览。");
-                return false;
-            }
             if (link == null || linkCoordinateTransform == null ||
                 swApp == null || model == null || exporter == null)
             {
@@ -121,6 +109,44 @@ namespace SW2URDF.UI
                                     displayedBodyCount.ToString(CultureInfo.InvariantCulture) + ").",
                                 "已显示组件盒体线框预览（" +
                                     displayedBodyCount.ToString(CultureInfo.InvariantCulture) + " 个）。");
+                            break;
+                        case CollisionMeshStrategy.ConvexHull:
+                            displayedBodyCount = ShowConvexHull(modeler, link,
+                                displayContext.LinkToDisplayTarget,
+                                displayContext.DisplayTarget);
+                            status = ChineseUiText.Translate(
+                                "Convex hull collision wireframe preview shown.",
+                                "已显示凸包碰撞线框预览。");
+                            break;
+                        case CollisionMeshStrategy.VisualMesh:
+                            displayedBodyCount = ShowComponentBodies(
+                                link,
+                                linkCoordinateTransform,
+                                displayContext.LinkToDisplayTarget,
+                                displayContext.DisplayTarget);
+                            status = ChineseUiText.Translate(
+                                "Visual-mesh collision geometry preview shown from SolidWorks bodies.",
+                                "已使用 SolidWorks 实体显示复用可视网格的碰撞几何预览。");
+                            break;
+                        case CollisionMeshStrategy.AccurateMesh:
+                            displayedBodyCount = ShowComponentBodies(
+                                link,
+                                linkCoordinateTransform,
+                                displayContext.LinkToDisplayTarget,
+                                displayContext.DisplayTarget);
+                            status = ChineseUiText.Translate(
+                                "Accurate collision geometry preview shown from SolidWorks bodies.",
+                                "已使用 SolidWorks 实体显示精确碰撞几何预览。");
+                            break;
+                        case CollisionMeshStrategy.SimplifiedMesh:
+                            displayedBodyCount = ShowComponentBodies(
+                                link,
+                                linkCoordinateTransform,
+                                displayContext.LinkToDisplayTarget,
+                                displayContext.DisplayTarget);
+                            status = ChineseUiText.Translate(
+                                "Approximate simplified-mesh preview shown from unsimplified SolidWorks bodies; the final STL may differ.",
+                                "已使用未简化的 SolidWorks 实体显示近似预览；最终简化 STL 可能不同。");
                             break;
                         default:
                             status = ChineseUiText.Translate(
@@ -237,6 +263,39 @@ namespace SW2URDF.UI
             };
         }
 
+        internal static double[][] BuildConvexHullEdgeDimensions(
+            ExportHelper.LinkLocalBoundingBox box)
+        {
+            ExportHelper.ConvexHullGeometry geometry =
+                ExportHelper.BuildConvexHullGeometry(box);
+            HashSet<string> uniqueEdges = new HashSet<string>();
+            List<double[]> edges = new List<double[]>();
+            foreach (int[] triangle in geometry.Triangles)
+            {
+                if (triangle == null || triangle.Length < 3)
+                {
+                    continue;
+                }
+                AddConvexHullEdge(geometry.Vertices, triangle[0], triangle[1], uniqueEdges, edges);
+                AddConvexHullEdge(geometry.Vertices, triangle[1], triangle[2], uniqueEdges, edges);
+                AddConvexHullEdge(geometry.Vertices, triangle[2], triangle[0], uniqueEdges, edges);
+            }
+            return edges.ToArray();
+        }
+
+        internal static Matrix<double> BuildBodyToDisplayTarget(
+            Matrix<double> linkToDisplayTarget,
+            Matrix<double> linkToDocument,
+            Matrix<double> componentToDocument)
+        {
+            if (linkToDisplayTarget == null || linkToDocument == null ||
+                componentToDocument == null)
+            {
+                throw new ArgumentNullException("A collision preview transform is missing.");
+            }
+            return linkToDisplayTarget * linkToDocument.Inverse() * componentToDocument;
+        }
+
         internal static bool IsDisplaySuccess(int result) { return result == 0; }
 
         private int ShowBox(Modeler modeler, Link link, MathTransform transform,
@@ -307,6 +366,180 @@ namespace SW2URDF.UI
                 }
             }
             return boxes.Count;
+        }
+
+        private int ShowConvexHull(Modeler modeler, Link link, MathTransform transform,
+            object displayTarget)
+        {
+            double[][] edges = BuildConvexHullEdgeDimensions(
+                exporter.CreateLinkLocalBoundingBox(link));
+            if (edges.Length == 0)
+            {
+                throw new InvalidOperationException(ChineseUiText.Translate(
+                    "No usable convex hull edges were found.",
+                    "未找到可用的凸包边线。"));
+            }
+            foreach (double[] edge in edges)
+            {
+                AddLine(modeler, edge, transform, displayTarget);
+            }
+            return edges.Length;
+        }
+
+        private int ShowComponentBodies(
+            Link link,
+            MathTransform linkToDocument,
+            MathTransform linkToDisplayTarget,
+            object displayTarget)
+        {
+            if (link.SWComponents == null || link.SWComponents.Count == 0)
+            {
+                throw new InvalidOperationException(ChineseUiText.Translate(
+                    "The Link has no SolidWorks components to preview.",
+                    "该 Link 没有可供预览的 SolidWorks 组件。"));
+            }
+
+            Matrix<double> linkToDocumentMatrix = MathOps.GetTransformation(linkToDocument);
+            Matrix<double> linkToDisplayTargetMatrix =
+                MathOps.GetTransformation(linkToDisplayTarget);
+            MathUtility mathUtility = null;
+            try
+            {
+                mathUtility = swApp.GetMathUtility() as MathUtility;
+                if (mathUtility == null)
+                {
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "SolidWorks MathUtility is unavailable.",
+                        "SolidWorks MathUtility 不可用。"));
+                }
+
+                HashSet<string> visitedComponents = new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase);
+                int displayedBodyCount = 0;
+                foreach (Component2 component in link.SWComponents)
+                {
+                    displayedBodyCount += ShowComponentBodiesRecursive(
+                        component,
+                        linkToDocumentMatrix,
+                        linkToDisplayTargetMatrix,
+                        displayTarget,
+                        mathUtility,
+                        visitedComponents);
+                }
+                if (displayedBodyCount == 0)
+                {
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "No usable SolidWorks bodies were found for this Link.",
+                        "未找到该 Link 可用的 SolidWorks 实体。"));
+                }
+                return displayedBodyCount;
+            }
+            finally
+            {
+                ReleaseComReference(mathUtility);
+            }
+        }
+
+        private int ShowComponentBodiesRecursive(
+            Component2 component,
+            Matrix<double> linkToDocument,
+            Matrix<double> linkToDisplayTarget,
+            object displayTarget,
+            MathUtility mathUtility,
+            ISet<string> visitedComponents)
+        {
+            if (component == null ||
+                !visitedComponents.Add(GetComponentIdentity(component)))
+            {
+                return 0;
+            }
+
+            Matrix<double> componentToDocument = Matrix<double>.Build.DenseIdentity(4);
+            MathTransform componentTransform = null;
+            MathTransform bodyToDisplayTarget = null;
+            int displayedBodyCount = 0;
+            try
+            {
+                componentTransform = component.Transform2;
+                if (componentTransform != null)
+                {
+                    componentToDocument = MathOps.GetTransformation(componentTransform);
+                }
+                Matrix<double> bodyTransformMatrix = BuildBodyToDisplayTarget(
+                    linkToDisplayTarget,
+                    linkToDocument,
+                    componentToDocument);
+                bodyToDisplayTarget = mathUtility.CreateTransform(
+                    TemporaryBodyDisplayContext.ToSolidWorksTransformData(bodyTransformMatrix))
+                    as MathTransform;
+                if (bodyToDisplayTarget == null)
+                {
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "SolidWorks could not create the collision body preview transform.",
+                        "SolidWorks 无法创建碰撞实体预览变换。"));
+                }
+
+                object[] bodies = null;
+                try
+                {
+                    object bodyInfo;
+                    bodies = component.GetBodies3(
+                        (int)swBodyType_e.swSolidBody,
+                        out bodyInfo) as object[];
+                }
+                catch (COMException)
+                {
+                    bodies = null;
+                }
+                foreach (object bodyObject in bodies ?? new object[0])
+                {
+                    Body2 sourceBody = bodyObject as Body2;
+                    if (sourceBody == null)
+                    {
+                        continue;
+                    }
+                    try
+                    {
+                        Body2 copiedBody = sourceBody.Copy() as Body2;
+                        if (copiedBody == null)
+                        {
+                            continue;
+                        }
+                        Body2 ownedBody = copiedBody;
+                        copiedBody = null;
+                        AddBody(ownedBody, bodyToDisplayTarget,
+                            DrawingColor.OrangeRed, displayTarget);
+                        displayedBodyCount++;
+                    }
+                    finally
+                    {
+                        ReleaseComReference(sourceBody);
+                    }
+                }
+            }
+            finally
+            {
+                ReleaseComReference(bodyToDisplayTarget);
+                ReleaseComReference(componentTransform);
+            }
+
+            object[] children = null;
+            try
+            {
+                children = component.GetChildren() as object[];
+            }
+            catch (COMException) { }
+            foreach (object childObject in children ?? new object[0])
+            {
+                displayedBodyCount += ShowComponentBodiesRecursive(
+                    childObject as Component2,
+                    linkToDocument,
+                    linkToDisplayTarget,
+                    displayTarget,
+                    mathUtility,
+                    visitedComponents);
+            }
+            return displayedBodyCount;
         }
 
         private void AddLine(Modeler modeler, double[] dimensions, MathTransform transform,
@@ -449,11 +682,41 @@ namespace SW2URDF.UI
             return new[] { start[0], start[1], start[2], end[0], end[1], end[2] };
         }
 
-        private static bool IsMeshStrategy(CollisionMeshStrategy strategy)
+        private static void AddConvexHullEdge(
+            IList<double[]> vertices,
+            int firstIndex,
+            int secondIndex,
+            ISet<string> uniqueEdges,
+            ICollection<double[]> edges)
         {
-            return strategy == CollisionMeshStrategy.VisualMesh ||
-                strategy == CollisionMeshStrategy.SimplifiedMesh ||
-                strategy == CollisionMeshStrategy.AccurateMesh;
+            if (vertices == null || firstIndex < 0 || secondIndex < 0 ||
+                firstIndex >= vertices.Count || secondIndex >= vertices.Count ||
+                firstIndex == secondIndex)
+            {
+                return;
+            }
+            int minimum = Math.Min(firstIndex, secondIndex);
+            int maximum = Math.Max(firstIndex, secondIndex);
+            string key = minimum.ToString(CultureInfo.InvariantCulture) + ":" +
+                maximum.ToString(CultureInfo.InvariantCulture);
+            if (uniqueEdges.Add(key))
+            {
+                edges.Add(BuildLineDimensions(vertices[firstIndex], vertices[secondIndex]));
+            }
+        }
+
+        private static string GetComponentIdentity(Component2 component)
+        {
+            try
+            {
+                string name = component.Name2;
+                if (!String.IsNullOrWhiteSpace(name))
+                {
+                    return name;
+                }
+            }
+            catch (COMException) { }
+            return component.GetHashCode().ToString(CultureInfo.InvariantCulture);
         }
 
         private static void RequireUsableBox(ExportHelper.LinkLocalBoundingBox box)

@@ -1771,6 +1771,12 @@ namespace SW2URDF.URDFExport
 
         internal static void WriteConvexHullPrimitiveStl(string filename, LinkLocalBoundingBox box)
         {
+            ConvexHullGeometry geometry = BuildConvexHullGeometry(box);
+            WriteBinaryStl(filename, geometry.Vertices, geometry.Triangles);
+        }
+
+        internal static ConvexHullGeometry BuildConvexHullGeometry(LinkLocalBoundingBox box)
+        {
             if (box == null || !box.IsUsable)
             {
                 throw new InvalidOperationException("Convex hull collision mesh is invalid");
@@ -1792,7 +1798,7 @@ namespace SW2URDF.URDFExport
                 triangles = BuildConvexHullTriangles(sourcePoints);
             }
 
-            WriteBinaryStl(filename, sourcePoints, triangles);
+            return new ConvexHullGeometry(sourcePoints, triangles);
         }
 
         private static double[] CreateAxisPoint(
@@ -2120,6 +2126,19 @@ namespace SW2URDF.URDFExport
             writer.Write((float)point[0]);
             writer.Write((float)point[1]);
             writer.Write((float)point[2]);
+        }
+
+        internal sealed class ConvexHullGeometry
+        {
+            public ConvexHullGeometry(IList<double[]> vertices, IList<int[]> triangles)
+            {
+                Vertices = vertices;
+                Triangles = triangles;
+            }
+
+            public IList<double[]> Vertices { get; private set; }
+
+            public IList<int[]> Triangles { get; private set; }
         }
 
         internal class LinkLocalBoundingBox
