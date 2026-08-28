@@ -97,8 +97,8 @@ namespace SW2URDF.UI
                                 displayContext.LinkToDisplayTarget,
                                 displayContext.DisplayTarget);
                             status = ChineseUiText.Translate(
-                                "Sphere collision preview shown as three wire circles.",
-                                "已用三个线框圆显示球体碰撞预览。");
+                                "Spherical collision body preview shown.",
+                                "已显示球形碰撞体预览。");
                             break;
                         case CollisionMeshStrategy.ComponentBoxes:
                             displayedBodyCount = ShowComponentBoxes(modeler, link,
@@ -250,17 +250,12 @@ namespace SW2URDF.UI
             return dimensions;
         }
 
-        internal static double[][] BuildSphereCircleDimensions(ExportHelper.LinkLocalBoundingBox box)
+        internal static double[] BuildSphereDimensions(ExportHelper.LinkLocalBoundingBox box)
         {
             RequireUsableBox(box);
             double[] center = box.Center;
             double radius = Math.Max(box.Width, Math.Max(box.Depth, box.Height)) / 2.0;
-            return new[]
-            {
-                BuildCircleDimensions(center, radius, new[] { 1.0, 0.0, 0.0 }, new[] { 0.0, 1.0, 0.0 }),
-                BuildCircleDimensions(center, radius, new[] { 1.0, 0.0, 0.0 }, new[] { 0.0, 0.0, 1.0 }),
-                BuildCircleDimensions(center, radius, new[] { 0.0, 1.0, 0.0 }, new[] { 0.0, 0.0, 1.0 })
-            };
+            return new[] { center[0], center[1], center[2], radius };
         }
 
         internal static double[][] BuildConvexHullEdgeDimensions(
@@ -339,12 +334,45 @@ namespace SW2URDF.UI
         private int ShowSphere(Modeler modeler, Link link, MathTransform transform,
             object displayTarget)
         {
-            double[][] circles = BuildSphereCircleDimensions(exporter.CreateLinkLocalBoundingBox(link));
-            foreach (double[] circle in circles)
+            Surface surface = null;
+            Body2 body = null;
+            try
             {
-                AddCircle(modeler, circle, transform, displayTarget);
+                double[] dimensions = BuildSphereDimensions(
+                    exporter.CreateLinkLocalBoundingBox(link));
+                surface = modeler.CreateSphericalSurface2(
+                    new[] { dimensions[0], dimensions[1], dimensions[2] },
+                    new[] { 0.0, 0.0, 1.0 },
+                    new[] { 1.0, 0.0, 0.0 },
+                    dimensions[3]) as Surface;
+                if (surface == null)
+                {
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "SolidWorks could not create the spherical collision surface.",
+                        "SolidWorks 无法创建球形碰撞曲面。"));
+                }
+
+                body = surface.CreateTrimmedSheet5(
+                    new Curve[] { null },
+                    true,
+                    0.00001) as Body2;
+                if (body == null)
+                {
+                    throw new InvalidOperationException(ChineseUiText.Translate(
+                        "SolidWorks could not create the spherical collision body.",
+                        "SolidWorks 无法创建球形碰撞体。"));
+                }
+
+                Body2 ownedBody = body;
+                body = null;
+                AddBody(ownedBody, transform, DrawingColor.OrangeRed, displayTarget);
+                return 1;
             }
-            return circles.Length;
+            finally
+            {
+                ReleaseComObject(body);
+                ReleaseComObject(surface);
+            }
         }
 
         private int ShowComponentBoxes(Modeler modeler, Link link, MathTransform transform,
@@ -587,37 +615,6 @@ namespace SW2URDF.UI
             }
         }
 
-        private void AddCircle(Modeler modeler, double[] dimensions, MathTransform transform,
-            object displayTarget)
-        {
-            object curve = null;
-            Body2 body = null;
-            try
-            {
-                curve = modeler.CreateEllipse(
-                    new[] { dimensions[0], dimensions[1], dimensions[2] },
-                    dimensions[3], dimensions[4],
-                    new[] { dimensions[5], dimensions[6], dimensions[7] },
-                    new[] { dimensions[8], dimensions[9], dimensions[10] });
-                if (curve == null)
-                {
-                    throw new InvalidOperationException(ChineseUiText.Translate(
-                        "SolidWorks could not create a sphere preview circle.",
-                        "SolidWorks 无法创建球体预览圆。"));
-                }
-                body = modeler.CreateWireBody(curve,
-                    (int)swCreateWireBodyOptions_e.swCreateWireBodyByDefault);
-                Body2 ownedBody = body;
-                body = null;
-                AddBody(ownedBody, transform, DrawingColor.OrangeRed, displayTarget);
-            }
-            finally
-            {
-                ReleaseComObject(body);
-                ReleaseComObject(curve);
-            }
-        }
-
         private void AddBody(Body2 body, MathTransform transform, DrawingColor color,
             object displayTarget)
         {
@@ -664,17 +661,6 @@ namespace SW2URDF.UI
                 }
                 ReleaseComObject(body);
             }
-        }
-
-        private static double[] BuildCircleDimensions(
-            double[] center, double radius, double[] majorAxis, double[] minorAxis)
-        {
-            return new[]
-            {
-                center[0], center[1], center[2], radius, radius,
-                majorAxis[0], majorAxis[1], majorAxis[2],
-                minorAxis[0], minorAxis[1], minorAxis[2]
-            };
         }
 
         private static double[] BuildLineDimensions(double[] start, double[] end)

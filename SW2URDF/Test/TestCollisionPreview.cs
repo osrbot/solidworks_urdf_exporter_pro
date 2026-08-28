@@ -67,16 +67,13 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestSphereUsesThreeOrthogonalGreatCircles()
+        public void TestSphereDimensionsUseCenterAndLargestBoxExtent()
         {
             ExportHelper.LinkLocalBoundingBox box = CreateBox(-1.0, -2.0, -3.0, 3.0, 4.0, 5.0);
 
-            double[][] result = CollisionPreview.BuildSphereCircleDimensions(box);
+            double[] result = CollisionPreview.BuildSphereDimensions(box);
 
-            Assert.Equal(3, result.Length);
-            Assert.Equal(new[] { 1.0, 1.0, 1.0, 4.0, 4.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0 }, result[0]);
-            Assert.Equal(new[] { 1.0, 1.0, 1.0, 4.0, 4.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 }, result[1]);
-            Assert.Equal(new[] { 1.0, 1.0, 1.0, 4.0, 4.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 }, result[2]);
+            Assert.Equal(new[] { 1.0, 1.0, 1.0, 4.0 }, result);
         }
 
         [Fact]
