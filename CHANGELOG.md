@@ -4,6 +4,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## Unreleased
 
+## 2026-08-29
+
 ### Changed
 
 - Reworked the assembly exporter around a themed, scrollable WinForms layout while preserving the
