@@ -75,24 +75,35 @@ namespace SW2URDF.UI
 
         private AssemblyExportForm()
         {
-            exportSessionDraftStore = new FileExportSessionDraftStore();
-            treeSelectionUpdateGuard = new TreeSelectionUpdateGuard();
-            InitializeComponent();
-            ChineseUiText.Apply(this);
-            InitializeLinkCoordinateSystemControls();
-            InitializeUsageGuideButton();
-            InitializeCommonMaterialNames();
-            InitializeAutomaticLinkColorControls();
-            buttonDesignSizes = CaptureButtonDesignSizes();
-            enableLayoutFixes = true;
-            ApplyHighDpiLayoutFixes();
-            InitializeCollisionStrategyComboBox();
-            InitializeCollisionPreviewControls();
-            textBoxIxy.TextChanged += InertiaMatrixOffDiagonalTextChanged;
-            textBoxIxz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
-            textBoxIyz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
-            comboBoxJointType.TextChanged += ComboBoxJointTypeTextChanged;
-            UpdateInertiaMatrixMirrorBoxes();
+            // Keep the designer and runtime-created controls in the same initial DPI pass.
+            SuspendLayout();
+            try
+            {
+                exportSessionDraftStore = new FileExportSessionDraftStore();
+                treeSelectionUpdateGuard = new TreeSelectionUpdateGuard();
+                InitializeComponent();
+                ChineseUiText.Apply(this);
+                InitializeLinkCoordinateSystemControls();
+                InitializeUsageGuideButton();
+                InitializeCommonMaterialNames();
+                InitializeAutomaticLinkColorControls();
+                buttonDesignSizes = CaptureButtonDesignSizes();
+                enableLayoutFixes = true;
+                ApplyHighDpiLayoutFixes();
+                InitializeCollisionStrategyComboBox();
+                InitializeCollisionPreviewControls();
+                textBoxIxy.TextChanged += InertiaMatrixOffDiagonalTextChanged;
+                textBoxIxz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
+                textBoxIyz.TextChanged += InertiaMatrixOffDiagonalTextChanged;
+                comboBoxJointType.TextChanged += ComboBoxJointTypeTextChanged;
+                UpdateInertiaMatrixMirrorBoxes();
+                InitializeModernUi();
+            }
+            finally
+            {
+                ResumeLayout(true);
+            }
+            ApplyModernInitialScaleBounds();
         }
 
         private void InitializeLinkCoordinateSystemControls()
@@ -1481,11 +1492,21 @@ namespace SW2URDF.UI
             textBoxMimicMultiplier.Visible = showControls;
             MimicOffsetLabel.Visible = showControls;
             textBoxMimicOffset.Visible = showControls;
+            if (modernUiInitialized)
+            {
+                SynchronizeModernMimicLayout();
+                return;
+            }
             PositionJointFooterControls();
         }
 
         private void MimicCheckBoxCheckedChanged(object sender, EventArgs e)
         {
+            if (modernUiInitialized)
+            {
+                return;
+            }
+
             bool showControls = (sender as CheckBox).Checked;
             ShowMimicControls(showControls);
             if (showControls && string.IsNullOrWhiteSpace(textBoxMimicMultiplier.Text))
@@ -1614,6 +1635,11 @@ namespace SW2URDF.UI
 
         private void PositionJointFooterControls()
         {
+            if (modernUiInitialized)
+            {
+                return;
+            }
+
             const int rightMargin = 12;
             const int bottomMargin = 4;
             const int verticalGap = 4;
@@ -1724,6 +1750,11 @@ namespace SW2URDF.UI
 
         private void ResetLinkPanelScroll()
         {
+            if (modernUiInitialized && modernLinkScrollPanel != null)
+            {
+                modernLinkScrollPanel.AutoScrollPosition = Point.Empty;
+                return;
+            }
             panelLinkProperties.AutoScrollPosition = Point.Empty;
         }
 

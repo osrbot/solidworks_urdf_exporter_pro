@@ -408,6 +408,10 @@
     <Compile Include="UI\AssemblyExportForm.Designer.cs">
       <DependentUpon>AssemblyExportForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="UI\AssemblyExportForm.ModernLayout.cs">
+      <DependentUpon>AssemblyExportForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="UI\ModernWinFormsTheme.cs" />
     <Compile Include="AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>

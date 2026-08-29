@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Globalization;
 using System.Windows.Forms;
 
@@ -271,7 +270,11 @@ namespace SW2URDF.UI
 
         private static void ApplyChineseFont(Control root)
         {
-            root.Font = new Font("Microsoft YaHei UI", root.Font.Size, root.Font.Style);
+            UiFontResources.SetFont(
+                root,
+                "Microsoft YaHei UI",
+                root.Font.Size,
+                root.Font.Style);
             foreach (Control child in root.Controls)
             {
                 ApplyChineseFont(child);

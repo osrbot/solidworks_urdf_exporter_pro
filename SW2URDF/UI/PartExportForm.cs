@@ -39,9 +39,18 @@ namespace SW2URDF.UI
 
         private PartExportForm()
         {
-            InitializeComponent();
-            ChineseUiText.Apply(this);
-            InitializeMaterialIdControl();
+            SuspendLayout();
+            try
+            {
+                InitializeComponent();
+                ChineseUiText.Apply(this);
+                InitializeMaterialIdControl();
+                ModernWinFormsTheme.Apply(this);
+            }
+            finally
+            {
+                ResumeLayout(true);
+            }
         }
 
         public PartExportForm(SldWorks iSwApp)
