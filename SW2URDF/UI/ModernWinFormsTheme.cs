@@ -56,6 +56,14 @@ namespace SW2URDF.UI
             Font replacement = new Font(family, size, style, GraphicsUnit.Point);
             OwnedFont previous;
             bool hadPrevious = Fonts.TryGetValue(control, out previous);
+            if (hadPrevious &&
+                Object.ReferenceEquals(control.Font, previous.Font) &&
+                previous.Font.Equals(replacement))
+            {
+                replacement.Dispose();
+                return;
+            }
+
             try
             {
                 control.Font = replacement;

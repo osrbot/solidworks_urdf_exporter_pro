@@ -24,6 +24,7 @@ using SolidWorks.Interop.sldworks;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
+using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 
@@ -51,12 +52,44 @@ namespace SW2URDF.UI
             {
                 ResumeLayout(true);
             }
+
+            EnsureModernLayoutFits();
         }
 
         public PartExportForm(SldWorks iSwApp)
             : this()
         {
             Exporter = new ExportHelper(iSwApp);
+        }
+
+        private void EnsureModernLayoutFits()
+        {
+            const int gap = 8;
+            const int margin = 7;
+
+            groupBox3.Top = Math.Max(groupBox3.Top, groupBox2.Bottom + gap);
+            int footerTop = groupBox3.Bottom + gap;
+            button_cancel.Top = footerTop;
+            button_finish.Top = footerTop;
+            button_finish.Left = Math.Max(
+                button_cancel.Right + gap,
+                groupBox3.Right - button_finish.Width);
+
+            Size desiredClientSize = new Size(
+                Math.Max(ClientSize.Width, groupBox3.Right + margin),
+                Math.Max(ClientSize.Height, button_finish.Bottom + margin));
+            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+            int nonClientWidth = Math.Max(0, Width - ClientSize.Width);
+            int nonClientHeight = Math.Max(0, Height - ClientSize.Height);
+            Size maximumClientSize = new Size(
+                Math.Max(1, workingArea.Width - nonClientWidth),
+                Math.Max(1, workingArea.Height - nonClientHeight));
+
+            AutoScroll = true;
+            AutoScrollMinSize = desiredClientSize;
+            ClientSize = new Size(
+                Math.Min(desiredClientSize.Width, maximumClientSize.Width),
+                Math.Min(desiredClientSize.Height, maximumClientSize.Height));
         }
 
         private void InitializeMaterialIdControl()

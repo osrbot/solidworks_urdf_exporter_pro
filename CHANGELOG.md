@@ -4,6 +4,25 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## Unreleased
 
+### Changed
+
+- Reworked the assembly exporter around a themed, scrollable WinForms layout while preserving the
+  existing Link/Joint workflow, current feature controls, and Simplified Chinese translations.
+- Applied the same SolidWorks-compatible visual theme to the part exporter and made its content
+  area scroll when localized or DPI-scaled controls exceed the available screen working area.
+
+### Fixed
+
+- Prevented repeated localization and theme passes from disposing a `Font` object that a WinForms
+  control still references. This fixes exporter construction failures after equivalent fonts are
+  applied more than once.
+- Constrained DPI-scaled assembly exporter bounds to the active monitor working area so the footer
+  actions remain reachable on 150% and 200% scaling.
+- Reflowed the part export collision section and footer after font scaling, preventing the collision
+  controls from covering the Finish button.
+- Made the Link-page scroll reset regression independent of an interactive SolidWorks window while
+  retaining hierarchy, ownership, and reset assertions.
+
 ### Documentation
 
 - Added matching English and Simplified Chinese "Why This Fork Exists" summaries to the README and

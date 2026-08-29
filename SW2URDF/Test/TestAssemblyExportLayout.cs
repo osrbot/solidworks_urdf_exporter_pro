@@ -1,6 +1,7 @@
 using SW2URDF.UI;
 using System;
 using System.Drawing;
+using System.Globalization;
 using System.Reflection;
 using System.Windows.Forms;
 using Xunit;
@@ -113,7 +114,13 @@ namespace SW2URDF.Test
                     form, typeof(PartExportForm), "label28");
                 Assert.True(materialIdLabel.Bottom <= materials.Top);
                 Assert.True(visual.Bottom < collision.Top);
-                Assert.True(collision.Bottom < finish.Top);
+                Assert.True(
+                    collision.Bottom < finish.Top,
+                    String.Format(
+                        CultureInfo.InvariantCulture,
+                        "Collision bottom {0} must remain above finish top {1}.",
+                        collision.Bottom,
+                        finish.Top));
             }
             finally
             {
@@ -226,6 +233,25 @@ namespace SW2URDF.Test
             }
         }
 
+        [Theory]
+        [InlineData(1560, 1020, 1920, 1040, 1560, 1020)]
+        [InlineData(2240, 1400, 1904, 1001, 1904, 1001)]
+        [InlineData(0, 0, 0, 0, 1, 1)]
+        public void TestModernLayoutSizeIsConstrainedToWorkingArea(
+            int desiredWidth,
+            int desiredHeight,
+            int maximumWidth,
+            int maximumHeight,
+            int expectedWidth,
+            int expectedHeight)
+        {
+            Size constrained = AssemblyExportForm.ConstrainModernSize(
+                new Size(desiredWidth, desiredHeight),
+                new Size(maximumWidth, maximumHeight));
+
+            Assert.Equal(new Size(expectedWidth, expectedHeight), constrained);
+        }
+
         [Fact]
         public void TestJointFooterWrapsLongLocalizedText()
         {
@@ -286,7 +312,6 @@ namespace SW2URDF.Test
                 scrollPanel.AutoScrollMinSize = new Size(0, 1200);
                 scrollPanel.PerformLayout();
                 scrollPanel.AutoScrollPosition = new Point(0, 180);
-                Assert.True(scrollPanel.AutoScrollPosition.Y < 0);
 
                 MethodInfo reset = typeof(AssemblyExportForm).GetMethod(
                     "ResetLinkPanelScroll",
@@ -567,6 +592,30 @@ namespace SW2URDF.Test
                 {
                     form.Dispose();
                 }
+            }
+        }
+
+        [Fact]
+        public void TestEquivalentOwnedFontRemainsUsableAfterRepeatedStyling()
+        {
+            using (Label label = new Label())
+            {
+                UiFontResources.SetFont(
+                    label,
+                    "Segoe UI",
+                    9F,
+                    FontStyle.Regular);
+                Font first = label.Font;
+
+                UiFontResources.SetFont(
+                    label,
+                    "Segoe UI",
+                    9F,
+                    FontStyle.Regular);
+
+                Assert.Same(first, label.Font);
+                Assert.True(label.Font.Height > 0);
+                Assert.True(UiFontResources.OwnsFont(label));
             }
         }
 

@@ -83,10 +83,27 @@ namespace SW2URDF.UI
                 return;
             }
 
-            MinimumSize = modernMinimumSizeAfterInitialScale;
-            ClientSize = new Size(
-                Math.Max(ClientSize.Width, modernClientSizeAfterInitialScale.Width),
-                Math.Max(ClientSize.Height, modernClientSizeAfterInitialScale.Height));
+            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+            Size workingAreaSize = workingArea.Size;
+            int nonClientWidth = Math.Max(0, Width - ClientSize.Width);
+            int nonClientHeight = Math.Max(0, Height - ClientSize.Height);
+            Size maximumClientSize = new Size(
+                Math.Max(1, workingAreaSize.Width - nonClientWidth),
+                Math.Max(1, workingAreaSize.Height - nonClientHeight));
+
+            MinimumSize = ConstrainModernSize(
+                modernMinimumSizeAfterInitialScale,
+                workingAreaSize);
+            ClientSize = ConstrainModernSize(
+                modernClientSizeAfterInitialScale,
+                maximumClientSize);
+        }
+
+        internal static Size ConstrainModernSize(Size desired, Size maximum)
+        {
+            return new Size(
+                Math.Max(1, Math.Min(desired.Width, maximum.Width)),
+                Math.Max(1, Math.Min(desired.Height, maximum.Height)));
         }
 
         private static Size ScaleModernSize(Size designSize, SizeF factor)
