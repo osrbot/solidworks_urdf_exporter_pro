@@ -41,6 +41,43 @@ namespace SW2URDF.URDFExport
                 : jointType;
         }
 
+        public static void ApplyUserSelection(Joint joint, string jointType)
+        {
+            string normalized = Normalize(jointType);
+            bool confirmsMateSuggestion =
+                joint.ConfigurationSource == "solidworks_mate_suggestion" &&
+                !Joint.IsAutomaticType(normalized) &&
+                normalized == Normalize(joint.Type);
+            Apply(joint, normalized);
+            if (Joint.IsAutomaticType(normalized))
+            {
+                joint.MarkPendingMateDetection();
+            }
+            else if (confirmsMateSuggestion)
+            {
+                joint.ConfirmConfiguration();
+            }
+            else
+            {
+                joint.MarkManualConfiguration("URDF joint type was explicitly selected in the exporter UI.");
+            }
+        }
+
+        public static void ApplyDetectedSuggestion(
+            Joint joint,
+            string detectedType,
+            string evidence)
+        {
+            Apply(joint, detectedType);
+            joint.MarkMateSuggestion(evidence);
+        }
+
+        public static bool RequiresUserConfirmation(Joint joint)
+        {
+            return joint != null &&
+                !joint.ConfigurationUserConfirmed;
+        }
+
         public static string ResolveDetectedType(string configuredType, string detectedType)
         {
             string normalizedConfiguredType = Normalize(configuredType);
@@ -96,8 +133,10 @@ namespace SW2URDF.URDFExport
             if (rotationalStatus1 == 0 && rotationalStatus2 == 0 &&
                 linearStatus1 == 0 && linearStatus2 == 0)
             {
-                detectedType = "fixed";
-                return true;
+                // Zero remaining DOFs is not enough to infer URDF semantics. It can mean an
+                // intentionally fixed joint, a fully constrained movable joint, or an imported
+                // STEP/fixed assembly with no usable SolidWorks Mate information.
+                return false;
             }
 
             if (rotationalStatus1 == 1 && rotationalStatus2 == 0 &&

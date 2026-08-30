@@ -1,0 +1,3 @@
+# The historic Visual Studio solution is intentionally CRLF. Treat CR as part
+# of the line ending so whitespace checks still catch spaces and tabs at EOL.
+SW2URDF.sln whitespace=trailing-space,space-before-tab,cr-at-eol

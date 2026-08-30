@@ -9,7 +9,7 @@ existing repository practice; it does not invent a CLA, response-time promise, o
 
 - Windows x64;
 - Visual Studio 2017 with `.NET desktop development`;
-- .NET Framework 4.5.2;
+- .NET Framework 4.8;
 - SolidWorks plus matching API Tools/Interop assemblies;
 - administrator access may be required for COM registration or SolidWorks debugging.
 
@@ -30,13 +30,13 @@ matching inputs from a local installation and records their versions and hashes 
 After a Debug build:
 
 ```powershell
-TestRunner\bin\x64\Debug\net452\TestRunner.exe
+TestRunner\bin\x64\Debug\net48\TestRunner.exe
 ```
 
 Filter by test class/name:
 
 ```powershell
-TestRunner\bin\x64\Debug\net452\TestRunner.exe TestMassPropertyFrameConverter
+TestRunner\bin\x64\Debug\net48\TestRunner.exe TestMassPropertyFrameConverter
 ```
 
 - Pure unit tests must run without SolidWorks.

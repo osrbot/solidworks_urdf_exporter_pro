@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-blue.svg)](#supported-environment)
-[![Framework](https://img.shields.io/badge/.NET%20Framework-4.5.2-blueviolet.svg)](#development)
+[![Framework](https://img.shields.io/badge/.NET%20Framework-4.8-blueviolet.svg)](#development)
 
 This repository is the OSRBot-maintained fork of the ROS
 [`solidworks_urdf_exporter`](https://github.com/ros/solidworks_urdf_exporter). It keeps the
@@ -52,7 +52,12 @@ generated package reports remain authoritative for what was actually exported.
 
 ## Main Features
 
-- Generates matching `ROS1/<package>` and `ROS2/<package>` description packages.
+- Generates a verified Robot Bundle as the canonical asset, then derives ROS 1 legacy and modern
+  ROS 2/Gazebo description packages from that same model.
+- Supports explicit `ros2_control` hardware/controller profiles and exact-version Isaac Sim USD /
+  Isaac Lab profiles without guessing actuator gains.
+- Records stable Link/Joint IDs and source evidence. SolidWorks Mate detection is an optional,
+  user-confirmed suggestion for native movable assemblies, never a fallback for STEP geometry.
 - Stores Link/Joint configuration in the assembly feature
   `URDF Export Configuration (v1.5)` and migrates older readable configurations when saved.
 - Provides a transactional Link-tree canvas with add, rename, reparent, automatic layout, box
@@ -85,7 +90,7 @@ limitations.
 | Item | Supported or verified state |
 | --- | --- |
 | Operating system | Windows x64 |
-| Target framework | .NET Framework 4.5.2 |
+| Target framework | .NET Framework 4.8 |
 | Historical minimum SolidWorks version | SolidWorks 2018 SP5 |
 | Current live API verification focus | SolidWorks 2023 |
 | Release build | `Release|x64` |
@@ -108,7 +113,8 @@ verified target. See the upstream discussion in
 
 The public release process is intentionally manual-gated: CI validates a committed maintainer-built
 installer and creates a draft candidate; it does not publish a release until live SolidWorks testing
-has completed and the maintainer explicitly approves publication.
+has completed, the `solidworkstools.dll` redistribution review in `THIRD_PARTY_NOTICES.md` is
+approved, and the maintainer explicitly approves publication.
 
 Historical upstream installers remain available from
 [`ros/solidworks_urdf_exporter` releases](https://github.com/ros/solidworks_urdf_exporter/releases).
@@ -127,9 +133,13 @@ Historical upstream installers remain available from
    equivalent inertia preview.
 6. Choose Visual format, collision strategy, material ID/RGBA, and STL reduction. Preview collision
    coverage in SolidWorks, but treat the exported manifest as the final strategy record.
-7. Export the ROS1 and ROS2 packages.
+7. Select the maintained ROS/Gazebo pair and any explicit ros2_control or Isaac profiles, then
+   export the canonical Robot Bundle and selected packages.
+   `Export URDF Without Meshes` is a lightweight XML-debug compatibility path; it does not create
+   the Robot Bundle, Isaac output, or new profiles. Use the complete mesh export for deliverables.
 8. Review the generated reports before simulation:
-   - `config/export_report.md`
+   - `<export-root>/export_report.md` (always written for a v2 export, including Bundle-only)
+   - `config/export_report.md` in each selected ROS package
    - `config/inertial_validation.csv`
    - `config/mesh_manifest.csv`
 
@@ -137,11 +147,20 @@ Historical upstream installers remain available from
 
 ```text
 <export-root>/
-|-- ROS1/<package>/
+|-- export_report.md                  # top-level v2 health report, including Bundle-only
+|-- Bundle/<package>.osurdf/
+|   |-- robot.json
+|   |-- robot.urdf
+|   |-- manifest.json
+|   |-- checksums.sha256
+|   |-- meshes/
+|   |-- profiles/
+|   `-- reports/
+|-- ROS1/<package>/                 # optional legacy output
 |   |-- meshes/
 |   |-- urdf/
 |   `-- config/
-`-- ROS2/<package>/
+`-- ROS2/<package>/                 # optional modern output
     |-- meshes/
     |-- urdf/
     `-- config/
@@ -214,6 +233,10 @@ not claim to author or validate texture mapping.
 - [Troubleshooting](docs/wiki/Troubleshooting.md)
 - [Contributing](docs/wiki/Contributing.md)
 - [Release Process](docs/wiki/Release-Process.md)
+- [Robot Bundle v2 architecture](docs/architecture/robot-bundle-v2.md)
+- [Joint semantics and provenance](docs/architecture/joint-semantics-and-provenance.md)
+- [Compatibility matrix](docs/development/compatibility-matrix.md)
+- [Isaac Sim / Isaac Lab workflow](docs/isaac/README.md)
 - [Changelog](CHANGELOG.md)
 
 The files under `docs/wiki` are the version-controlled source for the public GitHub Wiki. Canonical
@@ -224,10 +247,11 @@ versions in the same change when behavior changes.
 
 Prerequisites:
 
-1. Visual Studio 2017 with `.NET desktop development`.
+1. Visual Studio 2017 with `.NET desktop development` and .NET Framework 4.8 targeting tools.
 2. SolidWorks and the matching SolidWorks API tools/assemblies.
 3. An x64 developer environment. Run Visual Studio as administrator when COM registration or
    SolidWorks debugging requires it.
+4. .NET SDK 8 for the portable Core, CLI, and hosted unit tests.
 
 Open `SW2URDF.sln`. For debugging, configure the `SW2URDF` project to start the installed
 `SLDWORKS.exe` for the target SolidWorks version.
@@ -242,13 +266,13 @@ MSBuild.exe SW2URDF\SW2URDF.csproj /t:Build /p:Configuration=Debug /p:Platform=x
 Run all locally available tests after building Debug:
 
 ```powershell
-TestRunner\bin\x64\Debug\net452\TestRunner.exe
+TestRunner\bin\x64\Debug\net48\TestRunner.exe
 ```
 
 Run a focused class or name filter:
 
 ```powershell
-TestRunner\bin\x64\Debug\net452\TestRunner.exe TestCollisionPreview
+TestRunner\bin\x64\Debug\net48\TestRunner.exe TestCollisionPreview
 ```
 
 Pure tests can run without SolidWorks. Live COM tests require a compatible installed SolidWorks and
@@ -288,6 +312,8 @@ or a required placeholder is missing; it does not machine-translate the Changelo
 - Unsaved assemblies do not have a stable path and cannot use per-assembly recovery drafts.
 - Component persistent IDs can become invalid after delete/replace/save-as operations and then need
   manual rebinding.
+- STEP and other geometry-only imports do not carry reliable Joint semantics. A fixed or
+  fully-constrained assembly is not automatically classified as a fixed-joint robot.
 - Collision previews are temporary SolidWorks geometry. For mesh strategies, preview geometry is not
   promised to be byte-identical to the final tessellated STL.
 - STL does not carry UV texture coordinates. The maintained UI does not offer texture authoring.

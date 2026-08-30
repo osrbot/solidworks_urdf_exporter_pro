@@ -4,7 +4,7 @@
 
 [![许可证：MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![平台](https://img.shields.io/badge/platform-Windows%20x64-blue.svg)](#支持环境)
-[![框架](https://img.shields.io/badge/.NET%20Framework-4.5.2-blueviolet.svg)](#开发)
+[![框架](https://img.shields.io/badge/.NET%20Framework-4.8-blueviolet.svg)](#开发)
 
 本仓库是 ROS 原项目
 [`solidworks_urdf_exporter`](https://github.com/ros/solidworks_urdf_exporter) 的 OSRBot
@@ -48,7 +48,11 @@ SolidWorks、复杂装配体、物理参数校验和长期发布维护中暴露�
 
 ## 主要功能
 
-- 同一次事务生成匹配的 `ROS1/<package>` 与 `ROS2/<package>` 描述包。
+- 先生成并校验规范 Robot Bundle，再从同一模型派生 ROS 1 legacy 与现代 ROS 2/Gazebo 描述包。
+- 支持显式 `ros2_control` hardware/controller profile，以及精确版本的 Isaac Sim USD / Isaac
+  Lab profile；不会从 CAD 猜 actuator gains。
+- 为 Link/Joint 保存稳定 ID 与来源证据。SolidWorks Mate 识别只对原生可动装配提供需人工确认的
+  建议，不作为 STEP 几何的兜底推断。
 - 在装配体特征 `URDF Export Configuration (v1.5)` 中保存 Link/Joint 配置，并在正式保存时
   迁移可读的旧配置。
 - 提供事务化 Link 树画布：添加、重命名、重设父级、自动布局、框选以及分支复制/粘贴/删除。
@@ -74,7 +78,7 @@ SolidWorks、复杂装配体、物理参数校验和长期发布维护中暴露�
 | 项目 | 支持或验证状态 |
 | --- | --- |
 | 操作系统 | Windows x64 |
-| 目标框架 | .NET Framework 4.5.2 |
+| 目标框架 | .NET Framework 4.8 |
 | 历史最低 SolidWorks 版本 | SolidWorks 2018 SP5 |
 | 当前 Live API 验证重点 | SolidWorks 2023 |
 | Release 构建 | `Release|x64` |
@@ -94,7 +98,8 @@ SolidWorks、复杂装配体、物理参数校验和长期发布维护中暴露�
 5. 重启 SolidWorks，使用 `Tools > Export as URDF`。
 
 公开发布流程使用人工门禁：CI 验证已提交的维护者构建并创建 Draft Candidate；只有完成 Live
-SolidWorks 手动测试并得到维护者明确发布许可后才能公开。
+SolidWorks 手动测试、完成 `THIRD_PARTY_NOTICES.md` 中 `solidworkstools.dll` 再分发许可审核，
+并得到维护者明确发布许可后才能公开。
 
 历史上游安装包见
 [`ros/solidworks_urdf_exporter` Releases](https://github.com/ros/solidworks_urdf_exporter/releases)。
@@ -110,8 +115,12 @@ SolidWorks 手动测试并得到维护者明确发布许可后才能公开。
 5. 为每个 Link 选择明确的 Link 坐标系，检查质量、COM、惯性值和等效惯性预览。
 6. 选择 Visual 格式、Collision 策略、material ID/RGBA 和 STL 精简比例。使用 SolidWorks
    碰撞预览检查覆盖关系，以导出 manifest 作为最终策略记录。
-7. 导出 ROS1/ROS2 包。进度窗口保持在 SolidWorks 上方，完成摘要显示本次文件变化。
-8. 检查 `export_report.md`、`inertial_validation.csv`、`mesh_manifest.csv`，并在目标 Viewer 或
+7. 选择维护矩阵中的 ROS/Gazebo 组合，以及显式 ros2_control 或 Isaac profile，然后导出
+   Robot Bundle 和所选功能包。进度窗口保持在 SolidWorks 上方，完成摘要显示本次文件变化。
+   “导出 URDF（不含网格）”只用于 XML 调试的轻量兼容路径，不生成 Robot Bundle、Isaac
+   或新 profile；可交付输出必须选择完整网格导出。
+8. 先检查输出根目录的 `export_report.md`，再检查所选 ROS 包内的
+   `config/inertial_validation.csv`、`config/mesh_manifest.csv`，并在目标 Viewer 或
    仿真器中验证 Visual、Collision、Inertia、COM、轴和 Joint 运动。
 
 首次教程状态按 Windows 用户保存在：
@@ -124,14 +133,23 @@ SolidWorks 手动测试并得到维护者明确发布许可后才能公开。
 
 ```text
 <output-root>/
-  ROS1/<package>/
+  export_report.md                  # 本次 v2 导出总览，Bundle-only 也会生成
+  Bundle/<package>.osurdf/
+    robot.json
+    robot.urdf
+    manifest.json
+    checksums.sha256
+    meshes/
+    profiles/
+    reports/
+  ROS1/<package>/                 # 可选 legacy 输出
     urdf/
     meshes/visual/
     meshes/collision/
     config/export_report.md
     config/inertial_validation.csv
     config/mesh_manifest.csv
-  ROS2/<package>/
+  ROS2/<package>/                 # 可选现代输出
     urdf/
     meshes/visual/
     meshes/collision/
@@ -194,6 +212,11 @@ SolidWorks 手动测试并得到维护者明确发布许可后才能公开。
 - [问题排查](docs/wiki/Troubleshooting-zh-CN.md)
 - [参与贡献](docs/wiki/Contributing-zh-CN.md)
 - [发布流程](docs/wiki/Release-Process-zh-CN.md)
+- [Robot Bundle v2 架构](docs/architecture/robot-bundle-v2.md)
+- [Joint 语义与来源](docs/architecture/joint-semantics-and-provenance.md)
+- [兼容性矩阵](docs/development/compatibility-matrix.md)
+- [Isaac Sim / Isaac Lab 工作流](docs/isaac/README.md)
+- [开发任务与验收矩阵](docs/planning/SW2URDF_v2_开发任务与验收矩阵_2026-08-30.md)
 - [CHANGELOG](CHANGELOG.md)
 
 `docs/wiki` 是公开 GitHub Wiki 的版本化事实源。英文页使用标准文件名，简体中文页使用
@@ -204,8 +227,8 @@ SolidWorks 手动测试并得到维护者明确发布许可后才能公开。
 要求：
 
 1. Windows x64；
-2. Visual Studio 2017 与 `.NET desktop development`；
-3. .NET Framework 4.5.2；
+2. Visual Studio 2017、`.NET desktop development` 与 .NET Framework 4.8 targeting tools；
+3. .NET SDK 8（用于 portable Core、CLI 与 hosted 单元测试）；
 4. SolidWorks 与匹配的 API Tools/Interop assemblies。
 
 打开 `SW2URDF.sln`。调试 SolidWorks 时，Debug 配置需要启动目标安装目录的 `SLDWORKS.exe`。
@@ -220,13 +243,13 @@ MSBuild.exe SW2URDF\SW2URDF.csproj /t:Build /p:Configuration=Debug /p:Platform=x
 运行全部 Debug 测试：
 
 ```powershell
-TestRunner\bin\x64\Debug\net452\TestRunner.exe
+TestRunner\bin\x64\Debug\net48\TestRunner.exe
 ```
 
 按类或名称过滤：
 
 ```powershell
-TestRunner\bin\x64\Debug\net452\TestRunner.exe TestMassPropertyFrameConverter
+TestRunner\bin\x64\Debug\net48\TestRunner.exe TestMassPropertyFrameConverter
 ```
 
 Pure tests 可在 SolidWorks 不可用时运行。Live COM tests 需要兼容的本地 SolidWorks；RPC/COM
@@ -261,6 +284,7 @@ payload 哈希。provenance 是维护者构建追踪信息，不是 Authenticode
 - 安装/升级要求 SolidWorks 已关闭；没有自动结束进程或热加载。
 - 未保存装配体没有稳定路径，不能使用按装配体隔离的恢复草稿。
 - 删除、替换或 Save As 后，组件 persistent ID 可能失效，需要人工重新绑定。
+- STEP 等纯几何输入没有可靠 Joint 语义；固定或完全约束的装配也不会被自动判定为固定关节机器人。
 - 坐标系具有工程语义，必须由用户在 SolidWorks 中创建和选择，插件不会从几何自动猜测。
 - 空心/凹形刚体的合法 COM 可以位于空腔中；包围范围检查不是材料内部点测试。
 - 碰撞预览是临时 SolidWorks 几何；mesh 策略不承诺预览与最终 STL 字节一致。

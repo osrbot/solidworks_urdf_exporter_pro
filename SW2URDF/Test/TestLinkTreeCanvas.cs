@@ -102,6 +102,68 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void NewJointStartsUnconfiguredAndRequiresAnExplicitChoice()
+        {
+            LinkTreeNode root = LinkTreeDocument.NewNode("base_link", null, 80, 90);
+            LinkTreeNode child = LinkTreeDocument.NewNode(
+                "camera_link",
+                root.Id,
+                380,
+                90);
+            LinkTreeDocument document = new LinkTreeDocument();
+            document.Nodes.Add(root);
+            document.Nodes.Add(child);
+
+            Assert.Equal(string.Empty, child.JointType);
+            Assert.Empty(document.ValidateDraft());
+            Assert.Contains("尚未选择", string.Join(" ", document.Validate()));
+        }
+
+        [Fact]
+        public void ExplicitJointTypesAppearBeforeMateDetection()
+        {
+            Assert.Equal(
+                Joint.AvailableTypes.ToArray(),
+                Joint.SelectableTypes.Take(Joint.AvailableTypes.Count).ToArray());
+            Assert.Equal(
+                Joint.AutomaticallyDetectType,
+                Joint.SelectableTypes.Last());
+        }
+
+        [Fact]
+        public void PropertyManagerReportsAnUnconfiguredJointAsIncomplete()
+        {
+            ExportPropertyManager manager = (ExportPropertyManager)
+                FormatterServices.GetUninitializedObject(typeof(ExportPropertyManager));
+            LinkNode child = new LinkNode
+            {
+                IsBaseNode = false,
+                Text = "camera_link"
+            };
+            child.Link.Name = "camera_link";
+            child.Link.Joint.Name = "camera_joint";
+            child.Link.Joint.Type = string.Empty;
+            child.Link.SWComponents.Add(new Mock<Component2>().Object);
+
+            manager.CheckNodeComplete(child);
+
+            Assert.True(child.IsIncomplete);
+            Assert.Contains("Joint type is required", child.WhyIncomplete);
+        }
+
+        [Fact]
+        public void LegacyPropertyManagerAlsoCreatesAnUnconfiguredJoint()
+        {
+            ExportPropertyManager manager = (ExportPropertyManager)
+                FormatterServices.GetUninitializedObject(typeof(ExportPropertyManager));
+
+            LinkNode child = manager.CreateEmptyNode(new LinkNode());
+
+            Assert.Equal(string.Empty, child.Link.Joint.Type);
+            Assert.True(child.IsIncomplete);
+        }
+
+        [Fact]
         public void PropertyManagerControlIdsAreUnique()
         {
             FieldInfo[] idFields = typeof(ExportPropertyManager)
@@ -176,6 +238,7 @@ namespace SW2URDF.Test
                 500,
                 300);
             added.JointName = "right_sensor_joint";
+            added.JointType = "fixed";
             document.Nodes.Add(added);
 
             host.ApplyTree(document);
@@ -188,6 +251,24 @@ namespace SW2URDF.Test
             Assert.True(applied.Link.isIncomplete);
             Assert.True(host.RequiresJointKinematicsRecompute);
             Assert.True(host.RequiresJointLimitsRecompute);
+        }
+
+        [Fact]
+        public void CanvasApplyRejectsAnUnconfiguredJointWithoutMutatingTheSession()
+        {
+            LinkTreeSession host = new LinkTreeSession(CreateTree());
+            LinkTreeDocument document = host.LoadTree();
+            document.Nodes.Add(LinkTreeDocument.NewNode(
+                "camera_link",
+                document.Root.Id,
+                500,
+                300));
+
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+                () => host.ApplyTree(document));
+
+            Assert.Contains("尚未选择", error.Message);
+            Assert.Equal(2, host.LoadTree().Nodes.Count);
         }
 
         [Fact]
@@ -222,6 +303,23 @@ namespace SW2URDF.Test
 
             Assert.True(session.RequiresJointKinematicsRecompute);
             Assert.True(session.RequiresJointLimitsRecompute);
+        }
+
+        [Fact]
+        public void LegacyCapturePreservesAnUnconfiguredNewJointDraft()
+        {
+            LinkTreeSession session = new LinkTreeSession(CreateTree());
+            LinkNode visible = session.CreateActiveProjection();
+            LinkNode added = AddChild(visible, "camera_link", "camera_joint");
+            added.Link.Joint.Type = string.Empty;
+
+            session.CaptureTree(visible);
+
+            LinkTreeDocument draft = session.LoadTree();
+            Assert.Equal(
+                string.Empty,
+                draft.Nodes.Single(node => node.Name == "camera_link").JointType);
+            Assert.Contains("尚未选择", string.Join(" ", draft.Validate()));
         }
 
         [Fact]
@@ -328,6 +426,7 @@ namespace SW2URDF.Test
                 500,
                 420);
             added.JointName = "camera_joint";
+            added.JointType = "fixed";
             edited.Nodes.Add(added);
 
             session.ApplyTree(edited);
@@ -1187,6 +1286,9 @@ namespace SW2URDF.Test
         public void DetectedJointTypeDoesNotOverrideAnExplicitType()
         {
             Assert.Equal(
+                "fixed",
+                JointConfigurationPolicy.ResolveDetectedType("fixed", null));
+            Assert.Equal(
                 "revolute",
                 JointConfigurationPolicy.ResolveDetectedType("revolute", "prismatic"));
             Assert.Equal(
@@ -1302,12 +1404,12 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void JointDofClassifierRejectsUnknownAndMultiAxisResults()
+        public void JointDofClassifierRejectsZeroUnknownAndMultiAxisResults()
         {
             string detectedType;
-            Assert.True(JointConfigurationPolicy.TryClassifyDetectedType(
+            Assert.False(JointConfigurationPolicy.TryClassifyDetectedType(
                 0, 0, 0, 0, 0, out detectedType));
-            Assert.Equal("fixed", detectedType);
+            Assert.Null(detectedType);
             Assert.True(JointConfigurationPolicy.TryClassifyDetectedType(
                 0, 1, 0, 0, 0, out detectedType));
             Assert.Equal("continuous", detectedType);
@@ -1337,6 +1439,50 @@ namespace SW2URDF.Test
                 "revolute", "prismatic"));
             Assert.False(JointConfigurationPolicy.IsDetectedTypeCompatible(
                 "planar", "fixed"));
+        }
+
+        [Fact]
+        public void MateSuggestionRemainsBlockedUntilTheUserConfirmsOrOverridesIt()
+        {
+            Joint joint = new Joint { Name = "knee_joint", Type = Joint.AutomaticallyDetectType };
+
+            JointConfigurationPolicy.ApplyDetectedSuggestion(
+                joint,
+                "continuous",
+                "One rotational degree of freedom was observed.");
+
+            Assert.True(JointConfigurationPolicy.RequiresUserConfirmation(joint));
+            JointConfigurationPolicy.ApplyUserSelection(joint, "continuous");
+            Assert.False(JointConfigurationPolicy.RequiresUserConfirmation(joint));
+            Assert.Equal("solidworks_mate_suggestion", joint.ConfigurationSource);
+            Assert.True(joint.ConfigurationUserConfirmed);
+
+            JointConfigurationPolicy.ApplyDetectedSuggestion(
+                joint,
+                "continuous",
+                "One rotational degree of freedom was observed.");
+            JointConfigurationPolicy.ApplyUserSelection(joint, "revolute");
+            Assert.False(JointConfigurationPolicy.RequiresUserConfirmation(joint));
+            Assert.Equal("manual_configuration", joint.ConfigurationSource);
+            Assert.True(joint.ConfigurationUserConfirmed);
+        }
+
+        [Fact]
+        public void LegacyJointConfigurationRequiresAnExplicitUserSelection()
+        {
+            Joint joint = new Joint
+            {
+                Name = "legacy_joint",
+                Type = "revolute",
+                ConfigurationSource = "legacy_configuration",
+                ConfigurationUserConfirmed = false
+            };
+
+            Assert.True(JointConfigurationPolicy.RequiresUserConfirmation(joint));
+            JointConfigurationPolicy.ApplyUserSelection(joint, "revolute");
+            Assert.False(JointConfigurationPolicy.RequiresUserConfirmation(joint));
+            Assert.Equal("manual_configuration", joint.ConfigurationSource);
+            Assert.True(joint.ConfigurationUserConfirmed);
         }
 
         [Fact]
@@ -1596,8 +1742,11 @@ namespace SW2URDF.Test
             LinkTreeDocument document = new LinkTreeDocument();
             LinkTreeNode root = LinkTreeDocument.NewNode("base_link", null, 90, 330);
             LinkTreeNode chassis = LinkTreeDocument.NewNode("chassis_link", root.Id, 390, 250);
+            chassis.JointType = "fixed";
             LinkTreeNode lidar = LinkTreeDocument.NewNode("lidar_link", chassis.Id, 710, 115);
+            lidar.JointType = "fixed";
             LinkTreeNode imu = LinkTreeDocument.NewNode("imu_link", chassis.Id, 710, 250);
+            imu.JointType = "fixed";
             LinkTreeNode leftWheel = LinkTreeDocument.NewNode("left_wheel_link", chassis.Id, 710, 385);
             leftWheel.JointType = "continuous";
             LinkTreeNode rightWheel = LinkTreeDocument.NewNode("right_wheel_link", chassis.Id, 710, 520);

@@ -1,0 +1,165 @@
+name: Core CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - main
+      - "feature/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dotnet:
+    name: .NET (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: |
+            src/**/packages.lock.json
+            tests/**/packages.lock.json
+
+      - name: Restore locked dependencies
+        run: dotnet restore tests/OSURDF.Core.Tests/OSURDF.Core.Tests.csproj --locked-mode
+
+      - name: Test Core
+        run: dotnet test tests/OSURDF.Core.Tests/OSURDF.Core.Tests.csproj --configuration Release --no-restore
+
+      - name: Restore CLI
+        run: dotnet restore src/OSURDF.Cli/OSURDF.Cli.csproj --locked-mode
+
+      - name: Build CLI
+        run: dotnet build src/OSURDF.Cli/OSURDF.Cli.csproj --configuration Release --no-restore
+
+  portable-pipeline:
+    name: Bundle, ROS and Isaac preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: |
+            src/**/packages.lock.json
+            tests/**/packages.lock.json
+
+      - name: Build CLI from locked dependencies
+        run: |
+          set -euo pipefail
+          dotnet restore src/OSURDF.Cli/OSURDF.Cli.csproj --locked-mode
+          dotnet build src/OSURDF.Cli/OSURDF.Cli.csproj --configuration Release --no-restore
+
+      - name: Validate JSON schemas and Python adapter
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          excluded = {".git", "bin", "obj", "__pycache__"}
+
+          def unique_object(pairs):
+              value = {}
+              for key, item in pairs:
+                  if key in value:
+                      raise ValueError(f"duplicate JSON property: {key}")
+                  value[key] = item
+              return value
+
+          def reject_constant(value):
+              raise ValueError(f"non-finite JSON number: {value}")
+
+          files = sorted(
+              path for path in Path(".").rglob("*.json")
+              if not excluded.intersection(path.parts)
+          )
+          for path in files:
+              json.loads(
+                  path.read_text(encoding="utf-8"),
+                  object_pairs_hook=unique_object,
+                  parse_constant=reject_constant,
+              )
+          print(f"Strict JSON validation passed for {len(files)} files.")
+          PY
+          python3 -m unittest discover -s tools/isaac_adapter/tests -v
+          python3 -m py_compile tools/isaac_adapter/osurdf_isaac_adapter.py
+
+      - name: Exercise the portable pipeline end to end
+        env:
+          SOURCE_DATE_EPOCH: "1700000000"
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d "$RUNNER_TEMP/osurdf-e2e.XXXXXX")"
+          trap 'rm -rf -- "$work"' EXIT
+          cli="src/OSURDF.Cli/bin/Release/net8.0/osurdf.dll"
+          mkdir -p "$work"
+          dotnet "$cli" import-urdf \
+            --input tests/fixtures/minimal_robot.urdf \
+            --output "$work/robot.json" \
+            --package-name minimal_robot_description \
+            --package-version 0.1.0 \
+            --description "OSURDF CI fixture" \
+            --maintainer-name "OSURDF CI" \
+            --maintainer-email ci@example.com \
+            --model-license Apache-2.0 \
+            --model-author "OSURDF contributors" \
+            --ros1 --ros2 \
+            --ros-distro lyrical --gazebo-distro jetty \
+            --isaac-sim-version 6.0.0
+          jq --slurpfile profile tests/fixtures/minimal_ros2_control_profile.json \
+            --slurpfile lab tests/fixtures/minimal_isaaclab_profile.json \
+            '.profiles.ros2.ros2Control = $profile[0] | .profiles.isaacLab = $lab[0]' \
+            "$work/robot.json" > "$work/robot-with-control.json"
+          mv "$work/robot-with-control.json" "$work/robot.json"
+          dotnet "$cli" validate --input "$work/robot.json"
+          for bundle in bundle-a bundle-b; do
+            dotnet "$cli" bundle \
+              --source-urdf tests/fixtures/minimal_robot.urdf \
+              --robot "$work/robot.json" \
+              --output "$work/$bundle"
+            dotnet "$cli" verify-bundle --bundle "$work/$bundle"
+          done
+          diff -ru "$work/bundle-a" "$work/bundle-b"
+          dotnet "$cli" export-ros1 --bundle "$work/bundle-a" --output "$work/ros1"
+          dotnet "$cli" export-ros2 --bundle "$work/bundle-a" --output "$work/ros2"
+          python3 tools/isaac_adapter/osurdf_isaac_adapter.py preflight \
+            --bundle "$work/bundle-a" --require-isaac-lab --output "$work/isaac-preflight"
+          python3 tools/isaac_adapter/osurdf_isaac_adapter.py generate-isaaclab \
+            --bundle "$work/bundle-a" --output "$work/isaaclab-generated"
+          python3 -m py_compile \
+            "$work/isaaclab-generated/robot_cfg.py" \
+            "$work/isaaclab-generated/smoke_test.py"
+          test -f "$work/ros1/minimal_robot_description/urdf/minimal_robot.urdf"
+          test -f "$work/ros2/minimal_robot_description/urdf/minimal_robot.urdf"
+          test -f "$work/ros2/minimal_robot_description/urdf/minimal_robot.ros2_control.urdf"
+          test -f "$work/ros2/minimal_robot_description/config/controllers.yaml"
+          test -f "$work/isaac-preflight/name_map.json"
+          test -f "$work/isaaclab-generated/actuator_groups.json"

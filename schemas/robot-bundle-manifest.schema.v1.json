@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://osrbot.com/schemas/osurdf/robot-bundle-manifest.schema.v1.json",
+  "title": "OSURDF Robot Bundle manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "bundleFormat", "robotSchemaVersion", "robotName", "createdUtc", "reproducibleTimestamp", "generator", "entrypoints", "profiles", "validation", "files"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "bundleFormat": { "const": "osurdf-robot-bundle" },
+    "robotSchemaVersion": { "const": 2 },
+    "robotName": { "type": "string", "minLength": 1 },
+    "createdUtc": { "type": "string", "format": "date-time" },
+    "reproducibleTimestamp": { "type": "boolean" },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "commit"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "commit": { "type": "string", "minLength": 1 }
+      }
+    },
+    "entrypoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["robotJson", "portableUrdf", "isaacProfile", "isaacLabProfile"],
+      "properties": {
+        "robotJson": { "const": "robot.json" },
+        "portableUrdf": { "const": "robot.urdf" },
+        "isaacProfile": { "const": "profiles/isaac.json" },
+        "isaacLabProfile": { "const": "profiles/isaaclab.json" }
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ros1", "ros2", "isaac", "isaacLab"],
+      "properties": {
+        "ros1": { "type": "boolean" },
+        "ros2": { "type": "boolean" },
+        "isaac": { "type": "boolean" },
+        "isaacLab": { "type": "boolean" }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["valid", "errors", "warnings", "report"],
+      "properties": {
+        "valid": { "type": "boolean" },
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "report": { "const": "reports/validation.json" }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role", "sha256", "bytes"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+          "role": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sourceUri": { "type": "string" }
+        }
+      }
+    }
+  }
+}

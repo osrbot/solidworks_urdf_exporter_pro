@@ -1032,8 +1032,10 @@ namespace SW2URDF.URDFExport
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Label;
             caption = ChineseUiText.Translate("Joint Type", "Joint \u7c7b\u578b");
             tip = ChineseUiText.Translate(
-                "Select the joint type",
-                "\u9009\u62e9 Joint \u7c7b\u578b");
+                "Select an explicit URDF joint type. Mate detection is only for native movable " +
+                    "SolidWorks assemblies; use an explicit type for STEP or fixed assemblies.",
+                "\u8bf7\u660e\u786e\u9009\u62e9 URDF Joint \u7c7b\u578b\u3002Mate \u8bc6\u522b\u4ec5\u9002\u7528\u4e8e SolidWorks \u539f\u751f\u53ef\u52a8" +
+                    "\u88c5\u914d\uff1bSTEP \u6216\u56fa\u5b9a\u88c5\u914d\u8bf7\u624b\u52a8\u9009\u62e9\u3002");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_LeftEdge;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMLabelJointType = (PropertyManagerPageLabel)PMGroup.AddControl2(
@@ -1043,15 +1045,20 @@ namespace SW2URDF.URDFExport
             controlType = (int)swPropertyManagerPageControlType_e.swControlType_Combobox;
             caption = ChineseUiText.Translate("Joint type", "Joint \u7c7b\u578b");
             tip = ChineseUiText.Translate(
-                "Select the joint type",
-                "\u9009\u62e9 Joint \u7c7b\u578b");
+                "Select an explicit URDF joint type. Mate detection is only for native movable " +
+                    "SolidWorks assemblies; use an explicit type for STEP or fixed assemblies.",
+                "\u8bf7\u660e\u786e\u9009\u62e9 URDF Joint \u7c7b\u578b\u3002Mate \u8bc6\u522b\u4ec5\u9002\u7528\u4e8e SolidWorks \u539f\u751f\u53ef\u52a8" +
+                    "\u88c5\u914d\uff1bSTEP \u6216\u56fa\u5b9a\u88c5\u914d\u8bf7\u624b\u52a8\u9009\u62e9\u3002");
             alignment = (int)swPropertyManagerPageControlLeftAlign_e.swControlAlign_Indent;
             options = (int)swAddControlOptions_e.swControlOptions_Visible;
             PMComboBoxJointType = (PropertyManagerPageCombobox)PMGroup.AddControl2(
                 ComboBoxJointTypeID, (short)controlType, caption, (short)alignment, (int)options, tip);
             PMComboBoxJointType.Style =
                 (int)swPropMgrPageComboBoxStyle_e.swPropMgrPageComboBoxStyle_EditBoxReadOnly;
-            List<string> jointTypeItems = new List<string>();
+            List<string> jointTypeItems = new List<string>
+            {
+                ChineseUiText.JointTypeDisplay(String.Empty)
+            };
             foreach (string jointType in Joint.SelectableTypes)
             {
                 jointTypeItems.Add(ChineseUiText.JointTypeDisplay(jointType));

@@ -77,9 +77,14 @@ namespace SW2URDF.Test
             Assert.Contains("Origin_global", completeText);
             Assert.Contains("# base_link", completeText);
             Assert.Contains("camera_joint", completeText);
+            Assert.Contains("STEP", completeText);
+            Assert.Contains("SolidWorks Mate detection", completeText);
+            Assert.Contains("zero remaining DOFs", completeText);
             Assert.Contains("ComponentBoxes", completeText);
             Assert.Contains("inertial_validation.csv", completeText);
             Assert.Contains("mesh_manifest.csv", completeText);
+            Assert.Contains("Robot Bundle", completeText);
+            Assert.Contains("Export URDF Without Meshes", completeText);
             Assert.Contains("ROS1", completeText);
             Assert.Contains("ROS2", completeText);
             Assert.Contains("robot_state_publisher", completeText);

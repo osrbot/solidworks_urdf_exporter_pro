@@ -55,9 +55,46 @@ namespace SW2URDF.Test
             Assert.Equal(Path.Combine(tempDirectory, "ROS2", "robot_name") + Path.DirectorySeparatorChar,
                 pkg.WindowsRos2PackageDirectory);
             Assert.Equal(Path.Combine(tempDirectory, "export.log"), pkg.WindowsExportLogFile);
+            Assert.Equal(Path.Combine(tempDirectory, "export_report.md"), pkg.WindowsExportReportFile);
             Assert.Equal("robot_name", pkg.RobotName);
             Assert.Equal("robot_name", pkg.PackageName);
             Assert.Equal("robot_name", pkg.Ros2PackageName);
+        }
+
+        [Fact]
+        public void V2BundleOnlyExportStillWritesATopLevelHealthReport()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            try
+            {
+                URDFPackage pkg = new URDFPackage("bundle_robot", tempDirectory);
+                ExportHelper.WriteExportReport(
+                    pkg,
+                    Path.Combine(pkg.WindowsRobotsDirectory, "bundle_robot.urdf"),
+                    new ExportHelper.InertialValidationRecord[0],
+                    new ExportHelper.MeshExportRecord[0],
+                    false,
+                    MeshExportFormat.STL,
+                    TimeSpan.Zero,
+                    new ExportTargetOptions
+                    {
+                        UseV2Pipeline = true,
+                        CreateRobotBundle = true,
+                        ExportRos1Legacy = false,
+                        ExportRos2 = false
+                    });
+
+                Assert.True(File.Exists(pkg.WindowsExportReportFile));
+                string report = File.ReadAllText(pkg.WindowsExportReportFile);
+                Assert.Contains("| ROS package completeness | SKIP |", report);
+                Assert.Contains("| ROS package parity | SKIP |", report);
+                Assert.False(File.Exists(Path.Combine(pkg.WindowsConfigDirectory, "export_report.md")));
+                Assert.False(File.Exists(Path.Combine(pkg.WindowsRos2ConfigDirectory, "export_report.md")));
+            }
+            finally
+            {
+                Directory.Delete(tempDirectory, true);
+            }
         }
 
         [Fact]

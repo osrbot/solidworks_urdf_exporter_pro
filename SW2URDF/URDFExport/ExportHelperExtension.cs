@@ -211,6 +211,11 @@ namespace SW2URDF.URDFExport
             if (!node.IsBaseNode)
             {
                 string jointType = node.Link.Joint.Type;
+                if (string.IsNullOrWhiteSpace(jointType))
+                {
+                    return "Joint '" + node.Link.Joint.Name +
+                        "' has no selected type. Select an explicit URDF joint type before exporting.";
+                }
                 if (Joint.IsAutomaticType(jointType))
                 {
                     if (!allowAutomaticType)
@@ -1712,6 +1717,10 @@ namespace SW2URDF.URDFExport
                 ? "fixed"
                 : JointConfigurationPolicy.Normalize(child.Joint.Type);
             JointConfigurationPolicy.Apply(child.Joint, jointType);
+            if (child.isFixedFrame)
+            {
+                child.Joint.MarkTopologyFixedFrame();
+            }
 
             string coordSysName = child.Joint.CoordinateSystemName;
             string axisName = child.Joint.AxisName;
@@ -1729,10 +1738,16 @@ namespace SW2URDF.URDFExport
                 // reference coordinate system, the reference axis or the joint type.
                 if (!EstimateGlobalJointFromComponents(parent, child))
                 {
-                    ExportErrorWhy = string.Format("Inferring the joint geometry failed for the joint {0} " +
-                        "from link {1} to {2} failed. Check that the mates have not fully defined the " +
-                        "components in link {1} and that there is exactly one degree of freedom.",
-                        child.Joint.Name, child.Name, parent.Name);
+                    ExportErrorWhy = string.Format(
+                        "Joint '{0}' ({1} -> {2}) could not be inferred from SolidWorks Mate/DOF " +
+                        "data. STEP, imported, fixed, fully constrained, under-constrained, or " +
+                        "multi-DOF assemblies do not provide a unique URDF joint. Select an " +
+                        "explicit joint type; for a moving joint, also select explicit reference " +
+                        "geometry when Mate inference is unavailable. Use Mate detection only for " +
+                        "a native movable assembly with one remaining degree of freedom.",
+                        child.Joint.Name,
+                        parent.Name,
+                        child.Name);
                     return false;
                 }
                 JointConfigurationPolicy.Apply(child.Joint, child.Joint.Type);
@@ -2230,6 +2245,17 @@ namespace SW2URDF.URDFExport
                         configuredType,
                         inferredType))
                 {
+                    if (apiResult == 0 &&
+                        R1Status == 0 && R2Status == 0 &&
+                        L1Status == 0 && L2Status == 0)
+                    {
+                        logger.Warn(string.Format(
+                            "Joint DOF inference is inconclusive for {0}: zero remaining DOFs can " +
+                            "mean fixed, fully constrained, or missing Mate semantics. An explicit " +
+                            "URDF joint type and, for a moving joint, explicit reference geometry " +
+                            "may be required.",
+                            child.Joint.Name));
+                    }
                     logger.Warn(string.Format(
                         "Joint DOF inference rejected for {0}: result={1}, R1={2}, R2={3}, L1={4}, L2={5}, configured={6}.",
                         child.Joint.Name,
@@ -2242,8 +2268,25 @@ namespace SW2URDF.URDFExport
                     return false;
                 }
 
-                JointConfigurationPolicy.Apply(child.Joint,
-                    JointConfigurationPolicy.ResolveDetectedType(configuredType, inferredType));
+                string resolvedType =
+                    JointConfigurationPolicy.ResolveDetectedType(configuredType, inferredType);
+                if (Joint.IsAutomaticType(configuredType))
+                {
+                    JointConfigurationPolicy.ApplyDetectedSuggestion(
+                        child.Joint,
+                        resolvedType,
+                        string.Format(
+                            "SolidWorks GetRemainingDOFs result={0}; R1={1}; R2={2}; L1={3}; L2={4}.",
+                            apiResult,
+                            R1Status,
+                            R2Status,
+                            L1Status,
+                            L2Status));
+                }
+                else
+                {
+                    JointConfigurationPolicy.Apply(child.Joint, resolvedType);
+                }
                 child.Joint.Origin.SetXYZ(MathOps.GetXYZ(child.SWMainComponent.Transform2));
                 child.Joint.Origin.SetRPY(MathOps.GetRPY(child.SWMainComponent.Transform2));
 

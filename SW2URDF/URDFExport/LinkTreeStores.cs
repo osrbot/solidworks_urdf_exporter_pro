@@ -121,6 +121,16 @@ namespace SW2URDF.URDFExport
             state.ApplyJointType(jointType);
         }
 
+        public void ApplyJointTypeFromUser(Guid id, string jointType)
+        {
+            LinkConfigurationState state;
+            if (!states.TryGetValue(id, out state))
+            {
+                throw new InvalidOperationException("Missing URDF configuration for Link node " + id + ".");
+            }
+            state.ApplyJointTypeFromUser(jointType);
+        }
+
         public void MarkJointKinematicsStale(Guid id)
         {
             LinkConfigurationState state;
@@ -240,6 +250,11 @@ namespace SW2URDF.URDFExport
         public void ApplyJointType(string jointType)
         {
             JointConfigurationPolicy.Apply(configuration.Joint, jointType);
+        }
+
+        public void ApplyJointTypeFromUser(string jointType)
+        {
+            JointConfigurationPolicy.ApplyUserSelection(configuration.Joint, jointType);
         }
 
         public void MarkJointKinematicsStale()

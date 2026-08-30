@@ -9,7 +9,7 @@
 
 - Windows x64；
 - Visual Studio 2017 与 `.NET desktop development`；
-- .NET Framework 4.5.2；
+- .NET Framework 4.8；
 - SolidWorks 与匹配的 API Tools/Interop assemblies；
 - 调试 COM 注册或启动 SolidWorks 时可能需要管理员权限。
 
@@ -30,13 +30,13 @@ MSBuild.exe SW2URDF\SW2URDF.csproj /t:Build /p:Configuration=Debug /p:Platform=x
 Debug 构建后：
 
 ```powershell
-TestRunner\bin\x64\Debug\net452\TestRunner.exe
+TestRunner\bin\x64\Debug\net48\TestRunner.exe
 ```
 
 按测试类/名称过滤：
 
 ```powershell
-TestRunner\bin\x64\Debug\net452\TestRunner.exe TestMassPropertyFrameConverter
+TestRunner\bin\x64\Debug\net48\TestRunner.exe TestMassPropertyFrameConverter
 ```
 
 - Pure unit tests 应可在 SolidWorks 不可用时运行。

@@ -447,6 +447,7 @@ namespace SW2URDF.UI
         private void AssemblyExportFormLoad(object sender, EventArgs e)
         {
             textBoxRosPackageName.Text = URDFPackage.SanitizePackageName(Exporter.RosPackageName);
+            InitializeExportTargetControls();
             UpdateRosPackageNameHint();
             Exporter.UpdateReferenceGeometries();
             FillJointTree();
@@ -458,6 +459,10 @@ namespace SW2URDF.UI
             if (!(previouslySelectedNode == null || previouslySelectedNode.Link.Joint == null))
             {
                 SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link.Joint);
+            }
+            if (ResolveAutomaticJointSuggestions())
+            {
+                return;
             }
             string errors = CheckJointsForErrors();
             if (!string.IsNullOrWhiteSpace(errors))
@@ -494,6 +499,108 @@ namespace SW2URDF.UI
             AppendDuplicateJointNameErrors(treeViewJointTree.Nodes, builder);
             AppendMimicReferenceErrors(joints, builder);
             return builder.ToString();
+        }
+
+        private bool ResolveAutomaticJointSuggestions()
+        {
+            List<string> suggestions = new List<string>();
+            List<string> failures = new List<string>();
+            foreach (LinkNode child in treeViewJointTree.Nodes)
+            {
+                ResolveAutomaticJointSuggestions(
+                    BaseNode.Link,
+                    child,
+                    suggestions,
+                    failures);
+            }
+            if (suggestions.Count == 0 && failures.Count == 0)
+            {
+                return false;
+            }
+
+            if (previouslySelectedNode != null)
+            {
+                FillJointPropertyBoxes(previouslySelectedNode.Link.Joint);
+            }
+            StringBuilder message = new StringBuilder();
+            if (suggestions.Count > 0)
+            {
+                message.AppendLine(ChineseUiText.Translate(
+                    "Mate assist produced provisional suggestions:",
+                    "Mate 辅助已生成待确认建议："));
+                foreach (string suggestion in suggestions)
+                {
+                    message.AppendLine("  " + suggestion);
+                }
+                message.AppendLine();
+                message.AppendLine(ChineseUiText.Translate(
+                    "Review every listed Joint before continuing. A rotational DOF is proposed as continuous because CAD motion alone cannot prove whether a bounded revolute limit is intended. Open each suggested Joint, choose the explicit URDF type, add limits where required, and then click Next again.",
+                    "继续前请逐个检查上述 Joint。旋转自由度暂按 continuous 建议，因为 CAD 运动本身无法证明是否需要有界 revolute 限位。请打开每个建议 Joint，明确选择 URDF 类型，按需填写限位，然后再次点击下一步。"));
+            }
+            if (failures.Count > 0)
+            {
+                if (message.Length > 0)
+                {
+                    message.AppendLine();
+                }
+                message.AppendLine(ChineseUiText.Translate(
+                    "Mate assist could not classify these Joints; select their types and reference geometry manually:",
+                    "Mate 辅助无法识别以下 Joint；请手动选择类型和参考几何："));
+                foreach (string failure in failures)
+                {
+                    message.AppendLine("  " + failure);
+                }
+            }
+            MessageBox.Show(
+                message.ToString().TrimEnd(),
+                ChineseUiText.Translate("Review Mate suggestions", "检查 Mate 建议"),
+                MessageBoxButtons.OK,
+                failures.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            return true;
+        }
+
+        private void ResolveAutomaticJointSuggestions(
+            Link parent,
+            LinkNode node,
+            ICollection<string> suggestions,
+            ICollection<string> failures)
+        {
+            if (node == null || node.Link == null)
+            {
+                return;
+            }
+            Joint joint = node.Link.Joint;
+            if (joint != null && Joint.IsAutomaticType(joint.Type))
+            {
+                Joint snapshot = new Joint();
+                snapshot.SetElement(joint);
+                try
+                {
+                    if (Exporter.EstimateGlobalJointFromComponents(parent, node.Link))
+                    {
+                        suggestions.Add(joint.Name + ": " + joint.Type);
+                    }
+                    else
+                    {
+                        joint.SetElement(snapshot);
+                        failures.Add(joint.Name);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    joint.SetElement(snapshot);
+                    failures.Add(joint.Name);
+                    logger.Warn("Mate suggestion failed for Joint " + joint.Name, exception);
+                }
+            }
+            foreach (LinkNode child in node.Nodes)
+            {
+                ResolveAutomaticJointSuggestions(
+                    node.Link,
+                    child,
+                    suggestions,
+                    failures);
+            }
         }
 
         private string CheckJointsForErrors(LinkNode root)
@@ -541,6 +648,14 @@ namespace SW2URDF.UI
             if (!node.Link.Joint.AreRequiredFieldsSatisfied())
             {
                 builder.Append(node.Link.Joint.Name).Append("\r\n");
+            }
+            if (JointConfigurationPolicy.RequiresUserConfirmation(node.Link.Joint))
+            {
+                builder.Append(node.Link.Joint.ConfigurationSource == "solidworks_mate_suggestion"
+                        ? "Unconfirmed Mate suggestion: "
+                        : "Unconfirmed Joint configuration: ")
+                    .Append(node.Link.Joint.Name)
+                    .Append(" (open this Joint and explicitly select its URDF type)\r\n");
             }
 
             foreach (LinkNode child in node.Nodes)
@@ -641,6 +756,25 @@ namespace SW2URDF.UI
             Exporter.RosPackageName = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
             textBoxRosPackageName.Text = Exporter.RosPackageName;
             UpdateRosPackageNameHint();
+            Exporter.ExportTargets = exportSTL
+                ? CaptureExportTargetOptions()
+                : ExportTargetOptions.LegacyCompatibilityDefaults();
+            if (!exportSTL)
+            {
+                logger.Info(
+                    "Using the lightweight URDF-only compatibility path; Robot Bundle, " +
+                    "profile, and Isaac outputs require a complete mesh export.");
+            }
+            IList<string> targetErrors = Exporter.ExportTargets.Validate();
+            if (targetErrors.Count > 0)
+            {
+                MessageBox.Show(
+                    string.Join("\r\n", targetErrors),
+                    ChineseUiText.Translate("Output profile errors", "输出配置错误"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
 
             // Saving selected node
             LinkNode node = (LinkNode)treeViewLinkProperties.SelectedNode;
@@ -702,8 +836,8 @@ namespace SW2URDF.UI
             {
                 SelectedPath = Directory.Exists(Exporter.SavePath) ? Exporter.SavePath : "",
                 Description = ChineseUiText.Translate(
-                    "Select the export root directory for the ROS 1 and ROS 2 packages",
-                    "\u9009\u62e9 ROS 1 \u548c ROS 2 \u529f\u80fd\u5305\u7684\u5bfc\u51fa\u6839\u76ee\u5f55")
+                    "Select the export root for the Robot Bundle and selected profiles",
+                    "\u9009\u62e9 Robot Bundle \u4e0e\u5df2\u9009\u8f93\u51fa\u914d\u7f6e\u7684\u5bfc\u51fa\u6839\u76ee\u5f55")
             })
             {
 
@@ -784,10 +918,81 @@ namespace SW2URDF.UI
         private void UpdateRosPackageNameHint()
         {
             string sanitized = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
-            labelRosPackageNameHint.Text = "ROS1/2: " + sanitized;
+            List<string> targets = new List<string> { "Bundle" };
+            if (modernRos2CheckBox == null || modernRos2CheckBox.Checked)
+            {
+                targets.Add("ROS2");
+            }
+            if (modernRos1CheckBox == null || modernRos1CheckBox.Checked)
+            {
+                targets.Add("ROS1 legacy");
+            }
+            if (modernIsaacCheckBox != null && modernIsaacCheckBox.Checked)
+            {
+                targets.Add("Isaac");
+            }
+            labelRosPackageNameHint.Text = string.Join(" | ", targets) + ": " + sanitized;
             packagePathToolTip.SetToolTip(
                 labelRosPackageNameHint,
-                "ROS1/" + sanitized + " | ROS2/" + sanitized);
+                "Bundle/" + sanitized + ".osurdf | ROS1/" + sanitized + " | ROS2/" + sanitized);
+        }
+
+        private void InitializeExportTargetControls()
+        {
+            if (modernBundleCheckBox == null)
+            {
+                return;
+            }
+            ExportTargetOptions existing = Exporter.ExportTargets;
+            bool restore = existing != null && existing.UseV2Pipeline;
+            modernBundleCheckBox.Checked = true;
+            modernRos2CheckBox.Checked = restore ? existing.ExportRos2 : true;
+            modernRos1CheckBox.Checked = restore ? existing.ExportRos1Legacy : true;
+            modernIsaacCheckBox.Checked = restore && existing.ExportIsaacSim;
+            modernIsaacLabCheckBox.Checked = restore && existing.ExportIsaacLab;
+            modernPackageVersionTextBox.Text = restore ? existing.PackageVersion : "0.1.0";
+            modernPackageDescriptionTextBox.Text = restore
+                ? existing.Description
+                : "Robot description package for " + Exporter.RosPackageName;
+            modernMaintainerNameTextBox.Text = restore ? existing.MaintainerName : string.Empty;
+            modernMaintainerEmailTextBox.Text = restore ? existing.MaintainerEmail : string.Empty;
+            modernModelLicenseTextBox.Text = restore ? existing.ModelLicense : string.Empty;
+            modernModelAuthorTextBox.Text = restore ? existing.ModelAuthor : string.Empty;
+            modernRos2PairComboBox.SelectedIndex = restore &&
+                string.Equals(existing.Ros2Distribution, "jazzy", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(existing.GazeboDistribution, "harmonic", StringComparison.OrdinalIgnoreCase)
+                    ? 1
+                    : 0;
+            modernIsaacVersionTextBox.Text = restore ? existing.IsaacSimVersion : string.Empty;
+            modernIsaacLabVersionTextBox.Text = restore ? existing.IsaacLabVersion : string.Empty;
+            modernRos2ControlProfileTextBox.Text = restore ? existing.Ros2ControlProfileFile : string.Empty;
+            modernIsaacLabProfileTextBox.Text = restore ? existing.IsaacLabProfileFile : string.Empty;
+            SynchronizeIsaacTargetControls();
+        }
+
+        private ExportTargetOptions CaptureExportTargetOptions()
+        {
+            return new ExportTargetOptions
+            {
+                UseV2Pipeline = true,
+                CreateRobotBundle = true,
+                ExportRos2 = modernRos2CheckBox.Checked,
+                ExportRos1Legacy = modernRos1CheckBox.Checked,
+                ExportIsaacSim = modernIsaacCheckBox.Checked,
+                ExportIsaacLab = modernIsaacLabCheckBox.Checked,
+                PackageVersion = modernPackageVersionTextBox.Text.Trim(),
+                Description = modernPackageDescriptionTextBox.Text.Trim(),
+                MaintainerName = modernMaintainerNameTextBox.Text.Trim(),
+                MaintainerEmail = modernMaintainerEmailTextBox.Text.Trim(),
+                ModelLicense = modernModelLicenseTextBox.Text.Trim(),
+                ModelAuthor = modernModelAuthorTextBox.Text.Trim(),
+                Ros2Distribution = modernRos2PairComboBox.SelectedIndex == 1 ? "jazzy" : "lyrical",
+                GazeboDistribution = modernRos2PairComboBox.SelectedIndex == 1 ? "harmonic" : "jetty",
+                Ros2ControlProfileFile = modernRos2ControlProfileTextBox.Text.Trim(),
+                IsaacSimVersion = modernIsaacVersionTextBox.Text.Trim(),
+                IsaacLabVersion = modernIsaacLabVersionTextBox.Text.Trim(),
+                IsaacLabProfileFile = modernIsaacLabProfileTextBox.Text.Trim()
+            };
         }
 
         private void LinkCoordinateSystemSelectionChangeCommitted(object sender, EventArgs e)

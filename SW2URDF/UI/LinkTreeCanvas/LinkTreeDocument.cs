@@ -134,6 +134,16 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         public IList<string> Validate()
         {
+            return Validate(false);
+        }
+
+        internal IList<string> ValidateDraft()
+        {
+            return Validate(true);
+        }
+
+        private IList<string> Validate(bool allowUnconfiguredJointTypes)
+        {
             List<string> errors = new List<string>();
             if (Nodes.Count == 0)
             {
@@ -167,11 +177,15 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 {
                     errors.Add(node.Name + " 的 Joint 名称无效。");
                 }
-                if (node.ParentId.HasValue && string.IsNullOrWhiteSpace(node.JointType))
+                if (node.ParentId.HasValue &&
+                    string.IsNullOrWhiteSpace(node.JointType) &&
+                    !allowUnconfiguredJointTypes)
                 {
-                    errors.Add(node.Name + " 的 Joint 类型不能为空。");
+                    errors.Add(node.Name + " 的 Joint 类型尚未选择。");
                 }
-                else if (node.ParentId.HasValue && !SupportedJointTypes.Contains(node.JointType))
+                else if (node.ParentId.HasValue &&
+                    !string.IsNullOrWhiteSpace(node.JointType) &&
+                    !SupportedJointTypes.Contains(node.JointType))
                 {
                     errors.Add(node.Name + " 的 Joint 类型不受支持：" + node.JointType + "。");
                 }
@@ -251,7 +265,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 ParentId = parentId,
                 Name = name,
                 JointName = parentId.HasValue ? BuildDefaultJointName(name) : string.Empty,
-                JointType = parentId.HasValue ? "fixed" : string.Empty,
+                JointType = string.Empty,
                 X = x,
                 Y = y
             };

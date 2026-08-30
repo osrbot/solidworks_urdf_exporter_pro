@@ -21,6 +21,9 @@ namespace TestRunner
         // Start out assuming success; we'll set this to 1 if we get a failed test
         static int result = 0;
 
+        // A release gate must not pass when discovery silently returns no tests.
+        static int testsDiscovered = 0;
+
         static string TestNameFilter = "";
         static string IsolatedTestLogFile;
 
@@ -186,17 +189,25 @@ namespace TestRunner
 
         static void OnDiscoveryComplete(DiscoveryCompleteInfo info)
         {
+            testsDiscovered = info.TestCasesDiscovered;
             lock (consoleLock)
                 Console.WriteLine($"Running {info.TestCasesToRun} of {info.TestCasesDiscovered} tests...");
         }
 
         static void OnExecutionComplete(ExecutionCompleteInfo info)
         {
+            if (testsDiscovered <= 0 || info.TotalTests <= 0)
+            {
+                result = 1;
+                Console.Error.WriteLine(
+                    "[FAIL] No SW2URDF tests were discovered or executed; the release gate cannot pass.");
+            }
+
             lock (consoleLock)
                 Console.WriteLine(
-                    $"Finished: {info.TotalTests} tests in" + 
-                    $"{Math.Round(info.ExecutionTime, 3)}s " + 
-                    $"({info.TestsFailed} failed, " + 
+                    $"Finished: {info.TotalTests} tests in " +
+                    $"{Math.Round(info.ExecutionTime, 3)}s " +
+                    $"({info.TestsFailed} failed, " +
                     $"{info.TestsSkipped} skipped)");
 
             finished.Set();

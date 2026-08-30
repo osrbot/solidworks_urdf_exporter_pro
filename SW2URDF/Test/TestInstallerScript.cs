@@ -22,11 +22,18 @@ namespace SW2URDF.Test
             Assert.Contains("Name: \"chinesesimplified\"", installerScript);
             Assert.Contains("chinesesimplified.RegisteringControls=", installerScript);
             Assert.Contains("chinesesimplified.UnregisteringControls=", installerScript);
+            Assert.Contains("DotNet48MinimumRelease = 528040", installerScript);
+            Assert.Contains("function InitializeSetup(): Boolean", installerScript);
+            Assert.Contains("{cm:DotNet48Required}", installerScript);
             Assert.Contains("OSRBot / kitso666", installerScript);
             Assert.Contains("https://github.com/osrbot/solidworks_urdf_exporter_pro", installerScript);
             Assert.Contains("\\*.dll\"}; DestDir: {app}", installerScript);
             Assert.Contains("\\SW2URDF.png\"}; DestDir: {app}", installerScript);
             Assert.Contains("\\images\\*.png\"}; DestDir: {app}\\images", installerScript);
+            Assert.Contains("\\schemas\\*\"}; DestDir: {app}\\schemas", installerScript);
+            Assert.Contains("\\tools\\isaac_adapter\\*\"}; DestDir: {app}\\tools\\isaac_adapter", installerScript);
+            Assert.Contains("THIRD_PARTY_NOTICES.md", installerScript);
+            Assert.Contains("\\THIRD_PARTY_LICENSES\\*\"}; DestDir: {app}\\THIRD_PARTY_LICENSES", installerScript);
             Assert.DoesNotContain("\\*.pdb", installerScript);
             Assert.DoesNotContain("\\*.xml", installerScript);
         }
@@ -69,6 +76,20 @@ namespace SW2URDF.Test
             Assert.Contains("\"/p:SolutionDir=$SolutionDir\"", buildScript);
             Assert.Contains("$RequiredPayloadFiles", buildScript);
             Assert.Contains("\"solidworkstools.dll\"", buildScript);
+            Assert.Contains("\"OSURDF.Core.dll\"", buildScript);
+            Assert.Contains("\"Newtonsoft.Json.dll\"", buildScript);
+            Assert.Contains("\"log4net.dll\"", buildScript);
+            Assert.Contains("\"APACHE-2.0.txt\"", buildScript);
+            Assert.Contains("\"MIT.txt\"", buildScript);
+            Assert.Contains("\"osurdf_isaac_adapter.py\"", buildScript);
+            Assert.Contains("\"robot.schema.v2.json\"", buildScript);
+            Assert.Contains("RestoreLockedMode=true", buildScript);
+            Assert.Contains("SW2URDFBaseIntermediateOutputPath", buildScript);
+            Assert.Contains("sdkPackageLocks = $SdkPackageLocks", buildScript);
+            Assert.Contains("TestRunner\\packages.lock.json", buildScript);
+            Assert.Contains("SW2URDF_TEST_ASSEMBLY", buildScript);
+            Assert.Contains("SolidWorks regression suite failed", buildScript);
+            Assert.Contains("pluginTests = $PluginTestEvidence", buildScript);
             Assert.Contains("required installer payload: $RequiredPayloadFile", buildScript);
             Assert.DoesNotContain("& $MSBuild $Solution", buildScript);
             Assert.DoesNotContain("$NuGetCommand.Source", buildScript);
@@ -79,6 +100,8 @@ namespace SW2URDF.Test
         {
             string project = ReadRepositoryFile("SW2URDF", "SW2URDF.csproj");
 
+            Assert.Contains("<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>", project);
+            Assert.Contains("<BootstrapperPackage Include=\".NETFramework,Version=v4.8\">", project);
             Assert.Contains("<ItemGroup Condition=\"'$(Configuration)' != 'Release'\">", project);
             Assert.Contains("<Compile Include=\"Test\\TestLinkTreeCanvas.cs\" />", project);
             Assert.Contains("xunit.assert", project);
@@ -89,6 +112,9 @@ namespace SW2URDF.Test
             string releasePackages = ReadRepositoryFile("SW2URDF", "packages.release.config");
             Assert.Contains("Microsoft.Net.Compilers", releasePackages);
             Assert.Contains("CsvHelper", releasePackages);
+            Assert.Contains("log4net\" version=\"3.4.0", releasePackages);
+            Assert.Contains("MathNet.Numerics.Signed", releasePackages);
+            Assert.DoesNotContain("id=\"MathNet.Numerics\"", releasePackages);
             Assert.DoesNotContain("xunit", releasePackages);
             Assert.DoesNotContain("Moq", releasePackages);
 
@@ -117,6 +143,23 @@ namespace SW2URDF.Test
                 "packages.release.lock.json");
             Assert.Contains("\"version\": \"6.11.1\"", releaseLock);
             Assert.Contains("\"sha256\"", releaseLock);
+            Assert.DoesNotContain("\"id\": \"MathNet.Numerics\",", releaseLock);
+            Assert.Contains("\"id\": \"log4net\"", releaseLock);
+            Assert.Contains("..\\packages\\log4net.3.4.0\\lib\\net462\\log4net.dll", project);
+            Assert.DoesNotContain("<HintPath>lib\\log4net.dll</HintPath>", project);
+            Assert.Contains("..\\THIRD_PARTY_LICENSES\\*.txt", project);
+
+            string testRunnerProject = ReadRepositoryFile("TestRunner", "TestRunner.csproj");
+            Assert.Contains("<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>", testRunnerProject);
+            Assert.Contains("Microsoft.NETFramework.ReferenceAssemblies", testRunnerProject);
+            Assert.Contains("xunit.runner.utility\" Version=\"2.4.1\"", testRunnerProject);
+            string testRunnerLock = ReadRepositoryFile("TestRunner", "packages.lock.json");
+            Assert.Contains("\"xunit.runner.utility\"", testRunnerLock);
+            Assert.Contains("\"resolved\": \"2.4.1\"", testRunnerLock);
+
+            string testRunner = ReadRepositoryFile("TestRunner", "TestRunner.cs");
+            Assert.Contains("No SW2URDF tests were discovered or executed", testRunner);
+            Assert.Contains("testsDiscovered <= 0 || info.TotalTests <= 0", testRunner);
         }
 
         [Fact]
@@ -141,9 +184,13 @@ namespace SW2URDF.Test
             Assert.Contains("installerSha256", workflow);
             Assert.Contains("sourceTree", workflow);
             Assert.Contains("packages.release.lock.json", workflow);
+            Assert.Contains(".pluginTests.result == \"passed\"", workflow);
+            Assert.Contains("TestRunner/bin/Release/net48/TestRunner.exe", workflow);
             Assert.Contains("innoextract", workflow);
             Assert.Contains("Installer payload does not match the provenance manifest", workflow);
             Assert.Contains("Extracted installer payload hash mismatch", workflow);
+            Assert.Contains("THIRD_PARTY_LICENSES/APACHE-2.0.txt", workflow);
+            Assert.Contains("THIRD_PARTY_LICENSES/MIT.txt", workflow);
             Assert.Contains("--json isDraft", workflow);
             Assert.Contains("--draft", workflow);
             Assert.DoesNotContain("--draft=false", workflow);
@@ -160,10 +207,29 @@ namespace SW2URDF.Test
             Assert.Contains(
                 "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2",
                 workflow);
+            Assert.Contains("persist-credentials: false", workflow);
+            Assert.Contains("timeout-minutes: 60", workflow);
             Assert.DoesNotContain("uses: actions/checkout@v4", workflow);
             Assert.DoesNotContain("git tag --force", workflow);
             Assert.DoesNotContain("gh release delete-asset", workflow);
             Assert.DoesNotContain("-printf \"%T@ %p", workflow);
+        }
+
+        [Theory]
+        [InlineData("solidworks-integration.yml")]
+        [InlineData("ros-integration.yml")]
+        [InlineData("isaac-integration.yml")]
+        public void TestSelfHostedIntegrationWorkflowsRequireManualDispatch(string workflowName)
+        {
+            string workflow = ReadRepositoryFile(
+                ".github", "workflows", workflowName);
+
+            Assert.Contains("workflow_dispatch:", workflow);
+            Assert.Contains("runs-on: [self-hosted,", workflow);
+            Assert.Contains("persist-credentials: false", workflow);
+            Assert.Contains("timeout-minutes:", workflow);
+            Assert.DoesNotContain("pull_request:", workflow);
+            Assert.DoesNotContain("pull_request_target:", workflow);
         }
 
         [Fact]
@@ -183,6 +249,26 @@ namespace SW2URDF.Test
             Assert.Contains("{{RELEASE_ARTIFACT_SHA}}", notes);
             Assert.Contains("Draft only", notes);
             Assert.Contains("\u5f53\u524d\u4ec5\u4e3a Draft", notes);
+        }
+
+        [Fact]
+        public void TestThirdPartyRuntimeLicensesArePackagedAndScoped()
+        {
+            string notices = ReadRepositoryFile("THIRD_PARTY_NOTICES.md");
+            string mit = ReadRepositoryFile("THIRD_PARTY_LICENSES", "MIT.txt");
+            string apache = ReadRepositoryFile("THIRD_PARTY_LICENSES", "APACHE-2.0.txt");
+
+            Assert.Contains("Apache log4net 3.4.0", notices);
+            Assert.Contains("CsvHelper 7.1.1", notices);
+            Assert.Contains("MathNet.Numerics.Signed 4.7.0", notices);
+            Assert.Contains("Newtonsoft.Json 13.0.3", notices);
+            Assert.Contains("System.Runtime.CompilerServices.Unsafe 4.5.0", notices);
+            Assert.Contains("System.Threading.Tasks.Extensions 4.5.1", notices);
+            Assert.Contains("solidworkstools.dll", notices);
+            Assert.Contains("does not grant redistribution rights", notices);
+            Assert.Contains("Permission is hereby granted", mit);
+            Assert.Contains("Apache License", apache);
+            Assert.Contains("Version 2.0, January 2004", apache);
         }
 
         [Fact]
@@ -288,6 +374,35 @@ namespace SW2URDF.Test
             Assert.True(createRobot >= 0);
             Assert.True(validateLinks > createRobot);
             Assert.True(saveConfiguration > validateLinks);
+        }
+
+        [Fact]
+        public void TestUrdfOnlyExportCannotSelectBundleOrIsaacTargets()
+        {
+            string form = ReadRepositoryFile("SW2URDF", "UI", "AssemblyExportForm.cs");
+            int finishExport = form.IndexOf(
+                "private void FinishExport(bool exportSTL)",
+                StringComparison.Ordinal);
+            int captureTargets = form.IndexOf(
+                "? CaptureExportTargetOptions()",
+                finishExport,
+                StringComparison.Ordinal);
+            int legacyTargets = form.IndexOf(
+                ": ExportTargetOptions.LegacyCompatibilityDefaults();",
+                captureTargets,
+                StringComparison.Ordinal);
+            int validateTargets = form.IndexOf(
+                "Exporter.ExportTargets.Validate()",
+                legacyTargets,
+                StringComparison.Ordinal);
+
+            Assert.True(finishExport >= 0);
+            Assert.True(captureTargets > finishExport);
+            Assert.True(legacyTargets > captureTargets);
+            Assert.True(validateTargets > legacyTargets);
+            Assert.Contains(
+                "Robot Bundle, profile, and Isaac outputs require a complete mesh export",
+                form.Substring(finishExport, validateTargets - finishExport));
         }
 
         [Fact]

@@ -24,12 +24,14 @@ concurrency:
 jobs:
   publish-installer:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install installer inspection tool
         shell: bash
@@ -191,16 +193,39 @@ jobs:
               (.tools.innoSetup.sha256 | test("^[0-9a-f]{64}$")) and
               (all(.packageInputs[]; .id != "" and .version != "" and
                 (.sha256 | test("^[0-9a-f]{64}$")))) and
+              (.sdkPackageLocks | length >= 2) and
+              (all(.sdkPackageLocks[];
+                (.path | test("^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+packages\\.lock\\.json$")) and
+                (.sha256 | test("^[0-9a-f]{64}$")))) and
               (all(.solidWorksInputs[]; .file != "" and
                 (.sha256 | test("^[0-9a-f]{64}$")))) and
+              (.pluginTests.configuration == "Test") and
+              (.pluginTests.platform == "x64") and
+              (.pluginTests.result == "passed") and
+              (.pluginTests.runner == "TestRunner/bin/Release/net48/TestRunner.exe") and
+              (.pluginTests.testAssemblySha256 | test("^[0-9a-f]{64}$")) and
               (.payloadInputs | length > 0) and
               (any(.payloadInputs[]; .path == "SW2URDF.dll")) and
+              (any(.payloadInputs[]; .path == "OSURDF.Core.dll")) and
+              (any(.payloadInputs[]; .path == "Newtonsoft.Json.dll")) and
+              (any(.payloadInputs[]; .path == "THIRD_PARTY_LICENSES/APACHE-2.0.txt")) and
+              (any(.payloadInputs[]; .path == "THIRD_PARTY_LICENSES/MIT.txt")) and
+              (any(.payloadInputs[]; .path == "schemas/robot.schema.v2.json")) and
+              (any(.payloadInputs[]; .path == "tools/isaac_adapter/osurdf_isaac_adapter.py")) and
               (all(.payloadInputs[]; .path != "" and
                 (.sha256 | test("^[0-9a-f]{64}$"))))
             ' "$provenance_path" >/dev/null; then
             echo "Installer provenance contains invalid build input records." >&2
             exit 1
           fi
+          while IFS=$'\t' read -r lock_path expected_hash; do
+            lock_copy="$(mktemp)"
+            if ! git show "${source_sha}:${lock_path}" > "$lock_copy" ||
+               [[ "$(sha256sum "$lock_copy" | awk '{print $1}')" != "$expected_hash" ]]; then
+              echo "SDK package lock provenance mismatch: $lock_path" >&2
+              exit 1
+            fi
+          done < <(jq -r '.sdkPackageLocks[] | [.path, .sha256] | @tsv' "$provenance_path")
           release_lock="$(mktemp)"
           git show "${source_sha}:SW2URDF/packages.release.lock.json" > "$release_lock"
           locked_packages="$(jq -S -c '.packages | sort_by(.id, .version)' "$release_lock")"

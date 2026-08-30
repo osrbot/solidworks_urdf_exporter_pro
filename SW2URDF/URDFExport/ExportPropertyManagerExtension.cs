@@ -391,19 +391,25 @@ namespace SW2URDF.URDFExport
                 node.IsIncomplete = true;
                 node.WhyIncomplete +=
                     "        The reference axis cannot be automatically generated\r\n" +
-                    "        without components. Either select an axis or at least one component.";
+                    "        without components. Either select an axis or at least one component.\r\n";
             }
 
-            if (node.Link.SWComponents.Count == 0 &&
-                (node.Link.Joint.Type == "Automatically Generate" ||
-                 node.Link.Joint.Type == Joint.AutomaticallyDetectType))
+            if (String.IsNullOrWhiteSpace(node.Link.Joint.Type))
             {
                 node.IsIncomplete = true;
                 node.WhyIncomplete +=
-                    "        The joint type cannot be automatically detected\r\n" +
-                    "        without components. Either select an joint type or at least one component.";
+                    "        Joint type is required. Select an explicit URDF joint type, or use\r\n" +
+                    "        SolidWorks Mate detection only for a native movable assembly.";
             }
-            else if (node.Link.Joint.Type != Joint.AutomaticallyDetectType &&
+            else if (node.Link.SWComponents.Count == 0 &&
+                Joint.IsAutomaticType(node.Link.Joint.Type))
+            {
+                node.IsIncomplete = true;
+                node.WhyIncomplete +=
+                    "        SolidWorks Mate detection requires components from a native movable\r\n" +
+                    "        assembly. Select an explicit type for STEP or fixed assemblies.";
+            }
+            else if (!Joint.IsAutomaticType(node.Link.Joint.Type) &&
                 !Joint.AvailableTypes.Contains(node.Link.Joint.Type))
             {
                 node.IsIncomplete = true;
@@ -602,7 +608,7 @@ namespace SW2URDF.URDFExport
                 node.Link.Name = "Empty_Link";
                 node.Link.Joint.AxisName = "Automatically Generate";
                 node.Link.Joint.CoordinateSystemName = "Automatically Generate";
-                node.Link.Joint.Type = Joint.AutomaticallyDetectType;
+                node.Link.Joint.Type = String.Empty;
                 node.Link.SWComponents = new List<Component2>();
                 node.IsBaseNode = false;
                 node.IsIncomplete = true;

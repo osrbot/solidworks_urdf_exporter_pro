@@ -64,7 +64,9 @@ namespace SW2URDF.UI.LinkTreeCanvas
             LinkTreeDocument candidate = BuildDocument(outline, source, errors);
             if (candidate != null)
             {
-                errors.AddRange(candidate.Validate());
+                // Outline editing owns topology only. New Joints remain intentionally
+                // unconfigured until the user chooses their types on the canvas.
+                errors.AddRange(candidate.ValidateDraft());
             }
             return new LinkTreeOutlineParseResult(errors.Count == 0 ? candidate : null, errors);
         }
@@ -231,10 +233,6 @@ namespace SW2URDF.UI.LinkTreeCanvas
                         reservedJointOwners,
                         LinkTreeDocument.BuildDefaultJointName(node.Name),
                         original == null ? (Guid?)null : original.Id);
-                    if (string.IsNullOrWhiteSpace(node.JointType))
-                    {
-                        node.JointType = "fixed";
-                    }
                 }
 
                 candidate.Nodes.Add(node);

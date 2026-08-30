@@ -36,6 +36,24 @@ namespace SW2URDF.UI
         private Button modernLinkUsageGuideButton;
         private Size modernMinimumSizeAfterInitialScale;
         private Size modernClientSizeAfterInitialScale;
+        private CheckBox modernBundleCheckBox;
+        private CheckBox modernRos2CheckBox;
+        private CheckBox modernRos1CheckBox;
+        private CheckBox modernIsaacCheckBox;
+        private CheckBox modernIsaacLabCheckBox;
+        private TextBox modernPackageVersionTextBox;
+        private TextBox modernPackageDescriptionTextBox;
+        private TextBox modernMaintainerNameTextBox;
+        private TextBox modernMaintainerEmailTextBox;
+        private TextBox modernModelLicenseTextBox;
+        private TextBox modernModelAuthorTextBox;
+        private ComboBox modernRos2PairComboBox;
+        private TextBox modernIsaacVersionTextBox;
+        private TextBox modernIsaacLabVersionTextBox;
+        private TextBox modernRos2ControlProfileTextBox;
+        private Button modernRos2ControlProfileButton;
+        private TextBox modernIsaacLabProfileTextBox;
+        private Button modernIsaacLabProfileButton;
 
         internal void InitializeModernUi()
         {
@@ -692,27 +710,241 @@ namespace SW2URDF.UI
                 ChineseUiText.Translate("Package output", "功能包输出"),
                 null));
 
+            FlowLayoutPanel targets = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                Dock = DockStyle.Top,
+                FlowDirection = FlowDirection.LeftToRight,
+                Margin = new Padding(0, 10, 0, 8),
+                WrapContents = true
+            };
+            modernBundleCheckBox = CreateTargetCheckBox("Robot Bundle", true);
+            modernRos2CheckBox = CreateTargetCheckBox(
+                ChineseUiText.Translate("ROS 2 + modern Gazebo", "ROS 2 + 现代 Gazebo"),
+                true);
+            modernRos1CheckBox = CreateTargetCheckBox("ROS 1 legacy", true);
+            modernIsaacCheckBox = CreateTargetCheckBox("Isaac Sim USD profile", false);
+            modernIsaacLabCheckBox = CreateTargetCheckBox("Isaac Lab RL profile", false);
+            modernBundleCheckBox.Enabled = false;
+            modernIsaacCheckBox.CheckedChanged += ModernIsaacSelectionChanged;
+            modernRos1CheckBox.CheckedChanged += ModernTargetSelectionChanged;
+            modernRos2CheckBox.CheckedChanged += ModernTargetSelectionChanged;
+            modernIsaacLabCheckBox.CheckedChanged += ModernTargetSelectionChanged;
+            targets.Controls.Add(modernBundleCheckBox);
+            targets.Controls.Add(modernRos2CheckBox);
+            targets.Controls.Add(modernRos1CheckBox);
+            targets.Controls.Add(modernIsaacCheckBox);
+            targets.Controls.Add(modernIsaacLabCheckBox);
+            card.Controls.Add(targets);
+
             TableLayoutPanel grid = new TableLayoutPanel
             {
                 AutoSize = true,
-                ColumnCount = 2,
+                ColumnCount = 4,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 12, 0, 0),
-                RowCount = 2
+                Margin = new Padding(0, 4, 0, 0),
+                RowCount = 9
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            for (int row = 0; row < grid.RowCount; row++)
+            {
+                grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            }
             AddModernField(grid, labelRosPackageName, textBoxRosPackageName, 0, 0, 1);
+            modernPackageVersionTextBox = CreateTargetTextBox("0.1.0");
+            AddModernField(grid, CreateTargetLabel("Package version", "功能包版本"), modernPackageVersionTextBox, 0, 2, 3);
             labelRosPackageNameHint.AutoSize = true;
             labelRosPackageNameHint.Dock = DockStyle.Fill;
             ModernWinFormsTheme.SetFont(labelRosPackageNameHint, 8.5F, FontStyle.Regular);
             labelRosPackageNameHint.ForeColor = ModernWinFormsTheme.MutedText;
             labelRosPackageNameHint.Margin = new Padding(0, 2, 0, 0);
             grid.Controls.Add(labelRosPackageNameHint, 1, 1);
+            grid.SetColumnSpan(labelRosPackageNameHint, 3);
+
+            modernPackageDescriptionTextBox = CreateTargetTextBox(string.Empty);
+            AddModernField(grid, CreateTargetLabel("Description", "功能包说明"), modernPackageDescriptionTextBox, 2, 0, 1);
+            grid.SetColumnSpan(modernPackageDescriptionTextBox, 3);
+            modernMaintainerNameTextBox = CreateTargetTextBox(string.Empty);
+            modernMaintainerEmailTextBox = CreateTargetTextBox(string.Empty);
+            AddModernField(grid, CreateTargetLabel("Maintainer", "维护者"), modernMaintainerNameTextBox, 3, 0, 1);
+            AddModernField(grid, CreateTargetLabel("Email", "维护者邮箱"), modernMaintainerEmailTextBox, 3, 2, 3);
+            modernModelLicenseTextBox = CreateTargetTextBox(string.Empty);
+            modernModelAuthorTextBox = CreateTargetTextBox(string.Empty);
+            AddModernField(grid, CreateTargetLabel("Model license", "模型许可证"), modernModelLicenseTextBox, 4, 0, 1);
+            AddModernField(grid, CreateTargetLabel("Model author", "模型作者"), modernModelAuthorTextBox, 4, 2, 3);
+
+            modernRos2PairComboBox = new ComboBox
+            {
+                Dock = DockStyle.Fill,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 2, 8, 6)
+            };
+            modernRos2PairComboBox.Items.Add("ROS 2 Lyrical + Gazebo Jetty (recommended)");
+            modernRos2PairComboBox.Items.Add("ROS 2 Jazzy + Gazebo Harmonic (compatibility)");
+            modernRos2PairComboBox.SelectedIndex = 0;
+            AddModernField(
+                grid,
+                CreateTargetLabel("ROS / Gazebo pair", "ROS / Gazebo 版本组合"),
+                modernRos2PairComboBox,
+                5,
+                0,
+                1);
+            grid.SetColumnSpan(modernRos2PairComboBox, 3);
+
+            modernIsaacVersionTextBox = CreateTargetTextBox(string.Empty);
+            modernIsaacLabVersionTextBox = CreateTargetTextBox(string.Empty);
+            AddModernField(grid, CreateTargetLabel("Isaac Sim", "Isaac Sim 版本"), modernIsaacVersionTextBox, 6, 0, 1);
+            AddModernField(grid, CreateTargetLabel("Isaac Lab", "Isaac Lab 版本"), modernIsaacLabVersionTextBox, 6, 2, 3);
+            modernRos2ControlProfileTextBox = CreateTargetTextBox(string.Empty);
+            modernRos2ControlProfileButton = new Button
+            {
+                AutoSize = true,
+                Text = ChineseUiText.Translate("Browse control profile...", "选择 ros2_control 配置...")
+            };
+            modernRos2ControlProfileButton.Click += ModernRos2ControlProfileBrowseClick;
+            FlowLayoutPanel controlProfilePicker = CreateProfilePicker(
+                modernRos2ControlProfileTextBox,
+                modernRos2ControlProfileButton);
+            AddModernField(grid, CreateTargetLabel("ros2_control", "ros2_control 配置"), controlProfilePicker, 7, 0, 1);
+            grid.SetColumnSpan(controlProfilePicker, 3);
+
+            modernIsaacLabProfileTextBox = CreateTargetTextBox(string.Empty);
+            modernIsaacLabProfileButton = new Button
+            {
+                AutoSize = true,
+                Text = ChineseUiText.Translate("Browse actuator profile...", "选择 actuator 配置...")
+            };
+            modernIsaacLabProfileButton.Click += ModernIsaacLabProfileBrowseClick;
+            FlowLayoutPanel profilePicker = CreateProfilePicker(
+                modernIsaacLabProfileTextBox,
+                modernIsaacLabProfileButton);
+            AddModernField(grid, CreateTargetLabel("Actuators", "Actuator 配置"), profilePicker, 8, 0, 1);
+            grid.SetColumnSpan(profilePicker, 3);
             card.Controls.Add(grid);
+            SynchronizeIsaacTargetControls();
             return card;
+        }
+
+        private static FlowLayoutPanel CreateProfilePicker(TextBox textBox, Button button)
+        {
+            FlowLayoutPanel picker = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                Margin = new Padding(0),
+                WrapContents = false
+            };
+            textBox.Width = 280;
+            textBox.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            picker.Controls.Add(textBox);
+            picker.Controls.Add(button);
+            return picker;
+        }
+
+        private CheckBox CreateTargetCheckBox(string text, bool isChecked)
+        {
+            return new CheckBox
+            {
+                AutoSize = true,
+                Checked = isChecked,
+                Margin = new Padding(0, 0, 16, 4),
+                Text = text,
+                UseVisualStyleBackColor = true
+            };
+        }
+
+        private static TextBox CreateTargetTextBox(string value)
+        {
+            return new TextBox
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 2, 8, 6),
+                Text = value
+            };
+        }
+
+        private static Label CreateTargetLabel(string english, string chinese)
+        {
+            return new Label
+            {
+                AutoSize = true,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 6, 8, 4),
+                Text = ChineseUiText.Translate(english, chinese),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+        }
+
+        private void ModernIsaacSelectionChanged(object sender, EventArgs e)
+        {
+            if (!modernIsaacCheckBox.Checked)
+            {
+                modernIsaacLabCheckBox.Checked = false;
+            }
+            SynchronizeIsaacTargetControls();
+            UpdateRosPackageNameHint();
+        }
+
+        private void ModernTargetSelectionChanged(object sender, EventArgs e)
+        {
+            SynchronizeIsaacTargetControls();
+            UpdateRosPackageNameHint();
+        }
+
+        private void SynchronizeIsaacTargetControls()
+        {
+            if (modernIsaacCheckBox == null || modernIsaacLabCheckBox == null ||
+                modernIsaacVersionTextBox == null || modernIsaacLabVersionTextBox == null ||
+                modernIsaacLabProfileTextBox == null || modernIsaacLabProfileButton == null ||
+                modernRos2CheckBox == null || modernRos2PairComboBox == null ||
+                modernRos2ControlProfileTextBox == null || modernRos2ControlProfileButton == null)
+            {
+                return;
+            }
+            modernIsaacLabCheckBox.Enabled = modernIsaacCheckBox.Checked;
+            modernIsaacVersionTextBox.Enabled = modernIsaacCheckBox.Checked;
+            modernIsaacLabVersionTextBox.Enabled = modernIsaacLabCheckBox.Checked;
+            modernIsaacLabProfileTextBox.Enabled = modernIsaacLabCheckBox.Checked;
+            modernIsaacLabProfileButton.Enabled = modernIsaacLabCheckBox.Checked;
+            modernRos2PairComboBox.Enabled = modernRos2CheckBox.Checked;
+            modernRos2ControlProfileTextBox.Enabled = modernRos2CheckBox.Checked;
+            modernRos2ControlProfileButton.Enabled = modernRos2CheckBox.Checked;
+        }
+
+        private void ModernRos2ControlProfileBrowseClick(object sender, EventArgs e)
+        {
+            BrowseProfileFile(
+                modernRos2ControlProfileTextBox,
+                ChineseUiText.Translate("Select a ros2_control profile", "选择 ros2_control 配置"));
+        }
+
+        private void ModernIsaacLabProfileBrowseClick(object sender, EventArgs e)
+        {
+            BrowseProfileFile(
+                modernIsaacLabProfileTextBox,
+                ChineseUiText.Translate(
+                    "Select an Isaac Lab actuator profile",
+                    "选择 Isaac Lab actuator 配置"));
+        }
+
+        private void BrowseProfileFile(TextBox target, string title)
+        {
+            using (OpenFileDialog dialog = new OpenFileDialog
+            {
+                CheckFileExists = true,
+                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                Title = title
+            })
+            {
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    target.Text = dialog.FileName;
+                }
+            }
         }
 
         private Control CreateModernJointFooter()

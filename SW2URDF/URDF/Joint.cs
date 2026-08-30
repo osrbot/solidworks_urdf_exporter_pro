@@ -23,8 +23,8 @@ namespace SW2URDF.URDF
 
         private static ReadOnlyCollection<string> CreateSelectableTypes()
         {
-            List<string> types = new List<string> { AutomaticallyDetectType };
-            types.AddRange(AvailableTypes);
+            List<string> types = new List<string>(AvailableTypes);
+            types.Add(AutomaticallyDetectType);
             return types.AsReadOnly();
         }
 
@@ -79,6 +79,15 @@ namespace SW2URDF.URDF
         [DataMember]
         public string AxisName;
 
+        [DataMember(IsRequired = false, EmitDefaultValue = false)]
+        public string ConfigurationSource;
+
+        [DataMember(IsRequired = false, EmitDefaultValue = false)]
+        public string ConfigurationEvidence;
+
+        [DataMember(IsRequired = false)]
+        public bool ConfigurationUserConfirmed;
+
         public Joint() : base("joint", false)
         {
             Origin = new Origin(false);
@@ -94,6 +103,9 @@ namespace SW2URDF.URDF
 
             NameAttribute = new URDFAttribute("name", true, "");
             TypeAttribute = new URDFAttribute("type", true, "");
+            ConfigurationSource = "unknown";
+            ConfigurationEvidence = string.Empty;
+            ConfigurationUserConfirmed = false;
 
             Attributes.Add(NameAttribute);
             Attributes.Add(TypeAttribute);
@@ -175,6 +187,9 @@ namespace SW2URDF.URDF
             // These strings aren't kept as URDFAttribute objects and so they are tracked separately
             CoordinateSystemName = joint.CoordinateSystemName;
             AxisName = joint.AxisName;
+            ConfigurationSource = joint.ConfigurationSource;
+            ConfigurationEvidence = joint.ConfigurationEvidence;
+            ConfigurationUserConfirmed = joint.ConfigurationUserConfirmed;
         }
 
         public override void SetElementFromData(List<string> context, StringDictionary dictionary)
@@ -197,6 +212,9 @@ namespace SW2URDF.URDF
             Type = joint.Type;
             Axis.SetElement(joint.Axis);
             Origin.SetElement(joint.Origin);
+            ConfigurationSource = joint.ConfigurationSource;
+            ConfigurationEvidence = joint.ConfigurationEvidence;
+            ConfigurationUserConfirmed = joint.ConfigurationUserConfirmed;
         }
 
         public void SetJointNonKinematics(Joint joint)
@@ -205,6 +223,39 @@ namespace SW2URDF.URDF
             Calibration.SetElement(joint.Calibration);
             Dynamics.SetElement(joint.Dynamics);
             Safety.SetElement(joint.Safety);
+        }
+
+        public void MarkManualConfiguration(string evidence)
+        {
+            ConfigurationSource = "manual_configuration";
+            ConfigurationEvidence = evidence;
+            ConfigurationUserConfirmed = true;
+        }
+
+        public void MarkMateSuggestion(string evidence)
+        {
+            ConfigurationSource = "solidworks_mate_suggestion";
+            ConfigurationEvidence = evidence;
+            ConfigurationUserConfirmed = false;
+        }
+
+        public void MarkPendingMateDetection()
+        {
+            ConfigurationSource = "solidworks_mate_suggestion";
+            ConfigurationEvidence = "User requested conditional SolidWorks Mate/DOF detection; no result is confirmed yet.";
+            ConfigurationUserConfirmed = false;
+        }
+
+        public void MarkTopologyFixedFrame()
+        {
+            ConfigurationSource = "topology_fixed_frame";
+            ConfigurationEvidence = "The Link is an explicit fixed-frame node in the configured Link tree.";
+            ConfigurationUserConfirmed = true;
+        }
+
+        public void ConfirmConfiguration()
+        {
+            ConfigurationUserConfirmed = true;
         }
     }
 }

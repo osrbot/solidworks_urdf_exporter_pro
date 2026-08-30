@@ -466,7 +466,7 @@ namespace SW2URDF.UI
                 Joint.Mimic.Clear();
             }
 
-            JointConfigurationPolicy.Apply(Joint, selectedType);
+            JointConfigurationPolicy.ApplyUserSelection(Joint, selectedType);
             displayedJointType = Joint.Type;
             jointUnitInputsResetForCurrentChange = false;
         }

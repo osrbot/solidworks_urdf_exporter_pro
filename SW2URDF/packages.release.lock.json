@@ -12,9 +12,9 @@
       "sha256": "9c4344ce14c6a988f11e29252ab2270d0da227792beac2185253c551014c37aa"
     },
     {
-      "id": "MathNet.Numerics",
-      "version": "4.7.0",
-      "sha256": "72738799153317512de477343e7517aeae51ffa9881326946c73ea5e31d07f03"
+      "id": "log4net",
+      "version": "3.4.0",
+      "sha256": "8e03eab8ca3da1e2a45e094763a3c15c58f39438ecfb5fa891abcad6282d8e7c"
     },
     {
       "id": "MathNet.Numerics.Signed",
@@ -25,6 +25,11 @@
       "id": "Microsoft.Net.Compilers",
       "version": "3.11.0",
       "sha256": "e4a540a9cb41d15e6e1cc05fa2cadb847454df9ebe49d683cded2780506ef880"
+    },
+    {
+      "id": "Newtonsoft.Json",
+      "version": "13.0.3",
+      "sha256": "872fc189e638ab1056555b03aaa38f68bcb54286e221aa646eb1129babf63c77"
     },
     {
       "id": "System.Runtime.CompilerServices.Unsafe",

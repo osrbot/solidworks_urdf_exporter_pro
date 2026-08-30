@@ -115,7 +115,8 @@ namespace SW2URDF.UI
             builder.AppendLine("- 保存配置: 导出或关闭配置页时，插件会提示是否保存变化；保存后配置写回当前装配体文件，而不是单独散落在外部目录。");
             builder.AppendLine("- 组件重连: 加载旧配置时会用保存的 SolidWorks component PID 重新关联零件；如果某些零件被删除、替换或另存导致 PID 失效，会弹窗列出需要人工检查的 link。");
             builder.AppendLine("- 编辑 Link 树...: 打开自由画布，可增加子 Link、拖拽调整父子关系、框选并复制/粘贴对称结构。画布在副本上编辑；取消不修改原树，应用后才提交。新增或粘贴的 Link 不复制 SolidWorks 组件绑定，需要回到属性页重新分配组件。");
-            builder.AppendLine("- Link 树大纲编辑: 在自由画布中点击 大纲编辑，用 Markdown 标题一次编辑整棵树。# 是根 Link，## 是二级 Link，### 是三级 Link。支持 #base_link 和 # base_link 两种写法；同名旧 Link 保留原 Joint、参数和 CAD 绑定。新增 Link 自动生成 fixed Joint，例如 camera_link 生成 camera_joint；之后仍可在画布中手动修改 Joint。格式错误不会覆盖画布。");
+            builder.AppendLine("- Link 树大纲编辑: 在自由画布中点击 大纲编辑，用 Markdown 标题一次编辑整棵树。# 是根 Link，## 是二级 Link，### 是三级 Link。支持 #base_link 和 # base_link 两种写法；同名旧 Link 保留原 Joint、参数和 CAD 绑定。新增 Link 自动生成 Joint 名称，例如 camera_link 生成 camera_joint，但 Joint 类型保持待选择；回到画布明确选择后才能应用。格式错误不会覆盖画布。");
+            builder.AppendLine("- Joint 类型: STEP、导入模型或固定装配请手动选择。尝试从 SolidWorks Mate 识别仅适用于保留正确 Mate 的原生可动装配；0 DOF 不会再被自动当成 fixed。");
             builder.AppendLine("- 导出报告: 导出后查看 config/export_report.md、config/inertial_validation.csv 和 config/mesh_manifest.csv，可快速确认惯性误差、网格大小、fallback 和最终碰撞策略。");
             builder.AppendLine();
             builder.AppendLine("推荐使用流程");
@@ -123,7 +124,7 @@ namespace SW2URDF.UI
             builder.AppendLine("1. 首次导出时，先在 SolidWorks 里建好 Origin_global、各 Joint 坐标系和 Axis。");
             builder.AppendLine("2. 在配置树里整理 Link/Joint 层级，命名尽量保持 ROS 友好: 小写、下划线、无空格。");
             builder.AppendLine("   复杂层级可点 编辑 Link 树... 进入自由画布，再点 大纲编辑，用 #/##/### 批量写出父子层级。");
-            builder.AppendLine("3. 在画布检查 Joint 名称和类型，点击应用，再回属性页配置新增 Link 的组件、坐标系和轴。");
+            builder.AppendLine("3. 在画布为每个新增 Joint 明确选择类型并检查名称；点击应用后，再回属性页配置新增 Link 的组件、坐标系和轴。");
             builder.AppendLine("4. 可用“自动配色”为整棵 Link 树生成稳定层级颜色，再按需手动修改单个 Link 的材质 ID 或 RGBA。");
             builder.AppendLine("5. 选好碰撞策略、材质 ID、网格精简比例后导出。");
             builder.AppendLine("6. 重新打开同一个装配体时，插件会优先加载保存在装配体内的 Link 树配置；不用从头重新建树。");
@@ -162,7 +163,8 @@ namespace SW2URDF.UI
             builder.AppendLine("- Save configuration: when the configuration changes, the exporter prompts to save it back into the current assembly document instead of scattering separate sidecar files.");
             builder.AppendLine("- Component reconnect: saved SolidWorks component PIDs are resolved when an old tree is loaded. If parts were deleted, replaced, or saved as new files, the exporter reports the links that need inspection.");
             builder.AppendLine("- Edit Link Tree...: opens a free canvas for adding child Links, drag-to-reparent, box selection, and structure copy/paste. The canvas edits a working copy: Cancel discards changes and Apply commits them. New or pasted Links do not inherit SolidWorks component bindings and must be assigned on the property page.");
-            builder.AppendLine("- Link tree outline editing: click Outline Edit in the canvas to edit the complete hierarchy with Markdown headings. # is the root Link, ## is a second-level Link, and ### is a third-level Link. Existing Links matched by name keep Joint data, reusable properties, and CAD bindings. New Links receive generated fixed Joints: camera_link becomes camera_joint. Joint details remain editable on the canvas, and invalid text never replaces the canvas document.");
+            builder.AppendLine("- Link tree outline editing: click Outline Edit in the canvas to edit the complete hierarchy with Markdown headings. # is the root Link, ## is a second-level Link, and ### is a third-level Link. Existing Links matched by name keep Joint data, reusable properties, and CAD bindings. New Links receive generated Joint names such as camera_joint, but their types remain unconfigured until explicitly selected on the canvas. Invalid text never replaces the canvas document.");
+            builder.AppendLine("- Joint types: choose explicit types for STEP, imported, or fixed assemblies. Try SolidWorks Mate detection only for a native movable assembly with correct Mates; zero remaining DOFs is no longer treated as fixed.");
             builder.AppendLine("- Link frames and inertia: create each Link frame as a SolidWorks coordinate-system feature, then select it on the Link properties page. Non-root Links use their child-Joint frame; the root uses Origin_global or another explicit root frame. Changing the frame recomputes COM, the COM inertia tensor, and adjacent Joint origins without a parallel-axis shift.");
             builder.AppendLine("- Export diagnostics: after export, check config/export_report.md, config/inertial_validation.csv, and config/mesh_manifest.csv for inertia error, mesh size, fallback, and effective collision strategy.");
             builder.AppendLine();
@@ -171,7 +173,7 @@ namespace SW2URDF.UI
             builder.AppendLine("1. For a first export, create Origin_global, joint coordinate systems, and axes in SolidWorks.");
             builder.AppendLine("2. Arrange the Link/Joint hierarchy in the configuration tree. Keep names ROS-friendly: lowercase, underscores, no spaces.");
             builder.AppendLine("   For a complex hierarchy, open Edit Link Tree..., then use Outline Edit to write parent-child levels with #/##/### headings.");
-            builder.AppendLine("3. Review Joint names and types on the canvas, apply it, then assign components, coordinate systems, and axes for new Links on the property page.");
+            builder.AppendLine("3. Explicitly choose every new Joint type and review its name on the canvas. Apply the tree, then assign components, coordinate systems, and axes for new Links on the property page.");
             builder.AppendLine("4. Optionally use Auto Links for stable level-based colors, then override any Link material ID or RGBA manually.");
             builder.AppendLine("5. Pick collision strategy, material ID, color, and STL reduction ratio, then export.");
             builder.AppendLine("6. When the same assembly is reopened, the saved Link tree configuration is loaded from the assembly so the tree does not have to be rebuilt from scratch.");

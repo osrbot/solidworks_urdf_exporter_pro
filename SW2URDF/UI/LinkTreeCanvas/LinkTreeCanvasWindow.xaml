@@ -95,7 +95,9 @@
                     <TextBox x:Name="JointNameTextBox" Margin="0,5,0,12" IsEnabled="False" LostFocus="JointNameCommit" KeyDown="PropertyTextBoxKeyDown" />
 
                     <TextBlock Text="Joint 类型" Foreground="#475467" />
-                    <ComboBox x:Name="JointTypeComboBox" Margin="0,5,0,20" IsEnabled="False" SelectionChanged="JointTypeChanged" />
+                    <ComboBox x:Name="JointTypeComboBox" Margin="0,5,0,5" IsEnabled="False" SelectionChanged="JointTypeChanged" />
+                    <TextBlock Margin="0,0,0,20" Foreground="#667085" FontSize="11" TextWrapping="Wrap"
+                               Text="STEP/固定装配请手动选择类型；Mate 识别仅适用于 SolidWorks 原生可动装配。" />
 
                     <Button Content="+ 添加子 Link" Click="AddChildClick" Margin="0,0,0,8" />
                     <Button Content="聚焦当前节点" Click="FocusSelectedClick" Margin="0" />

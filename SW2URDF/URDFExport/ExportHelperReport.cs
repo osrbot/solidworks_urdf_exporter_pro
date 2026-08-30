@@ -19,7 +19,8 @@ namespace SW2URDF.URDFExport
             IEnumerable<MeshExportRecord> meshRecords,
             bool exportMeshes,
             MeshExportFormat meshFormat,
-            TimeSpan elapsed)
+            TimeSpan elapsed,
+            ExportTargetOptions targets = null)
         {
             string report = BuildExportReport(
                 package,
@@ -28,17 +29,33 @@ namespace SW2URDF.URDFExport
                 meshRecords,
                 exportMeshes,
                 meshFormat,
-                elapsed);
+                elapsed,
+                targets);
 
-            string ros1ReportFileName = Path.Combine(package.WindowsConfigDirectory, ExportReportFileName);
-            Directory.CreateDirectory(package.WindowsConfigDirectory);
-            File.WriteAllText(ros1ReportFileName, report, new UTF8Encoding(false));
-            logger.Info("Wrote ROS 1 export report to " + ros1ReportFileName);
+            if (targets != null && targets.UseV2Pipeline)
+            {
+                Directory.CreateDirectory(package.WindowsExportRootDirectory);
+                File.WriteAllText(package.WindowsExportReportFile, report, new UTF8Encoding(false));
+                logger.Info("Wrote v2 export report to " + package.WindowsExportReportFile);
+            }
 
-            string ros2ReportFileName = Path.Combine(package.WindowsRos2ConfigDirectory, ExportReportFileName);
-            Directory.CreateDirectory(package.WindowsRos2ConfigDirectory);
-            File.WriteAllText(ros2ReportFileName, report, new UTF8Encoding(false));
-            logger.Info("Wrote ROS 2 export report to " + ros2ReportFileName);
+            bool writeRos1 = targets == null || !targets.UseV2Pipeline || targets.ExportRos1Legacy;
+            bool writeRos2 = targets == null || !targets.UseV2Pipeline || targets.ExportRos2;
+            if (writeRos1)
+            {
+                string ros1ReportFileName = Path.Combine(package.WindowsConfigDirectory, ExportReportFileName);
+                Directory.CreateDirectory(package.WindowsConfigDirectory);
+                File.WriteAllText(ros1ReportFileName, report, new UTF8Encoding(false));
+                logger.Info("Wrote ROS 1 export report to " + ros1ReportFileName);
+            }
+
+            if (writeRos2)
+            {
+                string ros2ReportFileName = Path.Combine(package.WindowsRos2ConfigDirectory, ExportReportFileName);
+                Directory.CreateDirectory(package.WindowsRos2ConfigDirectory);
+                File.WriteAllText(ros2ReportFileName, report, new UTF8Encoding(false));
+                logger.Info("Wrote ROS 2 export report to " + ros2ReportFileName);
+            }
         }
 
         internal static string BuildExportReport(
@@ -48,7 +65,8 @@ namespace SW2URDF.URDFExport
             IEnumerable<MeshExportRecord> meshRecords,
             bool exportMeshes,
             MeshExportFormat meshFormat,
-            TimeSpan elapsed)
+            TimeSpan elapsed,
+            ExportTargetOptions targets = null)
         {
             List<InertialValidationRecord> inertialRows =
                 inertialRecords == null ? new List<InertialValidationRecord>() : inertialRecords.ToList();
@@ -66,8 +84,27 @@ namespace SW2URDF.URDFExport
                 ros2UrdfFileName,
                 package.Ros2PackageName,
                 package.WindowsRos2PackageDirectory);
-            List<PackageCheck> packageChecks = BuildPackageChecks(package, ros1UrdfFileName, ros2UrdfFileName, exportMeshes);
-            List<PackageParityCheck> packageParityChecks = BuildPackageParityChecks(package, exportMeshes);
+            bool includeRos1 = targets == null || !targets.UseV2Pipeline || targets.ExportRos1Legacy;
+            bool includeRos2 = targets == null || !targets.UseV2Pipeline || targets.ExportRos2;
+            bool ros2AmentCmake = targets != null && targets.UseV2Pipeline;
+            bool requireCollisionMeshes = exportMeshes &&
+                meshRows.Any(record => !UsesNativeCollisionGeometry(record));
+            List<PackageCheck> packageChecks = BuildPackageChecks(
+                package,
+                ros1UrdfFileName,
+                ros2UrdfFileName,
+                exportMeshes,
+                requireCollisionMeshes,
+                includeRos1,
+                includeRos2,
+                ros2AmentCmake);
+            List<PackageParityCheck> packageParityChecks = includeRos1 && includeRos2
+                ? BuildPackageParityChecks(
+                    package,
+                    exportMeshes,
+                    requireCollisionMeshes,
+                    ros2AmentCmake)
+                : new List<PackageParityCheck>();
             List<string> findings = BuildExportFindings(
                 ros1Urdf,
                 ros2Urdf,
@@ -75,7 +112,9 @@ namespace SW2URDF.URDFExport
                 packageParityChecks,
                 inertialRows,
                 meshRows,
-                exportMeshes);
+                exportMeshes,
+                includeRos1,
+                includeRos2);
 
             bool hasFailure = findings.Any(f => f.StartsWith("FAIL:", StringComparison.Ordinal));
             bool hasWarning = findings.Any(f => f.StartsWith("WARN:", StringComparison.Ordinal));
@@ -112,7 +151,9 @@ namespace SW2URDF.URDFExport
                 meshRows,
                 findings,
                 exportMeshes,
-                meshFormat);
+                meshFormat,
+                includeRos1,
+                includeRos2);
             AppendExportParametersSection(
                 builder,
                 package,
@@ -122,8 +163,8 @@ namespace SW2URDF.URDFExport
                 meshRows,
                 exportMeshes,
                 meshFormat);
-            AppendUrdfSection(builder, ros1Urdf);
-            AppendUrdfSection(builder, ros2Urdf);
+            if (includeRos1) AppendUrdfSection(builder, ros1Urdf);
+            if (includeRos2) AppendUrdfSection(builder, ros2Urdf);
             AppendPackageSection(builder, packageChecks);
             AppendPackageParitySection(builder, packageParityChecks);
             AppendInertialSection(builder, inertialRows);
@@ -142,11 +183,13 @@ namespace SW2URDF.URDFExport
             IEnumerable<PackageParityCheck> packageParityChecks,
             IEnumerable<InertialValidationRecord> inertialRows,
             IEnumerable<MeshExportRecord> meshRows,
-            bool exportMeshes)
+            bool exportMeshes,
+            bool includeRos1,
+            bool includeRos2)
         {
             List<string> findings = new List<string>();
-            AddUrdfFindings(findings, ros1Urdf, exportMeshes);
-            AddUrdfFindings(findings, ros2Urdf, exportMeshes);
+            if (includeRos1) AddUrdfFindings(findings, ros1Urdf, exportMeshes);
+            if (includeRos2) AddUrdfFindings(findings, ros2Urdf, exportMeshes);
 
             foreach (PackageCheck check in packageChecks)
             {
@@ -207,7 +250,7 @@ namespace SW2URDF.URDFExport
                         "Visual mesh for link " + record.LinkName + " is missing at " +
                         record.VisualWindowsPath);
                 }
-                if (!record.CollisionExists)
+                if (!record.CollisionExists && !UsesNativeCollisionGeometry(record))
                 {
                     findings.Add((exportMeshes ? "FAIL: " : "WARN: ") +
                         "Collision mesh for link " + record.LinkName + " is missing at " +
@@ -276,9 +319,15 @@ namespace SW2URDF.URDFExport
             URDFPackage package,
             string ros1UrdfFileName,
             string ros2UrdfFileName,
-            bool exportMeshes)
+            bool exportMeshes,
+            bool requireCollisionMeshes,
+            bool includeRos1,
+            bool includeRos2,
+            bool ros2AmentCmake)
         {
             List<PackageCheck> checks = new List<PackageCheck>();
+            if (includeRos1)
+            {
             AddDirectoryCheck(checks, "ROS 1 package directory", package.WindowsPackageDirectory, true);
             AddFileCheck(checks, "ROS 1 CMakeLists.txt", package.WindowsCMakeLists, true);
             AddFileCheck(checks, "ROS 1 package.xml", Path.Combine(package.WindowsPackageDirectory, "package.xml"), true);
@@ -290,18 +339,28 @@ namespace SW2URDF.URDFExport
             AddDirectoryCheck(checks, "ROS 1 meshes directory", package.WindowsMeshesDirectory, exportMeshes);
             AddDirectoryCheck(checks, "ROS 1 visual meshes directory", Path.Combine(package.WindowsMeshesDirectory, "visual"), exportMeshes);
             AddDirectoryFilesCheck(checks, "ROS 1 visual mesh files", Path.Combine(package.WindowsMeshesDirectory, "visual"), exportMeshes);
-            AddDirectoryCheck(checks, "ROS 1 collision meshes directory", Path.Combine(package.WindowsMeshesDirectory, "collision"), exportMeshes);
-            AddDirectoryFilesCheck(checks, "ROS 1 collision mesh files", Path.Combine(package.WindowsMeshesDirectory, "collision"), exportMeshes);
+            AddDirectoryCheck(checks, "ROS 1 collision meshes directory", Path.Combine(package.WindowsMeshesDirectory, "collision"), requireCollisionMeshes);
+            AddDirectoryFilesCheck(checks, "ROS 1 collision mesh files", Path.Combine(package.WindowsMeshesDirectory, "collision"), requireCollisionMeshes);
             AddFileCheck(checks, "ROS 1 inertial validation CSV",
                 Path.Combine(package.WindowsConfigDirectory, "inertial_validation.csv"), true);
             AddFileCheck(checks, "ROS 1 mesh manifest CSV",
                 Path.Combine(package.WindowsConfigDirectory, "mesh_manifest.csv"), true);
+            }
 
+            if (includeRos2)
+            {
             AddDirectoryCheck(checks, "ROS 2 package directory", package.WindowsRos2PackageDirectory, true);
             AddFileCheck(checks, "ROS 2 package.xml", Path.Combine(package.WindowsRos2PackageDirectory, "package.xml"), true);
-            AddFileCheck(checks, "ROS 2 setup.py", Path.Combine(package.WindowsRos2PackageDirectory, "setup.py"), true);
-            AddFileCheck(checks, "ROS 2 resource marker",
-                Path.Combine(package.WindowsRos2ResourceDirectory, package.Ros2PackageName), true);
+            if (ros2AmentCmake)
+            {
+                AddFileCheck(checks, "ROS 2 CMakeLists.txt", Path.Combine(package.WindowsRos2PackageDirectory, "CMakeLists.txt"), true);
+            }
+            else
+            {
+                AddFileCheck(checks, "ROS 2 setup.py", Path.Combine(package.WindowsRos2PackageDirectory, "setup.py"), true);
+                AddFileCheck(checks, "ROS 2 resource marker",
+                    Path.Combine(package.WindowsRos2ResourceDirectory, package.Ros2PackageName), true);
+            }
             AddFileCheck(checks, "ROS 2 URDF", ros2UrdfFileName, true);
             AddDirectoryCheck(checks, "ROS 2 config directory", package.WindowsRos2ConfigDirectory, true);
             AddFileCheck(checks, "ROS 2 display.launch.py", Path.Combine(package.WindowsRos2LaunchDirectory, "display.launch.py"), true);
@@ -309,18 +368,21 @@ namespace SW2URDF.URDFExport
             AddDirectoryCheck(checks, "ROS 2 meshes directory", package.WindowsRos2MeshesDirectory, exportMeshes);
             AddDirectoryCheck(checks, "ROS 2 visual meshes directory", Path.Combine(package.WindowsRos2MeshesDirectory, "visual"), exportMeshes);
             AddDirectoryFilesCheck(checks, "ROS 2 visual mesh files", Path.Combine(package.WindowsRos2MeshesDirectory, "visual"), exportMeshes);
-            AddDirectoryCheck(checks, "ROS 2 collision meshes directory", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), exportMeshes);
-            AddDirectoryFilesCheck(checks, "ROS 2 collision mesh files", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), exportMeshes);
+            AddDirectoryCheck(checks, "ROS 2 collision meshes directory", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), requireCollisionMeshes);
+            AddDirectoryFilesCheck(checks, "ROS 2 collision mesh files", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), requireCollisionMeshes);
             AddFileCheck(checks, "ROS 2 inertial validation CSV",
                 Path.Combine(package.WindowsRos2ConfigDirectory, "inertial_validation.csv"), true);
             AddFileCheck(checks, "ROS 2 mesh manifest CSV",
                 Path.Combine(package.WindowsRos2ConfigDirectory, "mesh_manifest.csv"), true);
+            }
             return checks;
         }
 
         private static List<PackageParityCheck> BuildPackageParityChecks(
             URDFPackage package,
-            bool exportMeshes)
+            bool exportMeshes,
+            bool requireCollisionMeshes,
+            bool ros2AmentCmake = false)
         {
             List<PackageParityCheck> checks = new List<PackageParityCheck>();
             AddPackageParityFileCheck(
@@ -333,11 +395,11 @@ namespace SW2URDF.URDFExport
             AddPackageParityFileCheck(
                 checks,
                 "build",
-                "ROS1 CMakeLists.txt / ROS2 setup.py",
+                ros2AmentCmake ? "ROS1/ROS2 CMakeLists.txt" : "ROS1 CMakeLists.txt / ROS2 setup.py",
                 package.WindowsPackageDirectory,
                 "CMakeLists.txt",
                 package.WindowsRos2PackageDirectory,
-                "setup.py",
+                ros2AmentCmake ? "CMakeLists.txt" : "setup.py",
                 true);
             AddPackageParityFileCheck(
                 checks,
@@ -386,12 +448,15 @@ namespace SW2URDF.URDFExport
                     Path.Combine(package.WindowsMeshesDirectory, "visual"),
                     Path.Combine(package.WindowsRos2MeshesDirectory, "visual"),
                     true);
-                AddPackageParityDirectoryChecks(
-                    checks,
-                    "meshes/collision",
-                    Path.Combine(package.WindowsMeshesDirectory, "collision"),
-                    Path.Combine(package.WindowsRos2MeshesDirectory, "collision"),
-                    true);
+                if (requireCollisionMeshes)
+                {
+                    AddPackageParityDirectoryChecks(
+                        checks,
+                        "meshes/collision",
+                        Path.Combine(package.WindowsMeshesDirectory, "collision"),
+                        Path.Combine(package.WindowsRos2MeshesDirectory, "collision"),
+                        true);
+                }
             }
             AddPackageParityDirectoryChecks(
                 checks,
@@ -503,7 +568,9 @@ namespace SW2URDF.URDFExport
             IEnumerable<MeshExportRecord> meshRecords,
             IEnumerable<string> findings,
             bool exportMeshes,
-            MeshExportFormat meshFormat)
+            MeshExportFormat meshFormat,
+            bool includeRos1,
+            bool includeRos2)
         {
             List<PackageCheck> packageRows = packageChecks.ToList();
             List<PackageParityCheck> parityRows = packageParityChecks.ToList();
@@ -521,8 +588,8 @@ namespace SW2URDF.URDFExport
                 overallStatus,
                 "failures=" + CountFindings(findingRows, "FAIL:").ToString(CultureInfo.InvariantCulture) +
                 ", warnings=" + CountFindings(findingRows, "WARN:").ToString(CultureInfo.InvariantCulture));
-            AppendUrdfHealthRow(builder, ros1Urdf, exportMeshes);
-            AppendUrdfHealthRow(builder, ros2Urdf, exportMeshes);
+            if (includeRos1) AppendUrdfHealthRow(builder, ros1Urdf, exportMeshes);
+            if (includeRos2) AppendUrdfHealthRow(builder, ros2Urdf, exportMeshes);
             AppendPackageCompletenessHealthRow(builder, packageRows);
             AppendPackageParityHealthRow(builder, parityRows);
             AppendInertialHealthRow(builder, inertialRows);
@@ -580,7 +647,9 @@ namespace SW2URDF.URDFExport
             List<PackageCheck> rows = checks.ToList();
             int missingCritical = rows.Count(r => r.Critical && !r.Exists);
             int missingOptional = rows.Count(r => !r.Critical && !r.Exists);
-            string status = missingCritical > 0 ? "FAIL" : missingOptional > 0 ? "WARN" : "PASS";
+            string status = rows.Count == 0
+                ? "SKIP"
+                : missingCritical > 0 ? "FAIL" : missingOptional > 0 ? "WARN" : "PASS";
             AppendHealthRow(
                 builder,
                 "ROS package completeness",
@@ -596,7 +665,9 @@ namespace SW2URDF.URDFExport
             List<PackageParityCheck> rows = checks.ToList();
             int criticalMismatches = rows.Count(r => r.Critical && !r.Matches);
             int optionalMismatches = rows.Count(r => !r.Critical && !r.Matches);
-            string status = criticalMismatches > 0 ? "FAIL" : optionalMismatches > 0 ? "WARN" : "PASS";
+            string status = rows.Count == 0
+                ? "SKIP"
+                : criticalMismatches > 0 ? "FAIL" : optionalMismatches > 0 ? "WARN" : "PASS";
             AppendHealthRow(
                 builder,
                 "ROS package parity",
@@ -1267,6 +1338,13 @@ namespace SW2URDF.URDFExport
             }
 
             return reference.StartsWith("native:", StringComparison.Ordinal) ? reference : "mesh";
+        }
+
+        private static bool UsesNativeCollisionGeometry(MeshExportRecord record)
+        {
+            return record != null &&
+                !String.IsNullOrWhiteSpace(record.CollisionUrdfReference) &&
+                record.CollisionUrdfReference.StartsWith("native:", StringComparison.Ordinal);
         }
 
         private static string FormatStlReductionRatios(IEnumerable<MeshExportRecord> records)

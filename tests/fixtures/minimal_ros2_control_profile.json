@@ -1,0 +1,26 @@
+{
+  "enabled": true,
+  "name": "minimal_robot_system",
+  "type": "system",
+  "plugin": "gz_ros2_control/GazeboSimSystem",
+  "joints": [
+    {
+      "joint": "shoulder_joint",
+      "commandInterfaces": ["position"],
+      "stateInterfaces": ["position", "velocity"]
+    }
+  ],
+  "controllers": [
+    {
+      "name": "arm_controller",
+      "type": "forward_command_controller/ForwardCommandController",
+      "joints": ["shoulder_joint"],
+      "commandInterfaces": ["position"],
+      "stateInterfaces": ["position", "velocity"]
+    }
+  ],
+  "controllerManagerUpdateRate": 100,
+  "gazeboPluginEnabled": true,
+  "gazeboPluginFilename": "libgz_ros2_control-system.so",
+  "gazeboPluginClass": "gz_ros2_control::GazeboSimROS2ControlPlugin"
+}

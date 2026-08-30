@@ -28,7 +28,7 @@
 | 项目 | 当前事实 |
 | --- | --- |
 | OS/架构 | Windows x64 |
-| 目标框架 | .NET Framework 4.5.2 |
+| 目标框架 | .NET Framework 4.8 |
 | 历史最低 SolidWorks | 2018 SP5 |
 | 当前 Live API 验证重点 | SolidWorks 2023 |
 

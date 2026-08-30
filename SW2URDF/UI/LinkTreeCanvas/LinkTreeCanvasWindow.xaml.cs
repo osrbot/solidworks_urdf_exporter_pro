@@ -31,6 +31,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
         private readonly Dictionary<Guid, Border> nodeViews = new Dictionary<Guid, Border>();
         private readonly HashSet<Guid> selectedNodeIds = new HashSet<Guid>();
         private readonly List<LinkTreeNode> copiedNodes = new List<LinkTreeNode>();
+        private readonly List<string> jointTypeItems;
         private LinkTreeDocument document;
         private Guid? selectedNodeId;
         private Guid? draggingNodeId;
@@ -49,7 +50,13 @@ namespace SW2URDF.UI.LinkTreeCanvas
         public LinkTreeCanvasWindow(ILinkTreeCanvasHost canvasHost)
         {
             InitializeComponent();
-            JointTypeComboBox.ItemsSource = UrdfJoint.SelectableTypes;
+            jointTypeItems = new List<string>
+            {
+                ChineseUiText.JointTypeDisplay(string.Empty)
+            };
+            jointTypeItems.AddRange(UrdfJoint.SelectableTypes.Select(
+                ChineseUiText.JointTypeDisplay));
+            JointTypeComboBox.ItemsSource = jointTypeItems;
             host = canvasHost ?? throw new ArgumentNullException(nameof(canvasHost));
             document = host.LoadTree();
             if (document.Nodes.Count(node => !node.ParentId.HasValue) != 1)
@@ -132,7 +139,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
             TextBlock detail = new TextBlock
             {
-                Text = node.ParentId.HasValue ? node.JointType : "ROOT",
+                Text = node.ParentId.HasValue ? JointTypeSummary(node.JointType) : "ROOT",
                 Foreground = new SolidColorBrush(Color.FromRgb(102, 112, 133)),
                 FontSize = 11,
                 Margin = new Thickness(12, 0, 0, 7),
@@ -210,6 +217,8 @@ namespace SW2URDF.UI.LinkTreeCanvas
             Panel.SetZIndex(arrow, 2);
             Workspace.Children.Add(arrow);
 
+            string jointTypeSummary = JointTypeSummary(child.JointType);
+            string jointSummary = child.JointName + " / " + jointTypeSummary;
             Border label = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(238, 255, 255, 255)),
@@ -219,12 +228,13 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 Padding = new Thickness(6, 2, 6, 2),
                 Child = new TextBlock
                 {
-                    Text = child.JointName + " / " + child.JointType,
+                    Text = jointSummary,
                     FontSize = 10,
                     Foreground = new SolidColorBrush(Color.FromRgb(71, 84, 103)),
                     MaxWidth = 155,
                     TextTrimming = TextTrimming.CharacterEllipsis,
-                    ToolTip = child.JointName + " / " + child.JointType
+                    ToolTip = child.JointName + " / " +
+                        ChineseUiText.JointTypeDisplay(child.JointType)
                 },
                 IsHitTestVisible = false
             };
@@ -501,9 +511,23 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         private void SelectJointType(string jointType)
         {
-            JointTypeComboBox.SelectedItem = UrdfJoint.SelectableTypes.Contains(jointType)
-                ? jointType
+            string display = ChineseUiText.JointTypeDisplay(jointType);
+            JointTypeComboBox.SelectedItem = jointTypeItems.Contains(display)
+                ? display
                 : null;
+        }
+
+        private static string JointTypeSummary(string jointType)
+        {
+            if (string.IsNullOrWhiteSpace(jointType))
+            {
+                return "待选择 Joint 类型";
+            }
+            if (jointType == UrdfJoint.AutomaticallyDetectType)
+            {
+                return "Mate 辅助识别";
+            }
+            return jointType;
         }
 
         private void AddChildClick(object sender, RoutedEventArgs e)
@@ -540,7 +564,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
             SelectNode(child.Id);
             LinkNameTextBox.Focus();
             LinkNameTextBox.SelectAll();
-            UpdateStatus("已添加子 Link，请输入名称");
+            UpdateStatus("已添加子 Link，请输入名称并选择 Joint 类型");
         }
 
         private string MakeUniqueLinkName(string baseName)
@@ -654,7 +678,8 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         private void JointTypeChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (suppressPropertyEvents || !selectedNodeId.HasValue || JointTypeComboBox.SelectedItem == null)
+            string selectedDisplay = JointTypeComboBox.SelectedItem as string;
+            if (suppressPropertyEvents || !selectedNodeId.HasValue || selectedDisplay == null)
             {
                 return;
             }
@@ -670,7 +695,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
             {
                 return;
             }
-            node.JointType = (string)JointTypeComboBox.SelectedItem;
+            node.JointType = ChineseUiText.JointTypeValue(selectedDisplay);
             RenderDocument();
         }
 

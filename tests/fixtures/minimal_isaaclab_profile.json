@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "enabled": true,
+  "isaacLabVersion": "2.3.2",
+  "backend": "physx",
+  "primPath": "{ENV_REGEX_NS}/Robot",
+  "rootPosition": { "x": 0.0, "y": 0.0, "z": 1.0 },
+  "rootRotationWxyz": { "w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0 },
+  "jointPositions": { "shoulder_joint": 0.0 },
+  "jointVelocities": { "shoulder_joint": 0.0 },
+  "actuatorGroups": [
+    {
+      "name": "fixture_shoulder",
+      "controlMode": "position",
+      "joints": ["shoulder_joint"],
+      "stiffness": 25.0,
+      "damping": 2.5,
+      "effortLimit": 20.0,
+      "velocityLimit": 3.0,
+      "armature": 0.01,
+      "friction": 0.0
+    }
+  ],
+  "physics": {
+    "enabledSelfCollisions": false,
+    "solverPositionIterationCount": 8,
+    "solverVelocityIterationCount": 2,
+    "enableGyroscopicForces": true,
+    "maxDepenetrationVelocity": 5.0
+  },
+  "smokeEnvironmentCount": 4,
+  "smokeStepCount": 120
+}

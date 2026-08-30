@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://osrbot.com/schemas/osurdf/ros2-control-profile.schema.v1.json",
+  "title": "OSURDF ros2_control profile v1",
+  "$ref": "robot.schema.v2.json#/$defs/ros2Control"
+}

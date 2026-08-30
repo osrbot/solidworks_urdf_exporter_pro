@@ -75,7 +75,7 @@ Generation failure falls back to `VisualMesh`. Do not trust only the last strate
 ## Build Problems
 
 - Point `SolidWorksInstallDir` to the actual installation containing matching Interop DLLs.
-- Build x64 against .NET Framework 4.5.2.
+- Build x64 against .NET Framework 4.8.
 - Install Visual Studio `.NET desktop development` and matching SolidWorks API Tools if resources or
   Interop tools are missing.
 - Auditable installer builds currently require Inno Setup 6.3.0-6.3.3; newer versions are rejected

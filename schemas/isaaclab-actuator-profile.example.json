@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "enabled": true,
+  "isaacLabVersion": "2.3.2",
+  "backend": "physx",
+  "primPath": "{ENV_REGEX_NS}/Robot",
+  "rootPosition": { "x": 0.0, "y": 0.0, "z": 1.0 },
+  "rootRotationWxyz": { "w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0 },
+  "jointPositions": {},
+  "jointVelocities": {},
+  "actuatorGroups": [
+    {
+      "name": "legs",
+      "controlMode": "position",
+      "joints": ["left_hip_joint", "right_hip_joint"],
+      "stiffness": 100.0,
+      "damping": 5.0,
+      "effortLimit": 80.0,
+      "velocityLimit": 12.0,
+      "armature": 0.01,
+      "friction": 0.0
+    }
+  ],
+  "physics": {
+    "enabledSelfCollisions": false,
+    "solverPositionIterationCount": 8,
+    "solverVelocityIterationCount": 2,
+    "enableGyroscopicForces": true,
+    "maxDepenetrationVelocity": 5.0
+  },
+  "smokeEnvironmentCount": 64,
+  "smokeStepCount": 1000
+}

@@ -31,7 +31,7 @@ older uninstaller cannot unregister a newer installation.
 | Item | Current evidence |
 | --- | --- |
 | OS and architecture | Windows x64 |
-| Target framework | .NET Framework 4.5.2 |
+| Target framework | .NET Framework 4.8 |
 | Historical minimum SolidWorks | 2018 SP5 |
 | Current Live API verification focus | SolidWorks 2023 |
 

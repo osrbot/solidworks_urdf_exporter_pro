@@ -114,6 +114,10 @@ namespace SW2URDF.URDFExport
         public string SavePath
         { get; set; }
 
+        [XmlIgnore]
+        public ExportTargetOptions ExportTargets
+        { get; set; }
+
         public readonly List<Link> Links;
 
         private readonly List<string> ReferenceCoordinateSystemNames;
@@ -149,6 +153,7 @@ namespace SW2URDF.URDFExport
             ComputeVisualCollision = true;
             ComputeJointKinematics = true;
             ComputeJointLimits = true;
+            ExportTargets = ExportTargetOptions.LegacyCompatibilityDefaults();
         }
 
         public void SetComputeInertial(bool computeInertial)
@@ -208,6 +213,8 @@ namespace SW2URDF.URDFExport
             List<MeshExportRecord> meshRecords = new List<MeshExportRecord>();
             URDFPackage exportedPackage = null;
             ExportOutputSnapshot outputBeforeExport = null;
+            string stagingDirectory = null;
+            V2ExportResult v2Result = null;
             try
             {
                 int progressBarBound = GetMeshExportLinks(URDFRobot.BaseLink).Count;
@@ -220,9 +227,19 @@ namespace SW2URDF.URDFExport
                 RosPackageName = URDFPackage.SanitizePackageName(RosPackageName);
                 logger.Info("Creating package directories with ROS package name " + RosPackageName +
                     ", robot name " + PackageName + " and save path " + SavePath);
-                URDFPackage package = new URDFPackage(PackageName, RosPackageName, SavePath);
-                exportedPackage = package;
-                outputBeforeExport = ExportOutputSnapshot.Capture(package);
+                URDFPackage deliveryPackage = new URDFPackage(PackageName, RosPackageName, SavePath);
+                bool requiresV2Staging = ExportTargets != null &&
+                    ExportTargets.UseV2Pipeline;
+                URDFPackage package = deliveryPackage;
+                if (requiresV2Staging)
+                {
+                    stagingDirectory = CreateV2ExportStagingDirectory();
+                    package = new URDFPackage(PackageName, RosPackageName, stagingDirectory);
+                    logger.Info("Using isolated source staging for the v2 export pipeline at " +
+                        stagingDirectory + ".");
+                }
+                exportedPackage = deliveryPackage;
+                outputBeforeExport = ExportOutputSnapshot.Capture(deliveryPackage);
                 package.CreateDirectories();
                 URDFRobot.Name = PackageName;
                 string windowsURDFFileName = package.WindowsRobotsDirectory + URDFRobot.Name + ".urdf";
@@ -307,23 +324,51 @@ namespace SW2URDF.URDFExport
                 UpdateProgressTitle("Writing CSV file", "\u6b63\u5728\u5199\u5165 CSV \u6587\u4ef6");
                 ImportExport.WriteRobotToCSV(URDFRobot, windowsCSVFileName);
 
-                UpdateProgressTitle("Creating ROS 2 package", "\u6b63\u5728\u521b\u5efa ROS 2 \u529f\u80fd\u5305");
-                logger.Info("Creating ROS 2 package at " + package.WindowsRos2PackageDirectory);
-                package.CreateRos2Package(windowsURDFFileName);
+                if (ExportTargets != null && ExportTargets.UseV2Pipeline)
+                {
+                    UpdateProgressTitle("Creating Robot Bundle and target packages", "\u6b63\u5728\u521b\u5efa Robot Bundle \u4e0e\u76ee\u6807\u529f\u80fd\u5305");
+                    logger.Info("Creating v2 Robot Bundle at " + deliveryPackage.WindowsBundleDirectory);
+                    v2Result = V2ExportBridge.Export(
+                        package,
+                        deliveryPackage,
+                        windowsURDFFileName,
+                        URDFRobot,
+                        meshRecords,
+                        ExportTargets);
+                    if (!string.IsNullOrWhiteSpace(v2Result.RetainedPreviousBundleDirectory))
+                    {
+                        logger.Warn(
+                            "The new Robot Bundle was published, but the prior recovery copy could not be removed: " +
+                            v2Result.RetainedPreviousBundleDirectory);
+                    }
+                }
+                else
+                {
+                    UpdateProgressTitle("Creating ROS 2 package", "\u6b63\u5728\u521b\u5efa ROS 2 \u529f\u80fd\u5305");
+                    logger.Info("Creating ROS 2 package at " + package.WindowsRos2PackageDirectory);
+                    package.CreateRos2Package(windowsURDFFileName);
+                }
 
                 UpdateProgressTitle("Writing export report", "\u6b63\u5728\u5199\u5165\u5bfc\u51fa\u4f53\u68c0\u62a5\u544a");
+                IEnumerable<MeshExportRecord> reportMeshRecords = v2Result != null
+                    ? v2Result.DeliveryMeshRecords
+                    : meshRecords;
                 WriteExportReport(
-                    package,
-                    windowsURDFFileName,
+                    deliveryPackage,
+                    Path.Combine(
+                        deliveryPackage.WindowsRobotsDirectory,
+                        URDFRobot.Name + ".urdf"),
                     inertialRecords,
-                    meshRecords,
+                    reportMeshRecords,
                     exportSTL,
                     meshFormat,
-                    exportStopwatch.Elapsed);
+                    exportStopwatch.Elapsed,
+                    ExportTargets);
+                V2ExportBridge.RefreshRosChecksums(v2Result);
 
                 UpdateProgressTitle("Copying export log", "\u6b63\u5728\u590d\u5236\u5bfc\u51fa\u65e5\u5fd7");
                 logger.Info("Copying log file");
-                CopyLogFile(package);
+                CopyLogFile(deliveryPackage);
                 success = true;
             }
             catch (Exception e)
@@ -339,6 +384,13 @@ namespace SW2URDF.URDFExport
                     visibilityMayHaveChanged,
                     preferencesSaved,
                     progressStarted) && success;
+                bool stagingDeleted = DeleteV2ExportStagingDirectory(stagingDirectory);
+                if (!stagingDeleted && string.IsNullOrWhiteSpace(ExportErrorWhy))
+                {
+                    ExportErrorWhy = "Export files were created, but temporary v2 staging cleanup failed. " +
+                        "See the UTF-8 export log at " + Logger.GetFileName() + ".";
+                }
+                success = stagingDeleted && success;
                 exportStopwatch.Stop();
             }
 
@@ -365,6 +417,41 @@ namespace SW2URDF.URDFExport
                 " and robot " + PackageName + "; elapsed " +
                 OperationHeartbeat.FormatElapsed(exportStopwatch.Elapsed));
             return true;
+        }
+
+        private static string CreateV2ExportStagingDirectory()
+        {
+            string directory = Path.Combine(
+                Path.GetTempPath(),
+                "OSURDF",
+                "export-staging",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            return directory;
+        }
+
+        private static bool DeleteV2ExportStagingDirectory(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                return true;
+            }
+            try
+            {
+                Directory.Delete(directory, true);
+                logger.Info("Removed temporary v2 export staging at " + directory);
+                return true;
+            }
+            catch (IOException exception)
+            {
+                logger.Error("Could not remove temporary v2 export staging at " + directory, exception);
+                return false;
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                logger.Error("Could not remove temporary v2 export staging at " + directory, exception);
+                return false;
+            }
         }
 
         private bool RestoreExportEnvironment(

@@ -85,7 +85,7 @@ namespace SW2URDF.URDFExport
         /// <summary>
         /// Current Serialization version
         /// </summary>
-        private const double SerializationVersion = 1.5;
+        private const double SerializationVersion = 1.6;
 
         /// <summary>
         /// Previous versions of serialization were set at 1 in the SW Document. This is
@@ -97,9 +97,10 @@ namespace SW2URDF.URDFExport
         /// The name given to the URDF configuration in the ModelDoc Feature tree. This is displayed to the
         /// user
         /// </summary>
-        public const string UrdfConfigurationSwAttributeName= "URDF Export Configuration (v1.5)";
+        public const string UrdfConfigurationSwAttributeName= "URDF Export Configuration (v1.6)";
 
         public static List<string> PREVIOUS_URDF_CONFIGURATION_NAMES = new List<string>() {
+            "URDF Export Configuration (v1.5)",
             "URDF Export Configuration (v1.4)",
             "URDF Export Configuration (v1.3)",
             "URDF Export Configuration"

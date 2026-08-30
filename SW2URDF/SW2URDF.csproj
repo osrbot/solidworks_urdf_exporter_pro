@@ -37,7 +37,7 @@
     </UpgradeBackupLocation>
     <StartProgram>C:\PROGRA~1\SOLIDW~1\SOLIDW~1\\SldWorks.exe</StartProgram>
     <StartAction>Program</StartAction>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <OldToolsVersion>2.0</OldToolsVersion>
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <TargetFrameworkProfile>
@@ -61,6 +61,8 @@
     <CscToolExe Condition="Exists('$(MSBuildProjectDirectory)\..\packages\Microsoft.Net.Compilers.3.11.0\tools\csc.exe')">csc.exe</CscToolExe>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
+    <BaseIntermediateOutputPath Condition="'$(SW2URDFBaseIntermediateOutputPath)' != ''">$(SW2URDFBaseIntermediateOutputPath)</BaseIntermediateOutputPath>
+    <IntermediateOutputPath Condition="'$(SW2URDFIntermediateOutputPath)' != ''">$(SW2URDFIntermediateOutputPath)</IntermediateOutputPath>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <OutputPath>bin\Debug\</OutputPath>
@@ -241,8 +243,9 @@
     <Reference Include="CsvHelper, Version=7.0.0.0, Culture=neutral, PublicKeyToken=8c4959082be5c823, processorArchitecture=MSIL">
       <HintPath>..\packages\CsvHelper.7.1.1\lib\net45\CsvHelper.dll</HintPath>
     </Reference>
-    <Reference Include="log4net">
-      <HintPath>lib\log4net.dll</HintPath>
+    <Reference Include="log4net, Version=3.4.0.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
+      <HintPath>..\packages\log4net.3.4.0\lib\net462\log4net.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="MathNet.Numerics, Version=4.7.0.0, Culture=neutral, PublicKeyToken=cd8b63ad3d691a37, processorArchitecture=MSIL">
       <HintPath>..\packages\MathNet.Numerics.Signed.4.7.0\lib\net40\MathNet.Numerics.dll</HintPath>
@@ -292,6 +295,10 @@
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Numerics" />
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=4.0.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Runtime.CompilerServices.Unsafe.4.5.0\lib\netstandard1.0\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
     </Reference>
@@ -424,6 +431,8 @@
     <Compile Include="URDFExport\ExportHelper.cs" />
     <Compile Include="URDFExport\ExportHelperExtension.cs" />
     <Compile Include="URDFExport\ExportHelperReport.cs" />
+    <Compile Include="URDFExport\ExportTargetOptions.cs" />
+    <Compile Include="URDFExport\V2ExportBridge.cs" />
     <Compile Include="URDFExport\InertiaEllipsoid.cs" />
     <Compile Include="URDFExport\LinkTreeStores.cs" />
     <Compile Include="URDFExport\LinkTreeValidation.cs" />
@@ -498,9 +507,9 @@
     <EmbeddedResource Include="UI\Resources\Images\AddinIcon.bmp" />
   </ItemGroup>
   <ItemGroup>
-    <BootstrapperPackage Include=".NETFramework,Version=v4.0">
+    <BootstrapperPackage Include=".NETFramework,Version=v4.8">
       <Visible>False</Visible>
-      <ProductName>Microsoft .NET Framework 4 %28x86 and x64%29</ProductName>
+      <ProductName>Microsoft .NET Framework 4.8 %28x86 and x64%29</ProductName>
       <Install>true</Install>
     </BootstrapperPackage>
     <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
@@ -520,7 +529,41 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\src\OSURDF.Core\OSURDF.Core.csproj">
+      <Project>{D01297EE-E9E5-4423-B4CE-C9DB6867314B}</Project>
+      <Name>OSURDF.Core</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
     <None Include="packages.config" />
+    <None Include="..\LICENSE">
+      <Link>LICENSE</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\THIRD_PARTY_NOTICES.md">
+      <Link>THIRD_PARTY_NOTICES.md</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\THIRD_PARTY_LICENSES\*.txt">
+      <Link>THIRD_PARTY_LICENSES\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\schemas\*.json">
+      <Link>schemas\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\schemas\README.md">
+      <Link>schemas\README.md</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\tools\isaac_adapter\osurdf_isaac_adapter.py">
+      <Link>tools\isaac_adapter\osurdf_isaac_adapter.py</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\tools\isaac_adapter\README.md">
+      <Link>tools\isaac_adapter\README.md</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="Properties\DataSources\SwAddin.datasource">
       <SubType>Designer</SubType>
     </None>
@@ -592,6 +635,7 @@
     <PostBuildEvent>
 :REGISTRATION
 IF "$(TargetFrameworkVersion)"=="v4.5.2" GOTO NET40
+IF "$(TargetFrameworkVersion)"=="v4.8" GOTO NET40
 IF "$(TargetFrameworkVersion)"=="v4.5" GOTO NET40
 IF "$(TargetFrameworkVersion)"=="v4.0" GOTO NET40
 IF "$(TargetFrameworkVersion)"=="v3.5" GOTO NET20

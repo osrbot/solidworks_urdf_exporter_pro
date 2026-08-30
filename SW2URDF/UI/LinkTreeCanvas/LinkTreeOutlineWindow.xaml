@@ -60,7 +60,7 @@
                     <TextBlock Grid.Row="1" Margin="0,10,0,0" FontFamily="Consolas" LineHeight="23"
                                Text="# base_link&#x0a;## camera_link&#x0a;## steering_link&#x0a;### wheel_link" />
                     <TextBlock Grid.Row="2" Margin="0,16,0,0" Foreground="#475467" TextWrapping="Wrap"
-                               Text="同名 Link 会保留原有 Joint、参数和 CAD 绑定。新增 Link 自动创建 fixed Joint，例如 camera_link 生成 camera_joint；Joint 细节可回画布修改。删除一行会从候选树中删除该 Link；名称必须符合 ROS 命名规则。" />
+                               Text="同名 Link 会保留原有 Joint、参数和 CAD 绑定。新增 Link 会生成 Joint 名称，但类型保持待选择；返回画布后必须明确选择类型才能应用。删除一行会从候选树中删除该 Link；名称必须符合 ROS 命名规则。" />
                     <ScrollViewer Grid.Row="3" Margin="0,18,0,0" VerticalScrollBarVisibility="Auto">
                         <TextBlock x:Name="ValidationText" TextWrapping="Wrap" Foreground="#C62828" />
                     </ScrollViewer>

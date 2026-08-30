@@ -507,7 +507,14 @@ namespace SW2URDF.URDFExport
                     current.JointType,
                     node.JointType,
                     StringComparison.Ordinal);
-                candidateConfigurations.ApplyJointType(node.Id, node.JointType);
+                if (typeChanged || current == null)
+                {
+                    candidateConfigurations.ApplyJointTypeFromUser(node.Id, node.JointType);
+                }
+                else
+                {
+                    candidateConfigurations.ApplyJointType(node.Id, node.JointType);
+                }
                 if (typeChanged)
                 {
                     candidateConfigurations.MarkJointKinematicsStale(node.Id);
@@ -642,7 +649,9 @@ namespace SW2URDF.URDFExport
             LinkTreeDocument document,
             LinkConfigurationStore capturedConfigurations)
         {
-            List<string> errors = document.Validate().ToList();
+            // The legacy PropertyManager can hold an incomplete draft while the user fills in
+            // a newly created Link. The canvas Apply action still uses strict validation.
+            List<string> errors = document.ValidateDraft().ToList();
             errors.AddRange(capturedConfigurations.ValidateMimicReferences(
                 document.Nodes
                     .Where(node => node.ParentId.HasValue)

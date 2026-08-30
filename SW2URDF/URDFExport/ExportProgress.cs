@@ -52,6 +52,8 @@ namespace SW2URDF.URDFExport
             HashSet<string> files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             AddFiles(files, package.WindowsPackageDirectory, outputBeforeExport);
             AddFiles(files, package.WindowsRos2PackageDirectory, outputBeforeExport);
+            AddFiles(files, package.WindowsBundleDirectory, outputBeforeExport);
+            AddFile(files, package.WindowsExportReportFile, outputBeforeExport);
             AddFile(files, package.WindowsExportLogFile, outputBeforeExport);
 
             long totalBytes = files.Sum(path => GetFileLengthOrZero(path));
@@ -188,6 +190,8 @@ namespace SW2URDF.URDFExport
                 new Dictionary<string, FileStamp>(StringComparer.OrdinalIgnoreCase);
             CaptureDirectory(files, package.WindowsPackageDirectory);
             CaptureDirectory(files, package.WindowsRos2PackageDirectory);
+            CaptureDirectory(files, package.WindowsBundleDirectory);
+            CaptureFile(files, package.WindowsExportReportFile);
             CaptureFile(files, package.WindowsExportLogFile);
             return new ExportOutputSnapshot(files);
         }

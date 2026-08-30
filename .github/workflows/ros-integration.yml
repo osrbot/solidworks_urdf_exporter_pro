@@ -1,0 +1,101 @@
+name: ROS package gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      ros_distribution:
+        description: Installed ROS 2 distribution on the runner
+        required: true
+        default: lyrical
+        type: choice
+        options:
+          - lyrical
+          - jazzy
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ros-integration-${{ github.ref }}-${{ inputs.ros_distribution }}
+  cancel-in-progress: false
+
+jobs:
+  export-build-launch:
+    runs-on: [self-hosted, Linux, X64, ros2]
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Export and build the ROS 2 fixture package
+        shell: bash
+        env:
+          ROS_DISTRIBUTION: ${{ inputs.ros_distribution }}
+        run: |
+          set -euo pipefail
+          source "/opt/ros/${ROS_DISTRIBUTION}/setup.bash"
+          dotnet restore src/OSURDF.Cli/OSURDF.Cli.csproj --locked-mode
+          dotnet build src/OSURDF.Cli/OSURDF.Cli.csproj -c Release --no-restore
+          cli="src/OSURDF.Cli/bin/Release/net8.0/osurdf.dll"
+          work="$(mktemp -d "$RUNNER_TEMP/osurdf-ros.XXXXXX")"
+          launch_log="$work/gazebo-control.log"
+          launch_pid=""
+          cleanup() {
+            if [[ -n "$launch_pid" ]]; then
+              kill "$launch_pid" 2>/dev/null || true
+              wait "$launch_pid" 2>/dev/null || true
+            fi
+            tail -n 200 "$launch_log" 2>/dev/null || true
+            rm -rf -- "$work"
+          }
+          trap cleanup EXIT
+          mkdir -p "$work/src"
+          gazebo_distribution=jetty
+          if [[ "$ROS_DISTRIBUTION" == jazzy ]]; then gazebo_distribution=harmonic; fi
+          dotnet "$cli" import-urdf \
+            --input tests/fixtures/minimal_robot.urdf --output "$work/robot.json" \
+            --package-name minimal_robot_description --package-version 0.1.0 \
+            --description "OSURDF ROS integration fixture" \
+            --maintainer-name "OSURDF CI" --maintainer-email ci@example.com \
+            --model-license Apache-2.0 --ros2 \
+            --ros-distro "$ROS_DISTRIBUTION" --gazebo-distro "$gazebo_distribution"
+          jq --slurpfile profile tests/fixtures/minimal_ros2_control_profile.json \
+            '.profiles.ros2.ros2Control = $profile[0]' \
+            "$work/robot.json" > "$work/robot-with-control.json"
+          mv "$work/robot-with-control.json" "$work/robot.json"
+          dotnet "$cli" validate --input "$work/robot.json"
+          dotnet "$cli" bundle \
+            --source-urdf tests/fixtures/minimal_robot.urdf \
+            --robot "$work/robot.json" --output "$work/bundle"
+          dotnet "$cli" export-ros2 --bundle "$work/bundle" --output "$work/src"
+          cd "$work"
+          colcon build --event-handlers console_direct+
+          source install/setup.bash
+          ros2 pkg prefix minimal_robot_description
+          python3 -m py_compile install/minimal_robot_description/share/minimal_robot_description/launch/*.py
+
+          timeout 90s ros2 launch minimal_robot_description gazebo.launch.py \
+            gz_args:='-r -s empty.sdf' >"$launch_log" 2>&1 &
+          launch_pid=$!
+
+          ready=false
+          for _ in $(seq 1 30); do
+            controllers="$(timeout 3s ros2 control list_controllers --controller-manager /controller_manager 2>/dev/null || true)"
+            if grep -Eq '^joint_state_broadcaster[[:space:]].*active' <<<"$controllers" && \
+               grep -Eq '^arm_controller[[:space:]].*active' <<<"$controllers"; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          [[ "$ready" == true ]] || {
+            echo "gz_ros2_control controllers did not become active" >&2
+            exit 1
+          }

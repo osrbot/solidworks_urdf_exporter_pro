@@ -48,7 +48,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 ValidationText.Text = addedCount == 0 && removedCount == 0
                     ? string.Empty
                     : "将新增 " + addedCount + " 个 Link，移除 " + removedCount +
-                        " 个 Link。新增 Link 需要回到属性页分配 CAD 组件。";
+                        " 个 Link。新增 Link 需回画布选择 Joint 类型，再到属性页分配 CAD 组件。";
                 ValidationText.Foreground = new SolidColorBrush(Color.FromRgb(180, 83, 9));
                 StatusText.Text = "结构有效，共 " + currentResult.Document.Nodes.Count + " 个 Link";
                 StatusText.Foreground = new SolidColorBrush(Color.FromRgb(0, 120, 83));

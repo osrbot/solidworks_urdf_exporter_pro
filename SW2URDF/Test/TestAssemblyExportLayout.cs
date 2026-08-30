@@ -1,4 +1,5 @@
 using SW2URDF.UI;
+using SW2URDF.URDFExport;
 using System;
 using System.Drawing;
 using System.Globalization;
@@ -11,21 +12,26 @@ namespace SW2URDF.Test
     public class TestAssemblyExportLayout
     {
         [Theory]
-        [InlineData("Automatically Detect", "自动识别")]
-        [InlineData("revolute", "有限角度转动")]
-        [InlineData("continuous", "无约束连续转动")]
-        [InlineData("prismatic", "直线滑动")]
-        [InlineData("fixed", "固定连接")]
-        [InlineData("floating", "六自由度运动")]
-        [InlineData("planar", "平面运动")]
+        [InlineData("", "请选择 Joint 类型（必填）", "Select joint type (required)")]
+        [InlineData(
+            "Automatically Detect",
+            "Automatically Detect / 尝试从 SolidWorks Mate 识别（仅原生可动装配）",
+            "Try SolidWorks Mate detection (native movable assemblies only)")]
+        [InlineData("revolute", "revolute / 有限角度转动", "revolute")]
+        [InlineData("continuous", "continuous / 无约束连续转动", "continuous")]
+        [InlineData("prismatic", "prismatic / 直线滑动", "prismatic")]
+        [InlineData("fixed", "fixed / 固定连接", "fixed")]
+        [InlineData("floating", "floating / 六自由度运动", "floating")]
+        [InlineData("planar", "planar / 平面运动", "planar")]
         public void TestChineseJointTypeDisplayRoundTripsToUrdfValue(
             string jointType,
-            string description)
+            string chineseDisplay,
+            string englishDisplay)
         {
-            string localized = jointType + " / " + description;
-            Assert.Equal(localized, ChineseUiText.JointTypeDisplay(jointType, true));
-            Assert.Equal(jointType, ChineseUiText.JointTypeDisplay(jointType, false));
-            Assert.Equal(jointType, ChineseUiText.JointTypeValue(localized));
+            Assert.Equal(chineseDisplay, ChineseUiText.JointTypeDisplay(jointType, true));
+            Assert.Equal(englishDisplay, ChineseUiText.JointTypeDisplay(jointType, false));
+            Assert.Equal(jointType, ChineseUiText.JointTypeValue(chineseDisplay));
+            Assert.Equal(jointType, ChineseUiText.JointTypeValue(englishDisplay));
         }
 
         [Fact]
@@ -33,6 +39,34 @@ namespace SW2URDF.Test
         {
             Assert.Equal("custom", ChineseUiText.JointTypeDisplay("custom", true));
             Assert.Equal("custom", ChineseUiText.JointTypeValue("custom"));
+        }
+
+        [Fact]
+        public void TestRos2CompatibilityPairIsCapturedAsOneAtomicSelection()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+            try
+            {
+                ComboBox pair = GetControl<ComboBox>(form, "modernRos2PairComboBox");
+                pair.SelectedIndex = 1;
+                MethodInfo capture = typeof(AssemblyExportForm).GetMethod(
+                    "CaptureExportTargetOptions",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(capture);
+                ExportTargetOptions options = (ExportTargetOptions)capture.Invoke(form, null);
+                Assert.Equal("jazzy", options.Ros2Distribution);
+                Assert.Equal("harmonic", options.GazeboDistribution);
+
+                pair.SelectedIndex = 0;
+                options = (ExportTargetOptions)capture.Invoke(form, null);
+                Assert.Equal("lyrical", options.Ros2Distribution);
+                Assert.Equal("jetty", options.GazeboDistribution);
+            }
+            finally
+            {
+                form.Dispose();
+            }
         }
 
         [Fact]
@@ -661,6 +695,9 @@ namespace SW2URDF.Test
             Assert.Contains("Automatic Link tree loading", guide);
             Assert.Contains("URDF Export Configuration (v1.5)", guide);
             Assert.Contains("Link tree outline editing", guide);
+            Assert.Contains("STEP, imported, or fixed assemblies", guide);
+            Assert.Contains("SolidWorks Mate detection", guide);
+            Assert.Contains("zero remaining DOFs is no longer treated as fixed", guide);
             Assert.Contains("Link frames and inertia", guide);
             Assert.Contains("without a parallel-axis shift", guide);
             Assert.Contains("#/##/###", guide);

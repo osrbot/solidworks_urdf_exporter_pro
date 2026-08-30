@@ -67,13 +67,20 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Default.isl,{#AddBackslash(So
 [CustomMessages]
 english.RegisteringControls=Registering SolidWorks URDF exporter...
 english.UnregisteringControls=Unregistering SolidWorks URDF exporter...
+english.DotNet48Required=Microsoft .NET Framework 4.8 or later is required. Install it, restart Windows if requested, and run this installer again.
 chinesesimplified.RegisteringControls=正在注册 SolidWorks URDF 导出插件...
 chinesesimplified.UnregisteringControls=正在注销 SolidWorks URDF 导出插件...
+chinesesimplified.DotNet48Required=需要 Microsoft .NET Framework 4.8 或更高版本。请先安装，按提示重启 Windows，然后重新运行本安装程序。
 
 [Files]
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\*.dll"}; DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\SW2URDF.png"}; DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\images\*.png"}; DestDir: {app}\images; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\LICENSE"}; DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\THIRD_PARTY_NOTICES.md"}; DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\THIRD_PARTY_LICENSES\*"}; DestDir: {app}\THIRD_PARTY_LICENSES; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\*"}; DestDir: {app}\schemas; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\isaac_adapter\*"}; DestDir: {app}\tools\isaac_adapter; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
 ;Source: x86\Debug\*;  DestDir: {app}; Flags: regserver ignoreversion; Check: not IsWin64
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
@@ -89,6 +96,39 @@ Filename: "{reg:HKLM64\SOFTWARE\Microsoft\.NETFramework,InstallRoot}\v4.0.30319\
 [Code]
 const
   Sw2UrdfComRegistrationKey = 'SOFTWARE\Classes\CLSID\{65c9fc17-6a74-45a3-8f84-55185900275d}\InprocServer32';
+  DotNet48MinimumRelease = 528040;
+
+function IsDotNet48Installed(): Boolean;
+var
+  Release: Cardinal;
+begin
+  Result := False;
+  if RegQueryDWordValue(
+    HKLM64,
+    'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full',
+    'Release',
+    Release) then
+  begin
+    if Release >= DotNet48MinimumRelease then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+  if RegQueryDWordValue(
+    HKLM32,
+    'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full',
+    'Release',
+    Release) then
+    Result := Release >= DotNet48MinimumRelease;
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := IsDotNet48Installed();
+  if not Result then
+    MsgBox(ExpandConstant('{cm:DotNet48Required}'), mbError, MB_OK);
+end;
 
 function NormalizeCodeBasePath(Value: String): String;
 begin

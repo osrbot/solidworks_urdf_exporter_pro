@@ -94,6 +94,11 @@ if (-not $MSBuild) {
     throw "MSBuild was not found. Install Visual Studio Build Tools or the .NET Framework MSBuild tools."
 }
 $MSBuild = [System.IO.Path]::GetFullPath($MSBuild)
+$DotNetCommand = Get-Command dotnet -ErrorAction SilentlyContinue
+if (-not $DotNetCommand) {
+    throw ".NET SDK was not found. Install the pinned .NET 8 SDK before building an installer."
+}
+$DotNet = $DotNetCommand.Source
 
 $ISCC = $null
 if (-not [string]::IsNullOrWhiteSpace($InnoCompilerPath)) {
@@ -219,6 +224,7 @@ try {
     $PackagesConfig = Join-Path $BuildRoot "SW2URDF\packages.release.config"
     $NuGetConfig = Join-Path $BuildRoot "NuGet.Config"
     $PackagesDirectory = Join-Path $BuildRoot "packages"
+    $SdkPackagesDirectory = Join-Path $BuildRoot ".nuget-packages"
     $InstallerScript = Join-Path $BuildRoot "INSTALL\Install.iss"
     $BaseIntermediateOutputPath = Join-Path $BuildRoot ".codex-build\SW2URDF\obj"
     $IntermediateOutputPath = Join-Path $BaseIntermediateOutputPath "$Platform\$Configuration"
@@ -252,6 +258,19 @@ try {
     if ($RestoredPackageArchives.Count -ne $PackageInputs.Count) {
         throw "NuGet restore produced package archives not covered by the release lock."
     }
+    $SdkPackageLocks = @(
+        "src\OSURDF.Core\packages.lock.json",
+        "TestRunner\packages.lock.json"
+    ) | ForEach-Object {
+        $LockFile = Join-Path $BuildRoot $_
+        if (-not (Test-Path -LiteralPath $LockFile -PathType Leaf)) {
+            throw "SDK package lock file was not found: $LockFile"
+        }
+        [ordered]@{
+            path = $_.Replace("\", "/")
+            sha256 = Get-Sha256 $LockFile
+        }
+    }
 
     $BuildOutputDirectory = Join-Path $BuildRoot "SW2URDF\bin\$Platform\$Configuration"
     $ResolvedBuildOutput = Assert-ChildPath $BuildRoot $BuildOutputDirectory "Build output"
@@ -268,8 +287,11 @@ try {
         /p:RegisterForComInterop=false /p:PostBuildEvent= `
         /p:SolidWorksInstallDir="$StagedSolidWorksDirectory" `
         "/p:SolutionDir=$SolutionDir" `
-        "/p:BaseIntermediateOutputPath=$BaseIntermediateOutputPath" `
-        "/p:IntermediateOutputPath=$IntermediateOutputPath"
+        "/p:SW2URDFBaseIntermediateOutputPath=$BaseIntermediateOutputPath" `
+        "/p:SW2URDFIntermediateOutputPath=$IntermediateOutputPath" `
+        "/p:RestoreConfigFile=$NuGetConfig" `
+        "/p:RestorePackagesPath=$SdkPackagesDirectory" `
+        /p:RestoreLockedMode=true /restore
     if ($LASTEXITCODE -ne 0) {
         throw "MSBuild failed with exit code $LASTEXITCODE."
     }
@@ -277,11 +299,26 @@ try {
     $PayloadCandidates = @(
         Get-ChildItem -LiteralPath $BuildOutputDirectory -File -Filter "*.dll"
         Get-Item -LiteralPath (Join-Path $BuildOutputDirectory "SW2URDF.png")
+        Get-Item -LiteralPath (Join-Path $BuildOutputDirectory "LICENSE")
+        Get-Item -LiteralPath (Join-Path $BuildOutputDirectory "THIRD_PARTY_NOTICES.md")
+        Get-ChildItem -LiteralPath (Join-Path $BuildOutputDirectory "THIRD_PARTY_LICENSES") `
+            -File
         Get-ChildItem -LiteralPath (Join-Path $BuildOutputDirectory "images") `
             -File -Filter "*.png"
+        Get-ChildItem -LiteralPath (Join-Path $BuildOutputDirectory "schemas") `
+            -File
+        Get-ChildItem -LiteralPath (Join-Path $BuildOutputDirectory "tools\isaac_adapter") `
+            -File
     )
     $RequiredPayloadFiles = @(
         "SW2URDF.dll",
+        "OSURDF.Core.dll",
+        "Newtonsoft.Json.dll",
+        "log4net.dll",
+        "APACHE-2.0.txt",
+        "MIT.txt",
+        "osurdf_isaac_adapter.py",
+        "robot.schema.v2.json",
         "solidworkstools.dll"
     )
     foreach ($RequiredPayloadFile in $RequiredPayloadFiles) {
@@ -289,6 +326,75 @@ try {
             throw "Release build did not produce required installer payload: $RequiredPayloadFile"
         }
     }
+
+    # Build the test-bearing plugin configuration and run the existing SolidWorks
+    # regression suite against that exact DLL before the Release payload is packaged.
+    & $NuGet restore (Join-Path $BuildRoot "SW2URDF\packages.config") `
+        -PackagesDirectory $PackagesDirectory -ConfigFile $NuGetConfig `
+        -NoHttpCache -DirectDownload -NonInteractive
+    if ($LASTEXITCODE -ne 0) {
+        throw "NuGet restore for the SolidWorks regression suite failed with exit code $LASTEXITCODE."
+    }
+    $TestBaseIntermediateOutputPath = Join-Path $BuildRoot ".codex-build\SW2URDF-test\obj"
+    $TestIntermediateOutputPath = Join-Path $TestBaseIntermediateOutputPath "$Platform\Test"
+    $TestBaseIntermediateOutputPath = $TestBaseIntermediateOutputPath.TrimEnd("\") + "\"
+    $TestIntermediateOutputPath = $TestIntermediateOutputPath.TrimEnd("\") + "\"
+    & $MSBuild $Project /p:Configuration=Test /p:Platform=$Platform `
+        /p:RegisterForComInterop=false /p:PostBuildEvent= `
+        /p:SolidWorksInstallDir="$StagedSolidWorksDirectory" `
+        "/p:SolutionDir=$SolutionDir" `
+        "/p:SW2URDFBaseIntermediateOutputPath=$TestBaseIntermediateOutputPath" `
+        "/p:SW2URDFIntermediateOutputPath=$TestIntermediateOutputPath" `
+        "/p:RestoreConfigFile=$NuGetConfig" `
+        "/p:RestorePackagesPath=$SdkPackagesDirectory" `
+        /p:RestoreLockedMode=true /restore
+    if ($LASTEXITCODE -ne 0) {
+        throw "SolidWorks test assembly build failed with exit code $LASTEXITCODE."
+    }
+
+    $TestRunnerProject = Join-Path $BuildRoot "TestRunner\TestRunner.csproj"
+    & $DotNet restore $TestRunnerProject --locked-mode `
+        --configfile $NuGetConfig --packages $SdkPackagesDirectory
+    if ($LASTEXITCODE -ne 0) {
+        throw "TestRunner locked restore failed with exit code $LASTEXITCODE."
+    }
+    & $DotNet build $TestRunnerProject --configuration Release --no-restore `
+        "-p:SolidWorksInstallDir=$StagedSolidWorksDirectory" `
+        "-p:RestorePackagesPath=$SdkPackagesDirectory"
+    if ($LASTEXITCODE -ne 0) {
+        throw "TestRunner build failed with exit code $LASTEXITCODE."
+    }
+
+    $TestAssembly = Join-Path $BuildRoot "SW2URDF\bin\$Platform\Test\SW2URDF.dll"
+    $TestRunnerExecutable = Join-Path $BuildRoot "TestRunner\bin\Release\net48\TestRunner.exe"
+    if (-not (Test-Path -LiteralPath $TestAssembly -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $TestRunnerExecutable -PathType Leaf)) {
+        throw "SolidWorks regression test outputs were not produced."
+    }
+    $PreviousTestAssembly = $env:SW2URDF_TEST_ASSEMBLY
+    try {
+        $env:SW2URDF_TEST_ASSEMBLY = $TestAssembly
+        & $TestRunnerExecutable
+        if ($LASTEXITCODE -ne 0) {
+            throw "SolidWorks regression suite failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        if ($null -eq $PreviousTestAssembly) {
+            Remove-Item Env:\SW2URDF_TEST_ASSEMBLY -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:SW2URDF_TEST_ASSEMBLY = $PreviousTestAssembly
+        }
+    }
+    $PluginTestEvidence = [ordered]@{
+        configuration = "Test"
+        platform = $Platform
+        testAssemblySha256 = Get-Sha256 $TestAssembly
+        runner = "TestRunner/bin/Release/net48/TestRunner.exe"
+        result = "passed"
+    }
+
     $PayloadRoot = $BuildOutputDirectory.TrimEnd("\") + "\"
     $PayloadInputs = @($PayloadCandidates |
         Sort-Object -Property FullName -Unique |
@@ -312,7 +418,15 @@ try {
         throw "Inno Setup did not create the expected installer: $BuiltInstallerPath"
     }
 
-    $BuildChanges = & git -C $BuildRoot status --porcelain --untracked-files=no 2>$null
+    $BuildChanges = & git -C $BuildRoot status --porcelain --untracked-files=normal -- . `
+        ":(exclude).solidworks-api" `
+        ":(exclude).nuget-packages" `
+        ":(exclude).codex-build" `
+        ":(exclude)packages" `
+        ":(exclude)SW2URDF/bin" `
+        ":(exclude)src/**/bin" `
+        ":(exclude)src/**/obj" `
+        ":(exclude)INSTALL/OUTPUT" 2>$null
     $BuildStatusExitCode = $LASTEXITCODE
     $PostBuildHead = & git -C $BuildRoot rev-parse HEAD 2>$null
     $BuildHeadExitCode = $LASTEXITCODE
@@ -373,7 +487,9 @@ try {
         }
         nugetSource = "https://api.nuget.org/v3/index.json"
         packageInputs = $PackageInputs
+        sdkPackageLocks = $SdkPackageLocks
         solidWorksInputs = $SolidWorksInputs
+        pluginTests = $PluginTestEvidence
         payloadInputs = $PayloadInputs
     }
     [System.IO.File]::WriteAllText(

@@ -41,7 +41,8 @@ namespace SW2URDF.Test
             LinkTreeNode wheel = result.Document.Nodes.Single(node => node.Name == "left_wheel_link");
             Assert.Equal(steering.Id, wheel.ParentId);
             Assert.Equal("left_steering_joint", steering.JointName);
-            Assert.Equal("fixed", steering.JointType);
+            Assert.Equal(string.Empty, steering.JointType);
+            Assert.Contains("尚未选择", string.Join(" ", result.Document.Validate()));
             Assert.Equal("continuous", wheel.JointType);
         }
 
@@ -157,7 +158,9 @@ namespace SW2URDF.Test
 
             Assert.True(result.IsValid, string.Join(Environment.NewLine, result.Errors));
             Assert.Equal(cameraId, result.Document.Nodes.Single(node => node.Name == "camera_link").Id);
-            Assert.Null(source.Find(result.Document.Nodes.Single(node => node.Name == "imu_link").Id));
+            LinkTreeNode added = result.Document.Nodes.Single(node => node.Name == "imu_link");
+            Assert.Null(source.Find(added.Id));
+            Assert.Equal(string.Empty, added.JointType);
         }
 
         private static LinkTreeDocument CreateDocument()
@@ -166,6 +169,7 @@ namespace SW2URDF.Test
             LinkTreeNode root = LinkTreeDocument.NewNode("base_link", null, 80, 200);
             LinkTreeNode camera = LinkTreeDocument.NewNode("camera_link", root.Id, 380, 120);
             camera.JointName = "camera_joint";
+            camera.JointType = "fixed";
             LinkTreeNode wheel = LinkTreeDocument.NewNode("left_wheel_link", root.Id, 380, 280);
             wheel.JointName = "left_wheel_joint";
             wheel.JointType = "continuous";

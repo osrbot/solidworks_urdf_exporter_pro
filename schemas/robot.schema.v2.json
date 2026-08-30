@@ -1,0 +1,425 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://osrbot.com/schemas/osurdf/robot.schema.v2.json",
+  "title": "OSURDF Robot Document v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "name", "units", "metadata", "links", "joints", "profiles"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "name": { "$ref": "#/$defs/nonEmptyString" },
+    "units": { "const": "SI" },
+    "metadata": { "$ref": "#/$defs/metadata" },
+    "links": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/link" }
+    },
+    "joints": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/joint" }
+    },
+    "profiles": { "$ref": "#/$defs/profiles" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "exactVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+    },
+    "portableRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\<>:\\\"|?*]).+$"
+    },
+    "vector3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "vector4": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z", "w"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" },
+        "w": { "type": "number" }
+      }
+    },
+    "quaternionWxyz": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["w", "x", "y", "z"],
+      "properties": {
+        "w": { "type": "number" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "pose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["xyz", "rpy"],
+      "properties": {
+        "xyz": { "$ref": "#/$defs/vector3" },
+        "rpy": { "$ref": "#/$defs/vector3" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "userConfirmed"],
+      "properties": {
+        "kind": {
+          "allOf": [
+            { "$ref": "#/$defs/nonEmptyString" },
+            { "not": { "const": "unknown" } }
+          ]
+        },
+        "evidence": { "type": "string" },
+        "reference": { "type": "string" },
+        "userConfirmed": { "type": "boolean" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generator", "generatorVersion", "commit", "sourceFormat"],
+      "properties": {
+        "generator": { "$ref": "#/$defs/nonEmptyString" },
+        "generatorVersion": { "$ref": "#/$defs/nonEmptyString" },
+        "commit": { "$ref": "#/$defs/nonEmptyString" },
+        "sourceFormat": { "$ref": "#/$defs/nonEmptyString" },
+        "sourceDigest": { "type": "string" },
+        "modelLicense": { "type": "string" },
+        "modelAuthor": { "type": "string" }
+      }
+    },
+    "inertia": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ixx", "ixy", "ixz", "iyy", "iyz", "izz"],
+      "properties": {
+        "ixx": { "type": "number" },
+        "ixy": { "type": "number" },
+        "ixz": { "type": "number" },
+        "iyy": { "type": "number" },
+        "iyz": { "type": "number" },
+        "izz": { "type": "number" }
+      }
+    },
+    "inertial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "mass", "inertia"],
+      "properties": {
+        "origin": { "$ref": "#/$defs/pose" },
+        "mass": { "type": "number", "exclusiveMinimum": 0 },
+        "inertia": { "$ref": "#/$defs/inertia" }
+      }
+    },
+    "geometry": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "uri"],
+          "properties": {
+            "type": { "const": "mesh" },
+            "uri": { "$ref": "#/$defs/nonEmptyString" },
+            "scale": { "$ref": "#/$defs/vector3" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "size"],
+          "properties": {
+            "type": { "const": "box" },
+            "size": { "$ref": "#/$defs/vector3" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "radius", "length"],
+          "properties": {
+            "type": { "const": "cylinder" },
+            "radius": { "type": "number", "exclusiveMinimum": 0 },
+            "length": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "radius"],
+          "properties": {
+            "type": { "const": "sphere" },
+            "radius": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      ]
+    },
+    "material": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "rgba": { "$ref": "#/$defs/vector4" },
+        "textureUri": { "type": "string", "minLength": 1 }
+      }
+    },
+    "visual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "geometry"],
+      "properties": {
+        "name": { "type": "string" },
+        "origin": { "$ref": "#/$defs/pose" },
+        "geometry": { "$ref": "#/$defs/geometry" },
+        "material": { "$ref": "#/$defs/material" }
+      }
+    },
+    "collision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "geometry"],
+      "properties": {
+        "name": { "type": "string" },
+        "origin": { "$ref": "#/$defs/pose" },
+        "geometry": { "$ref": "#/$defs/geometry" }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "visuals", "collisions", "source"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "inertial": { "$ref": "#/$defs/inertial" },
+        "visuals": { "type": "array", "items": { "$ref": "#/$defs/visual" } },
+        "collisions": { "type": "array", "items": { "$ref": "#/$defs/collision" } },
+        "source": { "$ref": "#/$defs/source" }
+      }
+    },
+    "jointLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lower": { "type": "number" },
+        "upper": { "type": "number" },
+        "effort": { "type": "number", "exclusiveMinimum": 0 },
+        "velocity": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "joint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type", "parent", "child", "origin", "source"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "type": { "enum": ["fixed", "continuous", "revolute", "prismatic", "floating", "planar"] },
+        "parent": { "$ref": "#/$defs/nonEmptyString" },
+        "child": { "$ref": "#/$defs/nonEmptyString" },
+        "origin": { "$ref": "#/$defs/pose" },
+        "axis": { "$ref": "#/$defs/vector3" },
+        "limit": { "$ref": "#/$defs/jointLimit" },
+        "dynamics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "damping": { "type": "number", "minimum": 0 }, "friction": { "type": "number", "minimum": 0 } }
+        },
+        "mimic": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["joint"],
+          "properties": {
+            "joint": { "$ref": "#/$defs/nonEmptyString" },
+            "multiplier": { "type": "number" },
+            "offset": { "type": "number" }
+          }
+        },
+        "source": { "$ref": "#/$defs/source" }
+      }
+    },
+    "packageProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "packageName": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "version": { "$ref": "#/$defs/exactVersion" },
+        "description": { "type": "string" },
+        "maintainerName": { "type": "string" },
+        "maintainerEmail": { "type": "string", "format": "email" },
+        "license": { "type": "string" }
+      }
+    },
+    "ros2ControlJoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["joint", "commandInterfaces", "stateInterfaces"],
+      "properties": {
+        "joint": { "$ref": "#/$defs/nonEmptyString" },
+        "commandInterfaces": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true },
+        "stateInterfaces": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true }
+      }
+    },
+    "ros2Controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "joints", "commandInterfaces", "stateInterfaces"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^(?!(?:controller_manager|joint_state_broadcaster)$)[A-Za-z_][A-Za-z0-9_]*$" },
+        "type": { "enum": ["joint_trajectory_controller/JointTrajectoryController", "forward_command_controller/ForwardCommandController"] },
+        "joints": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true },
+        "commandInterfaces": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true },
+        "stateInterfaces": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true }
+      }
+    },
+    "ros2Control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "name", "type", "joints", "controllers", "controllerManagerUpdateRate", "gazeboPluginEnabled", "gazeboPluginFilename", "gazeboPluginClass"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "type": { "enum": ["system", "actuator", "sensor"] },
+        "plugin": { "$ref": "#/$defs/nonEmptyString" },
+        "joints": { "type": "array", "items": { "$ref": "#/$defs/ros2ControlJoint" } },
+        "controllers": { "type": "array", "items": { "$ref": "#/$defs/ros2Controller" } },
+        "controllerManagerUpdateRate": { "type": "integer", "minimum": 1 },
+        "gazeboPluginEnabled": { "type": "boolean" },
+        "gazeboPluginFilename": { "$ref": "#/$defs/nonEmptyString" },
+        "gazeboPluginClass": { "$ref": "#/$defs/nonEmptyString" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+          "then": {
+            "required": ["plugin"],
+            "properties": { "joints": { "minItems": 1 } }
+          }
+        }
+      ]
+    },
+    "ros2Profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "distribution", "gazeboDistribution", "modernGazebo", "ros2Control"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "distribution": { "enum": ["lyrical", "jazzy"] },
+        "gazeboDistribution": { "enum": ["jetty", "harmonic"] },
+        "modernGazebo": { "const": true },
+        "ros2Control": { "$ref": "#/$defs/ros2Control" }
+      }
+    },
+    "ros1Profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "legacy"],
+      "properties": { "enabled": { "type": "boolean" }, "legacy": { "const": true } }
+    },
+    "isaacProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "enabled", "robotType", "baseType", "mergeMesh", "mergeFixedJoints", "allowSelfCollision", "collisionFromVisuals", "collisionType", "debugMode", "runAssetTransformer", "runMultiPhysicsConversion", "packageMappings"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "enabled": { "type": "boolean" },
+        "isaacSimVersion": { "$ref": "#/$defs/exactVersion" },
+        "robotType": { "enum": ["Default", "End Effector", "Manipulator", "Humanoid", "Wheeled", "Holonomic", "Quadruped", "Mobile Manipulators", "Aerial"] },
+        "baseType": { "enum": ["Source", "Fixed", "Mobile"] },
+        "mergeMesh": { "type": "boolean" },
+        "mergeFixedJoints": { "type": "boolean" },
+        "allowSelfCollision": { "type": "boolean" },
+        "collisionFromVisuals": { "type": "boolean" },
+        "collisionType": { "enum": ["convex_hull", "convex_decomposition", "bounding_sphere", "bounding_cube"] },
+        "debugMode": { "type": "boolean" },
+        "runAssetTransformer": { "type": "boolean" },
+        "runMultiPhysicsConversion": { "type": "boolean" },
+        "packageMappings": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+          "additionalProperties": { "$ref": "#/$defs/portableRelativePath" }
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "enabled": { "const": true } } }, "then": { "required": ["isaacSimVersion"] } }
+      ]
+    },
+    "actuatorGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "controlMode", "joints"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "controlMode": { "enum": ["position", "velocity", "effort", "passive"] },
+        "joints": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true },
+        "stiffness": { "type": "number", "minimum": 0 },
+        "damping": { "type": "number", "minimum": 0 },
+        "effortLimit": { "type": "number", "exclusiveMinimum": 0 },
+        "velocityLimit": { "type": "number", "exclusiveMinimum": 0 },
+        "armature": { "type": "number", "minimum": 0 },
+        "friction": { "type": "number", "minimum": 0 }
+      }
+    },
+    "isaacLabProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "enabled", "backend", "primPath", "rootPosition", "rootRotationWxyz", "jointPositions", "jointVelocities", "actuatorGroups", "physics", "smokeEnvironmentCount", "smokeStepCount"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "enabled": { "type": "boolean" },
+        "isaacLabVersion": { "$ref": "#/$defs/exactVersion" },
+        "backend": { "const": "physx" },
+        "primPath": { "$ref": "#/$defs/nonEmptyString" },
+        "rootPosition": { "$ref": "#/$defs/vector3" },
+        "rootRotationWxyz": { "$ref": "#/$defs/quaternionWxyz" },
+        "jointPositions": { "type": "object", "additionalProperties": { "type": "number" } },
+        "jointVelocities": { "type": "object", "additionalProperties": { "type": "number" } },
+        "actuatorGroups": { "type": "array", "items": { "$ref": "#/$defs/actuatorGroup" } },
+        "physics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabledSelfCollisions", "solverPositionIterationCount", "solverVelocityIterationCount", "enableGyroscopicForces", "maxDepenetrationVelocity"],
+          "properties": {
+            "enabledSelfCollisions": { "type": "boolean" },
+            "solverPositionIterationCount": { "type": "integer", "minimum": 1 },
+            "solverVelocityIterationCount": { "type": "integer", "minimum": 0 },
+            "enableGyroscopicForces": { "type": "boolean" },
+            "maxDepenetrationVelocity": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "smokeEnvironmentCount": { "type": "integer", "minimum": 1 },
+        "smokeStepCount": { "type": "integer", "minimum": 1 }
+      },
+      "allOf": [
+        { "if": { "properties": { "enabled": { "const": true } } }, "then": { "required": ["isaacLabVersion"] } }
+      ]
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "ros2", "ros1", "isaac", "isaacLab"],
+      "properties": {
+        "package": { "$ref": "#/$defs/packageProfile" },
+        "ros2": { "$ref": "#/$defs/ros2Profile" },
+        "ros1": { "$ref": "#/$defs/ros1Profile" },
+        "isaac": { "$ref": "#/$defs/isaacProfile" },
+        "isaacLab": { "$ref": "#/$defs/isaacLabProfile" }
+      }
+    }
+  }
+}

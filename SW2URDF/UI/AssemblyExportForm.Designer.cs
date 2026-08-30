@@ -241,7 +241,7 @@
             this.buttonLinksExportUrdfOnly.Name = "buttonLinksExportUrdfOnly";
             this.buttonLinksExportUrdfOnly.Size = new System.Drawing.Size(150, 21);
             this.buttonLinksExportUrdfOnly.TabIndex = 94;
-            this.buttonLinksExportUrdfOnly.Text = "Export URDF Only...";
+            this.buttonLinksExportUrdfOnly.Text = "Export URDF Without Meshes...";
             this.buttonLinksExportUrdfOnly.UseVisualStyleBackColor = true;
             this.buttonLinksExportUrdfOnly.Click += new System.EventHandler(this.ButtonLinksExportUrdfOnlyClick);
             // 

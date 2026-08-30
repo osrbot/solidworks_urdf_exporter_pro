@@ -68,6 +68,6 @@ SolidWorks COM/RPC 异常可能使 Live API 测试或预览失败。重启 Solid
 ## 构建问题
 
 - 检查 `SolidWorksInstallDir` 是否指向包含匹配 Interop DLL 的实际安装目录。
-- 使用 x64 和 .NET Framework 4.5.2。
+- 使用 x64 和 .NET Framework 4.8。
 - 若资源/Interop 工具缺失，安装 Visual Studio `.NET desktop development` 和对应 SolidWorks API Tools。
 - Release 安装包必须使用 Inno Setup 6.3.0–6.3.3；更新版本会被当前可审计打包脚本拒绝。
