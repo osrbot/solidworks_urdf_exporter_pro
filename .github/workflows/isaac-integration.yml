@@ -30,8 +30,6 @@ jobs:
   convert-and-smoke:
     runs-on: [self-hosted, Linux, X64, gpu, isaac-sim]
     timeout-minutes: 90
-    env:
-      OSURDF_ISAAC_WORK: ${{ runner.temp }}/osurdf-isaac-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -46,6 +44,7 @@ jobs:
       - name: Build fixture Bundle
         shell: bash
         env:
+          OSURDF_ISAAC_WORK: ${{ runner.temp }}/osurdf-isaac-${{ github.run_id }}-${{ github.run_attempt }}
           REQUESTED_ISAAC_SIM_VERSION: ${{ inputs.isaac_sim_version }}
           RUN_ISAAC_LAB: ${{ inputs.run_isaac_lab }}
           REQUESTED_ISAAC_LAB_VERSION: ${{ inputs.isaac_lab_version }}
@@ -84,6 +83,8 @@ jobs:
       - name: Run the explicit Isaac Lab fixture smoke test
         if: inputs.run_isaac_lab
         shell: bash
+        env:
+          OSURDF_ISAAC_WORK: ${{ runner.temp }}/osurdf-isaac-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
           : "${ISAACLAB_PYTHON:?Set ISAACLAB_PYTHON to the pinned Isaac Lab Python environment}"
@@ -96,4 +97,6 @@ jobs:
       - name: Clean temporary integration workspace
         if: always()
         shell: bash
+        env:
+          OSURDF_ISAAC_WORK: ${{ runner.temp }}/osurdf-isaac-${{ github.run_id }}-${{ github.run_attempt }}
         run: rm -rf -- "$OSURDF_ISAAC_WORK"
