@@ -61,6 +61,10 @@ namespace SW2URDF.Test
             Assert.Contains("worktree remove", buildScript);
             Assert.Contains("local-build-from-immutable-git-worktree", buildScript);
             Assert.Contains("$StagedSolidWorksDirectory", buildScript);
+            Assert.Contains(
+                "$VsWhere -latest -products * -requires Microsoft.Component.MSBuild",
+                buildScript);
+            Assert.Contains("$VsWhere -latest -products * -find", buildScript);
             Assert.Contains("Inno Setup compiler was not found", buildScript);
             Assert.Contains("requires Inno Setup 6.3.0 through 6.3.3", buildScript);
             Assert.Contains("Source changed during packaging. The installer was not promoted", buildScript);

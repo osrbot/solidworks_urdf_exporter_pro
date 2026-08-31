@@ -84,8 +84,14 @@ if ([string]::IsNullOrWhiteSpace($WindowsDir)) {
 $FrameworkMSBuild = Join-Path $WindowsDir "Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
 $MSBuild = $null
 if (Test-Path -LiteralPath $VsWhere) {
-    $MSBuild = & $VsWhere -latest -requires Microsoft.Component.MSBuild `
+    $MSBuild = & $VsWhere -latest -products * -requires Microsoft.Component.MSBuild `
         -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+    if (-not $MSBuild) {
+        # Some Build Tools installations contain MSBuild even when setup metadata
+        # does not advertise the Microsoft.Component.MSBuild component.
+        $MSBuild = & $VsWhere -latest -products * -find `
+            "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+    }
 }
 if (-not $MSBuild -and (Test-Path -LiteralPath $FrameworkMSBuild)) {
     $MSBuild = $FrameworkMSBuild
