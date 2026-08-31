@@ -761,9 +761,7 @@ namespace SW2URDF.UI
                 : ExportTargetOptions.LegacyCompatibilityDefaults();
             if (!exportSTL)
             {
-                logger.Info(
-                    "Using the lightweight URDF-only compatibility path; Robot Bundle, " +
-                    "profile, and Isaac outputs require a complete mesh export.");
+                logger.Info("Using the lightweight URDF-only compatibility path; Robot Bundle, profile, and Isaac outputs require a complete mesh export.");
             }
             IList<string> targetErrors = Exporter.ExportTargets.Validate();
             if (targetErrors.Count > 0)
@@ -1834,8 +1832,14 @@ namespace SW2URDF.UI
             Size preferred = TextRenderer.MeasureText(button.Text ?? "", button.Font);
             Size controlPreferred = button.GetPreferredSize(Size.Empty);
             button.Size = new Size(
-                Math.Max(designSize.Width, preferred.Width + 18),
-                Math.Max(designSize.Height, Math.Max(controlPreferred.Height, preferred.Height + 10)));
+                Math.Max(
+                    button.Width,
+                    Math.Max(
+                        designSize.Width,
+                        Math.Max(controlPreferred.Width, preferred.Width + 18))),
+                Math.Max(
+                    button.Height,
+                    Math.Max(designSize.Height, Math.Max(controlPreferred.Height, preferred.Height + 10))));
         }
 
         private void PositionJointFooterControls()

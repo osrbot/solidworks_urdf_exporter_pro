@@ -1171,6 +1171,12 @@ namespace SW2URDF.UI
             ModernWinFormsTheme.StyleSecondaryButton(buttonLinksPrevious);
             ModernWinFormsTheme.StyleSecondaryButton(buttonLinksExportUrdfOnly);
             ModernWinFormsTheme.StylePrimaryButton(buttonLinksFinish);
+            ResizeButtonToText(buttonJointCancel);
+            ResizeButtonToText(buttonJointNext);
+            ResizeButtonToText(buttonLinksCancel);
+            ResizeButtonToText(buttonLinksPrevious);
+            ResizeButtonToText(buttonLinksExportUrdfOnly);
+            ResizeButtonToText(buttonLinksFinish);
 
             label1.ForeColor = ModernWinFormsTheme.Accent;
             AxisRequiredLabel.ForeColor = ModernWinFormsTheme.Accent;

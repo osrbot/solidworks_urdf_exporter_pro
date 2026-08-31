@@ -394,7 +394,9 @@ namespace SW2URDF.Test
                 Assert.True(scrollPanel.AutoScroll);
 
                 packageName.Text = "rover_description";
-                Assert.Equal("ROS1/2: rover_description", packageHint.Text);
+                Assert.Equal(
+                    "Bundle | ROS2 | ROS1 legacy: rover_description",
+                    packageHint.Text);
                 Assert.DoesNotContain("and", packageHint.Text);
                 Assert.DoesNotContain("\u548c", packageHint.Text);
                 Assert.True(
