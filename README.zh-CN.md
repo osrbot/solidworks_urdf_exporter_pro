@@ -24,7 +24,7 @@ SolidWorks、复杂装配体、物理参数校验和长期发布维护中暴露�
 
 | 生产遗留问题 | 本维护分支的处理 |
 | --- | --- |
-| Link 树编辑可能在预览、PropertyManager 切换或重新打开后丢失 | 事务化编辑、v1.5 配置持久化、恢复草稿以及更严格的重复名称和陈旧状态校验 |
+| Link 树编辑可能在预览、PropertyManager 切换或重新打开后丢失 | 事务化编辑、严格的 v2 PID 配置持久化、恢复草稿以及更严格的重复名称和陈旧状态校验 |
 | 质量属性可能出现全零、符号错误或坐标系错位 | 显式系统单位、统一零件/装配体坐标转换、COM/边界检查、物理张量校验以及 API 主惯量对照 |
 | 导出前难以判断碰撞策略是否符合当前 Link | 按 Link 局部拟合、全部策略的 SolidWorks 临时预览、回退报告以及请求/实际策略记录 |
 | 外观配置和大型导出过程不易检查 | SolidWorks 外观读取、确定性 Link 自动配色、双语 UI、置顶进度和导出摘要 |
@@ -53,8 +53,17 @@ SolidWorks、复杂装配体、物理参数校验和长期发布维护中暴露�
   Lab profile；不会从 CAD 猜 actuator gains。
 - 为 Link/Joint 保存稳定 ID 与来源证据。SolidWorks Mate 识别只对原生可动装配提供需人工确认的
   建议，不作为 STEP 几何的兜底推断。
-- 在装配体特征 `URDF Export Configuration (v1.5)` 中保存 Link/Joint 配置，并在正式保存时
-  迁移可读的旧配置。
+- 在装配体特征 `URDF Export Configuration (v2)` 中保存 Link/Joint 配置。显式根文档参考使用
+  `OwnerScope=RootDocument` + 特征 PID；组件实例参考使用 `OwnerScope=ComponentInstance` +
+  组件 PID + 特征 PID。显示名只用于 UI，不参与身份判断。解析时先按 PID 找到 owner feature，
+  再通过 `IComponent2.GetCorresponding` 映射到准确的装配实例，不进行名称查找或活动配置切换。
+  v1.x 名称型配置不会自动迁移；
+  需要删除旧配置特征、重新创建并人工审核。v2 写入使用 canonical 与 hidden recovery 两个槽位：
+  写入现有槽位前先以 `revision=0` 使其失效，更新 payload 后最后提交非零 revision；每个槽位都
+  经过完整校验，加载时选择最新的有效 revision，避免中断的 COM 原位写覆盖最后有效状态。停在
+  `revision=0` 的槽位只表示未完成的准备写：加载时忽略，后续保存可直接重试。每个 SolidWorks
+  会话只缓存完整注册成功的 schema definition；初始化失败后重试会改用新的唯一定义，部分初始化的
+  `AttributeDef` 不会污染后续保存。
 - 提供事务化 Link 树画布：添加、重命名、重设父级、自动布局、框选以及分支复制/粘贴/删除。
 - 提供 Markdown 风格 Outline 编辑，使用 `#`、`##`、`###` 表示层级。
 - 对具有稳定保存路径的装配体，从 `%LOCALAPPDATA%\OSRBot\SW2URDF\export-drafts` 恢复未正式
@@ -243,17 +252,33 @@ MSBuild.exe SW2URDF\SW2URDF.csproj /t:Build /p:Configuration=Debug /p:Platform=x
 运行全部 Debug 测试：
 
 ```powershell
-TestRunner\bin\x64\Debug\net48\TestRunner.exe
+TestRunner\bin\Debug\net48\TestRunner.exe
 ```
 
 按类或名称过滤：
 
 ```powershell
-TestRunner\bin\x64\Debug\net48\TestRunner.exe TestMassPropertyFrameConverter
+TestRunner\bin\Debug\net48\TestRunner.exe TestMassPropertyFrameConverter
 ```
 
 Pure tests 可在 SolidWorks 不可用时运行。Live COM tests 需要兼容的本地 SolidWorks；RPC/COM
 不可用时可能失败。SolidWorks 2023 Live 覆盖不代表所有版本均已验证。
+
+深层参考几何 Live 测试使用一次性的五级装配体。运行前先关闭 SolidWorks；生成器会启动并独占
+一个隔离的 SolidWorks 进程；未传入 `--output-directory` 时在系统临时目录写入夹具，并在返回前
+关闭该进程。Live 测试有意只接受这种默认临时目录夹具：
+
+```powershell
+python -m pip install pywin32
+$fixture = python scripts\create_deep_reference_fixture.py `
+  examples\3_DOF_ARM\3_DOF_ARM.SLDASM
+$env:SW2URDF_RUN_DEEP_REFERENCE_TESTS = "1"
+$env:SW2URDF_TEST_DEEP_REFERENCE_ASSEMBLY = $fixture
+TestRunner\bin\Debug\net48\TestRunner.exe TestDeepReferenceGeometryIntegration
+```
+
+生成器只依赖公开的 `pywin32` 与 SolidWorks COM API。如果无法自动发现装配体模板，可显式传入
+`--assembly-template C:\path\assembly.asmdot`。
 
 ## 可复现安装包构建
 

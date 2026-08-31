@@ -1,15 +1,14 @@
 ﻿using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
-using SW2URDF.Legacy;
 using SW2URDF.URDF;
 using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Text;
-using System.Xml;
-using System.Xml.Serialization;
 
 namespace SW2URDF.URDFExport
 {
@@ -74,37 +73,34 @@ namespace SW2URDF.URDFExport
     /// Class to serialize URDF trees to string so they can be saved to an SW Attribute in the
     /// top-level assembly document.
     ///
-    /// Any changes to the serialization scheme need to support backwards compatibility in some way.
-    /// At least in regards to reading the old configuration. I'm also choosing to save any old xml
-    /// formats to a second attribute in case they need to be reloaded.
+    /// Version 2 stores reference geometry by persistent identity. Name-based configurations are
+    /// deliberately not migrated because a display name cannot identify nested geometry reliably.
     /// </summary>
     public static class ConfigurationSerialization
     {
         private static readonly log4net.ILog logger = Logger.GetLogger();
+        private static readonly object configurationSaveStateLock = new object();
+        private static bool configurationSaveInProgress;
+        private static readonly object configurationAttributeDefinitionLock = new object();
+        private static SldWorks configurationAttributeDefinitionOwner;
+        private static AttributeDef configurationAttributeDefinition;
 
         /// <summary>
         /// Current Serialization version
         /// </summary>
-        private const double SerializationVersion = 1.6;
-
-        /// <summary>
-        /// Previous versions of serialization were set at 1 in the SW Document. This is
-        /// used to denote the version at which the serialization scheme was modified.
-        /// </summary>
-        private const double MinDataContractVersion = 1.3;
+        private const double SerializationVersion = 2.0;
 
         /// <summary>
         /// The name given to the URDF configuration in the ModelDoc Feature tree. This is displayed to the
         /// user
         /// </summary>
-        public const string UrdfConfigurationSwAttributeName= "URDF Export Configuration (v1.6)";
+        public const string UrdfConfigurationSwAttributeName = "URDF Export Configuration (v2)";
 
-        public static List<string> PREVIOUS_URDF_CONFIGURATION_NAMES = new List<string>() {
-            "URDF Export Configuration (v1.5)",
-            "URDF Export Configuration (v1.4)",
-            "URDF Export Configuration (v1.3)",
-            "URDF Export Configuration"
-            };
+        private const string UrdfConfigurationRecoveryAttributeName =
+            "URDF Export Configuration (v2 recovery)";
+        private const string UrdfConfigurationAttributePrefix = "URDF Export Configuration";
+        private const string UrdfConfigurationDefinitionPrefix =
+            "SW2URDF.Configuration.v2.";
 
         #region Public Methods
 
@@ -125,25 +121,55 @@ namespace SW2URDF.URDFExport
         {
             string data = GetConfigTreeData(model, out double configVersion);
 
-            LinkNode basenode;
-            if (configVersion > SerializationVersion)
+            if (string.IsNullOrWhiteSpace(data))
             {
-                errorMessage = "The configuration saved in this model is newer than what this " +
-                    "exporter supports " + string.Format("({0} > {1})", configVersion, SerializationVersion) +
-                    ". Please update your exporter version.";
+                if (HasCurrentConfigurationAttribute(model))
+                {
+                    if (HasOnlyPreparedConfigurationSlots(model))
+                    {
+                        logger.Warn(
+                            "Ignoring an interrupted URDF configuration write. " +
+                            "No committed version 2 configuration was replaced.");
+                        errorMessage = string.Empty;
+                        return null;
+                    }
+                    errorMessage =
+                        "The version 2 URDF configuration slots are incomplete or unreadable. " +
+                        "They were not overwritten.";
+                    logger.Error(errorMessage);
+                    return null;
+                }
+                if (HasLegacyConfiguration(model))
+                {
+                    errorMessage = "This model contains a name-based URDF configuration from an older " +
+                        "exporter. Version 2 cannot identify nested reference geometry from those names. " +
+                        "Create and review a new URDF configuration.";
+                    logger.Warn(errorMessage);
+                    return null;
+                }
+                errorMessage = string.Empty;
+                return null;
+            }
+
+            if (!configVersion.Equals(SerializationVersion))
+            {
+                errorMessage = string.Format(
+                    "The saved URDF configuration version ({0}) is not supported by this exporter ({1}). " +
+                    "The configuration was not changed.",
+                    configVersion,
+                    SerializationVersion);
                 logger.Error(errorMessage);
                 return null;
             }
 
-            if (configVersion >= MinDataContractVersion)
+            LinkNode basenode = DeserializeFromString(data);
+            if (basenode == null)
             {
-                basenode = DeserializeFromString(data);
+                errorMessage = "The version 2 URDF configuration could not be deserialized. " +
+                    "The configuration was not changed.";
+                logger.Error(errorMessage);
+                return null;
             }
-            else
-            {
-                basenode = LoadConfigFromStringXML(data);
-            }
-
             errorMessage = string.Empty;
             return basenode;
         }
@@ -161,42 +187,55 @@ namespace SW2URDF.URDFExport
             LinkNode BaseNode,
             bool allowOverwrite)
         {
+            if (!TryBeginConfigurationSave())
+            {
+                return ConfigurationSaveResult.Failed(
+                    "A URDF configuration save is already in progress. " +
+                    "Wait for it to finish before saving again.");
+            }
+
             try
             {
-                string oldData = GetConfigTreeData(model, out double version);
-                if (oldData.Length > 0 && version > SerializationVersion)
+                ConfigurationAttributeCandidate current =
+                    GetCurrentConfigurationCandidate(model);
+                bool hasCurrentAttribute =
+                    HasCurrentConfigurationAttribute(model);
+                if (current == null &&
+                    !hasCurrentAttribute &&
+                    HasLegacyConfiguration(model))
                 {
-                    logger.Error(string.Format(
-                        "Refusing to overwrite newer URDF configuration version {0} with exporter version {1}.",
+                    return ConfigurationSaveResult.Failed(
+                        "A name-based URDF configuration from an older exporter still exists. " +
+                        "Delete it, create and review a version 2 configuration, then save again.");
+                }
+                if (current == null &&
+                    hasCurrentAttribute &&
+                    !HasOnlyPreparedConfigurationSlots(model))
+                {
+                    return ConfigurationSaveResult.Failed(
+                        "The existing version 2 URDF configuration slots are incomplete or unreadable. " +
+                        "Saving was stopped to protect it.");
+                }
+                string oldData = current == null
+                    ? string.Empty
+                    : current.Data;
+                double version = current == null
+                    ? 0.0
+                    : current.Version;
+                if (current != null && !version.Equals(SerializationVersion))
+                {
+                    return ConfigurationSaveResult.Failed(string.Format(
+                        "The existing URDF configuration version ({0}) is not supported by this exporter ({1}). " +
+                        "Saving was stopped to protect it.",
                         version,
                         SerializationVersion));
+                }
+                if (current != null &&
+                    !IsConfigurationPayloadReadable(oldData, version))
+                {
                     return ConfigurationSaveResult.Failed(
-                        "The saved URDF configuration is newer than this exporter supports. " +
-                        "Saving was stopped to protect the existing configuration.");
-                }
-                bool requiresUpgrade = oldData.Length > 0 && version < SerializationVersion;
-                string informationMessage = string.Empty;
-                SolidWorks.Interop.sldworks.Attribute currentAttribute =
-                    FindSWSaveAttribute(model, UrdfConfigurationSwAttributeName);
-                bool requiresStorageMigration = oldData.Length > 0 && currentAttribute == null;
-                if (currentAttribute != null)
-                {
-                    SaveAttributeSnapshot currentSnapshot;
-                    requiresStorageMigration =
-                        !SaveAttributeSnapshot.TryCapture(currentAttribute, out currentSnapshot) ||
-                        !currentSnapshot.IsComplete;
-                }
-                if (requiresUpgrade)
-                {
-                    informationMessage = "You have a URDF configuration with an outdated save format. It was automatically " +
-                        "upgraded to the latest version and saved to the configuration named \"" +
-                        UrdfConfigurationSwAttributeName + "\". " +
-                        "Old configurations can be deleted at your convenience.";
-                }
-                if (requiresStorageMigration)
-                {
-                    logger.Info(
-                        "The URDF configuration storage needs migration to the current complete attribute.");
+                        "The existing version 2 URDF configuration cannot be deserialized. " +
+                        "Saving was stopped to protect it.");
                 }
 
                 string newData = SerializeToString(BaseNode);
@@ -205,17 +244,17 @@ namespace SW2URDF.URDFExport
                     return ConfigurationSaveResult.Failed(
                         "Serializing this link failed. Please email your maintainer with your SW assembly.");
                 }
-                if (oldData == newData && !requiresUpgrade && !requiresStorageMigration)
+                if (oldData == newData)
                 {
                     return ConfigurationSaveResult.Unchanged();
                 }
-                if (!allowOverwrite && !requiresUpgrade && !requiresStorageMigration)
+                if (current != null && !allowOverwrite)
                 {
                     return ConfigurationSaveResult.ConfirmationRequired();
                 }
 
                 SaveDataToModelDoc(swApp, model, newData);
-                return ConfigurationSaveResult.Saved(informationMessage);
+                return ConfigurationSaveResult.Saved(string.Empty);
             }
             catch (Exception exception)
             {
@@ -224,11 +263,37 @@ namespace SW2URDF.URDFExport
                     "Saving the URDF configuration failed. Export was stopped. " +
                     "See the SW2URDF log for details.");
             }
+            finally
+            {
+                EndConfigurationSave();
+            }
         }
 
         #endregion Public Methods
 
         #region Private Methods
+
+        internal static bool TryBeginConfigurationSave()
+        {
+            lock (configurationSaveStateLock)
+            {
+                if (configurationSaveInProgress)
+                {
+                    return false;
+                }
+
+                configurationSaveInProgress = true;
+                return true;
+            }
+        }
+
+        internal static void EndConfigurationSave()
+        {
+            lock (configurationSaveStateLock)
+            {
+                configurationSaveInProgress = false;
+            }
+        }
 
         /// <summary>
         /// If someone updates the name of a LinkNode in the Treeview, it needs to be pushed down
@@ -267,10 +332,40 @@ namespace SW2URDF.URDFExport
             return DeserializeFromString(data);
         }
 
+        internal static bool TryGetSavedConfigurationUtc(
+            ModelDoc2 model,
+            out DateTime savedUtc)
+        {
+            savedUtc = default(DateTime);
+            try
+            {
+                ConfigurationAttributeCandidate current =
+                    GetCurrentConfigurationCandidate(model);
+                if (current == null)
+                {
+                    return false;
+                }
+
+                savedUtc = current.SavedAt.UtcDateTime;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                logger.Warn("Reading the URDF configuration timestamp failed.", exception);
+                return false;
+            }
+        }
+
         private static string SerializeToString(LinkNode node)
         {
             if (node == null)
             {
+                return string.Empty;
+            }
+            if (!HasValidPersistentReferences(node))
+            {
+                logger.Error(
+                    "The version 2 URDF configuration contains an invalid persistent reference.");
                 return string.Empty;
             }
 
@@ -316,6 +411,11 @@ namespace SW2URDF.URDFExport
                     try
                     {
                         Link link = (Link)ser.ReadObject(stream);
+                        if (!HasValidPersistentReferences(link, new HashSet<Link>()))
+                        {
+                            throw new SerializationException(
+                                "The version 2 URDF configuration contains an invalid persistent reference.");
+                        }
 
                         // By copying this link, we can ensure that all non-serialized properties are setup correctly
                         Link copy = link.Clone();
@@ -331,27 +431,59 @@ namespace SW2URDF.URDFExport
             return baseNode;
         }
 
-        /// <summary>
-        /// Load from the deprecated XML serialized scheme
-        /// </summary>
-        /// <param name="data">Data string to deserialize using XMLSerializer</param>
-        /// <returns>TreeView LinkNode</returns>
-        private static LinkNode LoadConfigFromStringXML(string data)
+        private static bool HasValidPersistentReferences(LinkNode node)
         {
-            LinkNode baseNode = null;
-            if (!string.IsNullOrWhiteSpace(data))
+            if (node == null || !HasValidPersistentReferences(node.Link))
             {
-                XmlSerializer serializer = new XmlSerializer(typeof(SerialNode));
-                XmlTextReader textReader = new XmlTextReader(new StringReader(data));
-                // Not reading external files, so this can set to prohibit. Resolves CA3075
-                textReader.DtdProcessing = DtdProcessing.Prohibit;
-                SerialNode sNode = (SerialNode)serializer.Deserialize(textReader);
-                textReader.Close();
-
-                baseNode = sNode.BuildLinkNodeFromSerialNode();
-                LinkTreeRootJointPolicy.Normalize(baseNode);
+                return false;
             }
-            return baseNode;
+
+            foreach (LinkNode child in node.Nodes)
+            {
+                if (!HasValidPersistentReferences(child))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool HasValidPersistentReferences(
+            Link link,
+            HashSet<Link> visited)
+        {
+            if (link == null || !visited.Add(link) ||
+                !HasValidPersistentReferences(link))
+            {
+                return false;
+            }
+            if (link.Children == null)
+            {
+                return false;
+            }
+
+            foreach (Link child in link.Children)
+            {
+                if (!HasValidPersistentReferences(child, visited))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool HasValidPersistentReferences(Link link)
+        {
+            return link != null &&
+                link.FrameReference != null &&
+                link.FrameReference.IsValidFor(
+                    ReferenceGeometryKind.CoordinateSystem,
+                    false) &&
+                link.Joint != null &&
+                link.Joint.AxisReference != null &&
+                link.Joint.AxisReference.IsValidFor(
+                    ReferenceGeometryKind.Axis,
+                    true);
         }
 
         /// <summary>
@@ -362,38 +494,140 @@ namespace SW2URDF.URDFExport
         /// <returns>Serialized data string</returns>
         private static string GetConfigTreeData(ModelDoc2 model, out double version)
         {
-            string data;
             version = 0.0;
-
-            SolidWorks.Interop.sldworks.Attribute currentAttribute =
-                FindSWSaveAttribute(model, UrdfConfigurationSwAttributeName);
-            if (TryReadConfigurationAttribute(currentAttribute, out data, out version))
+            ConfigurationAttributeCandidate current =
+                GetCurrentConfigurationCandidate(model);
+            if (current != null)
             {
-                return data;
+                version = current.Version;
+                return current.Data;
             }
 
-            if (currentAttribute != null)
+            if (HasCurrentConfigurationAttribute(model))
             {
                 logger.Warn(
-                    "Ignoring an incomplete current URDF configuration attribute and checking previous versions.");
-            }
-
-            foreach (string configurationName in PREVIOUS_URDF_CONFIGURATION_NAMES)
-            {
-                SolidWorks.Interop.sldworks.Attribute previousAttribute =
-                    FindSWSaveAttribute(model, configurationName);
-                if (TryReadConfigurationAttribute(previousAttribute, out data, out version))
-                {
-                    return data;
-                }
-                if (previousAttribute != null)
-                {
-                    logger.Warn(
-                        "Ignoring an unreadable previous URDF configuration attribute: " +
-                        configurationName);
-                }
+                    "The version 2 URDF configuration slots are incomplete or unreadable.");
             }
             return string.Empty;
+        }
+
+        private static bool HasCurrentConfigurationAttribute(ModelDoc2 model)
+        {
+            return
+                FindSWSaveAttribute(
+                    model,
+                    UrdfConfigurationSwAttributeName) != null ||
+                FindSWSaveAttribute(
+                    model,
+                    UrdfConfigurationRecoveryAttributeName) != null;
+        }
+
+        private static bool HasOnlyPreparedConfigurationSlots(ModelDoc2 model)
+        {
+            SolidWorks.Interop.sldworks.Attribute canonical =
+                FindSWSaveAttribute(
+                    model,
+                    UrdfConfigurationSwAttributeName);
+            SolidWorks.Interop.sldworks.Attribute recovery =
+                FindSWSaveAttribute(
+                    model,
+                    UrdfConfigurationRecoveryAttributeName);
+            bool hasSlot = false;
+            foreach (SolidWorks.Interop.sldworks.Attribute attribute in
+                new[] { canonical, recovery })
+            {
+                if (attribute == null)
+                {
+                    continue;
+                }
+                hasSlot = true;
+                if (!IsPreparedConfigurationSlot(attribute))
+                {
+                    return false;
+                }
+            }
+            return hasSlot;
+        }
+
+        internal static bool IsPreparedConfigurationSlot(
+            SolidWorks.Interop.sldworks.Attribute attribute)
+        {
+            if (attribute == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                string[] requiredParameters =
+                {
+                    "data",
+                    "name",
+                    "date",
+                    "exporterVersion",
+                    "revision"
+                };
+                foreach (string parameterName in requiredParameters)
+                {
+                    if (attribute.GetParameter(parameterName) == null)
+                    {
+                        return false;
+                    }
+                }
+
+                return attribute.GetParameter("revision").GetDoubleValue() == 0.0;
+            }
+            catch (Exception exception)
+            {
+                logger.Warn(
+                    "Reading an uncommitted URDF configuration slot failed.",
+                    exception);
+                return false;
+            }
+        }
+
+        private static bool HasLegacyConfiguration(ModelDoc2 model)
+        {
+            object[] objects = model.FeatureManager.GetFeatures(true) as object[];
+            if (objects == null)
+            {
+                return false;
+            }
+
+            foreach (Feature feature in CommonSwOperations.EnumerateComObjects<Feature>(
+                objects,
+                "searching for legacy URDF configuration attributes"))
+            {
+                if (feature.GetTypeName2() != "Attribute")
+                {
+                    continue;
+                }
+                SolidWorks.Interop.sldworks.Attribute attribute =
+                    CommonSwOperations.TryCastComObject<SolidWorks.Interop.sldworks.Attribute>(
+                        feature.GetSpecificFeature2(),
+                        "reading a legacy URDF configuration attribute");
+                if (attribute == null)
+                {
+                    continue;
+                }
+                string featureName = feature.Name ?? string.Empty;
+                string definitionName = attribute.GetName() ?? string.Empty;
+                bool isCurrent =
+                    IsConfigurationSlotName(featureName) ||
+                    IsConfigurationSlotName(definitionName);
+                bool hasConfigurationPrefix =
+                    featureName.StartsWith(
+                        UrdfConfigurationAttributePrefix,
+                        StringComparison.Ordinal) ||
+                    definitionName.StartsWith(
+                        UrdfConfigurationAttributePrefix,
+                        StringComparison.Ordinal);
+                if (!isCurrent && hasConfigurationPrefix)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static bool TryReadConfigurationAttribute(
@@ -422,13 +656,6 @@ namespace SW2URDF.URDFExport
                 {
                     return false;
                 }
-                if (version <= SerializationVersion &&
-                    !IsConfigurationPayloadReadable(data, version))
-                {
-                    data = string.Empty;
-                    version = 0.0;
-                    return false;
-                }
                 logger.Info(string.Format(
                     "URDF configuration found: attribute={0}, version={1}, characters={2}",
                     swAttribute.GetName(),
@@ -445,19 +672,122 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private static bool IsConfigurationPayloadReadable(string data, double version)
+        private static ConfigurationAttributeCandidate
+            GetCurrentConfigurationCandidate(ModelDoc2 model)
         {
+            TryCreateConfigurationCandidate(
+                FindSWSaveAttribute(
+                    model,
+                    UrdfConfigurationSwAttributeName),
+                UrdfConfigurationSwAttributeName,
+                out ConfigurationAttributeCandidate canonical);
+            TryCreateConfigurationCandidate(
+                FindSWSaveAttribute(
+                    model,
+                    UrdfConfigurationRecoveryAttributeName),
+                UrdfConfigurationRecoveryAttributeName,
+                out ConfigurationAttributeCandidate recovery);
+
+            if (canonical == null)
+            {
+                return recovery;
+            }
+            if (recovery == null)
+            {
+                return canonical;
+            }
+            if (canonical.Revision != recovery.Revision)
+            {
+                return canonical.Revision > recovery.Revision
+                    ? canonical
+                    : recovery;
+            }
+            if (canonical.SavedAt != recovery.SavedAt)
+            {
+                return canonical.SavedAt > recovery.SavedAt
+                    ? canonical
+                    : recovery;
+            }
+            return canonical;
+        }
+
+        private static bool TryCreateConfigurationCandidate(
+            SolidWorks.Interop.sldworks.Attribute attribute,
+            string attributeName,
+            out ConfigurationAttributeCandidate candidate)
+        {
+            candidate = null;
+            if (!TryReadConfigurationAttribute(
+                    attribute,
+                    out string data,
+                    out double version) ||
+                !version.Equals(SerializationVersion) ||
+                !IsConfigurationPayloadReadable(data, version))
+            {
+                return false;
+            }
+
             try
             {
-                LinkNode node = version >= MinDataContractVersion
-                    ? DeserializeFromString(data)
-                    : LoadConfigFromStringXML(data);
-                return node != null;
+                Parameter revisionParameter =
+                    attribute.GetParameter("revision");
+                Parameter dateParameter = attribute.GetParameter("date");
+                if (revisionParameter == null || dateParameter == null)
+                {
+                    return false;
+                }
+                double revision = revisionParameter.GetDoubleValue();
+                if (Double.IsNaN(revision) ||
+                    Double.IsInfinity(revision) ||
+                    revision < 1.0 ||
+                    revision > 9007199254740991D ||
+                    Math.Floor(revision) != revision)
+                {
+                    return false;
+                }
+                string date = dateParameter.GetStringValue() ?? string.Empty;
+                if (!DateTimeOffset.TryParse(
+                        date,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind,
+                        out DateTimeOffset savedAt))
+                {
+                    return false;
+                }
+
+                candidate = new ConfigurationAttributeCandidate
+                {
+                    AttributeName = attributeName,
+                    Data = data,
+                    Version = version,
+                    Revision = revision,
+                    SavedAt = savedAt
+                };
+                return true;
             }
             catch (Exception exception)
             {
                 logger.Warn(
-                    "URDF configuration payload could not be read; an older attribute will be checked.",
+                    "Reading a committed URDF configuration slot failed.",
+                    exception);
+                return false;
+            }
+        }
+
+        private static bool IsConfigurationPayloadReadable(string data, double version)
+        {
+            if (!version.Equals(SerializationVersion))
+            {
+                return false;
+            }
+            try
+            {
+                return DeserializeFromString(data) != null;
+            }
+            catch (Exception exception)
+            {
+                logger.Warn(
+                    "The version 2 URDF configuration payload could not be read.",
                     exception);
                 return false;
             }
@@ -486,13 +816,33 @@ namespace SW2URDF.URDFExport
                         CommonSwOperations.TryCastComObject<SolidWorks.Interop.sldworks.Attribute>(
                             feature.GetSpecificFeature2(),
                             "reading a URDF configuration attribute");
-                    if (att != null && att.GetName() == featName)
+                    if (att != null &&
+                        (string.Equals(
+                             feature.Name,
+                             featName,
+                             StringComparison.Ordinal) ||
+                         string.Equals(
+                             att.GetName(),
+                             featName,
+                             StringComparison.Ordinal)))
                     {
                         return feature;
                     }
                 }
             }
             return null;
+        }
+
+        private static bool IsConfigurationSlotName(string name)
+        {
+            return string.Equals(
+                    name,
+                    UrdfConfigurationSwAttributeName,
+                    StringComparison.Ordinal) ||
+                string.Equals(
+                    name,
+                    UrdfConfigurationRecoveryAttributeName,
+                    StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -527,29 +877,184 @@ namespace SW2URDF.URDFExport
                 FindSWSaveAttribute(model, name);
             if (existingAttribute != null)
             {
+                EnsureConfigurationAttributeSchema(existingAttribute, name);
                 return existingAttribute;
             }
 
-            int ConfigurationOptions = (int)swInConfigurationOpts_e.swAllConfiguration;
+            return CreateNewConfigurationAttribute(swApp, model, name);
+        }
 
-            int Options = 0;
-            AttributeDef saveConfigurationAttributeDef;
-            saveConfigurationAttributeDef = swApp.DefineAttribute(UrdfConfigurationSwAttributeName);
+        internal static SolidWorks.Interop.sldworks.Attribute
+            CreateNewConfigurationAttribute(
+                SldWorks swApp,
+                ModelDoc2 model,
+                string name)
+        {
+            if (swApp == null)
+            {
+                throw new ArgumentNullException("swApp");
+            }
+            if (model == null)
+            {
+                throw new ArgumentNullException("model");
+            }
 
-            saveConfigurationAttributeDef.AddParameter(
-                "data", (int)swParamType_e.swParamTypeString, 0, Options);
-            saveConfigurationAttributeDef.AddParameter(
-                "name", (int)swParamType_e.swParamTypeString, 0, Options);
-            saveConfigurationAttributeDef.AddParameter(
-                "date", (int)swParamType_e.swParamTypeString, 0, Options);
-            saveConfigurationAttributeDef.AddParameter(
-                "exporterVersion", (int)swParamType_e.swParamTypeDouble, SerializationVersion, Options);
-            saveConfigurationAttributeDef.Register();
-
+            int ConfigurationOptions =
+                (int)swInConfigurationOpts_e.swAllConfiguration;
+            int CreationOptions = string.Equals(
+                name,
+                UrdfConfigurationRecoveryAttributeName,
+                StringComparison.Ordinal)
+                ? 1
+                : 0;
+            AttributeDef saveConfigurationAttributeDef =
+                GetOrCreateConfigurationAttributeDefinition(swApp);
             SolidWorks.Interop.sldworks.Attribute saveExporterAttribute =
                 saveConfigurationAttributeDef.CreateInstance5(
-                    model, null, UrdfConfigurationSwAttributeName, Options, ConfigurationOptions);
+                    model, null, name, CreationOptions, ConfigurationOptions);
+            if (saveExporterAttribute == null)
+            {
+                throw new InvalidOperationException(
+                    "SolidWorks did not create the URDF configuration attribute instance '" +
+                    name + "'.");
+            }
+            EnsureConfigurationAttributeSchema(saveExporterAttribute, name);
             return saveExporterAttribute;
+        }
+
+        private static AttributeDef GetOrCreateConfigurationAttributeDefinition(
+            SldWorks swApp)
+        {
+            lock (configurationAttributeDefinitionLock)
+            {
+                if (ReferenceEquals(configurationAttributeDefinitionOwner, swApp) &&
+                    configurationAttributeDefinition != null)
+                {
+                    return configurationAttributeDefinition;
+                }
+
+                string definitionName =
+                    UrdfConfigurationDefinitionPrefix + Guid.NewGuid().ToString("N");
+                AttributeDef definition =
+                    swApp.DefineAttribute(definitionName) as AttributeDef;
+                if (definition == null)
+                {
+                    throw new InvalidOperationException(
+                        "SolidWorks did not provide the URDF configuration attribute definition '" +
+                        definitionName + "'.");
+                }
+
+                // A unique definition prevents a failed, partially initialized AttributeDef from
+                // poisoning retries in the same SolidWorks session. Cache only after every
+                // parameter and Register have succeeded.
+                AddRequiredAttributeParameter(
+                    definition,
+                    "data",
+                    swParamType_e.swParamTypeString,
+                    0,
+                    0);
+                AddRequiredAttributeParameter(
+                    definition,
+                    "name",
+                    swParamType_e.swParamTypeString,
+                    0,
+                    0);
+                AddRequiredAttributeParameter(
+                    definition,
+                    "date",
+                    swParamType_e.swParamTypeString,
+                    0,
+                    0);
+                AddRequiredAttributeParameter(
+                    definition,
+                    "exporterVersion",
+                    swParamType_e.swParamTypeDouble,
+                    SerializationVersion,
+                    0);
+                AddRequiredAttributeParameter(
+                    definition,
+                    "revision",
+                    swParamType_e.swParamTypeDouble,
+                    0,
+                    0);
+                if (!definition.Register())
+                {
+                    throw new InvalidOperationException(
+                        "SolidWorks refused to register the URDF configuration attribute definition '" +
+                        definitionName + "'.");
+                }
+
+                configurationAttributeDefinitionOwner = swApp;
+                configurationAttributeDefinition = definition;
+                return definition;
+            }
+        }
+
+        internal static void ResetConfigurationAttributeDefinitionCache(
+            SldWorks swApp)
+        {
+            lock (configurationAttributeDefinitionLock)
+            {
+                if (swApp != null &&
+                    configurationAttributeDefinitionOwner != null &&
+                    !ReferenceEquals(configurationAttributeDefinitionOwner, swApp))
+                {
+                    return;
+                }
+
+                configurationAttributeDefinition = null;
+                configurationAttributeDefinitionOwner = null;
+            }
+        }
+
+        private static void AddRequiredAttributeParameter(
+            AttributeDef definition,
+            string parameterName,
+            swParamType_e parameterType,
+            double defaultValue,
+            int parameterOptions)
+        {
+            if (!definition.AddParameter(
+                    parameterName,
+                    (int)parameterType,
+                    defaultValue,
+                    parameterOptions))
+            {
+                throw new InvalidOperationException(
+                    "SolidWorks refused to add URDF configuration parameter '" +
+                    parameterName + "' to its attribute definition.");
+            }
+        }
+
+        private static void EnsureConfigurationAttributeSchema(
+            SolidWorks.Interop.sldworks.Attribute attribute,
+            string attributeName)
+        {
+            string[] requiredParameters =
+            {
+                "data",
+                "name",
+                "date",
+                "exporterVersion",
+                "revision"
+            };
+            foreach (string parameterName in requiredParameters)
+            {
+                if (attribute.GetParameter(parameterName) == null)
+                {
+                    try
+                    {
+                        attribute.Delete(true);
+                    }
+                    catch (COMException)
+                    {
+                    }
+                    throw new InvalidOperationException(
+                        "The SolidWorks URDF configuration attribute '" +
+                        attributeName + "' is missing parameter '" +
+                        parameterName + "'.");
+                }
+            }
         }
 
         /// <summary>
@@ -562,124 +1067,105 @@ namespace SW2URDF.URDFExport
         private static void SaveDataToModelDoc(SldWorks swApp, ModelDoc2 model,
             string data)
         {
-            SolidWorks.Interop.sldworks.Attribute existingAttribute =
-                FindSWSaveAttribute(model, UrdfConfigurationSwAttributeName);
-            SaveAttributeSnapshot previous = null;
-            SolidWorks.Interop.sldworks.Attribute targetAttribute = null;
-            bool transactionMutated = false;
-
-            try
+            ConfigurationAttributeCandidate current =
+                GetCurrentConfigurationCandidate(model);
+            double nextRevision = current == null
+                ? 1.0
+                : current.Revision + 1.0;
+            if (nextRevision > 9007199254740991D)
             {
-                bool replaceExistingAttribute = false;
-                if (existingAttribute != null)
-                {
-                    if (!SaveAttributeSnapshot.TryCapture(existingAttribute, out previous))
-                    {
-                        throw new InvalidOperationException(
-                            "The existing URDF configuration cannot be snapshotted safely. " +
-                            "It was left unchanged.");
-                    }
-                    replaceExistingAttribute = !previous.IsComplete;
-                }
-                if (replaceExistingAttribute)
-                {
-                    logger.Warn(
-                        "Replacing an incomplete current URDF configuration attribute.");
-                    if (!existingAttribute.Delete(true))
-                    {
-                        throw new InvalidOperationException(
-                            "SolidWorks refused to delete the incomplete URDF configuration attribute.");
-                    }
-                    transactionMutated = true;
-                    existingAttribute = null;
-                    if (FindSWSaveAttribute(model, UrdfConfigurationSwAttributeName) != null)
-                    {
-                        throw new InvalidOperationException(
-                            "The incomplete URDF configuration attribute still exists after deletion.");
-                    }
-                }
+                throw new InvalidOperationException(
+                    "The URDF configuration revision exceeded the exact integer range.");
+            }
 
-                if (existingAttribute == null)
-                {
-                    transactionMutated = true;
-                }
-                targetAttribute = CreateSWSaveAttribute(
+            string savedAt = DateTimeOffset.UtcNow.ToString(
+                "O",
+                CultureInfo.InvariantCulture);
+            if (current != null &&
+                string.Equals(
+                    current.AttributeName,
+                    UrdfConfigurationRecoveryAttributeName,
+                    StringComparison.Ordinal))
+            {
+                WriteAndValidateConfigurationSlot(
                     swApp,
                     model,
-                    UrdfConfigurationSwAttributeName);
-                transactionMutated = true;
-                WriteSaveAttribute(
-                    targetAttribute,
+                    UrdfConfigurationSwAttributeName,
                     data,
-                    "config1",
-                    DateTime.Now.ToString("O"),
-                    SerializationVersion);
-
-                SolidWorks.Interop.sldworks.Attribute persistedAttribute =
-                    FindSWSaveAttribute(model, UrdfConfigurationSwAttributeName);
-                string persistedData;
-                double persistedVersion;
-                if (!TryReadConfigurationAttribute(
-                        persistedAttribute,
-                        out persistedData,
-                        out persistedVersion) ||
-                    persistedData != data || persistedVersion != SerializationVersion)
-                {
-                    throw new InvalidOperationException(
-                        "SolidWorks did not persist the complete URDF configuration.");
-                }
+                    savedAt,
+                    nextRevision);
+                DeleteRecoveryAttribute(model);
+                return;
             }
-            catch
+
+            WriteAndValidateConfigurationSlot(
+                swApp,
+                model,
+                UrdfConfigurationRecoveryAttributeName,
+                data,
+                savedAt,
+                nextRevision);
+            WriteAndValidateConfigurationSlot(
+                swApp,
+                model,
+                UrdfConfigurationSwAttributeName,
+                data,
+                savedAt,
+                nextRevision);
+            DeleteRecoveryAttribute(model);
+        }
+
+        private static void WriteAndValidateConfigurationSlot(
+            SldWorks swApp,
+            ModelDoc2 model,
+            string attributeName,
+            string data,
+            string savedAt,
+            double revision)
+        {
+            SolidWorks.Interop.sldworks.Attribute attribute =
+                CreateSWSaveAttribute(swApp, model, attributeName);
+            WriteSaveAttribute(
+                attribute,
+                data,
+                "config1",
+                savedAt,
+                SerializationVersion,
+                revision);
+
+            SolidWorks.Interop.sldworks.Attribute persisted =
+                FindSWSaveAttribute(model, attributeName);
+            if (!TryCreateConfigurationCandidate(
+                    persisted,
+                    attributeName,
+                    out ConfigurationAttributeCandidate candidate) ||
+                candidate.Data != data ||
+                !candidate.Version.Equals(SerializationVersion) ||
+                !candidate.Revision.Equals(revision) ||
+                !string.Equals(
+                    candidate.SavedAt.ToString(
+                        "O",
+                        CultureInfo.InvariantCulture),
+                    savedAt,
+                    StringComparison.Ordinal))
             {
-                if (transactionMutated)
-                {
-                    try
-                    {
-                        if (previous == null)
-                        {
-                            SolidWorks.Interop.sldworks.Attribute createdAttribute =
-                                targetAttribute ?? FindSWSaveAttribute(
-                                    model,
-                                    UrdfConfigurationSwAttributeName);
-                            if (createdAttribute != null && !createdAttribute.Delete(true))
-                            {
-                                throw new InvalidOperationException(
-                                    "SolidWorks refused to delete the incomplete URDF configuration attribute.");
-                            }
-                            if (FindSWSaveAttribute(model, UrdfConfigurationSwAttributeName) != null)
-                            {
-                                throw new InvalidOperationException(
-                                    "The incomplete URDF configuration attribute still exists after rollback.");
-                            }
-                        }
-                        else
-                        {
-                            SolidWorks.Interop.sldworks.Attribute rollbackAttribute =
-                                existingAttribute ?? CreateSWSaveAttribute(
-                                    swApp,
-                                    model,
-                                    UrdfConfigurationSwAttributeName);
-                            WriteSaveAttribute(
-                                rollbackAttribute,
-                                previous.Data,
-                                previous.Name,
-                                previous.Date,
-                                previous.ExporterVersion);
-                            if (!previous.Matches(rollbackAttribute))
-                            {
-                                throw new InvalidOperationException(
-                                    "SolidWorks did not restore the previous URDF configuration attribute.");
-                            }
-                        }
-                    }
-                    catch (Exception rollbackException)
-                    {
-                        logger.Error(
-                            "Rolling back the URDF configuration attribute failed.",
-                            rollbackException);
-                    }
-                }
-                throw;
+                throw new InvalidOperationException(
+                    "SolidWorks did not persist and validate the complete URDF " +
+                    "configuration slot '" + attributeName + "'.");
+            }
+        }
+
+        private static void DeleteRecoveryAttribute(ModelDoc2 model)
+        {
+            SolidWorks.Interop.sldworks.Attribute recovery =
+                FindSWSaveAttribute(
+                    model,
+                    UrdfConfigurationRecoveryAttributeName);
+            if (recovery != null && !recovery.Delete(true))
+            {
+                logger.Warn(
+                    "The validated recovery configuration could not be removed. " +
+                    "It remains available as a redundant committed copy.");
             }
         }
 
@@ -688,19 +1174,62 @@ namespace SW2URDF.URDFExport
             string data,
             string name,
             string date,
-            double exporterVersion)
+            double exporterVersion,
+            double revision)
         {
             int configurationOptions = (int)swInConfigurationOpts_e.swAllConfiguration;
+            // Invalidate an existing slot before changing any value. Without this
+            // prepare marker, a crash could pair new data with the slot's old valid
+            // revision and make an interrupted write look committed.
+            SetDoubleParameter(
+                attribute,
+                "revision",
+                0.0,
+                configurationOptions);
+            SetOptionalStringParameter(attribute, "name", name, configurationOptions);
+            SetDoubleParameter(
+                attribute,
+                "exporterVersion",
+                exporterVersion,
+                configurationOptions);
             SetStringParameter(attribute, "data", data, configurationOptions);
-            SetStringParameter(attribute, "name", name, configurationOptions);
             SetStringParameter(attribute, "date", date, configurationOptions);
+            // The nonzero revision is the commit marker and must be written last.
+            SetDoubleParameter(
+                attribute,
+                "revision",
+                revision,
+                configurationOptions);
+        }
 
-            Parameter versionParameter = attribute.GetParameter("exporterVersion");
-            if (versionParameter == null ||
-                !versionParameter.SetDoubleValue2(exporterVersion, configurationOptions, ""))
+        private static void SetDoubleParameter(
+            SolidWorks.Interop.sldworks.Attribute attribute,
+            string parameterName,
+            double value,
+            int configurationOptions)
+        {
+            Parameter parameter = attribute.GetParameter(parameterName);
+            if (parameter == null ||
+                !parameter.SetDoubleValue2(value, configurationOptions, ""))
             {
                 throw new InvalidOperationException(
-                    "SolidWorks refused to write URDF configuration parameter 'exporterVersion'.");
+                    "SolidWorks refused to write URDF configuration parameter '" +
+                    parameterName + "'.");
+            }
+        }
+
+        private static void SetOptionalStringParameter(
+            SolidWorks.Interop.sldworks.Attribute attribute,
+            string parameterName,
+            string value,
+            int configurationOptions)
+        {
+            Parameter parameter = attribute.GetParameter(parameterName);
+            if (parameter != null &&
+                !parameter.SetStringValue2(value, configurationOptions, ""))
+            {
+                logger.Warn("SolidWorks did not update optional URDF configuration parameter '" +
+                    parameterName + "'.");
             }
         }
 
@@ -720,67 +1249,13 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private sealed class SaveAttributeSnapshot
+        private sealed class ConfigurationAttributeCandidate
         {
-            public string Data { get; private set; }
-            public string Name { get; private set; }
-            public string Date { get; private set; }
-            public double ExporterVersion { get; private set; }
-            public bool IsComplete { get; private set; }
-
-            public static bool TryCapture(
-                SolidWorks.Interop.sldworks.Attribute attribute,
-                out SaveAttributeSnapshot snapshot)
-            {
-                snapshot = null;
-                Parameter data = attribute.GetParameter("data");
-                Parameter version = attribute.GetParameter("exporterVersion");
-                if (data == null || version == null)
-                {
-                    return false;
-                }
-
-                string dataValue = data.GetStringValue() ?? string.Empty;
-                double versionValue = version.GetDoubleValue();
-                Parameter name = attribute.GetParameter("name");
-                Parameter date = attribute.GetParameter("date");
-                string nameValue = name == null ? string.Empty : name.GetStringValue();
-                string dateValue = date == null ? string.Empty : date.GetStringValue();
-                bool payloadReadable = !string.IsNullOrWhiteSpace(dataValue) &&
-                    (versionValue > SerializationVersion ||
-                     ConfigurationSerialization.IsConfigurationPayloadReadable(
-                         dataValue,
-                         versionValue));
-
-                snapshot = new SaveAttributeSnapshot
-                {
-                    Data = dataValue,
-                    Name = string.IsNullOrWhiteSpace(nameValue) ? "config1" : nameValue,
-                    Date = dateValue ?? string.Empty,
-                    ExporterVersion = versionValue,
-                    IsComplete = payloadReadable &&
-                        !string.IsNullOrWhiteSpace(nameValue) &&
-                        !string.IsNullOrWhiteSpace(dateValue)
-                };
-                return true;
-            }
-
-            public bool Matches(SolidWorks.Interop.sldworks.Attribute attribute)
-            {
-                if (attribute == null)
-                {
-                    return false;
-                }
-                Parameter data = attribute.GetParameter("data");
-                Parameter name = attribute.GetParameter("name");
-                Parameter date = attribute.GetParameter("date");
-                Parameter version = attribute.GetParameter("exporterVersion");
-                return data != null && name != null && date != null && version != null &&
-                    string.Equals(Data, data.GetStringValue(), StringComparison.Ordinal) &&
-                    string.Equals(Name, name.GetStringValue(), StringComparison.Ordinal) &&
-                    string.Equals(Date, date.GetStringValue(), StringComparison.Ordinal) &&
-                    ExporterVersion.Equals(version.GetDoubleValue());
-            }
+            public string AttributeName { get; set; }
+            public string Data { get; set; }
+            public double Version { get; set; }
+            public double Revision { get; set; }
+            public DateTimeOffset SavedAt { get; set; }
         }
 
         #endregion Private Methods

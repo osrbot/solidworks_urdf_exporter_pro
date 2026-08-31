@@ -333,7 +333,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="GlobalSuppressions.cs" />
-    <Compile Include="Legacy\SerialNode.cs" />
     <Compile Include="UI\ChineseUiText.cs" />
     <Compile Include="UI\CollisionPreview.cs" />
     <Compile Include="UI\ConfigurationSaveInteraction.cs" />
@@ -364,6 +363,8 @@
     <Compile Include="Test\TestAssemblyExportLayout.cs" />
     <Compile Include="Test\TestAutomaticLinkColorScheme.cs" />
     <Compile Include="Test\TestCollisionPreview.cs" />
+    <Compile Include="Test\TestConfigurationFactory.cs" />
+    <Compile Include="Test\TestDeepReferenceGeometryIntegration.cs" />
     <Compile Include="Test\TestTreeSelectionUpdateGuard.cs" />
     <Compile Include="Test\TestExportSessionCloseCoordinator.cs" />
     <Compile Include="Test\TestExportSessionDraftStore.cs" />
@@ -386,6 +387,7 @@
     <Compile Include="Test\TestPropertyManager.cs" />
     <Compile Include="Test\TestROSFIles.cs" />
     <Compile Include="Test\TestSerialization.cs" />
+    <Compile Include="Test\TestStlCoordinateTransform.cs" />
     <Compile Include="Test\TestSWAttached.cs" />
     <Compile Include="Test\TestURDFAttributePrecision.cs" />
     <Compile Include="Test\TestURDFMerge.cs" />
@@ -424,6 +426,7 @@
     </Compile>
     <Compile Include="URDFExport\CSV\ContextToColumns.cs" />
     <Compile Include="URDFExport\CSV\CSVImportExport.cs" />
+    <Compile Include="URDFExport\CadFeatureReference.cs" />
     <Compile Include="URDFExport\ConfigurationSerialization.cs" />
     <Compile Include="URDFExport\ExportSessionCloseCoordinator.cs" />
     <Compile Include="URDFExport\ExportSessionDraftStore.cs" />
@@ -437,6 +440,8 @@
     <Compile Include="URDFExport\LinkTreeStores.cs" />
     <Compile Include="URDFExport\LinkTreeValidation.cs" />
     <Compile Include="URDFExport\MassPropertyFrameConverter.cs" />
+    <Compile Include="URDFExport\ReferenceGeometryCatalog.cs" />
+    <Compile Include="URDFExport\ReferenceGeometryResolver.cs" />
     <Compile Include="URDFExport\SolidWorksAppearanceResolver.cs" />
     <Compile Include="URDFExport\JointConfigurationPolicy.cs" />
     <Compile Include="URDFExport\MimicGraphValidator.cs" />

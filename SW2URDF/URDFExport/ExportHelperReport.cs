@@ -1102,7 +1102,7 @@ namespace SW2URDF.URDFExport
                 string warningQuantities = FormatQuantityList(linkRows
                     .Where(r => r.Row.IsWarning)
                     .Select(r => r.Row.Quantity));
-                string coordinateSystems = FormatQuantityList(linkRows.Select(r => r.CoordinateSystemName));
+                string coordinateSystems = FormatQuantityList(linkRows.Select(r => r.FrameDisplayLabel));
 
                 builder.AppendLine("| " + MarkdownCell(linkGroup.Key) +
                     " | " + MarkdownCell(coordinateSystems) +

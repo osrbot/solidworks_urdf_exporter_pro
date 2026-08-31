@@ -1648,6 +1648,7 @@
             this.comboBoxOrigin.Name = "comboBoxOrigin";
             this.comboBoxOrigin.Size = new System.Drawing.Size(468, 20);
             this.comboBoxOrigin.TabIndex = 225;
+            this.comboBoxOrigin.SelectionChangeCommitted += new System.EventHandler(this.ComboBoxOriginSelectionChangeCommitted);
             // 
             // label66
             // 

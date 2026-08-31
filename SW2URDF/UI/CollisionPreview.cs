@@ -699,7 +699,8 @@ namespace SW2URDF.UI
             int displayedBodyCount = 0;
             try
             {
-                componentTransform = component.Transform2;
+                componentTransform =
+                    ReferenceGeometryResolver.GetComponentToRootTransform(component);
                 if (componentTransform != null)
                 {
                     componentToDocument = MathOps.GetTransformation(componentTransform);

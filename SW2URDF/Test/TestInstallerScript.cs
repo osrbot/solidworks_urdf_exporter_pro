@@ -39,6 +39,32 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestDeepReferenceFixtureGeneratorIsRepositorySelfContained()
+        {
+            string script = ReadRepositoryFile(
+                "scripts",
+                "create_deep_reference_fixture.py");
+
+            Assert.Contains(
+                "DispatchEx(\"SldWorks.Application\")",
+                script);
+            Assert.Contains(
+                "pythoncom.VT_BYREF | pythoncom.VT_I4",
+                script);
+            Assert.Contains("AddComponent5", script);
+            Assert.Contains("model.Extension.SaveAs", script);
+            Assert.Contains("--assembly-template", script);
+            Assert.Contains("_assert_feature_exists", script);
+            Assert.DoesNotContain(".codex", script);
+            Assert.DoesNotContain(
+                "SOLIDWORKS_AUTOMATION_SCRIPTS",
+                script);
+            Assert.DoesNotContain("sw_session", script);
+            Assert.DoesNotContain("sw_connect", script);
+            Assert.DoesNotContain("sw_assembly", script);
+        }
+
+        [Fact]
         public void TestBuildInstallerUsesDateAndCommitOutputName()
         {
             string buildScript = ReadRepositoryFile("scripts", "BuildInstaller.ps1");
@@ -333,28 +359,52 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestConfigurationPersistenceHasRollbackAndLegacyFallback()
+        public void TestConfigurationPersistenceUsesValidatedRecoverySlotAndStrictVersionTwoBoundary()
         {
             string serialization = ReadRepositoryFile(
                 "SW2URDF", "URDFExport", "ConfigurationSerialization.cs");
 
-            Assert.Contains("!createdAttribute.Delete(true)", serialization);
-            Assert.Contains("SaveAttributeSnapshot.TryCapture", serialization);
-            Assert.Contains("Replacing an incomplete current URDF configuration attribute", serialization);
-            Assert.Contains("WriteSaveAttribute(", serialization);
-            Assert.Contains("Ignoring an incomplete current URDF configuration attribute", serialization);
-            Assert.Contains("IsConfigurationPayloadReadable(data, version)", serialization);
-            Assert.Contains("foreach (string configurationName in PREVIOUS_URDF_CONFIGURATION_NAMES)",
-                serialization);
-            Assert.Contains("SolidWorks did not persist the complete URDF configuration", serialization);
-            Assert.Contains("!parameter.SetStringValue2", serialization);
-            Assert.Contains("!versionParameter.SetDoubleValue2", serialization);
             Assert.Contains(
-                "oldData == newData && !requiresUpgrade && !requiresStorageMigration",
+                "URDF Export Configuration (v2 recovery)",
                 serialization);
-            Assert.Contains("!previous.Matches(rollbackAttribute)", serialization);
-            Assert.Contains("Refusing to overwrite newer URDF configuration version", serialization);
-            Assert.Contains("Saving was stopped to protect the existing configuration", serialization);
+            Assert.Contains("WriteAndValidateConfigurationSlot(", serialization);
+            Assert.Contains("GetCurrentConfigurationCandidate(model)", serialization);
+            Assert.Contains(
+                "Invalidate an existing slot before changing any value",
+                serialization);
+            Assert.Contains(
+                "The nonzero revision is the commit marker",
+                serialization);
+            Assert.Contains("DeleteRecoveryAttribute(model)", serialization);
+            Assert.Contains("WriteSaveAttribute(", serialization);
+            Assert.Contains("AddRequiredAttributeParameter(", serialization);
+            Assert.Contains("EnsureConfigurationAttributeSchema(", serialization);
+            Assert.Contains(
+                "UrdfConfigurationDefinitionPrefix + Guid.NewGuid().ToString(\"N\")",
+                serialization);
+            Assert.Contains("if (!definition.Register())", serialization);
+            Assert.Contains(
+                "ReferenceEquals(configurationAttributeDefinitionOwner, swApp)",
+                serialization);
+            Assert.Contains("configurationAttributeDefinition = definition", serialization);
+            Assert.Contains("TryBeginConfigurationSave()", serialization);
+            Assert.Contains("EndConfigurationSave()", serialization);
+            Assert.Contains("saveExporterAttribute == null", serialization);
+            Assert.Contains("SerializationVersion = 2.0", serialization);
+            Assert.Contains("URDF Export Configuration (v2)", serialization);
+            Assert.Contains("HasLegacyConfiguration(model)", serialization);
+            Assert.Contains("name-based URDF configuration", serialization);
+            Assert.Contains(
+                "SolidWorks did not persist and validate the complete URDF",
+                serialization);
+            Assert.Contains("!parameter.SetStringValue2", serialization);
+            Assert.Contains("!parameter.SetDoubleValue2", serialization);
+            Assert.Contains("oldData == newData", serialization);
+            Assert.Contains("Saving was stopped to protect it", serialization);
+            Assert.DoesNotContain("SaveAttributeSnapshot", serialization);
+            Assert.DoesNotContain("AggregateException", serialization);
+            Assert.DoesNotContain("PREVIOUS_URDF_CONFIGURATION_NAMES", serialization);
+            Assert.DoesNotContain("LoadConfigFromStringXML", serialization);
             Assert.DoesNotContain("MessageBox.", serialization);
 
             string interaction = ReadRepositoryFile(

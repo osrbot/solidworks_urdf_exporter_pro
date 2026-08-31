@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Runtime.Serialization;
 using System.Windows.Forms;
+using SW2URDF.URDFExport;
 
 namespace SW2URDF.URDF
 {
@@ -74,10 +75,7 @@ namespace SW2URDF.URDF
         public readonly Mimic Mimic;
 
         [DataMember]
-        public string CoordinateSystemName;
-
-        [DataMember]
-        public string AxisName;
+        public CadFeatureReference AxisReference;
 
         [DataMember(IsRequired = false, EmitDefaultValue = false)]
         public string ConfigurationSource;
@@ -106,6 +104,7 @@ namespace SW2URDF.URDF
             ConfigurationSource = "unknown";
             ConfigurationEvidence = string.Empty;
             ConfigurationUserConfirmed = false;
+            AxisReference = CadFeatureReference.Automatic(ReferenceGeometryKind.Axis);
 
             Attributes.Add(NameAttribute);
             Attributes.Add(TypeAttribute);
@@ -141,7 +140,7 @@ namespace SW2URDF.URDF
 
         public static bool IsAutomaticType(string jointType)
         {
-            return jointType == AutomaticallyDetectType || jointType == "Automatically Generate";
+            return jointType == AutomaticallyDetectType;
         }
 
         public static bool RequiresAxis(string jointType)
@@ -166,14 +165,6 @@ namespace SW2URDF.URDF
 
         public override void AppendToCSVDictionary(List<string> context, OrderedDictionary dictionary)
         {
-            string contextString = string.Join(".", context);
-
-            string coordSysContext = contextString + ".CoordSysName";
-            dictionary.Add(coordSysContext, CoordinateSystemName);
-
-            string axisContext = contextString + ".AxisName";
-            dictionary.Add(axisContext, AxisName);
-
             base.AppendToCSVDictionary(context, dictionary);
         }
 
@@ -184,9 +175,9 @@ namespace SW2URDF.URDF
             // The base method already performs the type check, so we don't have to for this cast
             Joint joint = (Joint)externalElement;
 
-            // These strings aren't kept as URDFAttribute objects and so they are tracked separately
-            CoordinateSystemName = joint.CoordinateSystemName;
-            AxisName = joint.AxisName;
+            AxisReference = joint.AxisReference == null
+                ? CadFeatureReference.None(ReferenceGeometryKind.Axis)
+                : joint.AxisReference.Clone();
             ConfigurationSource = joint.ConfigurationSource;
             ConfigurationEvidence = joint.ConfigurationEvidence;
             ConfigurationUserConfirmed = joint.ConfigurationUserConfirmed;
@@ -194,21 +185,14 @@ namespace SW2URDF.URDF
 
         public override void SetElementFromData(List<string> context, StringDictionary dictionary)
         {
-            string contextString = string.Join(".", context);
-
-            string coordSysContext = contextString + ".CoordSysName";
-            CoordinateSystemName = dictionary[coordSysContext];
-
-            string axisContext = contextString + ".AxisName";
-            AxisName = dictionary[axisContext];
-
             base.SetElementFromData(context, dictionary);
         }
 
         public void SetJointKinematics(Joint joint)
         {
-            CoordinateSystemName = joint.CoordinateSystemName;
-            AxisName = joint.AxisName;
+            AxisReference = joint.AxisReference == null
+                ? CadFeatureReference.None(ReferenceGeometryKind.Axis)
+                : joint.AxisReference.Clone();
             Type = joint.Type;
             Axis.SetElement(joint.Axis);
             Origin.SetElement(joint.Origin);

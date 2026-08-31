@@ -93,11 +93,7 @@ namespace SW2URDF.URDFExport.URDFMerge
             if (UseCSVJointKinematics)
             {
                 mergedLink.Joint.Origin.SetElement(csvLink.Joint.Origin);
-                mergedLink.Joint.CoordinateSystemName = csvLink.Joint.CoordinateSystemName;
-
                 mergedLink.Joint.Axis.SetElement(csvLink.Joint.Axis);
-                mergedLink.Joint.AxisName = csvLink.Joint.AxisName;
-
                 mergedLink.Joint.Type = csvLink.Joint.Type;
             }
 

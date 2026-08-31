@@ -282,11 +282,19 @@ namespace SW2URDF.Test
                     coordinateSystemName = "Origin_global";
                 }
                 ExportHelper exporter = new ExportHelper(swApp);
-                coordinateTransform = exporter.GetCoordinateSystemTransform(coordinateSystemName);
+                ReferenceGeometryEntry frameEntry = exporter.GetRefCoordinateSystems()
+                    .FirstOrDefault(entry =>
+                        String.Equals(
+                            entry.DisplayName,
+                            coordinateSystemName,
+                            StringComparison.Ordinal) &&
+                        String.IsNullOrWhiteSpace(entry.ComponentPath));
+                Assert.NotNull(frameEntry);
+                coordinateTransform = exporter.GetCoordinateSystemTransform(frameEntry.Reference);
                 Assert.NotNull(coordinateTransform);
 
                 Link link = new Link { Name = "inertia_preview_test_link" };
-                link.Joint.CoordinateSystemName = coordinateSystemName;
+                link.FrameReference = frameEntry.Reference.Clone();
                 link.SWComponents.Add(component);
                 link.Inertial.Mass.Value = 1.0;
                 link.Inertial.Inertia.Ixx = 0.001;

@@ -47,7 +47,10 @@ namespace SW2URDF.Test
                 LinkNode root = CreateTree();
                 root.Link.Joint.Name = "camera_joint";
                 root.Link.Joint.Type = "continuous";
-                root.Link.Joint.CoordinateSystemName = "Origin_global";
+                root.Link.FrameReference = CadFeatureReference.ExplicitRoot(
+                    ReferenceGeometryKind.CoordinateSystem,
+                    new byte[] { 1, 2, 3 },
+                    string.Empty);
 
                 Assert.True(store.Save(modelPath, root, "robot_description", directory));
                 Assert.True(store.TryLoad(modelPath, out ExportSessionDraft restored));
@@ -55,7 +58,10 @@ namespace SW2URDF.Test
                 Assert.True(restored.Root.IsBaseNode);
                 Assert.Equal(string.Empty, restored.Root.Link.Joint.Name);
                 Assert.Equal(string.Empty, restored.Root.Link.Joint.Type);
-                Assert.Equal("Origin_global", restored.Root.Link.Joint.CoordinateSystemName);
+                Assert.Equal(root.Link.FrameReference, restored.Root.Link.FrameReference);
+                Assert.Equal(
+                    ReferenceSelectionMode.None,
+                    restored.Root.Link.Joint.AxisReference.Mode);
                 Assert.Equal(
                     "camera_joint",
                     ((LinkNode)restored.Root.Nodes[0]).Link.Joint.Name);
@@ -130,6 +136,29 @@ namespace SW2URDF.Test
             {
                 DeleteTemporaryDirectory(directory);
             }
+        }
+
+        [Fact]
+        public void RecoveryDraftMustBeNewerThanCommittedConfiguration()
+        {
+            DateTime committed = new DateTime(
+                2026,
+                8,
+                31,
+                8,
+                0,
+                0,
+                DateTimeKind.Utc);
+
+            Assert.False(FileExportSessionDraftStore.IsDraftNewerThanConfiguration(
+                committed.AddSeconds(-1),
+                committed));
+            Assert.False(FileExportSessionDraftStore.IsDraftNewerThanConfiguration(
+                committed,
+                committed));
+            Assert.True(FileExportSessionDraftStore.IsDraftNewerThanConfiguration(
+                committed.AddSeconds(1),
+                committed));
         }
 
         private static LinkNode CreateTree()

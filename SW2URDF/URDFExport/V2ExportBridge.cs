@@ -433,16 +433,9 @@ namespace SW2URDF.URDFExport
 
         private static string BuildReference(LegacyJoint joint)
         {
-            List<string> references = new List<string>();
-            if (!string.IsNullOrWhiteSpace(joint.CoordinateSystemName))
-            {
-                references.Add("coordinateSystem=" + joint.CoordinateSystemName);
-            }
-            if (!string.IsNullOrWhiteSpace(joint.AxisName))
-            {
-                references.Add("axis=" + joint.AxisName);
-            }
-            return references.Count == 0 ? null : string.Join(";", references);
+            return joint.AxisReference == null
+                ? null
+                : "axisReference=" + joint.AxisReference.IdentityKey;
         }
 
         private static string NullIfBlank(string value)

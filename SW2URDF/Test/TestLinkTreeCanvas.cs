@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using Xunit;
 using Component2 = SolidWorks.Interop.sldworks.Component2;
@@ -719,12 +720,15 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void ConfigurationSerializationPreservesRecomputeStateAndAdditionalCollisions()
+        public void ConfigurationSerializationPreservesPersistentFrameAndAdditionalCollisions()
         {
             LinkNode root = CreateTree();
             root.Link.JointKinematicsDirty = true;
             root.Link.JointLimitsDirty = true;
-            root.Link.Joint.CoordinateSystemName = "全局原点";
+            root.Link.FrameReference = CreateCadReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                10,
+                "配置一");
             root.Link.AddAdditionalCollision(new Collision());
             MethodInfo serialize = typeof(ConfigurationSerialization).GetMethod(
                 "SerializeToString",
@@ -738,7 +742,7 @@ namespace SW2URDF.Test
 
             Assert.True(restored.Link.JointKinematicsDirty);
             Assert.True(restored.Link.JointLimitsDirty);
-            Assert.Equal("全局原点", restored.Link.Joint.CoordinateSystemName);
+            Assert.Equal(root.Link.FrameReference, restored.Link.FrameReference);
             Assert.Single(restored.Link.AdditionalCollisions);
         }
 
@@ -773,8 +777,12 @@ namespace SW2URDF.Test
             LinkNode root = CreateTree();
             root.Link.Joint.Name = "sensor_joint";
             root.Link.Joint.Type = "continuous";
-            root.Link.Joint.AxisName = "stale_axis";
-            root.Link.Joint.CoordinateSystemName = "Origin_global";
+            root.Link.Joint.AxisReference = CreateCadReference(
+                ReferenceGeometryKind.Axis,
+                11);
+            root.Link.FrameReference = CreateCadReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                12);
             root.Link.Joint.Parent.Name = "stale_parent";
             root.Link.Joint.Child.Name = "stale_child";
             root.Link.Joint.Mimic.JointName = "sensor_joint";
@@ -791,8 +799,8 @@ namespace SW2URDF.Test
             Assert.Equal("sensor_joint", root.Link.Joint.Name);
             Assert.Equal(string.Empty, restored.Link.Joint.Name);
             Assert.Equal(string.Empty, restored.Link.Joint.Type);
-            Assert.Equal(string.Empty, restored.Link.Joint.AxisName);
-            Assert.Equal("Origin_global", restored.Link.Joint.CoordinateSystemName);
+            Assert.Equal(ReferenceSelectionMode.None, restored.Link.Joint.AxisReference.Mode);
+            Assert.Equal(root.Link.FrameReference, restored.Link.FrameReference);
             Assert.Null(restored.Link.Joint.Parent.Name);
             Assert.Null(restored.Link.Joint.Child.Name);
             Assert.Null(restored.Link.Joint.Mimic.JointName);
@@ -807,13 +815,15 @@ namespace SW2URDF.Test
             LinkNode root = CreateTree();
             root.Link.Joint.Name = "sensor_joint";
             root.Link.Joint.Type = "continuous";
-            root.Link.Joint.CoordinateSystemName = "Origin_global";
+            root.Link.FrameReference = CreateCadReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                13);
 
             LinkNode projected = new LinkTreeSession(root).CreateProjection();
 
             Assert.Equal(string.Empty, projected.Link.Joint.Name);
             Assert.Equal(string.Empty, projected.Link.Joint.Type);
-            Assert.Equal("Origin_global", projected.Link.Joint.CoordinateSystemName);
+            Assert.Equal(root.Link.FrameReference, projected.Link.FrameReference);
             Assert.Equal(
                 "sensor_joint",
                 ((LinkNode)projected.Nodes[0]).Link.Joint.Name);
@@ -892,14 +902,15 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void LegacyAutomaticJointTypeIsNormalizedOnCapture()
+        public void NameBasedLegacyAutomaticJointTypeIsNotAccepted()
         {
             LinkNode root = CreateTree();
             ((LinkNode)root.Nodes[0]).Link.Joint.Type = "Automatically Generate";
 
             LinkNode projected = (LinkNode)new LinkTreeSession(root).CreateProjection().Nodes[0];
 
-            Assert.Equal(Joint.AutomaticallyDetectType, projected.Link.Joint.Type);
+            Assert.Equal("Automatically Generate", projected.Link.Joint.Type);
+            Assert.False(projected.Link.Joint.AreRequiredFieldsSatisfied());
         }
 
         [Fact]
@@ -1010,11 +1021,17 @@ namespace SW2URDF.Test
         {
             LinkNode root = CreateTree();
             LinkNode sensor = (LinkNode)root.Nodes[0];
-            sensor.Link.Joint.CoordinateSystemName = "origin_a";
-            sensor.Link.Joint.AxisName = "axis_a";
+            sensor.Link.FrameReference = CreateCadReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                20);
+            sensor.Link.Joint.AxisReference = CreateCadReference(
+                ReferenceGeometryKind.Axis,
+                21);
             LinkTreeSession session = new LinkTreeSession(root);
             LinkNode visible = session.CreateActiveProjection();
-            ((LinkNode)visible.Nodes[0]).Link.Joint.AxisName = "axis_b";
+            ((LinkNode)visible.Nodes[0]).Link.Joint.AxisReference = CreateCadReference(
+                ReferenceGeometryKind.Axis,
+                22);
 
             session.CaptureTree(visible);
 
@@ -1042,10 +1059,14 @@ namespace SW2URDF.Test
         public void RootCoordinateFrameChangeInvalidatesDescendantJoints()
         {
             LinkNode root = CreateTree();
-            root.Link.Joint.CoordinateSystemName = "global_a";
+            root.Link.FrameReference = CreateCadReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                30);
             LinkTreeSession session = new LinkTreeSession(root);
             LinkNode visible = session.CreateActiveProjection();
-            visible.Link.Joint.CoordinateSystemName = "global_b";
+            visible.Link.FrameReference = CreateCadReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                31);
 
             session.CaptureTree(visible);
 
@@ -1058,8 +1079,14 @@ namespace SW2URDF.Test
         {
             LinkNode root = CreateTree();
             LinkNode sourceNode = (LinkNode)root.Nodes[0];
-            sourceNode.Link.Joint.AxisName = "sensor_axis";
-            sourceNode.Link.Joint.CoordinateSystemName = "sensor_origin";
+            sourceNode.Link.Joint.Type = "continuous";
+            sourceNode.Link.Joint.Axis.SetXYZ(new[] { 1.0, 0.0, 0.0 });
+            sourceNode.Link.Joint.AxisReference = CreateCadReference(
+                ReferenceGeometryKind.Axis,
+                40);
+            sourceNode.Link.FrameReference = CreateCadReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                41);
             LinkTreeSession session = new LinkTreeSession(root);
             LinkTreeDocument edited = session.LoadTree();
             LinkTreeNode source = edited.Nodes.Single(node => node.Name == "sensor_link");
@@ -1075,8 +1102,10 @@ namespace SW2URDF.Test
             LinkNode projectedCopy = session.CreateProjection().Nodes
                 .Cast<LinkNode>()
                 .Single(node => node.Link.Name == "sensor_copy_link");
-            Assert.Equal("sensor_axis", projectedCopy.Link.Joint.AxisName);
-            Assert.Equal("sensor_origin", projectedCopy.Link.Joint.CoordinateSystemName);
+            Assert.Equal(sourceNode.Link.Joint.AxisReference,
+                projectedCopy.Link.Joint.AxisReference);
+            Assert.Equal(sourceNode.Link.FrameReference,
+                projectedCopy.Link.FrameReference);
             Assert.Empty(projectedCopy.Link.SWComponents);
             Assert.True(projectedCopy.IsIncomplete);
             Assert.True(projectedCopy.Link.isIncomplete);
@@ -1404,6 +1433,95 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void NestedReferenceWithoutATotalComponentTransformIsUnavailable()
+        {
+            CadFeatureReference reference = CreateCadReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                99);
+            Mock<SolidWorks.Interop.sldworks.ModelDoc2> owner =
+                new Mock<SolidWorks.Interop.sldworks.ModelDoc2>();
+            Mock<Component2> component = new Mock<Component2>();
+            component.SetupGet(item => item.Transform2)
+                .Returns(new Mock<SolidWorks.Interop.sldworks.MathTransform>().Object);
+            component.Setup(item => item.GetTotalTransform(false))
+                .Returns((SolidWorks.Interop.sldworks.MathTransform)null);
+            Mock<SolidWorks.Interop.sldworks.Feature> feature =
+                new Mock<SolidWorks.Interop.sldworks.Feature>();
+            ResolvedReferenceGeometry geometry = new ResolvedReferenceGeometry(
+                reference,
+                owner.Object,
+                component.Object,
+                feature.Object);
+            ReferenceGeometryResolver resolver =
+                new ReferenceGeometryResolver(owner.Object);
+
+            bool resolved = resolver.TryGetComponentTransform(
+                geometry,
+                out SolidWorks.Interop.sldworks.MathTransform transform,
+                out ReferenceGeometryResolution resolution);
+
+            Assert.False(resolved);
+            Assert.Null(transform);
+            Assert.Equal(
+                ReferenceResolutionStatus.TransformUnavailable,
+                resolution.Status);
+        }
+
+        [Fact]
+        public void TotalComponentTransformComFailureIsReportedAsUnavailable()
+        {
+            CadFeatureReference reference = CreateCadReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                100);
+            Mock<SolidWorks.Interop.sldworks.ModelDoc2> owner =
+                new Mock<SolidWorks.Interop.sldworks.ModelDoc2>();
+            Mock<Component2> component = new Mock<Component2>();
+            component.Setup(item => item.GetTotalTransform(false))
+                .Throws(new COMException("transform unavailable"));
+            ResolvedReferenceGeometry geometry = new ResolvedReferenceGeometry(
+                reference,
+                owner.Object,
+                component.Object,
+                new Mock<SolidWorks.Interop.sldworks.Feature>().Object);
+            ReferenceGeometryResolver resolver =
+                new ReferenceGeometryResolver(owner.Object);
+
+            bool resolved = resolver.TryGetComponentTransform(
+                geometry,
+                out SolidWorks.Interop.sldworks.MathTransform transform,
+                out ReferenceGeometryResolution resolution);
+
+            Assert.False(resolved);
+            Assert.Null(transform);
+            Assert.Equal(
+                ReferenceResolutionStatus.TransformUnavailable,
+                resolution.Status);
+        }
+
+        [Fact]
+        public void ComponentPersistentReferenceComFailureIsReportedAsUnavailable()
+        {
+            Mock<SolidWorks.Interop.sldworks.ModelDoc2> root =
+                new Mock<SolidWorks.Interop.sldworks.ModelDoc2>();
+            root.SetupGet(item => item.Extension)
+                .Throws(new COMException("extension unavailable"));
+            ReferenceGeometryResolver resolver =
+                new ReferenceGeometryResolver(root.Object);
+
+            ReferenceGeometryResolution resolution = resolver.Resolve(
+                CadFeatureReference.ExplicitComponent(
+                    ReferenceGeometryKind.CoordinateSystem,
+                    new byte[] { 1 },
+                    new byte[] { 2 },
+                    "renamed_configuration"));
+
+            Assert.False(resolution.IsResolved);
+            Assert.Equal(
+                ReferenceResolutionStatus.ComponentUnavailable,
+                resolution.Status);
+        }
+
+        [Fact]
         public void JointDofClassifierRejectsZeroUnknownAndMultiAxisResults()
         {
             string detectedType;
@@ -1486,14 +1604,17 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void AxislessJointTypesClearUrdfAxisButPreserveCadReferenceMetadata()
+        public void AxislessJointTypesClearUrdfAxisAndCadAxisReference()
         {
-            Joint joint = new Joint { Type = "revolute", AxisName = "Axis_wheel" };
+            Joint joint = new Joint { Type = "revolute" };
+            joint.AxisReference = CreateCadReference(
+                ReferenceGeometryKind.Axis,
+                50);
             joint.Axis.SetXYZ(new[] { 1.0, 0.0, 0.0 });
 
             JointConfigurationPolicy.Apply(joint, "floating");
 
-            Assert.Equal("Axis_wheel", joint.AxisName);
+            Assert.Equal(ReferenceSelectionMode.None, joint.AxisReference.Mode);
             Assert.False(joint.Axis.ElementContainsData());
         }
 
@@ -1587,27 +1708,29 @@ namespace SW2URDF.Test
                 BindingFlags.NonPublic | BindingFlags.Static);
 
             Assert.NotNull(method);
-            Assert.False((bool)method.Invoke(null, new object[] { "<broken", 1.5 }));
+            Assert.False((bool)method.Invoke(null, new object[] { "<broken", 2.0 }));
         }
 
         [Fact]
-        public void IncompleteConfigurationAttributeCannotProduceARollbackSnapshot()
+        public void IncompleteConfigurationAttributeCannotBecomeCommittedCandidate()
         {
-            Type snapshotType = typeof(ConfigurationSerialization).GetNestedType(
-                "SaveAttributeSnapshot",
-                BindingFlags.NonPublic);
-            MethodInfo method = snapshotType.GetMethod(
-                "TryCapture",
-                BindingFlags.Public | BindingFlags.Static);
+            MethodInfo method = typeof(ConfigurationSerialization).GetMethod(
+                "TryCreateConfigurationCandidate",
+                BindingFlags.NonPublic | BindingFlags.Static);
             Mock<SwAttribute> attribute = new Mock<SwAttribute>();
-            object[] arguments = { attribute.Object, null };
+            object[] arguments =
+            {
+                attribute.Object,
+                ConfigurationSerialization.UrdfConfigurationSwAttributeName,
+                null
+            };
 
             Assert.False((bool)method.Invoke(null, arguments));
-            Assert.Null(arguments[1]);
+            Assert.Null(arguments[2]);
         }
 
         [Fact]
-        public void ReadableConfigurationWithoutOptionalMetadataCanBeRolledBack()
+        public void ConfigurationCandidateRequiresRevisionAndTimestamp()
         {
             MethodInfo serialize = typeof(ConfigurationSerialization).GetMethod(
                 "SerializeToString",
@@ -1616,53 +1739,318 @@ namespace SW2URDF.Test
             Mock<SwParameter> data = new Mock<SwParameter>();
             data.Setup(parameter => parameter.GetStringValue()).Returns(payload);
             Mock<SwParameter> version = new Mock<SwParameter>();
-            version.Setup(parameter => parameter.GetDoubleValue()).Returns(1.5);
+            version.Setup(parameter => parameter.GetDoubleValue()).Returns(2.0);
             Mock<SwAttribute> attribute = new Mock<SwAttribute>();
             attribute.Setup(item => item.GetParameter("data")).Returns(data.Object);
             attribute.Setup(item => item.GetParameter("exporterVersion"))
                 .Returns(version.Object);
-            Type snapshotType = typeof(ConfigurationSerialization).GetNestedType(
-                "SaveAttributeSnapshot",
-                BindingFlags.NonPublic);
-            MethodInfo capture = snapshotType.GetMethod(
-                "TryCapture",
-                BindingFlags.Public | BindingFlags.Static);
-            object[] arguments = { attribute.Object, null };
+            MethodInfo create = typeof(ConfigurationSerialization).GetMethod(
+                "TryCreateConfigurationCandidate",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            object[] arguments =
+            {
+                attribute.Object,
+                ConfigurationSerialization.UrdfConfigurationSwAttributeName,
+                null
+            };
 
-            Assert.True((bool)capture.Invoke(null, arguments));
-            Assert.NotNull(arguments[1]);
-            Assert.False((bool)snapshotType.GetProperty("IsComplete")
-                .GetValue(arguments[1], null));
-            Assert.Equal(
-                payload,
-                snapshotType.GetProperty("Data").GetValue(arguments[1], null));
+            Assert.False((bool)create.Invoke(null, arguments));
+            Assert.Null(arguments[2]);
         }
 
         [Fact]
-        public void CorruptConfigurationPayloadStillProducesARollbackSnapshot()
+        public void CorruptConfigurationPayloadCannotBecomeCommittedCandidate()
         {
             Mock<SwParameter> data = new Mock<SwParameter>();
             data.Setup(parameter => parameter.GetStringValue()).Returns("<broken");
             Mock<SwParameter> version = new Mock<SwParameter>();
-            version.Setup(parameter => parameter.GetDoubleValue()).Returns(1.5);
+            version.Setup(parameter => parameter.GetDoubleValue()).Returns(2.0);
             Mock<SwAttribute> attribute = new Mock<SwAttribute>();
             attribute.Setup(item => item.GetParameter("data")).Returns(data.Object);
             attribute.Setup(item => item.GetParameter("exporterVersion"))
                 .Returns(version.Object);
-            Type snapshotType = typeof(ConfigurationSerialization).GetNestedType(
-                "SaveAttributeSnapshot",
-                BindingFlags.NonPublic);
-            MethodInfo capture = snapshotType.GetMethod(
-                "TryCapture",
-                BindingFlags.Public | BindingFlags.Static);
-            object[] arguments = { attribute.Object, null };
+            MethodInfo create = typeof(ConfigurationSerialization).GetMethod(
+                "TryCreateConfigurationCandidate",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            object[] arguments =
+            {
+                attribute.Object,
+                ConfigurationSerialization.UrdfConfigurationSwAttributeName,
+                null
+            };
 
-            Assert.True((bool)capture.Invoke(null, arguments));
-            Assert.False((bool)snapshotType.GetProperty("IsComplete")
-                .GetValue(arguments[1], null));
+            Assert.False((bool)create.Invoke(null, arguments));
+            Assert.Null(arguments[2]);
+        }
+
+        [Fact]
+        public void ConfigurationSlotIsInvalidatedBeforePayloadAndCommittedLast()
+        {
+            List<string> writes = new List<string>();
+            Mock<SwParameter> data = new Mock<SwParameter>();
+            data.Setup(parameter => parameter.SetStringValue2(
+                    It.IsAny<string>(),
+                    It.IsAny<int>(),
+                    It.IsAny<string>()))
+                .Callback(() => writes.Add("data"))
+                .Returns(true);
+            Mock<SwParameter> name = new Mock<SwParameter>();
+            name.Setup(parameter => parameter.SetStringValue2(
+                    It.IsAny<string>(),
+                    It.IsAny<int>(),
+                    It.IsAny<string>()))
+                .Callback(() => writes.Add("name"))
+                .Returns(true);
+            Mock<SwParameter> date = new Mock<SwParameter>();
+            date.Setup(parameter => parameter.SetStringValue2(
+                    It.IsAny<string>(),
+                    It.IsAny<int>(),
+                    It.IsAny<string>()))
+                .Callback(() => writes.Add("date"))
+                .Returns(true);
+            Mock<SwParameter> version = new Mock<SwParameter>();
+            version.Setup(parameter => parameter.SetDoubleValue2(
+                    It.IsAny<double>(),
+                    It.IsAny<int>(),
+                    It.IsAny<string>()))
+                .Callback(() => writes.Add("version"))
+                .Returns(true);
+            Mock<SwParameter> revision = new Mock<SwParameter>();
+            revision.Setup(parameter => parameter.SetDoubleValue2(
+                    It.IsAny<double>(),
+                    It.IsAny<int>(),
+                    It.IsAny<string>()))
+                .Callback<double, int, string>((value, _, __) =>
+                    writes.Add("revision:" + value.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture)))
+                .Returns(true);
+            Mock<SwAttribute> attribute = new Mock<SwAttribute>();
+            attribute.Setup(item => item.GetParameter("data")).Returns(data.Object);
+            attribute.Setup(item => item.GetParameter("name")).Returns(name.Object);
+            attribute.Setup(item => item.GetParameter("date")).Returns(date.Object);
+            attribute.Setup(item => item.GetParameter("exporterVersion"))
+                .Returns(version.Object);
+            attribute.Setup(item => item.GetParameter("revision"))
+                .Returns(revision.Object);
+            MethodInfo write = typeof(ConfigurationSerialization).GetMethod(
+                "WriteSaveAttribute",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            write.Invoke(null, new object[]
+            {
+                attribute.Object,
+                "payload",
+                "config1",
+                "date",
+                2.0,
+                3.0
+            });
+
             Assert.Equal(
-                "<broken",
-                snapshotType.GetProperty("Data").GetValue(arguments[1], null));
+                new[]
+                {
+                    "revision:0",
+                    "name",
+                    "version",
+                    "data",
+                    "date",
+                    "revision:3"
+                },
+                writes);
+        }
+
+        [Fact]
+        public void PreparedConfigurationSlotRequiresCompleteSchemaAndZeroRevision()
+        {
+            Mock<SwParameter> zeroRevision = new Mock<SwParameter>();
+            zeroRevision.Setup(parameter => parameter.GetDoubleValue()).Returns(0.0);
+            Mock<SwAttribute> prepared = new Mock<SwAttribute>();
+            prepared.Setup(attribute => attribute.GetParameter(It.IsAny<string>()))
+                .Returns(zeroRevision.Object);
+
+            Mock<SwParameter> committedRevision = new Mock<SwParameter>();
+            committedRevision.Setup(parameter => parameter.GetDoubleValue()).Returns(1.0);
+            Mock<SwAttribute> committed = new Mock<SwAttribute>();
+            committed.Setup(attribute => attribute.GetParameter(It.IsAny<string>()))
+                .Returns(committedRevision.Object);
+
+            Mock<SwAttribute> incomplete = new Mock<SwAttribute>();
+            incomplete.Setup(attribute => attribute.GetParameter(It.IsAny<string>()))
+                .Returns(zeroRevision.Object);
+            incomplete.Setup(attribute => attribute.GetParameter("date"))
+                .Returns((SwParameter)null);
+
+            Assert.True(ConfigurationSerialization.IsPreparedConfigurationSlot(
+                prepared.Object));
+            Assert.False(ConfigurationSerialization.IsPreparedConfigurationSlot(
+                committed.Object));
+            Assert.False(ConfigurationSerialization.IsPreparedConfigurationSlot(
+                incomplete.Object));
+        }
+
+        [Fact]
+        public void PartialAttributeDefinitionDoesNotPoisonNextCreationAttempt()
+        {
+            Mock<SolidWorks.Interop.sldworks.AttributeDef> partialDefinition =
+                new Mock<SolidWorks.Interop.sldworks.AttributeDef>();
+            partialDefinition.SetupSequence(definition => definition.AddParameter(
+                    It.IsAny<string>(),
+                    It.IsAny<int>(),
+                    It.IsAny<double>(),
+                    It.IsAny<int>()))
+                .Returns(true)
+                .Returns(false);
+
+            Mock<SwParameter> parameter = new Mock<SwParameter>();
+            Mock<SwAttribute> createdAttribute = new Mock<SwAttribute>();
+            createdAttribute.Setup(attribute => attribute.GetParameter(It.IsAny<string>()))
+                .Returns(parameter.Object);
+            Mock<SolidWorks.Interop.sldworks.AttributeDef> completeDefinition =
+                new Mock<SolidWorks.Interop.sldworks.AttributeDef>();
+            completeDefinition.Setup(definition => definition.AddParameter(
+                    It.IsAny<string>(),
+                    It.IsAny<int>(),
+                    It.IsAny<double>(),
+                    It.IsAny<int>()))
+                .Returns(true);
+            completeDefinition.Setup(definition => definition.Register()).Returns(true);
+            completeDefinition.Setup(definition => definition.CreateInstance5(
+                    It.IsAny<SolidWorks.Interop.sldworks.ModelDoc2>(),
+                    It.IsAny<object>(),
+                    It.IsAny<string>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>()))
+                .Returns(createdAttribute.Object);
+
+            Queue<SolidWorks.Interop.sldworks.AttributeDef> definitions =
+                new Queue<SolidWorks.Interop.sldworks.AttributeDef>(new[]
+                {
+                    partialDefinition.Object,
+                    completeDefinition.Object,
+                    completeDefinition.Object
+                });
+            List<string> definitionNames = new List<string>();
+            Mock<SolidWorks.Interop.sldworks.SldWorks> app =
+                new Mock<SolidWorks.Interop.sldworks.SldWorks>();
+            app.Setup(item => item.DefineAttribute(It.IsAny<string>()))
+                .Callback<string>(definitionNames.Add)
+                .Returns(() => definitions.Dequeue());
+            Mock<SolidWorks.Interop.sldworks.ModelDoc2> model =
+                new Mock<SolidWorks.Interop.sldworks.ModelDoc2>();
+
+            Assert.Throws<InvalidOperationException>(() =>
+                ConfigurationSerialization.CreateNewConfigurationAttribute(
+                    app.Object,
+                    model.Object,
+                    ConfigurationSerialization.UrdfConfigurationSwAttributeName));
+            SwAttribute created =
+                ConfigurationSerialization.CreateNewConfigurationAttribute(
+                    app.Object,
+                    model.Object,
+                    ConfigurationSerialization.UrdfConfigurationSwAttributeName);
+            SwAttribute reused =
+                ConfigurationSerialization.CreateNewConfigurationAttribute(
+                    app.Object,
+                    model.Object,
+                    ConfigurationSerialization.UrdfConfigurationSwAttributeName);
+            ConfigurationSerialization.ResetConfigurationAttributeDefinitionCache(
+                app.Object);
+            SwAttribute recreatedAfterDisconnect =
+                ConfigurationSerialization.CreateNewConfigurationAttribute(
+                    app.Object,
+                    model.Object,
+                    ConfigurationSerialization.UrdfConfigurationSwAttributeName);
+
+            Assert.Same(createdAttribute.Object, created);
+            Assert.Same(createdAttribute.Object, reused);
+            Assert.Same(createdAttribute.Object, recreatedAfterDisconnect);
+            Assert.Equal(3, definitionNames.Count);
+            Assert.NotEqual(definitionNames[0], definitionNames[1]);
+            Assert.NotEqual(definitionNames[1], definitionNames[2]);
+            completeDefinition.Verify(definition => definition.CreateInstance5(
+                model.Object,
+                null,
+                ConfigurationSerialization.UrdfConfigurationSwAttributeName,
+                It.IsAny<int>(),
+                It.IsAny<int>()), Times.Exactly(3));
+            ConfigurationSerialization.ResetConfigurationAttributeDefinitionCache(
+                app.Object);
+        }
+
+        [Fact]
+        public void ConfigurationSaveGateRejectsOverlapAndCanBeReused()
+        {
+            Assert.True(ConfigurationSerialization.TryBeginConfigurationSave());
+            try
+            {
+                Assert.False(ConfigurationSerialization.TryBeginConfigurationSave());
+            }
+            finally
+            {
+                ConfigurationSerialization.EndConfigurationSave();
+            }
+
+            Assert.True(ConfigurationSerialization.TryBeginConfigurationSave());
+            ConfigurationSerialization.EndConfigurationSave();
+        }
+
+        [Fact]
+        public void ConfigurationSlotLookupUsesFeatureNameInsteadOfDefinitionName()
+        {
+            Mock<SwAttribute> attribute = new Mock<SwAttribute>();
+            attribute.Setup(item => item.GetName())
+                .Returns("SW2URDF.Configuration.v2.unique-definition");
+            Mock<SolidWorks.Interop.sldworks.Feature> feature =
+                new Mock<SolidWorks.Interop.sldworks.Feature>();
+            feature.Setup(item => item.GetTypeName2()).Returns("Attribute");
+            feature.SetupGet(item => item.Name)
+                .Returns(ConfigurationSerialization.UrdfConfigurationSwAttributeName);
+            feature.Setup(item => item.GetSpecificFeature2()).Returns(attribute.Object);
+            Mock<SolidWorks.Interop.sldworks.FeatureManager> featureManager =
+                new Mock<SolidWorks.Interop.sldworks.FeatureManager>();
+            featureManager.Setup(manager => manager.GetFeatures(true))
+                .Returns(new object[] { feature.Object });
+            Mock<SolidWorks.Interop.sldworks.ModelDoc2> model =
+                new Mock<SolidWorks.Interop.sldworks.ModelDoc2>();
+            model.Setup(item => item.FeatureManager).Returns(featureManager.Object);
+            MethodInfo find = typeof(ConfigurationSerialization).GetMethod(
+                "FindSWSaveAttribute",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            SwAttribute found = (SwAttribute)find.Invoke(
+                null,
+                new object[]
+                {
+                    model.Object,
+                    ConfigurationSerialization.UrdfConfigurationSwAttributeName
+                });
+
+            Assert.Same(attribute.Object, found);
+        }
+
+        [Fact]
+        public void LegacyConfigurationDetectionUsesAttributeIdentityNotPayloadNames()
+        {
+            Mock<SwAttribute> legacyAttribute = new Mock<SwAttribute>();
+            legacyAttribute.Setup(attribute => attribute.GetName())
+                .Returns("URDF Export Configuration (v1.5)");
+            Mock<SolidWorks.Interop.sldworks.Feature> feature =
+                new Mock<SolidWorks.Interop.sldworks.Feature>();
+            feature.Setup(item => item.GetTypeName2()).Returns("Attribute");
+            feature.Setup(item => item.GetSpecificFeature2())
+                .Returns(legacyAttribute.Object);
+            Mock<SolidWorks.Interop.sldworks.FeatureManager> featureManager =
+                new Mock<SolidWorks.Interop.sldworks.FeatureManager>();
+            featureManager.Setup(manager => manager.GetFeatures(true))
+                .Returns(new object[] { feature.Object });
+            Mock<SolidWorks.Interop.sldworks.ModelDoc2> model =
+                new Mock<SolidWorks.Interop.sldworks.ModelDoc2>();
+            model.Setup(item => item.FeatureManager).Returns(featureManager.Object);
+            MethodInfo detect = typeof(ConfigurationSerialization).GetMethod(
+                "HasLegacyConfiguration",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.True((bool)detect.Invoke(null, new object[] { model.Object }));
         }
 
         [Fact]
@@ -1753,6 +2141,18 @@ namespace SW2URDF.Test
             rightWheel.JointType = "continuous";
             document.Nodes.AddRange(new[] { root, chassis, lidar, imu, leftWheel, rightWheel });
             return document;
+        }
+
+        private static CadFeatureReference CreateCadReference(
+            ReferenceGeometryKind kind,
+            byte id,
+            string configuration = "")
+        {
+            return CadFeatureReference.ExplicitComponent(
+                kind,
+                new[] { (byte)(id + 100) },
+                new[] { id },
+                configuration);
         }
 
         private static LinkNode CreateTree()

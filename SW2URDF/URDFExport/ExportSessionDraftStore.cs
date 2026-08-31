@@ -38,7 +38,7 @@ namespace SW2URDF.URDFExport
 
     internal sealed class FileExportSessionDraftStore : IExportSessionDraftStore
     {
-        internal const int DraftVersion = 1;
+        internal const int DraftVersion = 2;
         private static readonly log4net.ILog logger = Logger.GetLogger();
         private readonly string rootDirectory;
 
@@ -76,6 +76,14 @@ namespace SW2URDF.URDFExport
                 throw new ArgumentException("A draft root directory is required.", nameof(rootDirectory));
             }
             this.rootDirectory = Path.GetFullPath(rootDirectory);
+        }
+
+        internal static bool IsDraftNewerThanConfiguration(
+            DateTime draftSavedUtc,
+            DateTime configurationSavedUtc)
+        {
+            return draftSavedUtc.ToUniversalTime() >
+                configurationSavedUtc.ToUniversalTime();
         }
 
         public bool TryLoad(string modelPath, out ExportSessionDraft draft)
@@ -241,7 +249,7 @@ namespace SW2URDF.URDFExport
                 digest = sha.ComputeHash(bytes);
             }
 
-            StringBuilder name = new StringBuilder("export-session-v1-");
+            StringBuilder name = new StringBuilder("export-session-v2-");
             foreach (byte value in digest)
             {
                 name.Append(value.ToString("x2"));

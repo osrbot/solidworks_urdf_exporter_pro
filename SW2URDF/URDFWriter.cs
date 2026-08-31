@@ -636,11 +636,6 @@ namespace SW2URDF
         { get; set; }
         public safety_controller Safety
         { get; set; }
-        public string CoordinateSystemName
-        { get; set; }
-        public string AxisName
-        { get; set; }
-
         public joint()
         {
             Origin = new origin();

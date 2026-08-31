@@ -111,9 +111,9 @@ namespace SW2URDF.UI
             builder.AppendLine();
             builder.AppendLine("快速功能索引");
             builder.AppendLine();
-            builder.AppendLine("- 自动加载 Link 树配置: 如果装配体里存在 SolidWorks 特征 URDF Export Configuration (v1.5)，插件启动导出时会恢复上次保存的 Link/Joint 树、命名、父子关系和已保存属性。v1.4 及更早配置会在保存时自动升级。");
+            builder.AppendLine("- 自动加载 Link 树配置: 如果装配体里存在 SolidWorks 特征 URDF Export Configuration (v2)，插件启动导出时会恢复上次保存的 Link/Joint 树、命名、父子关系和已保存属性。v2 使用组件实例 PID + 参考几何特征 PID，可区分任意装配深度中的 Unicode 或同名坐标系/参考轴。v1.x 名称型配置不会自动迁移，必须重新创建并审核。");
             builder.AppendLine("- 保存配置: 导出或关闭配置页时，插件会提示是否保存变化；保存后配置写回当前装配体文件，而不是单独散落在外部目录。");
-            builder.AppendLine("- 组件重连: 加载旧配置时会用保存的 SolidWorks component PID 重新关联零件；如果某些零件被删除、替换或另存导致 PID 失效，会弹窗列出需要人工检查的 link。");
+            builder.AppendLine("- PID 重连: 加载当前 v2 配置时，会分别用保存的 SolidWorks 组件实例 PID 和特征 PID 重新关联零件与参考几何；显示名称和配置名称只用于界面提示，不参与身份判断。如果对象被删除、替换或另存导致 PID 失效，会列出需要人工检查的 Link。");
             builder.AppendLine("- 编辑 Link 树...: 打开自由画布，可增加子 Link、拖拽调整父子关系、框选并复制/粘贴对称结构。画布在副本上编辑；取消不修改原树，应用后才提交。新增或粘贴的 Link 不复制 SolidWorks 组件绑定，需要回到属性页重新分配组件。");
             builder.AppendLine("- Link 树大纲编辑: 在自由画布中点击 大纲编辑，用 Markdown 标题一次编辑整棵树。# 是根 Link，## 是二级 Link，### 是三级 Link。支持 #base_link 和 # base_link 两种写法；同名旧 Link 保留原 Joint、参数和 CAD 绑定。新增 Link 自动生成 Joint 名称，例如 camera_link 生成 camera_joint，但 Joint 类型保持待选择；回到画布明确选择后才能应用。格式错误不会覆盖画布。");
             builder.AppendLine("- Joint 类型: STEP、导入模型或固定装配请手动选择。尝试从 SolidWorks Mate 识别仅适用于保留正确 Mate 的原生可动装配；0 DOF 不会再被自动当成 fixed。");
@@ -159,9 +159,9 @@ namespace SW2URDF.UI
             builder.AppendLine();
             builder.AppendLine("Quick feature index");
             builder.AppendLine();
-            builder.AppendLine("- Automatic Link tree loading: when the assembly contains the SolidWorks feature URDF Export Configuration (v1.5), the exporter restores the saved Link/Joint tree, names, parent-child structure, and saved properties at startup. v1.4 and older configurations are upgraded when saved.");
+            builder.AppendLine("- Automatic Link tree loading: when the assembly contains the SolidWorks feature URDF Export Configuration (v2), the exporter restores the saved Link/Joint tree, names, parent-child structure, and saved properties at startup. Version 2 binds each reference with a component-instance PID plus a reference-feature PID, so Unicode or duplicate coordinate-system and axis names remain distinct at any assembly depth. Name-based v1.x configurations are not migrated automatically; recreate and review them explicitly.");
             builder.AppendLine("- Save configuration: when the configuration changes, the exporter prompts to save it back into the current assembly document instead of scattering separate sidecar files.");
-            builder.AppendLine("- Component reconnect: saved SolidWorks component PIDs are resolved when an old tree is loaded. If parts were deleted, replaced, or saved as new files, the exporter reports the links that need inspection.");
+            builder.AppendLine("- PID reconnect: when a current v2 configuration is loaded, saved SolidWorks component-instance and feature PIDs reconnect components and reference geometry independently. Display and configuration names are UI metadata, not identity. If an object was deleted, replaced, or saved as a new file, the exporter reports the Links that need inspection.");
             builder.AppendLine("- Edit Link Tree...: opens a free canvas for adding child Links, drag-to-reparent, box selection, and structure copy/paste. The canvas edits a working copy: Cancel discards changes and Apply commits them. New or pasted Links do not inherit SolidWorks component bindings and must be assigned on the property page.");
             builder.AppendLine("- Link tree outline editing: click Outline Edit in the canvas to edit the complete hierarchy with Markdown headings. # is the root Link, ## is a second-level Link, and ### is a third-level Link. Existing Links matched by name keep Joint data, reusable properties, and CAD bindings. New Links receive generated Joint names such as camera_joint, but their types remain unconfigured until explicitly selected on the canvas. Invalid text never replaces the canvas document.");
             builder.AppendLine("- Joint types: choose explicit types for STEP, imported, or fixed assemblies. Try SolidWorks Mate detection only for a native movable assembly with correct Mates; zero remaining DOFs is no longer treated as fixed.");

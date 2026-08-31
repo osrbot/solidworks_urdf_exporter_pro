@@ -39,6 +39,80 @@ namespace SW2URDF.UI
         // The preview button saves textbox values before display, so inertia values must round-trip.
         private const string InertiaDisplayFormat = "R";
 
+        private void FillReferenceComboBox(
+            ComboBox comboBox,
+            ReferenceGeometryKind kind,
+            CadFeatureReference selectedReference,
+            bool includeAutomatic,
+            bool includeNone)
+        {
+            comboBox.Items.Clear();
+            if (includeAutomatic)
+            {
+                comboBox.Items.Add(new CadFeatureReferenceChoice(
+                    CadFeatureReference.Automatic(kind),
+                    ChineseUiText.Translate("Automatically generate", "自动生成")));
+            }
+
+            List<ReferenceGeometryEntry> entries = kind == ReferenceGeometryKind.CoordinateSystem
+                ? Exporter.GetRefCoordinateSystems()
+                : Exporter.GetRefAxes();
+            bool selectedReferenceAvailable = false;
+            foreach (ReferenceGeometryEntry entry in entries)
+            {
+                comboBox.Items.Add(new CadFeatureReferenceChoice(
+                    entry.Reference,
+                    entry.DisplayLabel));
+                selectedReferenceAvailable = selectedReference != null &&
+                    entry.Reference.Equals(selectedReference) || selectedReferenceAvailable;
+            }
+
+            if (selectedReference != null &&
+                selectedReference.IsExplicit &&
+                !selectedReferenceAvailable)
+            {
+                comboBox.Items.Add(new CadFeatureReferenceChoice(
+                    selectedReference,
+                    ChineseUiText.Translate("Unavailable reference", "引用不可用")));
+            }
+            if (includeNone)
+            {
+                comboBox.Items.Add(new CadFeatureReferenceChoice(
+                    CadFeatureReference.None(kind),
+                    ChineseUiText.Translate("None", "无")));
+            }
+
+            for (int index = 0; index < comboBox.Items.Count; index++)
+            {
+                CadFeatureReferenceChoice choice =
+                    comboBox.Items[index] as CadFeatureReferenceChoice;
+                if (choice != null &&
+                    selectedReference != null &&
+                    choice.Reference.Equals(selectedReference))
+                {
+                    comboBox.SelectedIndex = index;
+                    return;
+                }
+            }
+            comboBox.SelectedIndex = comboBox.Items.Count == 0 ? -1 : 0;
+        }
+
+        private static CadFeatureReference ReadReferenceComboBox(
+            ComboBox comboBox,
+            CadFeatureReference fallback,
+            ReferenceGeometryKind kind)
+        {
+            CadFeatureReferenceChoice choice =
+                comboBox.SelectedItem as CadFeatureReferenceChoice;
+            if (choice != null)
+            {
+                return choice.Reference.Clone();
+            }
+            return fallback == null
+                ? CadFeatureReference.Automatic(kind)
+                : fallback.Clone();
+        }
+
         //From the link, this method fills the property boxes on the Link Properties page
         public void FillLinkPropertyBoxes(Link Link)
         {
@@ -47,18 +121,12 @@ namespace SW2URDF.UI
             comboBoxLinkCoordinateSystem.Enabled = !Link.isFixedFrame;
             if (!Link.isFixedFrame)
             {
-                List<string> coordinateSystems = Exporter.GetRefCoordinateSystems();
-                if (!string.IsNullOrWhiteSpace(Link.Joint.CoordinateSystemName) &&
-                    !coordinateSystems.Contains(Link.Joint.CoordinateSystemName))
-                {
-                    // Keep a stale saved value visible so selecting another node cannot
-                    // silently erase it before the user chooses a replacement frame.
-                    coordinateSystems.Add(Link.Joint.CoordinateSystemName);
-                }
-                comboBoxLinkCoordinateSystem.Items.AddRange(coordinateSystems.ToArray());
-                comboBoxLinkCoordinateSystem.SelectedIndex =
-                    comboBoxLinkCoordinateSystem.FindStringExact(
-                        Link.Joint.CoordinateSystemName);
+                FillReferenceComboBox(
+                    comboBoxLinkCoordinateSystem,
+                    ReferenceGeometryKind.CoordinateSystem,
+                    Link.FrameReference,
+                    true,
+                    false);
 
                 //G5: Maximum decimal places to use (not counting exponential notation) is 5
                 Link.Visual.Origin.FillBoxes(textBoxVisualOriginX,
@@ -108,8 +176,9 @@ namespace SW2URDF.UI
         }
 
         //Fills the property boxes on the joint properties page
-        public void FillJointPropertyBoxes(Joint joint)
+        public void FillJointPropertyBoxes(Link link)
         {
+            Joint joint = link == null ? null : link.Joint;
             FillBlank(jointBoxes);
             AutoUpdatingForm = true;
             if (joint == null)
@@ -182,14 +251,18 @@ namespace SW2URDF.UI
             }
 
             UpdateJointUnitLabels(joint.Type);
-            comboBoxOrigin.Items.Clear();
-            List<string> originNames = Exporter.GetRefCoordinateSystems();
-            comboBoxOrigin.Items.AddRange(originNames.ToArray());
-            comboBoxAxis.Items.Clear();
-            List<string> axesNames = Exporter.GetRefAxes();
-            comboBoxAxis.Items.AddRange(axesNames.ToArray());
-            comboBoxOrigin.SelectedIndex =
-                comboBoxOrigin.FindStringExact(joint.CoordinateSystemName);
+            FillReferenceComboBox(
+                comboBoxOrigin,
+                ReferenceGeometryKind.CoordinateSystem,
+                link.FrameReference,
+                true,
+                false);
+            FillReferenceComboBox(
+                comboBoxAxis,
+                ReferenceGeometryKind.Axis,
+                joint.AxisReference,
+                JointConfigurationPolicy.RequiresMotionAxis(joint.Type),
+                true);
 
             // Updating Mimic Element Fields
             List<string> jointNames = Exporter.GetJointNames();
@@ -219,10 +292,6 @@ namespace SW2URDF.UI
             // Resubscribe to callback
             MimicCheckBox.CheckedChanged += MimicCheckBoxCheckedChanged;
 
-            if (!String.IsNullOrWhiteSpace(joint.AxisName))
-            {
-                comboBoxAxis.SelectedIndex = comboBoxAxis.FindStringExact(joint.AxisName);
-            }
             displayedJointType = JointConfigurationPolicy.Normalize(joint.Type);
             jointUnitInputsResetForCurrentChange = false;
             AutoUpdatingForm = false;
@@ -356,7 +425,10 @@ namespace SW2URDF.UI
                 Link.STLQualityFine = radioButtonFine.Checked;
                 Link.MeshReductionRatio = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
                 Link.CollisionMeshStrategy = GetSelectedCollisionStrategy();
-                Link.Joint.CoordinateSystemName = comboBoxLinkCoordinateSystem.Text;
+                Link.FrameReference = ReadReferenceComboBox(
+                    comboBoxLinkCoordinateSystem,
+                    Link.FrameReference,
+                    ReferenceGeometryKind.CoordinateSystem);
             }
         }
 
@@ -377,8 +449,9 @@ namespace SW2URDF.UI
         }
 
         //Saves data from text boxes back into a joint
-        public void SaveJointDataFromPropertyBoxes(Joint Joint)
+        public void SaveJointDataFromPropertyBoxes(Link link)
         {
+            Joint Joint = link.Joint;
             string previousType = JointConfigurationPolicy.Normalize(Joint.Type);
             string selectedType = JointConfigurationPolicy.Normalize(comboBoxJointType.Text);
             if (JointConfigurationPolicy.ChangesMotionUnits(previousType, selectedType) &&
@@ -400,8 +473,10 @@ namespace SW2URDF.UI
             Joint.Parent.Update(labelParent);
             Joint.Child.Update(labelChild);
 
-            Joint.CoordinateSystemName = comboBoxOrigin.Text;
-            Joint.AxisName = comboBoxAxis.Text;
+            Joint.AxisReference = ReadReferenceComboBox(
+                comboBoxAxis,
+                Joint.AxisReference,
+                ReferenceGeometryKind.Axis);
 
             Joint.Origin.Update(textBoxJointX,
                                 textBoxJointY,

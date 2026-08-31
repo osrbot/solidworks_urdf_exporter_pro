@@ -16,13 +16,30 @@ URDF export project from the committed session.
 
 ## Assembly Configuration
 
-The formal configuration is stored in the assembly feature `URDF Export Configuration (v1.5)`.
-Readable older formats load through compatibility code and upgrade only after a later formal save
-succeeds. The exporter does not create or upgrade this feature while an unfinished PropertyManager
-session is open.
+The formal configuration is stored in the assembly feature `URDF Export Configuration (v2)`.
+An explicit root-document reference stores `OwnerScope=RootDocument` plus feature PID. An explicit
+component-instance reference stores `OwnerScope=ComponentInstance` plus component PID and feature
+PID. The catalog scans all assembly depths; Unicode and duplicate display names remain UI labels and
+do not participate in identity. Resolution first finds the owner feature by PID, then maps component
+references to the exact assembly occurrence with `IComponent2.GetCorresponding`; it does not use name
+lookup or active configuration switching.
 
-On reopen, components reconnect through saved PIDs. Delete, replace, or Save As operations can
-invalidate a PID. Rebind it manually; matching display names do not prove CAD identity.
+V2 persistence uses canonical and hidden recovery slots. An existing slot is invalidated before its
+payload changes, a nonzero revision is written last as the commit marker, each candidate is fully
+validated, and loading selects the newest valid revision. An interrupted in-place COM write
+therefore cannot replace the last valid configuration. A slot left at `revision=0` is an interrupted
+preparation, not corruption: loading ignores it and a later save can retry it. A SolidWorks session
+caches only a fully registered schema definition; after initialization fails, the retry uses a fresh
+unique definition so a partial `AttributeDef` cannot poison subsequent saves.
+
+Name-based v1.x configurations are deliberately not read or migrated because they cannot
+identify nested same-name geometry safely. Delete the legacy configuration feature, recreate the
+tree, and review every binding. The exporter does not create or replace a formal configuration while
+an unfinished PropertyManager session is open.
+
+On reopen, components and reference features reconnect independently through their saved PIDs.
+Delete, replace, or Save As operations can invalidate a PID. Rebind it manually; matching display or
+configuration names do not prove CAD identity.
 
 ## Canvas Operations
 

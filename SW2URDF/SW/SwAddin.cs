@@ -228,6 +228,8 @@ namespace SW2URDF.SW
             RemoveCommandMgr();
             DetachEventHandlers();
 
+            ConfigurationSerialization.ResetConfigurationAttributeDefinitionCache(
+                (SldWorks)SwApp);
             Marshal.ReleaseComObject(CmdMgr);
             CmdMgr = null;
             Marshal.ReleaseComObject(SwApp);

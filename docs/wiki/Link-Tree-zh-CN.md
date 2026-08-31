@@ -15,11 +15,24 @@ Link Tree 的三个责任分开保存：
 
 ## 装配体配置
 
-正式配置保存于装配体特征 `URDF Export Configuration (v1.5)`。旧版本在可读时会载入，只有在
-后续正式保存成功后才升级。插件不会在 PropertyManager 尚未完成时偷偷创建或升级配置特征。
+正式配置保存于装配体特征 `URDF Export Configuration (v2)`。显式根文档参考保存
+`OwnerScope=RootDocument` + 特征 PID；显式组件实例参考保存 `OwnerScope=ComponentInstance` +
+组件 PID + 特征 PID。目录会扫描全部装配深度；Unicode 名称和同名显示标签只用于 UI，不参与
+身份判断。解析时先按 PID 找到 owner feature，再通过 `IComponent2.GetCorresponding` 映射到准确的
+装配实例，不进行名称查找或活动配置切换。
 
-重新打开装配体时，组件通过保存的 PID 重连。删除、替换或 Save As 可能使 PID 失效，此时必须
-人工重新绑定，不能假设几何名称相同就等价。
+v2 持久化使用 canonical 与 hidden recovery 两个槽位。写入现有槽位前先以 `revision=0` 使其失效，
+更新 payload 后最后写入非零 revision 作为提交标记；每个候选槽位都经过完整校验，加载时选择最新
+的有效 revision。因此，中断的 COM 原位写不会替换最后有效配置。停在 `revision=0` 的槽位属于未完成
+准备写，加载时忽略，后续保存可直接重试。每个 SolidWorks 会话只缓存完整注册成功的 schema
+definition；初始化失败后重试会改用新的唯一定义，部分初始化的 `AttributeDef` 不会污染后续保存。
+
+v1.x 名称型配置无法安全识别深层同名参考几何，因此不会读取或自动迁移。必须删除旧
+配置特征、重新创建 Link 树，并逐项审核绑定。PropertyManager 尚未完成时，插件不会创建或替换
+正式配置。
+
+重新打开装配体时，组件和参考几何特征分别通过保存的 PID 重连。删除、替换或 Save As 可能使
+PID 失效，此时必须人工重新绑定；显示名称或配置名称相同不能证明 CAD 身份相同。
 
 ## 画布操作
 

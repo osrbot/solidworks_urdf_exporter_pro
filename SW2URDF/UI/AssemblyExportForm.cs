@@ -458,7 +458,7 @@ namespace SW2URDF.UI
         {
             if (!(previouslySelectedNode == null || previouslySelectedNode.Link.Joint == null))
             {
-                SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link.Joint);
+                SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link);
             }
             if (ResolveAutomaticJointSuggestions())
             {
@@ -520,7 +520,7 @@ namespace SW2URDF.UI
 
             if (previouslySelectedNode != null)
             {
-                FillJointPropertyBoxes(previouslySelectedNode.Link.Joint);
+                FillJointPropertyBoxes(previouslySelectedNode.Link);
             }
             StringBuilder message = new StringBuilder();
             if (suggestions.Count > 0)
@@ -703,7 +703,7 @@ namespace SW2URDF.UI
         {
             if (previouslySelectedNode != null)
             {
-                SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link.Joint);
+                SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link);
             }
             MoveJointTreeNodesToBaseNode();
             if (SaveConfigTree(ActiveSWModel, BaseNode, true))
@@ -1001,12 +1001,15 @@ namespace SW2URDF.UI
                 return;
             }
 
-            string previousCoordinateSystem = node.Link.Joint.CoordinateSystemName;
-            string selectedCoordinateSystem = comboBoxLinkCoordinateSystem.Text;
-            if (string.Equals(
+            CadFeatureReference previousCoordinateSystem =
+                node.Link.FrameReference == null
+                    ? CadFeatureReference.Automatic(ReferenceGeometryKind.CoordinateSystem)
+                    : node.Link.FrameReference.Clone();
+            CadFeatureReference selectedCoordinateSystem = ReadReferenceComboBox(
+                comboBoxLinkCoordinateSystem,
                 previousCoordinateSystem,
-                selectedCoordinateSystem,
-                StringComparison.Ordinal))
+                ReferenceGeometryKind.CoordinateSystem);
+            if (previousCoordinateSystem.Equals(selectedCoordinateSystem))
             {
                 return;
             }
@@ -1016,13 +1019,14 @@ namespace SW2URDF.UI
                 SaveLinkDataFromPropertyBoxes(node.Link);
                 // Save the other edited fields, but let the exporter change the frame
                 // transactionally so a failed SolidWorks recomputation can roll back.
-                node.Link.Joint.CoordinateSystemName = previousCoordinateSystem;
+                node.Link.FrameReference = previousCoordinateSystem;
                 Exporter.RecomputeLinkCoordinateSystem(
                     node,
                     selectedCoordinateSystem);
                 FillLinkPropertyBoxes(node.Link);
                 logger.Info("Changed Link coordinate system for " + node.Link.Name +
-                    " from " + previousCoordinateSystem + " to " + selectedCoordinateSystem);
+                    " from " + Exporter.GetReferenceDisplayLabel(previousCoordinateSystem) +
+                    " to " + Exporter.GetReferenceDisplayLabel(selectedCoordinateSystem));
                 if (collisionPreviewEnabled)
                 {
                     RefreshCollisionPreview();
@@ -1249,7 +1253,7 @@ namespace SW2URDF.UI
             {
                 SaveLinkDataFromPropertyBoxes(node.Link);
                 MathTransform coordinateTransform =
-                    Exporter.GetCoordinateSystemTransform(node.Link.Joint.CoordinateSystemName);
+                    Exporter.GetCoordinateSystemTransform(node.Link.FrameReference);
                 if (inertiaPreview.Show(
                     node.Link,
                     coordinateTransform,
@@ -1356,7 +1360,7 @@ namespace SW2URDF.UI
             {
                 SaveLinkDataFromPropertyBoxes(node.Link);
                 MathTransform coordinateTransform =
-                    Exporter.GetCoordinateSystemTransform(node.Link.Joint.CoordinateSystemName);
+                    Exporter.GetCoordinateSystemTransform(node.Link.FrameReference);
                 if (collisionPreview.Show(
                     node.Link,
                     GetSelectedCollisionStrategy(),
@@ -1518,7 +1522,7 @@ namespace SW2URDF.UI
             {
                 if (previouslySelectedNode != null && previouslySelectedNode.Link.Joint != null)
                 {
-                    SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link.Joint);
+                    SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link);
                 }
                 MoveJointTreeNodesToBaseNode();
             }
@@ -1616,7 +1620,7 @@ namespace SW2URDF.UI
             Font fontBold = new Font(treeViewJointTree.Font, FontStyle.Bold);
             if (previouslySelectedNode != null && !previouslySelectedNode.IsBaseNode)
             {
-                SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link.Joint);
+                SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link);
             }
             if (previouslySelectedNode != null)
             {
@@ -1633,7 +1637,7 @@ namespace SW2URDF.UI
             }
             node.NodeFont = fontBold;
             node.Text = node.Text;
-            FillJointPropertyBoxes(node.Link.Joint);
+            FillJointPropertyBoxes(node.Link);
             previouslySelectedNode = node;
         }
 
@@ -1672,15 +1676,81 @@ namespace SW2URDF.UI
         {
             if (!AutoUpdatingForm)
             {
-                if (!(String.IsNullOrWhiteSpace(comboBoxOrigin.Text) ||
-                    String.IsNullOrWhiteSpace(comboBoxAxis.Text)))
+                CadFeatureReference frameReference = ReadReferenceComboBox(
+                    comboBoxOrigin,
+                    null,
+                    ReferenceGeometryKind.CoordinateSystem);
+                CadFeatureReference axisReference = ReadReferenceComboBox(
+                    comboBoxAxis,
+                    null,
+                    ReferenceGeometryKind.Axis);
+                if (frameReference.IsExplicit && axisReference.IsExplicit)
                 {
-                    double[] Axis = Exporter.EstimateAxis(comboBoxAxis.Text);
-                    Axis = Exporter.LocalizeAxis(Axis, comboBoxOrigin.Text);
+                    double[] Axis = Exporter.EstimateAxis(axisReference);
+                    Axis = Exporter.LocalizeAxis(Axis, frameReference);
                     textBoxAxisX.Text = Axis[0].ToString("G5");
                     textBoxAxisY.Text = Axis[1].ToString("G5");
                     textBoxAxisZ.Text = Axis[2].ToString("G5");
                 }
+            }
+        }
+
+        private void ComboBoxOriginSelectionChangeCommitted(object sender, EventArgs e)
+        {
+            if (AutoUpdatingForm)
+            {
+                return;
+            }
+
+            LinkNode node = treeViewJointTree.SelectedNode as LinkNode;
+            if (node == null || node.Link == null || node.Link.isFixedFrame)
+            {
+                return;
+            }
+
+            CadFeatureReference previousCoordinateSystem =
+                node.Link.FrameReference == null
+                    ? CadFeatureReference.Automatic(ReferenceGeometryKind.CoordinateSystem)
+                    : node.Link.FrameReference.Clone();
+            CadFeatureReference selectedCoordinateSystem = ReadReferenceComboBox(
+                comboBoxOrigin,
+                previousCoordinateSystem,
+                ReferenceGeometryKind.CoordinateSystem);
+            if (previousCoordinateSystem.Equals(selectedCoordinateSystem))
+            {
+                return;
+            }
+
+            try
+            {
+                SaveJointDataFromPropertyBoxes(node.Link);
+                Exporter.RecomputeLinkCoordinateSystem(
+                    node,
+                    selectedCoordinateSystem);
+                FillJointPropertyBoxes(node.Link);
+                logger.Info("Changed Link coordinate system from the Joint page for " +
+                    node.Link.Name + " from " +
+                    Exporter.GetReferenceDisplayLabel(previousCoordinateSystem) +
+                    " to " +
+                    Exporter.GetReferenceDisplayLabel(selectedCoordinateSystem));
+            }
+            catch (Exception exception)
+            {
+                FillJointPropertyBoxes(node.Link);
+                logger.Warn(
+                    "Could not change Link coordinate system from the Joint page for " +
+                    node.Link.Name,
+                    exception);
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "The Link coordinate system could not be changed:\r\n",
+                        "\u65e0\u6cd5\u4fee\u6539 Link \u5750\u6807\u7cfb\uff1a\r\n") +
+                    exception.Message,
+                    ChineseUiText.Translate(
+                        "Link coordinate system",
+                        "Link \u5750\u6807\u7cfb"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
         }
 

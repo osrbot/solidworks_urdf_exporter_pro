@@ -120,8 +120,8 @@ namespace SW2URDF.URDFExport
 
         public readonly List<Link> Links;
 
-        private readonly List<string> ReferenceCoordinateSystemNames;
-        private readonly List<string> ReferenceAxesNames;
+        private readonly ReferenceGeometryCatalog referenceGeometryCatalog;
+        private readonly ReferenceGeometryResolver referenceGeometryResolver;
 
         private const double MinimumCustomStlDeviation = 0.001;
         private const double MaximumCustomStlDeviation = 0.02;
@@ -132,8 +132,6 @@ namespace SW2URDF.URDFExport
         private bool ComputeVisualCollision;
         private bool ComputeJointKinematics;
         private bool ComputeJointLimits;
-        private string assemblyGlobalCoordinateSystemName;
-
         #endregion class variables
 
         // Constructor for SW2URDF Exporter class
@@ -146,8 +144,8 @@ namespace SW2URDF.URDFExport
             PackageName = ActiveSWModel.GetTitle();
             RosPackageName = URDFPackage.SanitizePackageName(PackageName);
 
-            ReferenceCoordinateSystemNames = FindRefGeoNames("CoordSys");
-            ReferenceAxesNames = FindRefGeoNames("RefAxis");
+            referenceGeometryCatalog = new ReferenceGeometryCatalog(ActiveSWModel);
+            referenceGeometryResolver = new ReferenceGeometryResolver(ActiveSWModel);
 
             ComputeInertialValues = true;
             ComputeVisualCollision = true;
@@ -316,13 +314,14 @@ namespace SW2URDF.URDFExport
                 logger.Info("Export parameter summary: " +
                     BuildExportParameterSummary(inertialRecords, meshRecords, exportSTL, meshFormat));
 
+                Robot outputRobot = CreateMeshOutputRobot(meshFormat);
                 UpdateProgressTitle("Writing URDF file", "\u6b63\u5728\u5199\u5165 URDF \u6587\u4ef6");
                 logger.Info("Writing URDF file to " + windowsURDFFileName);
                 URDFWriter uWriter = new URDFWriter(windowsURDFFileName);
-                URDFRobot.WriteURDF(uWriter.writer);
+                outputRobot.WriteURDF(uWriter.writer);
 
                 UpdateProgressTitle("Writing CSV file", "\u6b63\u5728\u5199\u5165 CSV \u6587\u4ef6");
-                ImportExport.WriteRobotToCSV(URDFRobot, windowsCSVFileName);
+                ImportExport.WriteRobotToCSV(outputRobot, windowsCSVFileName);
 
                 if (ExportTargets != null && ExportTargets.UseV2Pipeline)
                 {
@@ -332,7 +331,7 @@ namespace SW2URDF.URDFExport
                         package,
                         deliveryPackage,
                         windowsURDFFileName,
-                        URDFRobot,
+                        outputRobot,
                         meshRecords,
                         ExportTargets);
                     if (!string.IsNullOrWhiteSpace(v2Result.RetainedPreviousBundleDirectory))
@@ -575,6 +574,46 @@ namespace SW2URDF.URDFExport
             foreach (Link child in link.Children)
             {
                 AddMeshExportLinks(child, links);
+            }
+        }
+
+        private Robot CreateMeshOutputRobot(MeshExportFormat meshFormat)
+        {
+            Robot output = new Robot
+            {
+                Name = URDFRobot.Name
+            };
+            output.SetBaseLink(URDFRobot.BaseLink.Clone());
+            if (meshFormat == MeshExportFormat.THREEDXML)
+            {
+                Localize3dxmlOutputOrigins(output.BaseLink);
+            }
+            return output;
+        }
+
+        private void Localize3dxmlOutputOrigins(Link link)
+        {
+            if (link == null)
+            {
+                return;
+            }
+            if (!link.isFixedFrame)
+            {
+                MathTransform frameTransform = GetCoordinateSystemTransform(
+                    link.FrameReference);
+                if (frameTransform == null)
+                {
+                    throw new InvalidOperationException(
+                        "Cannot localize 3DXML output because the Link frame cannot be resolved: " +
+                        GetReferenceDisplayLabel(link.FrameReference));
+                }
+                LocalizeVisualAndCollision(
+                    link,
+                    MathOps.GetTransformation(frameTransform));
+            }
+            foreach (Link child in link.Children)
+            {
+                Localize3dxmlOutputOrigins(child);
             }
         }
 
@@ -1372,12 +1411,13 @@ namespace SW2URDF.URDFExport
         {
             LinkLocalBoundingBox box = new LinkLocalBoundingBox();
             if (link == null || link.SWComponents == null || link.SWComponents.Count == 0 ||
-                link.Joint == null || String.IsNullOrWhiteSpace(link.Joint.CoordinateSystemName))
+                link.FrameReference == null || !link.FrameReference.IsExplicit)
             {
                 return box;
             }
 
-            MathTransform linkTransform = GetCoordinateSystemTransform(link.Joint.CoordinateSystemName);
+            MathTransform linkTransform =
+                GetCoordinateSystemTransform(link.FrameReference);
             if (linkTransform == null)
             {
                 return box;
@@ -1402,12 +1442,13 @@ namespace SW2URDF.URDFExport
         {
             List<LinkLocalBoundingBox> boxes = new List<LinkLocalBoundingBox>();
             if (link == null || link.SWComponents == null || link.SWComponents.Count == 0 ||
-                link.Joint == null || String.IsNullOrWhiteSpace(link.Joint.CoordinateSystemName))
+                link.FrameReference == null || !link.FrameReference.IsExplicit)
             {
                 return boxes;
             }
 
-            MathTransform linkTransform = GetCoordinateSystemTransform(link.Joint.CoordinateSystemName);
+            MathTransform linkTransform =
+                GetCoordinateSystemTransform(link.FrameReference);
             if (linkTransform == null)
             {
                 return boxes;
@@ -1553,10 +1594,17 @@ namespace SW2URDF.URDFExport
             Matrix<double> componentToLink;
             try
             {
-                MathTransform componentTransform = component.Transform2;
-                Matrix<double> componentToGlobal = componentTransform == null
-                    ? Matrix<double>.Build.DenseIdentity(4)
-                    : MathOps.GetTransformation(componentTransform);
+                MathTransform componentTransform =
+                    ReferenceGeometryResolver.GetComponentToRootTransform(component);
+                if (componentTransform == null)
+                {
+                    logger.Warn("Component transform is unavailable for " +
+                        GetComponentGeometryIdentity(component) +
+                        "; body tessellation was not used.");
+                    return false;
+                }
+                Matrix<double> componentToGlobal =
+                    MathOps.GetTransformation(componentTransform);
                 componentToLink = globalToLink * componentToGlobal;
             }
             catch (Exception e)
@@ -2463,83 +2511,41 @@ namespace SW2URDF.URDFExport
             int errors = 0;
             int warnings = 0;
 
-            string coordsysName = link.Joint.CoordinateSystemName;
-
-            logger.Info(link.Name + ": Exporting 3dxml with coordinate frame " + coordsysName);
-
-            Dictionary<string, string> names = GetComponentRefGeoNames(coordsysName);
-            ModelDoc2 ActiveDoc = ActiveSWModel;
-
-            logger.Info(link.Name + ": Reference geometry name " + names["component"]);
+            MathTransform frameTransform = GetCoordinateSystemTransform(link.FrameReference);
+            if (frameTransform == null)
+            {
+                throw new InvalidOperationException(
+                    "Cannot export 3DXML because the Link frame cannot be resolved: " +
+                    GetReferenceDisplayLabel(link.FrameReference));
+            }
+            logger.Info(link.Name + ": Exporting 3DXML in assembly coordinates and " +
+                "localizing its URDF origin from persistent Link frame " +
+                GetReferenceDisplayLabel(link.FrameReference));
 
             int saveOptions = (int)swSaveAsOptions_e.swSaveAsOptions_Silent |
                 (int)swSaveAsOptions_e.swSaveAsOptions_Copy;
-            SetLinkSpecificSTLPreferences(names["geo"], link, ActiveDoc);
+            SetLinkSpecificSTLPreferences(link, ActiveSWModel);
 
             logger.Info("Saving 3dxml to " + windowsMeshFilename);
 
-            // === 3dxml Localize Link === //
+            bool saved = ActiveSWModel.Extension.SaveAs(
+                windowsMeshFilename,
+                (int)swSaveAsVersion_e.swSaveAsCurrentVersion,
+                saveOptions,
+                null,
+                ref errors,
+                ref warnings);
 
-            // Remove suffix from coordinate-system name.
-            // ex. "Joint Origin <Arm_link-1>" -> "Joint Origin"
-            // Suffix is included when coordinate is inside sub-assembly.
-            string linkModelName = names["component"];
-            string linkModelSuffix = " <" + linkModelName + ">";
-            if(coordsysName.Contains(linkModelSuffix))
+            if (!saved || errors != 0 || !File.Exists(windowsMeshFilename))
             {
-                coordsysName = coordsysName.Replace(linkModelSuffix, "");
-                logger.Info($"Suffix of {linkModelName} was removed from coordsysName : {coordsysName}");
+                throw new InvalidOperationException(
+                    "Exporting 3DXML for Link " + link.Name + " failed with error " + errors +
+                    " and warnings " + warnings + ".");
             }
-
-            // Get the model document of the link.
-            ModelDoc2 linkModel;
-            bool isBaseLink = linkModelName == "";
-            if (isBaseLink)
+            if (warnings != 0)
             {
-                linkModel = ActiveDoc;
-            }
-            else
-            {
-                if (link.SWMainComponent != null)
-                {
-                    linkModel = link.SWMainComponent.GetModelDoc2();
-                }
-                else
-                {
-                    logger.Warn("Could not get linkModel because SWMainComponent was null");
-                    linkModel = null;
-                }
-            }
-
-            // Localize the link to the certain place.
-            if (linkModel != null)
-            {
-                MathTransform coordSysTransform =
-                    linkModel.Extension.GetCoordinateSystemTransformByName(coordsysName);
-                if (coordSysTransform != null)
-                {
-                    logger.Info("Localizing Link : " + coordsysName);
-                    Matrix<double> GlobalTransform = MathOps.GetTransformation(coordSysTransform);
-                    LocalizeVisualAndCollision(link, GlobalTransform);
-                }
-                else
-                {
-                    logger.Warn("coordSysTransform was null : " + coordsysName);
-                }
-            }
-            else
-            { 
-                logger.Warn("Link model was null.");
-            }
-            // === 3dxml Localize Link === //
-
-            ActiveDoc.Extension.SaveAs(windowsMeshFilename,
-                (int)swSaveAsVersion_e.swSaveAsCurrentVersion, saveOptions, null, ref errors, ref warnings);
-
-            if (errors + warnings != 0)
-            {
-                logger.Warn("Exporting 3dxml for link " + link.Name + " failed with error " + errors +
-                    " or warnings " + warnings);
+                logger.Warn("Exporting 3DXML for Link " + link.Name +
+                    " completed with warnings " + warnings + ".");
             }
         }
 
@@ -2572,40 +2578,53 @@ namespace SW2URDF.URDFExport
             UpdateProgressTitle("Preparing STL: " + link.Name,
                 "\u6b63\u5728\u51c6\u5907 STL: " + link.Name);
 
-            string coordsysName = link.Joint.CoordinateSystemName;
-            logger.Info(link.Name + ": Exporting STL with coordinate frame " + coordsysName);
+            MathTransform frameTransform = GetCoordinateSystemTransform(link.FrameReference);
+            if (frameTransform == null)
+            {
+                throw new InvalidOperationException(
+                    "Cannot export STL because the Link frame cannot be resolved: " +
+                    GetReferenceDisplayLabel(link.FrameReference));
+            }
+            logger.Info(link.Name + ": Exporting STL in assembly coordinates, then transforming " +
+                "vertices to persistent Link frame " +
+                GetReferenceDisplayLabel(link.FrameReference));
 
-            Dictionary<string, string> names = GetComponentRefGeoNames(coordsysName);
             ModelDoc2 activeDoc = ActiveSWModel;
-            logger.Info(link.Name + ": Reference geometry name " + names["component"]);
 
             int saveOptions = (int)swSaveAsOptions_e.swSaveAsOptions_Silent |
                 (int)swSaveAsOptions_e.swSaveAsOptions_Copy;
             StlMeshSettings meshSettings =
-                SetLinkSpecificSTLPreferences(names["geo"], link, activeDoc, reductionRatioOverride);
+                SetLinkSpecificSTLPreferences(link, activeDoc, reductionRatioOverride);
             StlExportStats stlStats = CreateStlExportStats(link, meshSettings);
 
             logger.Info("Saving STL to " + windowsMeshFilename);
             UpdateProgressTitle("SolidWorks is saving STL: " + link.Name,
                 "SolidWorks \u6b63\u5728\u4fdd\u5b58 STL: " + link.Name);
-            activeDoc.Extension.SaveAs(windowsMeshFilename,
+            bool saved = activeDoc.Extension.SaveAs(windowsMeshFilename,
                 (int)swSaveAsVersion_e.swSaveAsCurrentVersion, saveOptions, null,
                 ref errors, ref warnings);
-            if (errors + warnings != 0)
+            if (!saved || errors != 0 || !File.Exists(windowsMeshFilename))
             {
-                logger.Warn("Exporting STL for link " + link.Name + " failed with error " +
-                    errors + " or warnings " + warnings);
+                throw new InvalidOperationException(
+                    "Exporting STL for Link " + link.Name + " failed with error " + errors +
+                    " and warnings " + warnings + ".");
+            }
+            if (warnings != 0)
+            {
+                logger.Warn("Exporting STL for Link " + link.Name +
+                    " completed with warnings " + warnings + ".");
             }
 
             UpdateProgressTitle("Finalizing STL: " + link.Name,
                 "\u6b63\u5728\u6574\u7406 STL: " + link.Name);
-            bool success = CorrectSTLMesh(windowsMeshFilename);
-            LogActualBinaryStlSize(link, windowsMeshFilename, stlStats);
+            bool success = TransformBinaryStlToFrame(windowsMeshFilename, frameTransform);
             if (!success)
             {
-                logger.Warn("There was an issue exporting the STL for " + link.Name + ". It " +
-                    "may not be readable by CAD programs that aren't SolidWorks");
+                throw new InvalidOperationException(
+                    "The STL for Link " + link.Name +
+                    " could not be transformed into its Link coordinate frame.");
             }
+            LogActualBinaryStlSize(link, windowsMeshFilename, stlStats);
             return stlStats;
         }
 
@@ -2760,21 +2779,19 @@ namespace SW2URDF.URDFExport
                 ", save path " + SavePath +
                 ", z is up " + zIsUp +
                 ", started " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
-            CreateBaseRefOrigin(zIsUp);
+            URDFRobot.BaseLink.FrameReference = CreateBaseRefOrigin(zIsUp);
             MathTransform coordSysTransform =
-                ActiveSWModel.Extension.GetCoordinateSystemTransformByName("Origin_global");
+                GetCoordinateSystemTransform(URDFRobot.BaseLink.FrameReference);
             if (coordSysTransform == null)
             {
                 throw new InvalidOperationException(
-                    "SolidWorks could not resolve the Origin_global coordinate system.");
+                    "SolidWorks could not resolve the generated part Link coordinate system.");
             }
-            Matrix<double> globalTransform = MathOps.GetTransformation(coordSysTransform);
 
             MassPropertySnapshot massProperty = ReadLinkLocalMassProperty(
                 null,
                 coordSysTransform);
             ApplyMassPropertyToLink(URDFRobot.BaseLink, massProperty);
-            LocalizeVisualAndCollision(URDFRobot.BaseLink, globalTransform);
 
             //Creating package directories
             PackageName = URDFPackage.SanitizePackageName(PackageName);
@@ -2800,16 +2817,27 @@ namespace SW2URDF.URDFExport
                 SaveUserPreferences();
                 preferencesSaved = true;
                 SetSTLExportPreferences();
-                SetLinkSpecificSTLPreferences("", URDFRobot.BaseLink, ActiveSWModel);
+                SetLinkSpecificSTLPreferences(URDFRobot.BaseLink, ActiveSWModel);
                 int errors = 0;
                 int warnings = 0;
 
                 logger.Info("Saving part STL to " + windowsMeshFileName);
-                ActiveSWModel.Extension.SaveAs(windowsMeshFileName, (int)swSaveAsVersion_e.swSaveAsCurrentVersion,
+                bool saved = ActiveSWModel.Extension.SaveAs(windowsMeshFileName, (int)swSaveAsVersion_e.swSaveAsCurrentVersion,
                     (int)swSaveAsOptions_e.swSaveAsOptions_Silent, null, ref errors, ref warnings);
-                if (errors + warnings != 0)
+                if (!saved || errors != 0 || !File.Exists(windowsMeshFileName))
                 {
-                    logger.Warn("Exporting part STL failed with error " + errors + " or warnings " + warnings);
+                    throw new InvalidOperationException(
+                        "Exporting part STL failed with error " + errors +
+                        " and warnings " + warnings + ".");
+                }
+                if (!TransformBinaryStlToFrame(windowsMeshFileName, coordSysTransform))
+                {
+                    throw new InvalidOperationException(
+                        "The part STL could not be transformed into its Link coordinate frame.");
+                }
+                if (warnings != 0)
+                {
+                    logger.Warn("Exporting part STL completed with warnings " + warnings + ".");
                 }
                 URDFRobot.BaseLink.Visual.Geometry.UseMesh(meshFileName);
                 URDFRobot.BaseLink.Collision.Geometry.UseMesh(meshFileName);
@@ -2838,6 +2866,145 @@ namespace SW2URDF.URDFExport
                 }
             }
             logger.Info("Part export completed successfully for package " + PackageName);
+        }
+
+        internal static bool TransformBinaryStlToFrame(
+            string filename,
+            MathTransform frameTransform)
+        {
+            if (frameTransform == null)
+            {
+                throw new ArgumentNullException("frameTransform");
+            }
+            Matrix<double> rootToFrame =
+                MathOps.GetTransformation(frameTransform).Inverse();
+            return TransformBinaryStl(filename, rootToFrame);
+        }
+
+        internal static bool TransformBinaryStl(
+            string filename,
+            Matrix<double> rootToFrame)
+        {
+            if (rootToFrame == null || rootToFrame.RowCount != 4 || rootToFrame.ColumnCount != 4)
+            {
+                throw new ArgumentException(
+                    "The STL coordinate transform must be a 4x4 matrix.",
+                    "rootToFrame");
+            }
+
+            string temporaryFilename = filename + ".sw2urdf-transforming";
+            try
+            {
+                using (FileStream source = OpenFileWithRetry(
+                    filename,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read))
+                using (BinaryReader reader = new BinaryReader(source, Encoding.ASCII, true))
+                using (FileStream destination = new FileStream(
+                    temporaryFilename,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None))
+                using (BinaryWriter writer = new BinaryWriter(destination, Encoding.ASCII, true))
+                {
+                    if (source.Length < 84)
+                    {
+                        throw new InvalidDataException("The STL is too small to contain binary facets.");
+                    }
+                    reader.ReadBytes(80);
+                    uint triangleCount = reader.ReadUInt32();
+                    long expectedLength = 84L + 50L * triangleCount;
+                    if (triangleCount == 0 || source.Length != expectedLength)
+                    {
+                        throw new InvalidDataException(
+                            "The exported STL is not a complete binary STL.");
+                    }
+
+                    writer.Write(new byte[80]);
+                    writer.Write(triangleCount);
+                    for (uint triangleIndex = 0;
+                        triangleIndex < triangleCount;
+                        triangleIndex++)
+                    {
+                        ReadBinaryStlVector(reader);
+                        double[] p0 = TransformStlPoint(
+                            ReadBinaryStlVector(reader),
+                            rootToFrame);
+                        double[] p1 = TransformStlPoint(
+                            ReadBinaryStlVector(reader),
+                            rootToFrame);
+                        double[] p2 = TransformStlPoint(
+                            ReadBinaryStlVector(reader),
+                            rootToFrame);
+                        ushort attribute = reader.ReadUInt16();
+
+                        WriteBinaryStlVector(writer, CalculateTriangleNormal(p0, p1, p2));
+                        WriteBinaryStlVector(writer, p0);
+                        WriteBinaryStlVector(writer, p1);
+                        WriteBinaryStlVector(writer, p2);
+                        writer.Write(attribute);
+                    }
+                }
+
+                File.Replace(temporaryFilename, filename, null);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                logger.Warn(
+                    "Transforming the binary STL into its Link coordinate frame failed.",
+                    exception);
+                try
+                {
+                    if (File.Exists(temporaryFilename))
+                    {
+                        File.Delete(temporaryFilename);
+                    }
+                }
+                catch (IOException cleanupException)
+                {
+                    logger.Warn("Removing the incomplete transformed STL failed.", cleanupException);
+                }
+                return false;
+            }
+        }
+
+        private static double[] ReadBinaryStlVector(BinaryReader reader)
+        {
+            return new[]
+            {
+                (double)reader.ReadSingle(),
+                (double)reader.ReadSingle(),
+                (double)reader.ReadSingle()
+            };
+        }
+
+        private static double[] TransformStlPoint(
+            double[] point,
+            Matrix<double> transform)
+        {
+            Vector<double> source = Vector<double>.Build.Dense(new[]
+            {
+                point[0],
+                point[1],
+                point[2],
+                1.0
+            });
+            Vector<double> result = transform * source;
+            double w = Math.Abs(result[3]) < 1e-12 ? 1.0 : result[3];
+            double[] transformed = new[]
+            {
+                result[0] / w,
+                result[1] / w,
+                result[2] / w
+            };
+            if (transformed.Any(value => Double.IsNaN(value) || Double.IsInfinity(value)))
+            {
+                throw new InvalidDataException(
+                    "The Link coordinate transform produced a non-finite STL vertex.");
+            }
+            return transformed;
         }
 
         //Writes an empty header to the STL to get rid of the BS that SolidWorks adds to a binary STL file
@@ -2969,7 +3136,9 @@ namespace SW2URDF.URDFExport
             logger.Info("Setting STL preferences");
             iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLBinaryFormat, true);
             iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLDontTranslateToPositive, true);
-            iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swExportStlUnits, 2);
+            iSwApp.SetUserPreferenceIntegerValue(
+                (int)swUserPreferenceIntegerValue_e.swExportStlUnits,
+                (int)swLengthUnit_e.swMETER);
             iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, (int)swSTLQuality_e.swSTLQuality_Coarse);
             iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLShowInfoOnSave, false);
             iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLPreview, false);
@@ -2994,20 +3163,30 @@ namespace SW2URDF.URDFExport
         }
 
         //If the user selected something specific for a particular link, that is handled here.
-        private StlMeshSettings SetLinkSpecificSTLPreferences(string CoordinateSystemName, Link link, ModelDoc2 doc)
+        private StlMeshSettings SetLinkSpecificSTLPreferences(Link link, ModelDoc2 doc)
         {
-            return SetLinkSpecificSTLPreferences(CoordinateSystemName, link, doc, null);
+            return SetLinkSpecificSTLPreferences(link, doc, null);
         }
 
         //If the user selected something specific for a particular link, that is handled here.
         private StlMeshSettings SetLinkSpecificSTLPreferences(
-            string CoordinateSystemName,
             Link link,
             ModelDoc2 doc,
             double? reductionRatioOverride)
         {
-            doc.Extension.SetUserPreferenceString((int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem,
-                (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified, CoordinateSystemName);
+            bool modernPreferenceSet = doc.Extension.SetUserPreferenceString(
+                (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem,
+                (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified,
+                string.Empty);
+            bool legacyPreferenceSet = doc.Extension.SetUserPreferenceString(
+                (int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem,
+                (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified,
+                string.Empty);
+            if (!modernPreferenceSet && !legacyPreferenceSet)
+            {
+                throw new InvalidOperationException(
+                    "SolidWorks refused to reset the mesh export coordinate system to the assembly frame.");
+            }
             double reductionRatio = reductionRatioOverride.HasValue
                 ? reductionRatioOverride.Value
                 : link.MeshReductionRatio;

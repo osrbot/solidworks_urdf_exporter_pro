@@ -27,7 +27,7 @@ physical validation, and release maintenance:
 
 | Production gap | Maintained fork response |
 | --- | --- |
-| Link-tree edits could be lost across preview, PropertyManager, or reopen transitions | Transactional editing, persisted v1.5 configurations, recovery drafts, and stricter duplicate/stale-state validation |
+| Link-tree edits could be lost across preview, PropertyManager, or reopen transitions | Transactional editing, strict v2 PID-backed configurations, recovery drafts, and stricter duplicate/stale-state validation |
 | Mass properties could be zero, sign-inverted, or expressed in the wrong frame | Explicit system units, one part/assembly frame-conversion path, COM/bounds checks, physical tensor validation, and API-principal-moment comparison |
 | Collision choices were difficult to verify before export | Link-local fitting, temporary SolidWorks previews for every strategy, fallback reporting, and requested/effective strategy records |
 | Visual/material controls and large exports were hard to inspect consistently | SolidWorks appearance loading, deterministic Link coloring, bilingual UI, topmost progress, and export summaries |
@@ -58,8 +58,20 @@ generated package reports remain authoritative for what was actually exported.
   Isaac Lab profiles without guessing actuator gains.
 - Records stable Link/Joint IDs and source evidence. SolidWorks Mate detection is an optional,
   user-confirmed suggestion for native movable assemblies, never a fallback for STEP geometry.
-- Stores Link/Joint configuration in the assembly feature
-  `URDF Export Configuration (v1.5)` and migrates older readable configurations when saved.
+- Stores Link/Joint configuration in `URDF Export Configuration (v2)`. Explicit root-document
+  references use `OwnerScope=RootDocument` plus feature PID; component-instance references use
+  `OwnerScope=ComponentInstance` plus component PID and feature PID. Display names are UI labels,
+  not identity. Resolution first finds the owner feature by PID, then maps component references to
+  the exact assembly occurrence with `IComponent2.GetCorresponding`; no name lookup or active
+  configuration switching is involved. Name-based v1.x configurations are intentionally
+  not migrated; delete the
+  legacy feature, recreate the configuration, and review it. V2 writes use canonical and hidden
+  recovery slots: an existing slot is invalidated before its payload changes, a nonzero revision is
+  committed last, each slot is fully validated, and loading selects the newest valid revision so an
+  interrupted in-place COM write cannot replace the last valid state. A slot left at `revision=0` is
+  treated only as an interrupted preparation: loading ignores it and the next save can retry it.
+  A SolidWorks session caches only a fully registered schema definition; after initialization fails,
+  the retry uses a fresh unique definition so a partial `AttributeDef` cannot poison later saves.
 - Provides a transactional Link-tree canvas with add, rename, reparent, automatic layout, box
   selection, and branch copy/paste/delete.
 - Provides Markdown-style Link-tree outline editing where `#`, `##`, and `###` define hierarchy.
@@ -266,19 +278,36 @@ MSBuild.exe SW2URDF\SW2URDF.csproj /t:Build /p:Configuration=Debug /p:Platform=x
 Run all locally available tests after building Debug:
 
 ```powershell
-TestRunner\bin\x64\Debug\net48\TestRunner.exe
+TestRunner\bin\Debug\net48\TestRunner.exe
 ```
 
 Run a focused class or name filter:
 
 ```powershell
-TestRunner\bin\x64\Debug\net48\TestRunner.exe TestCollisionPreview
+TestRunner\bin\Debug\net48\TestRunner.exe TestCollisionPreview
 ```
 
 Pure tests can run without SolidWorks. Live COM tests require a compatible installed SolidWorks and
 can fail with an RPC/COM error when SolidWorks is unavailable or the automation process terminates.
 Live coverage on SolidWorks 2023 is not evidence of compatibility with every release or service
 pack.
+
+The deep-reference Live test uses a disposable five-level assembly. Close SolidWorks first; the
+generator starts and owns an isolated SolidWorks process, writes the fixture under the system
+temporary directory when `--output-directory` is omitted, and closes that process before returning.
+The Live test deliberately accepts only that default temporary-directory fixture:
+
+```powershell
+python -m pip install pywin32
+$fixture = python scripts\create_deep_reference_fixture.py `
+  examples\3_DOF_ARM\3_DOF_ARM.SLDASM
+$env:SW2URDF_RUN_DEEP_REFERENCE_TESTS = "1"
+$env:SW2URDF_TEST_DEEP_REFERENCE_ASSEMBLY = $fixture
+TestRunner\bin\Debug\net48\TestRunner.exe TestDeepReferenceGeometryIntegration
+```
+
+The generator depends only on public `pywin32` and SolidWorks COM APIs. If automatic template
+discovery is unavailable, pass an explicit `--assembly-template C:\path\assembly.asmdot`.
 
 ## Reproducible Installer Build
 

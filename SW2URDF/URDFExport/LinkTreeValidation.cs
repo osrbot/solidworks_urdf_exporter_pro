@@ -5,52 +5,6 @@ using System.Linq;
 
 namespace SW2URDF.URDFExport
 {
-    internal static class LinkTreeGlobalFramePolicy
-    {
-        public static string Resolve(
-            LinkNode root,
-            IEnumerable<string> availableCoordinateSystems)
-        {
-            if (root == null || root.Link == null || root.Link.Joint == null)
-            {
-                return string.Empty;
-            }
-
-            string configured = root.Link.Joint.CoordinateSystemName ?? string.Empty;
-            HashSet<string> available = new HashSet<string>(
-                availableCoordinateSystems ?? Enumerable.Empty<string>(),
-                StringComparer.OrdinalIgnoreCase);
-            if (!available.Contains("Origin_global") ||
-                string.Equals(configured, "Origin_global", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(configured, "Automatically Generate", StringComparison.Ordinal))
-            {
-                return configured;
-            }
-
-            // Older property-page builds could write the selected child's Joint frame into
-            // the root frame while refreshing combo boxes. Repair only that unambiguous case.
-            bool duplicatesChildJointFrame = FlattenChildren(root)
-                .Any(node => node.Link != null && node.Link.Joint != null &&
-                    string.Equals(
-                        node.Link.Joint.CoordinateSystemName,
-                        configured,
-                        StringComparison.OrdinalIgnoreCase));
-            return duplicatesChildJointFrame ? "Origin_global" : configured;
-        }
-
-        private static IEnumerable<LinkNode> FlattenChildren(LinkNode root)
-        {
-            foreach (LinkNode child in root.Nodes)
-            {
-                yield return child;
-                foreach (LinkNode descendant in FlattenChildren(child))
-                {
-                    yield return descendant;
-                }
-            }
-        }
-    }
-
     internal static class LinkTreeRootJointPolicy
     {
         public static void Normalize(LinkNode root)
@@ -65,14 +19,11 @@ namespace SW2URDF.URDFExport
                 return;
             }
 
-            // The root Link has no parent Joint. CoordinateSystemName is retained because the
-            // legacy data model uses it for the assembly-wide export coordinate system.
-            string globalCoordinateSystem = root.Joint.CoordinateSystemName;
             root.Joint.Unset();
             root.Joint.Name = string.Empty;
             root.Joint.Type = string.Empty;
-            root.Joint.AxisName = string.Empty;
-            root.Joint.CoordinateSystemName = globalCoordinateSystem ?? string.Empty;
+            root.Joint.AxisReference = CadFeatureReference.None(
+                ReferenceGeometryKind.Axis);
         }
     }
 

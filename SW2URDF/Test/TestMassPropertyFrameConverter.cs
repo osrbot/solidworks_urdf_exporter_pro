@@ -137,35 +137,52 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestRepairsRootFrameOverwrittenByChildJointFrame()
+        public void TestRootFrameCannotBeOverwrittenByChildJointFrame()
         {
             LinkNode root = new LinkNode { IsBaseNode = true };
-            root.Link.Joint.CoordinateSystemName = "Origin_back_left_joint";
+            root.Link.FrameReference = CreateReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                1);
             LinkNode child = new LinkNode { IsBaseNode = false };
-            child.Link.Joint.CoordinateSystemName = "Origin_back_left_joint";
+            child.Link.FrameReference = CreateReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                2);
             root.Nodes.Add(child);
 
-            string resolved = LinkTreeGlobalFramePolicy.Resolve(
-                root,
-                new[] { "Origin_global", "Origin_back_left_joint" });
+            LinkTreeRootJointPolicy.Normalize(root);
 
-            Assert.Equal("Origin_global", resolved);
+            Assert.Equal(CreateReference(ReferenceGeometryKind.CoordinateSystem, 1),
+                root.Link.FrameReference);
+            Assert.Equal(CreateReference(ReferenceGeometryKind.CoordinateSystem, 2),
+                child.Link.FrameReference);
         }
 
         [Fact]
-        public void TestKeepsExplicitCustomRootFrameWhenItDoesNotMatchChild()
+        public void TestRootNormalizationClearsOnlyHiddenJointCadBinding()
         {
             LinkNode root = new LinkNode { IsBaseNode = true };
-            root.Link.Joint.CoordinateSystemName = "robot_root";
-            LinkNode child = new LinkNode { IsBaseNode = false };
-            child.Link.Joint.CoordinateSystemName = "Origin_wheel_joint";
-            root.Nodes.Add(child);
+            CadFeatureReference frame = CreateReference(
+                ReferenceGeometryKind.CoordinateSystem,
+                3);
+            root.Link.FrameReference = frame;
+            root.Link.Joint.AxisReference = CreateReference(
+                ReferenceGeometryKind.Axis,
+                4);
 
-            string resolved = LinkTreeGlobalFramePolicy.Resolve(
-                root,
-                new[] { "Origin_global", "robot_root", "Origin_wheel_joint" });
+            LinkTreeRootJointPolicy.Normalize(root);
 
-            Assert.Equal("robot_root", resolved);
+            Assert.Equal(frame, root.Link.FrameReference);
+            Assert.Equal(ReferenceSelectionMode.None, root.Link.Joint.AxisReference.Mode);
+        }
+
+        private static CadFeatureReference CreateReference(
+            ReferenceGeometryKind kind,
+            byte id)
+        {
+            return CadFeatureReference.ExplicitRoot(
+                kind,
+                new[] { id },
+                string.Empty);
         }
 
         private static MassPropertySnapshot SnapshotAt(double x, double y, double z)

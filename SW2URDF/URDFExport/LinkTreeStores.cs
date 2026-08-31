@@ -53,8 +53,10 @@ namespace SW2URDF.URDFExport
         public void CreateDefault(Guid id)
         {
             Link link = new Link();
-            link.Joint.AxisName = "Automatically Generate";
-            link.Joint.CoordinateSystemName = "Automatically Generate";
+            link.FrameReference = CadFeatureReference.Automatic(
+                ReferenceGeometryKind.CoordinateSystem);
+            link.Joint.AxisReference = CadFeatureReference.Automatic(
+                ReferenceGeometryKind.Axis);
             link.JointKinematicsDirty = true;
             link.JointLimitsDirty = true;
             link.isIncomplete = true;
@@ -308,14 +310,10 @@ namespace SW2URDF.URDFExport
                     JointConfigurationPolicy.Normalize(configuration.Joint.Type),
                     JointConfigurationPolicy.Normalize(candidate.Joint.Type),
                     StringComparison.Ordinal) &&
-                string.Equals(
-                    configuration.Joint.CoordinateSystemName,
-                    candidate.Joint.CoordinateSystemName,
-                    StringComparison.Ordinal) &&
-                string.Equals(
-                    configuration.Joint.AxisName,
-                    candidate.Joint.AxisName,
-                    StringComparison.Ordinal) &&
+                Equals(configuration.FrameReference, candidate.FrameReference) &&
+                Equals(
+                    configuration.Joint.AxisReference,
+                    candidate.Joint.AxisReference) &&
                 configuration.isFixedFrame == candidate.isFixedFrame;
         }
 

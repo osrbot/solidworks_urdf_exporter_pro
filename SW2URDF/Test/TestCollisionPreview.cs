@@ -227,10 +227,18 @@ namespace SW2URDF.Test
                 }
 
                 ExportHelper exporter = new ExportHelper(swApp);
-                coordinateTransform = exporter.GetCoordinateSystemTransform(coordinateSystemName);
+                ReferenceGeometryEntry frameEntry = exporter.GetRefCoordinateSystems()
+                    .FirstOrDefault(entry =>
+                        String.Equals(
+                            entry.DisplayName,
+                            coordinateSystemName,
+                            StringComparison.Ordinal) &&
+                        String.IsNullOrWhiteSpace(entry.ComponentPath));
+                Assert.NotNull(frameEntry);
+                coordinateTransform = exporter.GetCoordinateSystemTransform(frameEntry.Reference);
                 Assert.NotNull(coordinateTransform);
                 Link link = new Link { Name = "preview_test_link" };
-                link.Joint.CoordinateSystemName = coordinateSystemName;
+                link.FrameReference = frameEntry.Reference.Clone();
                 link.SWComponents.Add(component);
                 using (TemporaryBodyDisplayContext context =
                     CreateDisplayContext(swApp, model, link, coordinateTransform))

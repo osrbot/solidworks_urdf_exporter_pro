@@ -21,8 +21,9 @@ older uninstaller cannot unregister a newer installation.
 
 - Close SolidWorks before upgrading.
 - The installer remembers a previously selected install directory.
-- Readable legacy assembly configurations load through the compatibility path and upgrade to v1.5
-  only after a later formal save succeeds.
+- Current configurations use `URDF Export Configuration (v2)` with component-instance and feature
+  persistent IDs. Name-based v1.x configurations are not migrated: delete the legacy
+  feature, recreate the configuration, and review every CAD binding.
 - Validate Link Tree, frames, inertia, and collision previews on a non-production assembly before
   upgrading production workflows.
 

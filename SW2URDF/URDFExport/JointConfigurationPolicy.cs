@@ -36,9 +36,7 @@ namespace SW2URDF.URDFExport
 
         public static string Normalize(string jointType)
         {
-            return jointType == "Automatically Generate"
-                ? Joint.AutomaticallyDetectType
-                : jointType;
+            return jointType;
         }
 
         public static void ApplyUserSelection(Joint joint, string jointType)
@@ -180,6 +178,7 @@ namespace SW2URDF.URDFExport
         private static void ClearMotionConfiguration(Joint joint)
         {
             joint.Axis.Unset();
+            joint.AxisReference = CadFeatureReference.None(ReferenceGeometryKind.Axis);
             joint.Limit.Unset();
             joint.Calibration.Unset();
             joint.Dynamics.Unset();

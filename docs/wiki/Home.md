@@ -11,8 +11,9 @@ entry point, support boundaries, and credits.
 The upstream exporter supplied the original add-in and URDF pipeline. The maintained fork is needed
 to close production gaps rather than merely repackage the historical binaries:
 
-- Link-tree sessions now have transactional editing, saved v1.5 configurations, recovery drafts,
-  and stricter validation across preview and reopen transitions.
+- Link-tree sessions now have transactional editing, strict v2 PID-backed configurations, recovery
+  drafts, and stricter validation across preview and reopen transitions. Component-instance and
+  feature PIDs keep nested Unicode or duplicate reference-geometry names unambiguous.
 - Mass, COM, and inertia use explicit units and one frame-conversion route for parts and assemblies,
   with bounds, physical-tensor, and API-principal-moment checks.
 - Collision strategies are fitted per Link, previewed in SolidWorks, and recorded with any fallback

@@ -1,4 +1,5 @@
 using SolidWorks.Interop.sldworks;
+using SW2URDF.URDFExport;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -56,6 +57,9 @@ namespace SW2URDF.URDF
         public Joint Joint;
 
         [DataMember]
+        public CadFeatureReference FrameReference;
+
+        [DataMember]
         public bool STLQualityFine;
 
         [DataMember]
@@ -99,6 +103,8 @@ namespace SW2URDF.URDF
             Collision = new Collision();
             AdditionalCollisions = new List<Collision>();
             Joint = new Joint();
+            FrameReference = CadFeatureReference.Automatic(
+                ReferenceGeometryKind.CoordinateSystem);
 
             isFixedFrame = false;
             MeshReductionRatio = 0;
@@ -140,6 +146,8 @@ namespace SW2URDF.URDF
             Collision = new Collision();
             AdditionalCollisions = new List<Collision>();
             Joint = new Joint();
+            FrameReference = CadFeatureReference.Automatic(
+                ReferenceGeometryKind.CoordinateSystem);
 
             isFixedFrame = false;
             MeshReductionRatio = 0;
@@ -299,6 +307,9 @@ namespace SW2URDF.URDF
             isIncomplete = externalLink.isIncomplete;
             JointKinematicsDirty = externalLink.JointKinematicsDirty;
             JointLimitsDirty = externalLink.JointLimitsDirty;
+            FrameReference = externalLink.FrameReference == null
+                ? CadFeatureReference.Automatic(ReferenceGeometryKind.CoordinateSystem)
+                : externalLink.FrameReference.Clone();
         }
 
         private static byte[] CloneBytes(byte[] value)

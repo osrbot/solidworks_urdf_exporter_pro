@@ -2,6 +2,7 @@ using MathNet.Numerics.LinearAlgebra;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SW2URDF.URDF;
+using SW2URDF.URDFExport;
 using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
@@ -259,7 +260,8 @@ namespace SW2URDF.UI
                     MathTransform transform = null;
                     try
                     {
-                        transform = candidate.Transform2;
+                        transform =
+                            ReferenceGeometryResolver.GetComponentToRootTransform(candidate);
                         if (transform == null)
                         {
                             continue;

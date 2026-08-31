@@ -48,8 +48,6 @@ namespace SW2URDF.URDFExport.CSV
             {"Link.Collision.Geometry.Mesh.filename","Collision Mesh Filename"},
             {"Link.Visual.Material.name","Material Name"},
             {"Link.SWComponents","SW Components"},
-            { "Link.CoordSysName","Coordinate System"},
-            { "Link.AxisName","Axis Name"},
             { "Link.Joint.name","Joint Name"},
             { "Link.Joint.type","Joint Type"},
             { "Link.Joint.Origin.xyz.x","Joint Origin X"},

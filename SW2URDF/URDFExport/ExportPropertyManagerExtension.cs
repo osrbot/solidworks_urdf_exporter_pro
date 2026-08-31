@@ -36,6 +36,13 @@ namespace SW2URDF.URDFExport
 {
     public partial class ExportPropertyManager : PropertyManagerPage2Handler9
     {
+        private List<CadFeatureReference> pmGlobalFrameReferences =
+            new List<CadFeatureReference>();
+        private List<CadFeatureReference> pmLinkFrameReferences =
+            new List<CadFeatureReference>();
+        private List<CadFeatureReference> pmAxisReferences =
+            new List<CadFeatureReference>();
+
         private void OpenLinkTreeCanvas()
         {
             if (Tree == null || Tree.Nodes.Count == 0)
@@ -194,7 +201,12 @@ namespace SW2URDF.URDFExport
             {
                 if (!String.IsNullOrWhiteSpace(activeModelPath))
                 {
-                    exportSessionDraftStore.Delete(activeModelPath);
+                    if (!exportSessionDraftStore.Delete(activeModelPath))
+                    {
+                        logger.Warn(
+                            "The saved URDF configuration is valid, but its older recovery draft could not be cleared. " +
+                            "The stale draft will be ignored when the exporter opens again.");
+                    }
                 }
             }
             catch (Exception exception)
@@ -214,15 +226,89 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        // Populates the combo box with feature names
-        private void FillComboBox(PropertyManagerPageCombobox box, List<string> featureNames)
+        private List<CadFeatureReference> FillReferenceComboBox(
+            PropertyManagerPageCombobox box,
+            List<ReferenceGeometryEntry> entries,
+            CadFeatureReference selectedReference,
+            ReferenceGeometryKind kind,
+            bool includeAutomatic,
+            bool includeNone)
         {
             box.Clear();
-            box.AddItems("Automatically Generate");
-            foreach (string name in featureNames)
+            List<CadFeatureReference> references = new List<CadFeatureReference>();
+            if (includeAutomatic)
             {
-                box.AddItems(name);
+                box.AddItems(ChineseUiText.Translate("Automatically generate", "自动生成"));
+                references.Add(CadFeatureReference.Automatic(kind));
             }
+
+            bool selectedReferenceAvailable = false;
+            foreach (ReferenceGeometryEntry entry in entries)
+            {
+                box.AddItems(entry.DisplayLabel);
+                references.Add(entry.Reference);
+                if (selectedReference != null && entry.Reference.Equals(selectedReference))
+                {
+                    selectedReferenceAvailable = true;
+                }
+            }
+            if (selectedReference != null &&
+                selectedReference.IsExplicit &&
+                !selectedReferenceAvailable)
+            {
+                box.AddItems(ChineseUiText.Translate("Unavailable reference", "引用不可用"));
+                references.Add(selectedReference.Clone());
+            }
+            if (includeNone)
+            {
+                box.AddItems(ChineseUiText.Translate("None", "无"));
+                references.Add(CadFeatureReference.None(kind));
+            }
+            return references;
+        }
+
+        private static void SelectReferenceComboBox(
+            PropertyManagerPageCombobox box,
+            IList<CadFeatureReference> references,
+            CadFeatureReference selectedReference)
+        {
+            box.CurrentSelection = -1;
+            if (selectedReference == null)
+            {
+                if (references.Count > 0)
+                {
+                    box.CurrentSelection = 0;
+                }
+                return;
+            }
+            for (short index = 0; index < references.Count; index++)
+            {
+                if (references[index].Equals(selectedReference))
+                {
+                    box.CurrentSelection = index;
+                    return;
+                }
+            }
+            if (references.Count > 0)
+            {
+                box.CurrentSelection = 0;
+            }
+        }
+
+        private static CadFeatureReference ReadReferenceComboBox(
+            PropertyManagerPageCombobox box,
+            IList<CadFeatureReference> references,
+            CadFeatureReference fallback,
+            ReferenceGeometryKind kind)
+        {
+            int index = box.CurrentSelection;
+            if (index >= 0 && index < references.Count)
+            {
+                return references[index].Clone();
+            }
+            return fallback == null
+                ? CadFeatureReference.Automatic(kind)
+                : fallback.Clone();
         }
 
         // Finds the specified item in a combobox and sets the box to it. I'm not sure why I
@@ -378,7 +464,9 @@ namespace SW2URDF.URDFExport
 
         private void CheckNodeJointComplete(LinkNode node)
         {
-            if (node.Link.SWComponents.Count == 0 && node.Link.Joint.CoordinateSystemName == "Automatically Generate")
+            if (node.Link.SWComponents.Count == 0 &&
+                node.Link.FrameReference != null &&
+                node.Link.FrameReference.Mode == ReferenceSelectionMode.Automatic)
             {
                 node.IsIncomplete = true;
                 node.WhyIncomplete +=
@@ -386,7 +474,9 @@ namespace SW2URDF.URDFExport
                     "        without components. Either select an origin or at least one component.\r\n";
             }
 
-            if (node.Link.SWComponents.Count == 0 && node.Link.Joint.AxisName == "Automatically Generate")
+            if (node.Link.SWComponents.Count == 0 &&
+                node.Link.Joint.AxisReference != null &&
+                node.Link.Joint.AxisReference.Mode == ReferenceSelectionMode.Automatic)
             {
                 node.IsIncomplete = true;
                 node.WhyIncomplete +=
@@ -511,15 +601,26 @@ namespace SW2URDF.URDFExport
             if (!node.IsBaseNode)
             {
                 node.Link.Joint.Name = PMTextBoxJointName.Text;
-                node.Link.Joint.AxisName = PMComboBoxAxes.get_ItemText(-1);
-                node.Link.Joint.CoordinateSystemName = PMComboBoxCoordSys.get_ItemText(-1);
+                node.Link.Joint.AxisReference = ReadReferenceComboBox(
+                    PMComboBoxAxes,
+                    pmAxisReferences,
+                    node.Link.Joint.AxisReference,
+                    ReferenceGeometryKind.Axis);
+                node.Link.FrameReference = ReadReferenceComboBox(
+                    PMComboBoxCoordSys,
+                    pmLinkFrameReferences,
+                    node.Link.FrameReference,
+                    ReferenceGeometryKind.CoordinateSystem);
                 node.Link.Joint.Type = ChineseUiText.JointTypeValue(
                     PMComboBoxJointType.get_ItemText(-1));
                 return;
             }
 
-            node.Link.Joint.CoordinateSystemName =
-                PMComboBoxGlobalCoordsys.get_ItemText(-1);
+            node.Link.FrameReference = ReadReferenceComboBox(
+                PMComboBoxGlobalCoordsys,
+                pmGlobalFrameReferences,
+                node.Link.FrameReference,
+                ReferenceGeometryKind.CoordinateSystem);
         }
 
         private void UpdateSelectedNodeComboValue(int controlId, int item)
@@ -539,16 +640,15 @@ namespace SW2URDF.URDFExport
             {
                 if (controlId == IDGlobalCoordsys && node.IsBaseNode)
                 {
-                    node.Link.Joint.CoordinateSystemName =
-                        PMComboBoxGlobalCoordsys.get_ItemText((short)item);
+                    node.Link.FrameReference = pmGlobalFrameReferences[item].Clone();
                 }
                 else if (!node.IsBaseNode && controlId == ComboBoxCoordSysID)
                 {
-                    node.Link.Joint.CoordinateSystemName = PMComboBoxCoordSys.get_ItemText((short)item);
+                    node.Link.FrameReference = pmLinkFrameReferences[item].Clone();
                 }
                 else if (!node.IsBaseNode && controlId == ComboBoxAxesID)
                 {
-                    node.Link.Joint.AxisName = PMComboBoxAxes.get_ItemText((short)item);
+                    node.Link.Joint.AxisReference = pmAxisReferences[item].Clone();
                 }
                 else if (!node.IsBaseNode && controlId == ComboBoxJointTypeID)
                 {
@@ -596,8 +696,10 @@ namespace SW2URDF.URDFExport
             if (Parent == null)             //For the base_link node
             {
                 node.Link.Name = "base_link";
-                node.Link.Joint.AxisName = "";
-                node.Link.Joint.CoordinateSystemName = "Automatically Generate";
+                node.Link.FrameReference = CadFeatureReference.Automatic(
+                    ReferenceGeometryKind.CoordinateSystem);
+                node.Link.Joint.AxisReference = CadFeatureReference.None(
+                    ReferenceGeometryKind.Axis);
                 node.Link.SWComponents = new List<Component2>();
                 node.IsBaseNode = true;
                 node.IsIncomplete = true;
@@ -606,8 +708,10 @@ namespace SW2URDF.URDFExport
             {
                 node.IsBaseNode = false;
                 node.Link.Name = "Empty_Link";
-                node.Link.Joint.AxisName = "Automatically Generate";
-                node.Link.Joint.CoordinateSystemName = "Automatically Generate";
+                node.Link.FrameReference = CadFeatureReference.Automatic(
+                    ReferenceGeometryKind.CoordinateSystem);
+                node.Link.Joint.AxisReference = CadFeatureReference.Automatic(
+                    ReferenceGeometryKind.Axis);
                 node.Link.Joint.Type = String.Empty;
                 node.Link.SWComponents = new List<Component2>();
                 node.IsBaseNode = false;
@@ -639,12 +743,29 @@ namespace SW2URDF.URDFExport
                 PMTextBoxJointName.Text = node.Link.Joint.Name;
                 PMLabelParentLink.Caption = node.Parent.Name;
 
-                FillComboBox(PMComboBoxCoordSys, Exporter.GetRefCoordinateSystems());
-                FillComboBox(PMComboBoxAxes, Exporter.GetRefAxes());
+                pmLinkFrameReferences = FillReferenceComboBox(
+                    PMComboBoxCoordSys,
+                    Exporter.GetRefCoordinateSystems(),
+                    node.Link.FrameReference,
+                    ReferenceGeometryKind.CoordinateSystem,
+                    true,
+                    false);
+                pmAxisReferences = FillReferenceComboBox(
+                    PMComboBoxAxes,
+                    Exporter.GetRefAxes(),
+                    node.Link.Joint.AxisReference,
+                    ReferenceGeometryKind.Axis,
+                    JointConfigurationPolicy.RequiresMotionAxis(node.Link.Joint.Type),
+                    true);
 
-                PMComboBoxAxes.AddItems("None");
-                SelectComboBox(PMComboBoxCoordSys, node.Link.Joint.CoordinateSystemName);
-                SelectComboBox(PMComboBoxAxes, node.Link.Joint.AxisName);
+                SelectReferenceComboBox(
+                    PMComboBoxCoordSys,
+                    pmLinkFrameReferences,
+                    node.Link.FrameReference);
+                SelectReferenceComboBox(
+                    PMComboBoxAxes,
+                    pmAxisReferences,
+                    node.Link.Joint.AxisReference);
                 SelectComboBox(
                     PMComboBoxJointType,
                     ChineseUiText.JointTypeDisplay(node.Link.Joint.Type));
@@ -656,11 +777,22 @@ namespace SW2URDF.URDFExport
                 SelectComboBox(PMComboBoxCoordSys, "");
                 SelectComboBox(PMComboBoxAxes, "");
                 SelectComboBox(PMComboBoxJointType, "");
+                pmLinkFrameReferences.Clear();
+                pmAxisReferences.Clear();
 
                 //Activate controls before changing them
                 EnableControls(!node.IsBaseNode);
-                FillComboBox(PMComboBoxGlobalCoordsys, Exporter.GetRefCoordinateSystems());
-                SelectComboBox(PMComboBoxGlobalCoordsys, node.Link.Joint.CoordinateSystemName);
+                pmGlobalFrameReferences = FillReferenceComboBox(
+                    PMComboBoxGlobalCoordsys,
+                    Exporter.GetRefCoordinateSystems(),
+                    node.Link.FrameReference,
+                    ReferenceGeometryKind.CoordinateSystem,
+                    true,
+                    false);
+                SelectReferenceComboBox(
+                    PMComboBoxGlobalCoordsys,
+                    pmGlobalFrameReferences,
+                    node.Link.FrameReference);
             }
         }
 
@@ -756,6 +888,24 @@ namespace SW2URDF.URDFExport
             bool restoredDraft = exportSessionDraftStore.TryLoad(
                 activeModelPath,
                 out ExportSessionDraft draft);
+            if (restoredDraft &&
+                baseNode != null &&
+                string.IsNullOrWhiteSpace(errorMessage) &&
+                ConfigurationSerialization.TryGetSavedConfigurationUtc(
+                    ActiveSWModel,
+                    out DateTime configurationSavedUtc) &&
+                !FileExportSessionDraftStore.IsDraftNewerThanConfiguration(
+                    draft.SavedUtc,
+                    configurationSavedUtc))
+            {
+                restoredDraft = false;
+                logger.Info(
+                    "Ignored a recovery draft because the saved URDF configuration is newer.");
+                if (!exportSessionDraftStore.Delete(activeModelPath))
+                {
+                    logger.Warn("The stale URDF recovery draft could not be deleted.");
+                }
+            }
             if (restoredDraft)
             {
                 baseNode = draft.Root;
@@ -836,7 +986,15 @@ namespace SW2URDF.URDFExport
             }
             ActiveSWModel.ClearSelection2(true);
             ActiveSWModel.Extension.SelectByID2(
-                "Origin_global", "COORDSYS", 0, 0, 0, true, 0, null, 0);
+                ConfigurationSerialization.UrdfConfigurationSwAttributeName,
+                "ATTRIBUTE",
+                0,
+                0,
+                0,
+                true,
+                0,
+                null,
+                0);
             if (needToCreateFolder)
             {
                 Feature folderFeature =
@@ -856,16 +1014,25 @@ namespace SW2URDF.URDFExport
 
         public void SelectFeatures(LinkNode node)
         {
-            ActiveSWModel.Extension.SelectByID2(
-                node.Link.Joint.CoordinateSystemName, "COORDSYS", 0, 0, 0, true, -1, null, 0);
-            if (node.Link.Joint.AxisName != "None")
-            {
-                ActiveSWModel.Extension.SelectByID2(
-                    node.Link.Joint.AxisName, "AXIS", 0, 0, 0, true, -1, null, 0);
-            }
+            SelectTopLevelReferenceFeature(node.Link.FrameReference);
+            SelectTopLevelReferenceFeature(node.Link.Joint.AxisReference);
             foreach (LinkNode child in node.Nodes)
             {
                 SelectFeatures(child);
+            }
+        }
+
+        private void SelectTopLevelReferenceFeature(CadFeatureReference reference)
+        {
+            if (reference == null || !reference.IsExplicit)
+            {
+                return;
+            }
+            ReferenceGeometryResolution resolution =
+                Exporter.ResolveReferenceGeometry(reference);
+            if (resolution.IsResolved && resolution.Geometry.Component == null)
+            {
+                resolution.Geometry.Feature.Select2(true, -1);
             }
         }
 
