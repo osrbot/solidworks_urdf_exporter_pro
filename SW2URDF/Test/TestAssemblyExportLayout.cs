@@ -1099,8 +1099,38 @@ namespace SW2URDF.Test
                     maxRight));
             Assert.True(
                 measured.Height <= label.Height,
-                String.Format("{0} is clipped vertically: preferred {1}, actual {2}.",
-                    label.Name, measured.Height, label.Height));
+                String.Format(
+                    "{0} is clipped vertically: preferred {1}, actual {2}, " +
+                    "width {3}, maximum {4}, control chain {5}.",
+                    label.Name,
+                    measured.Height,
+                    label.Height,
+                    label.Width,
+                    label.MaximumSize,
+                    DescribeControlChain(label)));
+        }
+
+        private static string DescribeControlChain(Control control)
+        {
+            string result = String.Empty;
+            for (Control current = control; current != null; current = current.Parent)
+            {
+                if (result.Length > 0)
+                {
+                    result += " <- ";
+                }
+                result += String.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0}[w={1},cw={2},dock={3},auto={4}]",
+                    String.IsNullOrWhiteSpace(current.Name)
+                        ? current.GetType().Name
+                        : current.Name,
+                    current.Width,
+                    current.ClientSize.Width,
+                    current.Dock,
+                    current.AutoSize);
+            }
+            return result;
         }
 
         private static void AssertMimicControlsDoNotOverlapFooter(AssemblyExportForm form)

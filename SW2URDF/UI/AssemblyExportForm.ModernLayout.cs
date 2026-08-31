@@ -23,6 +23,7 @@ THE SOFTWARE.
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using SW2URDF.URDF;
 
 namespace SW2URDF.UI
 {
@@ -234,6 +235,10 @@ namespace SW2URDF.UI
                 "modernJointMimicPage",
                 "Mimic");
             TableLayoutPanel mimicStack = CreateModernStack();
+            mimicStack.AutoSize = false;
+            mimicStack.Dock = DockStyle.Fill;
+            mimicStack.RowCount = 1;
+            mimicStack.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             mimicStack.Controls.Add(CreateModernMimicCard());
             mimicPage.Controls.Add(mimicStack);
 
@@ -452,7 +457,7 @@ namespace SW2URDF.UI
 
         private static TabControl CreateModernSectionTabs(string name)
         {
-            return new TabControl
+            TabControl tabs = new TabControl
             {
                 Name = name,
                 Dock = DockStyle.Fill,
@@ -460,6 +465,34 @@ namespace SW2URDF.UI
                 Padding = new Point(16, 6),
                 SizeMode = TabSizeMode.Normal
             };
+            tabs.SelectedIndexChanged += SynchronizeModernSelectedTabPage;
+            tabs.SizeChanged += SynchronizeModernSelectedTabPage;
+            tabs.Layout += SynchronizeModernSelectedTabPage;
+            return tabs;
+        }
+
+        private static void SynchronizeModernSelectedTabPage(
+            object sender,
+            EventArgs e)
+        {
+            TabControl tabs = sender as TabControl;
+            TabPage page = tabs == null ? null : tabs.SelectedTab;
+            if (page == null || tabs.DisplayRectangle.Width <= 0 ||
+                tabs.DisplayRectangle.Height <= 0)
+            {
+                return;
+            }
+
+            Rectangle pageBounds = tabs.DisplayRectangle;
+            int borderInset = Math.Max(4, pageBounds.Left);
+            pageBounds.Width = Math.Max(
+                pageBounds.Width,
+                tabs.ClientSize.Width - pageBounds.Left - borderInset);
+            pageBounds.Height = Math.Max(
+                pageBounds.Height,
+                tabs.ClientSize.Height - pageBounds.Top - borderInset);
+            page.Bounds = pageBounds;
+            page.PerformLayout();
         }
 
         private static TabPage CreateModernTabPage(string name, string text)
@@ -909,6 +942,10 @@ namespace SW2URDF.UI
             modernMimicDetails.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             modernMimicDetails.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             modernMimicDetails.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            modernMimicDetails.SizeChanged += delegate
+            {
+                UpdateModernMimicEquationWrapWidth();
+            };
 
             AddModernField(modernMimicDetails, MimicJointLabel, MimicJointComboBox, 0, 0, 1);
             modernMimicDetails.SetColumnSpan(MimicJointComboBox, 3);
@@ -948,7 +985,7 @@ namespace SW2URDF.UI
                 };
                 root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
                 root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+                root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
                 TableLayoutPanel frame = new TableLayoutPanel
@@ -971,9 +1008,11 @@ namespace SW2URDF.UI
 
                 TableLayoutPanel body = new TableLayoutPanel
                 {
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
                     BackColor = ModernWinFormsTheme.Surface,
                     ColumnCount = 2,
-                    Dock = DockStyle.Fill,
+                    Dock = DockStyle.Top,
                     Margin = new Padding(0, 0, 0, 8),
                     RowCount = 1
                 };
@@ -1336,6 +1375,7 @@ namespace SW2URDF.UI
                 TableLayoutPanel colorActions = new TableLayoutPanel
                 {
                     AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
                     ColumnCount = 1,
                     Dock = DockStyle.Top,
                     Margin = new Padding(8, 0, 0, 0),
@@ -1353,7 +1393,10 @@ namespace SW2URDF.UI
                 buttonMaterialColorPick.MinimumSize = new Size(0, 28);
                 buttonAutomaticLinkColors.Dock = DockStyle.Fill;
                 buttonAutomaticLinkColors.Margin = new Padding(0);
-                buttonAutomaticLinkColors.MinimumSize = new Size(0, 28);
+                ResizeButtonToText(buttonAutomaticLinkColors);
+                buttonAutomaticLinkColors.MinimumSize = new Size(
+                    buttonAutomaticLinkColors.Width,
+                    Math.Max(28, buttonAutomaticLinkColors.Height));
                 colorActions.Controls.Add(panelMaterialColorPreview, 0, 0);
                 colorActions.Controls.Add(buttonMaterialColorPick, 0, 1);
                 colorActions.Controls.Add(buttonAutomaticLinkColors, 0, 2);
@@ -1366,8 +1409,8 @@ namespace SW2URDF.UI
                     Margin = new Padding(0),
                     RowCount = 1
                 };
-                colorGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62F));
-                colorGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38F));
+                colorGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                colorGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
                 colorGrid.Controls.Add(rgbaGrid, 0, 0);
                 colorGrid.Controls.Add(colorActions, 1, 0);
                 Control color = CreateModernSubsection(
@@ -2151,6 +2194,8 @@ namespace SW2URDF.UI
             label27.Margin = new Padding(0);
 
             modernMimicDetails.PerformLayout();
+            UpdateModernMimicEquationWrapWidth();
+            modernMimicDetails.PerformLayout();
             if (modernMimicDetails.Parent != null)
             {
                 modernMimicDetails.Parent.PerformLayout();
@@ -2158,6 +2203,33 @@ namespace SW2URDF.UI
             if (modernJointRoot != null)
             {
                 modernJointRoot.PerformLayout();
+            }
+            if (modernJointSections != null)
+            {
+                SynchronizeModernSelectedTabPage(
+                    modernJointSections,
+                    EventArgs.Empty);
+                modernMimicDetails.PerformLayout();
+                UpdateModernMimicEquationWrapWidth();
+                modernMimicDetails.PerformLayout();
+            }
+        }
+
+        private void UpdateModernMimicEquationWrapWidth()
+        {
+            if (modernMimicDetails == null || MimicEquationLabel == null ||
+                modernMimicDetails.ClientSize.Width <= 0)
+            {
+                return;
+            }
+
+            int availableWidth = Math.Max(
+                1,
+                modernMimicDetails.ClientSize.Width -
+                MimicEquationLabel.Margin.Horizontal);
+            if (MimicEquationLabel.MaximumSize.Width != availableWidth)
+            {
+                MimicEquationLabel.MaximumSize = new Size(availableWidth, 0);
             }
         }
 
