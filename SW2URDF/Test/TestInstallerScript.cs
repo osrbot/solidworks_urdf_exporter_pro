@@ -155,6 +155,12 @@ namespace SW2URDF.Test
 
             string testRunnerProject = ReadRepositoryFile("TestRunner", "TestRunner.csproj");
             Assert.Contains("<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>", testRunnerProject);
+            Assert.Contains("<PlatformTarget>x64</PlatformTarget>", testRunnerProject);
+            Assert.Contains("<Prefer32Bit>false</Prefer32Bit>", testRunnerProject);
+            Assert.Contains("<RuntimeIdentifier>win7-x64</RuntimeIdentifier>", testRunnerProject);
+            Assert.Contains(
+                "<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>",
+                testRunnerProject);
             Assert.Contains("Microsoft.NETFramework.ReferenceAssemblies", testRunnerProject);
             Assert.Contains("xunit.runner.utility\" Version=\"2.4.1\"", testRunnerProject);
             string testRunnerLock = ReadRepositoryFile("TestRunner", "packages.lock.json");

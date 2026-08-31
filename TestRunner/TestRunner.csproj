@@ -8,6 +8,10 @@
     <OutputType>Exe</OutputType>
     <StartupObject />
     <LangVersion>7.1</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <RuntimeIdentifier>win7-x64</RuntimeIdentifier>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <SolidWorksInstallDir Condition=" '$(SolidWorksInstallDir)' == '' ">E:\Solidworks 2023\SOLIDWORKS Crop\SOLIDWORKS</SolidWorksInstallDir>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;bin\**;.codex-build*\**</DefaultItemExcludes>
