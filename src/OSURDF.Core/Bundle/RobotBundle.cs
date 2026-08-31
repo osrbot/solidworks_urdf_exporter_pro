@@ -649,11 +649,13 @@ namespace OSURDF.Core.Bundle
         {
             RobotJson.Write(Path.Combine(staging, RobotBundleLayout.RobotJsonFile), robot, false);
             UrdfCodec.Write(Path.Combine(staging, RobotBundleLayout.PortableUrdfFile), robot, true);
-            WriteJson(Path.Combine(staging, "profiles/package.json"), robot.Profiles.Package);
-            WriteJson(Path.Combine(staging, "profiles/ros1.json"), robot.Profiles.Ros1);
-            WriteJson(Path.Combine(staging, "profiles/ros2.json"), robot.Profiles.Ros2);
-            WriteJson(Path.Combine(staging, "profiles/isaac.json"), robot.Profiles.Isaac);
-            WriteJson(Path.Combine(staging, "profiles/isaaclab.json"), robot.Profiles.IsaacLab);
+            JObject canonicalRobot = JObject.Parse(RobotJson.Serialize(robot));
+            JObject profiles = (JObject)canonicalRobot["profiles"];
+            WriteJson(Path.Combine(staging, "profiles/package.json"), profiles["package"]);
+            WriteJson(Path.Combine(staging, "profiles/ros1.json"), profiles["ros1"]);
+            WriteJson(Path.Combine(staging, "profiles/ros2.json"), profiles["ros2"]);
+            WriteJson(Path.Combine(staging, "profiles/isaac.json"), profiles["isaac"]);
+            WriteJson(Path.Combine(staging, "profiles/isaaclab.json"), profiles["isaacLab"]);
             WriteJson(Path.Combine(staging, RobotBundleLayout.ValidationJsonFile), new
             {
                 valid = validation.IsValid,
@@ -1473,11 +1475,12 @@ namespace OSURDF.Core.Bundle
                 {
                     result.Errors.Add("robot.json and robot.urdf canonical model data do not match.");
                 }
-                VerifyProfileFile(root, "profiles/package.json", robot.Profiles?.Package, result);
-                VerifyProfileFile(root, "profiles/ros1.json", robot.Profiles?.Ros1, result);
-                VerifyProfileFile(root, "profiles/ros2.json", robot.Profiles?.Ros2, result);
-                VerifyProfileFile(root, "profiles/isaac.json", robot.Profiles?.Isaac, result);
-                VerifyProfileFile(root, "profiles/isaaclab.json", robot.Profiles?.IsaacLab, result);
+                JObject embeddedProfiles = rawRobot["profiles"] as JObject;
+                VerifyProfileFile(root, "profiles/package.json", embeddedProfiles?["package"], result);
+                VerifyProfileFile(root, "profiles/ros1.json", embeddedProfiles?["ros1"], result);
+                VerifyProfileFile(root, "profiles/ros2.json", embeddedProfiles?["ros2"], result);
+                VerifyProfileFile(root, "profiles/isaac.json", embeddedProfiles?["isaac"], result);
+                VerifyProfileFile(root, "profiles/isaaclab.json", embeddedProfiles?["isaacLab"], result);
                 RobotBundleManifest manifest = result.Manifest;
                 if (!string.Equals(manifest.RobotName, robot.Name, StringComparison.Ordinal) ||
                     manifest.RobotSchemaVersion != robot.SchemaVersion)
@@ -1553,12 +1556,12 @@ namespace OSURDF.Core.Bundle
         private static void VerifyProfileFile(
             string root,
             string relative,
-            object expected,
+            JToken expected,
             BundleVerificationResult result)
         {
             string path = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
             JToken actual = ReadStrictJson(path);
-            JToken expectedToken = expected == null ? JValue.CreateNull() : JToken.FromObject(expected);
+            JToken expectedToken = expected ?? JValue.CreateNull();
             if (!JToken.DeepEquals(actual, expectedToken))
             {
                 result.Errors.Add(relative + " does not match the corresponding robot.json profile.");

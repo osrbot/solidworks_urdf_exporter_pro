@@ -94,6 +94,94 @@ public sealed class PipelineTests : IDisposable
     }
 
     [Fact]
+    public void ValidatorChecksTheTriangleInequalityInThePrincipalFrame()
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        robot.Links[0].Inertial!.Inertia = new InertiaTensorDocument
+        {
+            // I + 2 vv^T for v=(1,1,1)/sqrt(3): diagonal inspection passes,
+            // while the true principal moments (1, 1, 3) are not physically realizable.
+            Ixx = 5.0 / 3.0,
+            Iyy = 5.0 / 3.0,
+            Izz = 5.0 / 3.0,
+            Ixy = 2.0 / 3.0,
+            Ixz = 2.0 / 3.0,
+            Iyz = 2.0 / 3.0
+        };
+
+        ValidationReport report = new RobotValidator().Validate(robot);
+
+        Assert.Contains(report.Findings, finding => finding.Code == "INERTIA_TRIANGLE");
+        Assert.DoesNotContain(report.Findings, finding => finding.Code == "INERTIA_POSITIVE_DEFINITE");
+    }
+
+    [Fact]
+    public void ValidatorAcceptsARotatedPhysicalInertiaTensor()
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        robot.Links[0].Inertial!.Inertia = new InertiaTensorDocument
+        {
+            // A 45-degree rotation of principal moments (1, 2, 2.5).
+            Ixx = 1.5,
+            Iyy = 1.5,
+            Izz = 2.5,
+            Ixy = 0.5,
+            Ixz = 0.0,
+            Iyz = 0.0
+        };
+
+        ValidationReport report = new RobotValidator().Validate(robot);
+
+        Assert.DoesNotContain(report.Findings, finding => finding.Code.StartsWith("INERTIA_", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void InertiaTriangleToleranceScalesForSmallRobots()
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        InertiaTensorDocument tensor = robot.Links[0].Inertial!.Inertia;
+        tensor.Ixx = 1e-14;
+        tensor.Iyy = 1e-14;
+        tensor.Izz = 3e-14;
+        tensor.Ixy = 0.0;
+        tensor.Ixz = 0.0;
+        tensor.Iyz = 0.0;
+
+        Assert.Contains(
+            new RobotValidator().Validate(robot).Findings,
+            finding => finding.Code == "INERTIA_TRIANGLE");
+
+        tensor.Izz = 2e-14;
+        Assert.DoesNotContain(
+            new RobotValidator().Validate(robot).Findings,
+            finding => finding.Code.StartsWith("INERTIA_", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BundleStandaloneProfilesMatchSparseCanonicalRobotProfiles()
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        robot.Metadata.ModelLicense = "MIT";
+        robot.Profiles.Isaac.Enabled = true;
+        robot.Profiles.Isaac.IsaacSimVersion = "6.0.0";
+        string output = BuildBundle(robot, "sparse-profile-bundle");
+        JObject canonical = JObject.Parse(File.ReadAllText(Path.Combine(output, RobotBundleLayout.RobotJsonFile)));
+        foreach ((string file, string property) in new[]
+        {
+            ("package.json", "package"),
+            ("ros1.json", "ros1"),
+            ("ros2.json", "ros2"),
+            ("isaac.json", "isaac"),
+            ("isaaclab.json", "isaacLab")
+        })
+        {
+            JToken standalone = JToken.Parse(File.ReadAllText(Path.Combine(output, "profiles", file)));
+            Assert.True(JToken.DeepEquals(canonical["profiles"]![property], standalone));
+        }
+        Assert.True(new RobotBundleVerifier().Verify(output).IsValid);
+    }
+
+    [Fact]
     public void RobotJsonV2RejectsUnknownAndDuplicateProperties()
     {
         const string unknown = "{\"schemaVersion\":2,\"name\":\"robot\",\"units\":\"SI\",\"links\":[],\"joints\":[],\"profiles\":{},\"typo\":true}";
