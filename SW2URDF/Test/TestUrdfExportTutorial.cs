@@ -84,6 +84,7 @@ namespace SW2URDF.Test
             Assert.Contains("inertial_validation.csv", completeText);
             Assert.Contains("mesh_manifest.csv", completeText);
             Assert.Contains("Robot Bundle", completeText);
+            Assert.Contains("Model and export", completeText);
             Assert.Contains("Export URDF Without Meshes", completeText);
             Assert.Contains("ROS1", completeText);
             Assert.Contains("ROS2", completeText);

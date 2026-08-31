@@ -28,12 +28,29 @@ namespace SW2URDF.UI
 {
     public partial class AssemblyExportForm
     {
+        private enum ModernAssemblyPage
+        {
+            Joint,
+            Link,
+            Model
+        }
+
         private bool modernUiInitialized;
+        // Keep workflow state explicit; visibility is a rendering detail and
+        // must not decide which editor data is captured when the form closes.
+        private ModernAssemblyPage modernActivePage;
         private Panel modernJointRoot;
-        private Panel modernJointScrollPanel;
-        private Panel modernLinkScrollPanel;
+        private Panel modernJointContentPanel;
+        private Panel modernLinkContentPanel;
+        private Panel modernModelRoot;
+        private TabControl modernJointSections;
+        private TabControl modernLinkSections;
         private TableLayoutPanel modernMimicDetails;
         private Button modernLinkUsageGuideButton;
+        private Button modernModelUsageGuideButton;
+        private Button modernLinkNextButton;
+        private Button modernModelCancelButton;
+        private Button modernModelPreviousButton;
         private Size modernMinimumSizeAfterInitialScale;
         private Size modernClientSizeAfterInitialScale;
         private CheckBox modernBundleCheckBox;
@@ -84,9 +101,10 @@ namespace SW2URDF.UI
 
                 BuildModernJointPage();
                 BuildModernLinkPage();
+                BuildModernModelPage();
                 ApplyModernAssemblySpecificStyles();
                 WireModernAssemblyLayoutEvents();
-                ActivateModernAssemblyPage();
+                ShowModernAssemblyPage(ModernAssemblyPage.Joint);
             }
             finally
             {
@@ -145,12 +163,14 @@ namespace SW2URDF.UI
             };
 
             Control header = CreateModernHeader(
+                "modernJoint",
                 label7,
                 ChineseUiText.Translate(
                     "Define joint identity, reference geometry, motion axis and constraints.",
                     "配置关节标识、参考几何、运动轴及约束参数。"),
-                ChineseUiText.Translate("Step 1 of 2 · Joint properties", "第 1/2 步 · Joint 属性"),
-                buttonUsageGuide);
+                ChineseUiText.Translate("Step 1 of 3 · Joint properties", "第 1/3 步 · Joint 属性"),
+                buttonUsageGuide,
+                null);
             header.Name = "modernJointHeader";
             Control footer = CreateModernJointFooter();
 
@@ -164,7 +184,7 @@ namespace SW2URDF.UI
                 Padding = new Padding(20, 16, 20, 16),
                 RowCount = 1
             };
-            body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 320F));
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280F));
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             body.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
@@ -177,15 +197,60 @@ namespace SW2URDF.UI
             treeCard.Margin = new Padding(0, 0, 16, 0);
             body.Controls.Add(treeCard, 0, 0);
 
-            modernJointScrollPanel = new Panel
+            modernJointContentPanel = new Panel
             {
-                Name = "modernJointScrollPanel",
-                AutoScroll = true,
+                Name = "modernJointContentPanel",
+                AutoScroll = false,
                 BackColor = ModernWinFormsTheme.Background,
                 Dock = DockStyle.Fill,
                 Margin = new Padding(0),
-                Padding = new Padding(0, 0, 8, 0)
+                Padding = new Padding(0)
             };
+
+            modernJointSections = CreateModernSectionTabs("modernJointSections");
+            TabPage basicsPage = CreateModernTabPage(
+                "modernJointBasicsPage",
+                ChineseUiText.Translate("Basics", "基本"));
+            TableLayoutPanel basicsStack = CreateModernStack();
+
+            label69.Text = ChineseUiText.Translate(
+                "Coordinate systems and axes come from SolidWorks reference geometry. Edit the model to change them.",
+                "坐标系与轴来自 SolidWorks 参考几何；如需调整，请返回模型中修改。");
+            Control infoBanner = CreateModernInfoBanner(label69);
+            infoBanner.Margin = new Padding(0, 0, 0, 8);
+            basicsStack.Controls.Add(infoBanner);
+            basicsStack.Controls.Add(CreateModernJointIdentityAndReferenceGrid());
+            basicsStack.Controls.Add(CreateModernOriginAndAxisGrid());
+            basicsPage.Controls.Add(basicsStack);
+
+            TabPage constraintsPage = CreateModernTabPage(
+                "modernJointConstraintsPage",
+                ChineseUiText.Translate("Constraints", "约束与安全"));
+            TableLayoutPanel constraintsStack = CreateModernStack();
+            constraintsStack.Controls.Add(CreateModernAdvancedJointGrid());
+            constraintsPage.Controls.Add(constraintsStack);
+
+            TabPage mimicPage = CreateModernTabPage(
+                "modernJointMimicPage",
+                "Mimic");
+            TableLayoutPanel mimicStack = CreateModernStack();
+            mimicStack.Controls.Add(CreateModernMimicCard());
+            mimicPage.Controls.Add(mimicStack);
+
+            modernJointSections.TabPages.Add(basicsPage);
+            modernJointSections.TabPages.Add(constraintsPage);
+            modernJointSections.TabPages.Add(mimicPage);
+            modernJointContentPanel.Controls.Add(modernJointSections);
+            body.Controls.Add(modernJointContentPanel, 1, 0);
+
+            modernJointRoot.Controls.Add(body);
+            modernJointRoot.Controls.Add(footer);
+            modernJointRoot.Controls.Add(header);
+            Controls.Add(modernJointRoot);
+        }
+
+        private static TableLayoutPanel CreateModernStack()
+        {
             TableLayoutPanel stack = new TableLayoutPanel
             {
                 AutoSize = true,
@@ -198,23 +263,7 @@ namespace SW2URDF.UI
                 RowCount = 0
             };
             stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-
-            label69.Text = ChineseUiText.Translate(
-                "Coordinate systems and axes come from SolidWorks reference geometry. Edit the model to change them.",
-                "坐标系与轴来自 SolidWorks 参考几何；如需调整，请返回模型中修改。");
-            stack.Controls.Add(CreateModernInfoBanner(label69));
-            stack.Controls.Add(CreateModernJointIdentityCard());
-            stack.Controls.Add(CreateModernReferenceGeometryCard());
-            stack.Controls.Add(CreateModernOriginAndAxisGrid());
-            stack.Controls.Add(CreateModernAdvancedJointGrid());
-            stack.Controls.Add(CreateModernMimicCard());
-            modernJointScrollPanel.Controls.Add(stack);
-            body.Controls.Add(modernJointScrollPanel, 1, 0);
-
-            modernJointRoot.Controls.Add(body);
-            modernJointRoot.Controls.Add(footer);
-            modernJointRoot.Controls.Add(header);
-            Controls.Add(modernJointRoot);
+            return stack;
         }
 
         private void BuildModernLinkPage()
@@ -236,10 +285,12 @@ namespace SW2URDF.UI
                 modernLinkUsageGuideButton.Click += ButtonUsageGuideClick;
 
                 Control header = CreateModernHeader(
+                    "modernLink",
                     label5,
                     label2.Text,
-                    ChineseUiText.Translate("Step 2 of 2 · Link properties", "第 2/2 步 · Link 属性"),
-                    modernLinkUsageGuideButton);
+                    ChineseUiText.Translate("Step 2 of 3 · Link properties", "第 2/3 步 · Link 属性"),
+                    modernLinkUsageGuideButton,
+                    label2);
                 header.Name = "modernLinkHeader";
                 Control footer = CreateModernLinkFooter();
                 footer.Name = "modernLinkFooter";
@@ -254,7 +305,7 @@ namespace SW2URDF.UI
                     Padding = new Padding(20, 16, 20, 16),
                     RowCount = 1
                 };
-                body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 320F));
+                body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 280F));
                 body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
                 body.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
@@ -267,47 +318,45 @@ namespace SW2URDF.UI
                 treeCard.Margin = new Padding(0, 0, 16, 0);
                 body.Controls.Add(treeCard, 0, 0);
 
-                modernLinkScrollPanel = new Panel
+                modernLinkContentPanel = new Panel
                 {
-                    Name = "modernLinkScrollPanel",
-                    AutoScroll = true,
+                    Name = "modernLinkContentPanel",
+                    AutoScroll = false,
                     BackColor = ModernWinFormsTheme.Background,
                     Dock = DockStyle.Fill,
                     Margin = new Padding(0),
-                    Padding = new Padding(0, 0, 8, 0)
+                    Padding = new Padding(0)
                 };
-                TableLayoutPanel stack = new TableLayoutPanel
-                {
-                    AutoSize = true,
-                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                    BackColor = ModernWinFormsTheme.Background,
-                    ColumnCount = 1,
-                    Dock = DockStyle.Top,
-                    Margin = new Padding(0),
-                    Padding = new Padding(0),
-                    RowCount = 0
-                };
-                stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-                stack.Controls.Add(CreateModernPackageCard());
 
                 label15.Visible = false;
                 groupBox5.Text = ChineseUiText.Translate("Inertial properties", "惯性属性");
-                groupBox5.Dock = DockStyle.Top;
-                groupBox5.Margin = new Padding(0, 0, 0, 12);
-                groupBox5.MinimumSize = new Size(590, groupBox5.Height);
-                stack.Controls.Add(groupBox5);
+                RebuildModernInertialLayout();
 
                 label19.Visible = false;
                 groupBox4.Text = ChineseUiText.Translate(
                     "Visual and collision geometry",
                     "可视与碰撞几何");
-                groupBox4.Dock = DockStyle.Top;
-                groupBox4.Margin = new Padding(0, 0, 0, 12);
-                groupBox4.MinimumSize = new Size(590, groupBox4.Height);
-                stack.Controls.Add(groupBox4);
+                RebuildModernVisualCollisionLayout();
 
-                modernLinkScrollPanel.Controls.Add(stack);
-                body.Controls.Add(modernLinkScrollPanel, 1, 0);
+                modernLinkSections = CreateModernSectionTabs("modernLinkSections");
+                TabPage inertiaPage = CreateModernTabPage(
+                    "modernLinkInertiaPage",
+                    ChineseUiText.Translate("Inertia", "惯性"));
+                groupBox5.Dock = DockStyle.Fill;
+                groupBox5.Margin = new Padding(0);
+                inertiaPage.Controls.Add(groupBox5);
+
+                TabPage geometryPage = CreateModernTabPage(
+                    "modernLinkGeometryPage",
+                    ChineseUiText.Translate("Visual / Collision", "外观 / 碰撞"));
+                groupBox4.Dock = DockStyle.Fill;
+                groupBox4.Margin = new Padding(0);
+                geometryPage.Controls.Add(groupBox4);
+
+                modernLinkSections.TabPages.Add(inertiaPage);
+                modernLinkSections.TabPages.Add(geometryPage);
+                modernLinkContentPanel.Controls.Add(modernLinkSections);
+                body.Controls.Add(modernLinkContentPanel, 1, 0);
 
                 panelLinkProperties.Controls.Add(body);
                 panelLinkProperties.Controls.Add(footer);
@@ -319,15 +368,120 @@ namespace SW2URDF.UI
             }
         }
 
+        private void BuildModernModelPage()
+        {
+            modernModelRoot = new Panel
+            {
+                Name = "modernModelRoot",
+                BackColor = ModernWinFormsTheme.Background,
+                Dock = DockStyle.Fill,
+                Visible = false
+            };
+
+            modernModelUsageGuideButton = new Button
+            {
+                Name = "modernModelUsageGuideButton",
+                Text = buttonUsageGuide.Text,
+                TabIndex = 303
+            };
+            modernModelUsageGuideButton.Click += ButtonUsageGuideClick;
+
+            Label title = new Label
+            {
+                Name = "modernModelTitle",
+                Text = ChineseUiText.Translate("Model and export", "模型与导出")
+            };
+            Control header = CreateModernHeader(
+                "modernModel",
+                title,
+                ChineseUiText.Translate(
+                    "Set robot-wide metadata and output targets once for the complete model.",
+                    "在这里统一设置整机模型信息与输出目标，无需逐个 Link 重复编辑。"),
+                ChineseUiText.Translate("Step 3 of 3 · Model settings", "第 3/3 步 · 模型设置"),
+                modernModelUsageGuideButton,
+                null);
+            header.Name = "modernModelHeader";
+            Control footer = CreateModernModelFooter();
+
+            TableLayoutPanel body = new TableLayoutPanel
+            {
+                Name = "modernModelBody",
+                BackColor = ModernWinFormsTheme.Background,
+                ColumnCount = 3,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0),
+                Padding = new Padding(20, 16, 20, 16),
+                RowCount = 1
+            };
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 8F));
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 84F));
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 8F));
+            body.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            TableLayoutPanel stack = CreateModernStack();
+            Label scopeMessage = new Label
+            {
+                Name = "modernModelScopeMessage",
+                Text = ChineseUiText.Translate(
+                    "These values belong to the robot package, not to an individual Link.",
+                    "以下信息属于整机功能包，不属于任何单独 Link。")
+            };
+            Control scopeBanner = CreateModernInfoBanner(scopeMessage);
+            scopeBanner.Margin = new Padding(0, 0, 0, 8);
+            stack.Controls.Add(scopeBanner);
+            Control packageCard = CreateModernPackageCard();
+            packageCard.Margin = new Padding(0);
+            stack.Controls.Add(packageCard);
+            Panel modelContent = new Panel
+            {
+                Name = "modernModelContentPanel",
+                AutoScroll = true,
+                BackColor = ModernWinFormsTheme.Background,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0),
+                Padding = new Padding(0, 0, 8, 0)
+            };
+            modelContent.Controls.Add(stack);
+            body.Controls.Add(modelContent, 1, 0);
+
+            modernModelRoot.Controls.Add(body);
+            modernModelRoot.Controls.Add(footer);
+            modernModelRoot.Controls.Add(header);
+            Controls.Add(modernModelRoot);
+        }
+
+        private static TabControl CreateModernSectionTabs(string name)
+        {
+            return new TabControl
+            {
+                Name = name,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0),
+                Padding = new Point(16, 6),
+                SizeMode = TabSizeMode.Normal
+            };
+        }
+
+        private static TabPage CreateModernTabPage(string name, string text)
+        {
+            return new TabPage
+            {
+                Name = name,
+                Text = text,
+                AutoScroll = true,
+                BackColor = ModernWinFormsTheme.Background,
+                Padding = new Padding(12)
+            };
+        }
+
         private Control CreateModernHeader(
+            string controlPrefix,
             Label titleLabel,
             string subtitle,
             string stepText,
-            Button guideButton)
+            Button guideButton,
+            Label reusableSubtitleLabel)
         {
-            string controlPrefix = titleLabel == label7
-                ? "modernJoint"
-                : "modernLink";
             Panel header = new Panel
             {
                 AutoSize = true,
@@ -372,11 +526,15 @@ namespace SW2URDF.UI
             ModernWinFormsTheme.SetFont(titleLabel, 15F, FontStyle.Bold);
             titleLabel.ForeColor = ModernWinFormsTheme.Text;
             titleLabel.Margin = new Padding(0, 0, 0, 3);
-            Label subtitleLabel = ModernWinFormsTheme.CreateTextLabel(
-                subtitle,
+            Label subtitleLabel = reusableSubtitleLabel ?? new Label();
+            subtitleLabel.Name = controlPrefix + "Subtitle";
+            subtitleLabel.AutoSize = true;
+            subtitleLabel.Text = subtitle;
+            subtitleLabel.Margin = new Padding(0);
+            ModernWinFormsTheme.SetFont(
+                subtitleLabel,
                 9F,
                 FontStyle.Regular);
-            subtitleLabel.Name = controlPrefix + "Subtitle";
             subtitleLabel.MaximumSize = new Size(620, 0);
             subtitleLabel.ForeColor = ModernWinFormsTheme.MutedText;
             titleStack.Controls.Add(titleLabel, 0, 0);
@@ -427,7 +585,9 @@ namespace SW2URDF.UI
             Label hintLabel = ModernWinFormsTheme.CreateTextLabel(hint, 8.5F, FontStyle.Regular);
             hintLabel.ForeColor = ModernWinFormsTheme.MutedText;
             hintLabel.Margin = new Padding(0, 0, 0, 12);
-            hintLabel.MaximumSize = new Size(270, 0);
+            // The hierarchy column includes the card margin and padding, so keep
+            // the hint inside its usable width after the compact 280 px split.
+            hintLabel.MaximumSize = new Size(220, 0);
 
             treeView.Dock = DockStyle.Fill;
             treeView.Margin = new Padding(0);
@@ -461,6 +621,31 @@ namespace SW2URDF.UI
             return banner;
         }
 
+        private Control CreateModernJointIdentityAndReferenceGrid()
+        {
+            TableLayoutPanel grid = new TableLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = ModernWinFormsTheme.Background,
+                ColumnCount = 2,
+                Dock = DockStyle.Top,
+                Margin = new Padding(0),
+                RowCount = 1
+            };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58F));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42F));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            Control identity = CreateModernJointIdentityCard();
+            identity.Margin = new Padding(0, 0, 4, 8);
+            Control reference = CreateModernReferenceGeometryCard();
+            reference.Margin = new Padding(4, 0, 0, 8);
+            grid.Controls.Add(identity, 0, 0);
+            grid.Controls.Add(reference, 1, 0);
+            return grid;
+        }
+
         private Control CreateModernJointIdentityCard()
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernJointIdentityCard");
@@ -468,34 +653,73 @@ namespace SW2URDF.UI
                 ChineseUiText.Translate("Joint identity", "Joint 基本信息"),
                 null));
 
-            TableLayoutPanel grid = new TableLayoutPanel
+            TableLayoutPanel relationship = new TableLayoutPanel
+            {
+                AutoSize = true,
+                BackColor = ModernWinFormsTheme.Surface,
+                ColumnCount = 3,
+                Dock = DockStyle.Top,
+                Margin = new Padding(0, 8, 0, 4),
+                RowCount = 2
+            };
+            relationship.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            relationship.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42F));
+            relationship.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            relationship.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            relationship.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            ModernWinFormsTheme.StyleFieldLabel(label64);
+            ModernWinFormsTheme.StyleFieldLabel(label65);
+            ModernWinFormsTheme.StyleReadoutLabel(labelParent);
+            ModernWinFormsTheme.StyleReadoutLabel(labelChild);
+            label64.Margin = new Padding(0, 0, 0, 2);
+            label65.Margin = new Padding(0, 0, 0, 2);
+            labelParent.Margin = new Padding(0, 0, 0, 2);
+            labelChild.Margin = new Padding(0, 0, 0, 2);
+            Label arrow = ModernWinFormsTheme.CreateTextLabel(
+                "\u2192",
+                16F,
+                FontStyle.Bold);
+            arrow.Name = "modernJointRelationArrow";
+            arrow.AccessibleName = ChineseUiText.Translate(
+                "Parent Link to Child Link",
+                "父 Link 指向子 Link");
+            arrow.Dock = DockStyle.Fill;
+            arrow.ForeColor = ModernWinFormsTheme.Accent;
+            arrow.Margin = new Padding(4, 0, 4, 0);
+            arrow.TextAlign = ContentAlignment.MiddleCenter;
+
+            relationship.Controls.Add(label64, 0, 0);
+            relationship.Controls.Add(label65, 2, 0);
+            relationship.Controls.Add(labelParent, 0, 1);
+            relationship.Controls.Add(arrow, 1, 0);
+            relationship.SetRowSpan(arrow, 2);
+            relationship.Controls.Add(labelChild, 2, 1);
+            card.Controls.Add(relationship);
+
+            TableLayoutPanel fields = new TableLayoutPanel
             {
                 AutoSize = true,
                 ColumnCount = 4,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 12, 0, 0),
-                RowCount = 2
+                Margin = new Padding(0, 4, 0, 0),
+                RowCount = 1
             };
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96F));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 56F));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88F));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44F));
-            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-
-            AddModernField(grid, label64, labelParent, 0, 0, 1);
-            AddModernField(grid, label65, labelChild, 0, 2, 3);
-            AddModernField(grid, label63, textBoxJointName, 1, 0, 1);
-            AddModernField(grid, label62, comboBoxJointType, 1, 2, 3);
-            ModernWinFormsTheme.StyleReadoutLabel(labelParent);
-            ModernWinFormsTheme.StyleReadoutLabel(labelChild);
-            card.Controls.Add(grid);
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 76F));
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52F));
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 72F));
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48F));
+            fields.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            AddModernField(fields, label63, textBoxJointName, 0, 0, 1);
+            AddModernField(fields, label62, comboBoxJointType, 0, 2, 3);
+            card.Controls.Add(fields);
             return card;
         }
 
         private Control CreateModernReferenceGeometryCard()
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernReferenceGeometryCard");
+            card.Margin = new Padding(0);
             card.Controls.Add(CreateModernCardTitle(
                 ChineseUiText.Translate("Reference geometry", "参考几何"),
                 null));
@@ -703,11 +927,559 @@ namespace SW2URDF.UI
             return card;
         }
 
+        private void RebuildModernInertialLayout()
+        {
+            groupBox5.SuspendLayout();
+            try
+            {
+                groupBox5.Controls.Clear();
+                groupBox5.BackColor = ModernWinFormsTheme.Surface;
+                groupBox5.Padding = new Padding(12, 20, 12, 12);
+
+                TableLayoutPanel root = new TableLayoutPanel
+                {
+                    Name = "modernInertialLayout",
+                    BackColor = ModernWinFormsTheme.Surface,
+                    ColumnCount = 1,
+                    Dock = DockStyle.Fill,
+                    Margin = new Padding(0),
+                    Padding = new Padding(0),
+                    RowCount = 3
+                };
+                root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+                root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+                TableLayoutPanel frame = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 2,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(0, 0, 0, 8),
+                    RowCount = 1
+                };
+                frame.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112F));
+                frame.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                AddModernField(
+                    frame,
+                    labelLinkCoordinateSystem,
+                    comboBoxLinkCoordinateSystem,
+                    0,
+                    0,
+                    1);
+
+                TableLayoutPanel body = new TableLayoutPanel
+                {
+                    BackColor = ModernWinFormsTheme.Surface,
+                    ColumnCount = 2,
+                    Dock = DockStyle.Fill,
+                    Margin = new Padding(0, 0, 0, 8),
+                    RowCount = 1
+                };
+                body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38F));
+                body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62F));
+                body.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+                TableLayoutPanel originGrid = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 4,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(0),
+                    RowCount = 3
+                };
+                originGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24F));
+                originGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+                originGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 54F));
+                originGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+                for (int row = 0; row < 3; row++)
+                {
+                    originGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                }
+                AddModernValueRow(
+                    originGrid,
+                    label13,
+                    textBoxInertialOriginX,
+                    label16,
+                    textBoxInertialOriginRoll,
+                    0);
+                AddModernValueRow(
+                    originGrid,
+                    label17,
+                    textBoxInertialOriginY,
+                    label45,
+                    textBoxInertialOriginPitch,
+                    1);
+                AddModernValueRow(
+                    originGrid,
+                    label47,
+                    textBoxInertialOriginZ,
+                    label46,
+                    textBoxInertialOriginYaw,
+                    2);
+                Control origin = CreateModernSubsection(
+                    "modernInertialOriginSection",
+                    label36,
+                    originGrid);
+                origin.Margin = new Padding(0, 0, 6, 0);
+
+                TableLayoutPanel matrixGrid = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 6,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(0),
+                    RowCount = 3
+                };
+                for (int pair = 0; pair < 3; pair++)
+                {
+                    matrixGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44F));
+                    matrixGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+                }
+                for (int row = 0; row < 3; row++)
+                {
+                    matrixGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                }
+                AddModernField(matrixGrid, label14, textBoxIxx, 0, 0, 1);
+                AddModernField(matrixGrid, label50, textBoxIxy, 0, 2, 3);
+                AddModernField(matrixGrid, label11, textBoxIxz, 0, 4, 5);
+                AddModernField(matrixGrid, labelInertiaIyx, textBoxIyxMirror, 1, 0, 1);
+                AddModernField(matrixGrid, label49, textBoxIyy, 1, 2, 3);
+                AddModernField(matrixGrid, label48, textBoxIyz, 1, 4, 5);
+                AddModernField(matrixGrid, labelInertiaIzx, textBoxIzxMirror, 2, 0, 1);
+                AddModernField(matrixGrid, labelInertiaIzy, textBoxIzyMirror, 2, 2, 3);
+                AddModernField(matrixGrid, label18, textBoxIzz, 2, 4, 5);
+                Control matrix = CreateModernSubsection(
+                    "modernInertiaMatrixSection",
+                    label44,
+                    matrixGrid);
+                matrix.Margin = new Padding(6, 0, 0, 0);
+
+                body.Controls.Add(origin, 0, 0);
+                body.Controls.Add(matrix, 1, 0);
+
+                TableLayoutPanel actions = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 4,
+                    Dock = DockStyle.Bottom,
+                    Margin = new Padding(0),
+                    RowCount = 1
+                };
+                actions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 74F));
+                actions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
+                actions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 176F));
+                actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                AddModernField(actions, label12, textBoxMass, 0, 0, 1);
+                buttonShowInertiaPreview.Dock = DockStyle.Fill;
+                buttonShowInertiaPreview.Margin = new Padding(8, 4, 8, 4);
+                buttonShowInertiaPreview.MinimumSize = new Size(0, 28);
+                buttonShowInertiaPreview.TabIndex = 2;
+                labelInertiaPreviewStatus.AutoSize = false;
+                labelInertiaPreviewStatus.AutoEllipsis = true;
+                labelInertiaPreviewStatus.Dock = DockStyle.Fill;
+                labelInertiaPreviewStatus.ForeColor = ModernWinFormsTheme.MutedText;
+                labelInertiaPreviewStatus.Margin = new Padding(0, 4, 0, 4);
+                labelInertiaPreviewStatus.TextAlign = ContentAlignment.MiddleLeft;
+                ModernWinFormsTheme.SetFont(
+                    labelInertiaPreviewStatus,
+                    8.5F,
+                    FontStyle.Regular);
+                actions.Controls.Add(buttonShowInertiaPreview, 2, 0);
+                actions.Controls.Add(labelInertiaPreviewStatus, 3, 0);
+
+                root.Controls.Add(frame, 0, 0);
+                root.Controls.Add(body, 0, 1);
+                root.Controls.Add(actions, 0, 2);
+                groupBox5.Controls.Add(root);
+                groupBox5.Controls.Add(label15);
+                label15.Visible = false;
+            }
+            finally
+            {
+                groupBox5.ResumeLayout(true);
+            }
+        }
+
+        private void RebuildModernVisualCollisionLayout()
+        {
+            groupBox4.SuspendLayout();
+            try
+            {
+                groupBox4.Controls.Clear();
+                groupBox4.BackColor = ModernWinFormsTheme.Surface;
+                groupBox4.Padding = new Padding(12, 20, 12, 12);
+
+                TableLayoutPanel root = new TableLayoutPanel
+                {
+                    Name = "modernVisualCollisionLayout",
+                    BackColor = ModernWinFormsTheme.Surface,
+                    ColumnCount = 2,
+                    Dock = DockStyle.Fill,
+                    Margin = new Padding(0),
+                    Padding = new Padding(0),
+                    RowCount = 1
+                };
+                root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48F));
+                root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52F));
+                root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+                TableLayoutPanel left = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    BackColor = ModernWinFormsTheme.Surface,
+                    ColumnCount = 1,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(0, 0, 6, 0),
+                    RowCount = 3
+                };
+                left.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                left.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                left.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                left.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+                TableLayoutPanel visualOriginGrid = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 4,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(0),
+                    RowCount = 3
+                };
+                visualOriginGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24F));
+                visualOriginGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+                visualOriginGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 54F));
+                visualOriginGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+                for (int row = 0; row < 3; row++)
+                {
+                    visualOriginGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                }
+                AddModernValueRow(
+                    visualOriginGrid,
+                    label26,
+                    textBoxVisualOriginX,
+                    label22,
+                    textBoxVisualOriginRoll,
+                    0);
+                AddModernValueRow(
+                    visualOriginGrid,
+                    label25,
+                    textBoxVisualOriginY,
+                    label21,
+                    textBoxVisualOriginPitch,
+                    1);
+                AddModernValueRow(
+                    visualOriginGrid,
+                    label24,
+                    textBoxVisualOriginZ,
+                    label20,
+                    textBoxVisualOriginYaw,
+                    2);
+                Control visualOrigin = CreateModernSubsection(
+                    "modernVisualOriginSection",
+                    label23,
+                    visualOriginGrid);
+                visualOrigin.Margin = new Padding(0, 0, 0, 8);
+                left.Controls.Add(visualOrigin, 0, 0);
+
+                TableLayoutPanel material = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 2,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(0, 0, 0, 8),
+                    RowCount = 1
+                };
+                material.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 124F));
+                material.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                AddModernField(material, label28, comboBoxMaterials, 0, 0, 1);
+                left.Controls.Add(material, 0, 1);
+
+                TableLayoutPanel meshOptions = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 2,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(0),
+                    RowCount = 1
+                };
+                meshOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+                meshOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+
+                FlowLayoutPanel detailChoices = new FlowLayoutPanel
+                {
+                    AutoSize = true,
+                    Dock = DockStyle.Top,
+                    FlowDirection = FlowDirection.LeftToRight,
+                    Margin = new Padding(0),
+                    WrapContents = true
+                };
+                radioButtonCourse.AutoSize = true;
+                radioButtonFine.AutoSize = true;
+                radioButtonCourse.Margin = new Padding(0, 0, 12, 0);
+                radioButtonFine.Margin = new Padding(0);
+                detailChoices.Controls.Add(radioButtonCourse);
+                detailChoices.Controls.Add(radioButtonFine);
+                Control detail = CreateModernSubsection(
+                    "modernMeshDetailSection",
+                    label10,
+                    detailChoices);
+                detail.Margin = new Padding(0, 0, 6, 0);
+
+                groupBox1.SuspendLayout();
+                groupBox1.Controls.Clear();
+                groupBox1.Text = ChineseUiText.Translate("Mesh format", "网格格式");
+                groupBox1.Dock = DockStyle.Fill;
+                groupBox1.Margin = new Padding(6, 0, 0, 0);
+                groupBox1.Padding = new Padding(8, 18, 8, 8);
+                FlowLayoutPanel formats = new FlowLayoutPanel
+                {
+                    AutoSize = true,
+                    Dock = DockStyle.Top,
+                    FlowDirection = FlowDirection.TopDown,
+                    Margin = new Padding(0),
+                    WrapContents = false
+                };
+                radioButtonStl.AutoSize = true;
+                radioButton3dxml.AutoSize = true;
+                radioButtonStl.Margin = new Padding(0, 0, 0, 4);
+                radioButton3dxml.Margin = new Padding(0);
+                formats.Controls.Add(radioButtonStl);
+                formats.Controls.Add(radioButton3dxml);
+                groupBox1.Controls.Add(formats);
+                groupBox1.ResumeLayout(true);
+
+                meshOptions.Controls.Add(detail, 0, 0);
+                meshOptions.Controls.Add(groupBox1, 1, 0);
+                left.Controls.Add(meshOptions, 0, 2);
+
+                TableLayoutPanel right = new TableLayoutPanel
+                {
+                    BackColor = ModernWinFormsTheme.Surface,
+                    ColumnCount = 1,
+                    Dock = DockStyle.Fill,
+                    Margin = new Padding(6, 0, 0, 0),
+                    RowCount = 3
+                };
+                right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                right.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+                right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+                TableLayoutPanel collisionGrid = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 2,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(0),
+                    RowCount = 3
+                };
+                collisionGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 126F));
+                collisionGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                collisionGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                collisionGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                collisionGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                AddModernField(
+                    collisionGrid,
+                    labelCollisionStrategy,
+                    comboBoxCollisionStrategy,
+                    0,
+                    0,
+                    1);
+                buttonShowCollisionPreview.Dock = DockStyle.Fill;
+                buttonShowCollisionPreview.Margin = new Padding(0, 4, 0, 4);
+                buttonShowCollisionPreview.MinimumSize = new Size(0, 28);
+                buttonShowCollisionPreview.TabIndex = 2;
+                collisionGrid.Controls.Add(buttonShowCollisionPreview, 0, 1);
+                collisionGrid.SetColumnSpan(buttonShowCollisionPreview, 2);
+                labelCollisionPreviewStatus.AutoSize = true;
+                labelCollisionPreviewStatus.AutoEllipsis = false;
+                labelCollisionPreviewStatus.Dock = DockStyle.Fill;
+                labelCollisionPreviewStatus.ForeColor = ModernWinFormsTheme.MutedText;
+                labelCollisionPreviewStatus.Margin = new Padding(0, 0, 0, 4);
+                labelCollisionPreviewStatus.MaximumSize = new Size(420, 0);
+                ModernWinFormsTheme.SetFont(
+                    labelCollisionPreviewStatus,
+                    8.5F,
+                    FontStyle.Regular);
+                collisionGrid.Controls.Add(labelCollisionPreviewStatus, 0, 2);
+                collisionGrid.SetColumnSpan(labelCollisionPreviewStatus, 2);
+                Control collision = CreateModernSubsection(
+                    "modernCollisionStrategySection",
+                    ChineseUiText.Translate("Collision", "碰撞体"),
+                    collisionGrid);
+                collision.Margin = new Padding(0, 0, 0, 8);
+                right.Controls.Add(collision, 0, 0);
+
+                TableLayoutPanel rgbaGrid = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 4,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(0),
+                    RowCount = 2
+                };
+                rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48F));
+                rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+                rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48F));
+                rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+                for (int row = 0; row < 2; row++)
+                {
+                    rgbaGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                }
+                AddModernField(rgbaGrid, label30, domainUpDownRed, 0, 0, 1);
+                AddModernField(rgbaGrid, label31, domainUpDownGreen, 0, 2, 3);
+                AddModernField(rgbaGrid, label32, domainUpDownBlue, 1, 0, 1);
+                AddModernField(rgbaGrid, label33, domainUpDownAlpha, 1, 2, 3);
+
+                TableLayoutPanel colorActions = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 1,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(8, 0, 0, 0),
+                    RowCount = 3
+                };
+                colorActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                colorActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
+                colorActions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                colorActions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                panelMaterialColorPreview.Dock = DockStyle.Fill;
+                panelMaterialColorPreview.Margin = new Padding(0, 0, 0, 4);
+                panelMaterialColorPreview.MinimumSize = new Size(70, 40);
+                buttonMaterialColorPick.Dock = DockStyle.Fill;
+                buttonMaterialColorPick.Margin = new Padding(0, 0, 0, 4);
+                buttonMaterialColorPick.MinimumSize = new Size(0, 28);
+                buttonAutomaticLinkColors.Dock = DockStyle.Fill;
+                buttonAutomaticLinkColors.Margin = new Padding(0);
+                buttonAutomaticLinkColors.MinimumSize = new Size(0, 28);
+                colorActions.Controls.Add(panelMaterialColorPreview, 0, 0);
+                colorActions.Controls.Add(buttonMaterialColorPick, 0, 1);
+                colorActions.Controls.Add(buttonAutomaticLinkColors, 0, 2);
+
+                TableLayoutPanel colorGrid = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 2,
+                    Dock = DockStyle.Top,
+                    Margin = new Padding(0),
+                    RowCount = 1
+                };
+                colorGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62F));
+                colorGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38F));
+                colorGrid.Controls.Add(rgbaGrid, 0, 0);
+                colorGrid.Controls.Add(colorActions, 1, 0);
+                Control color = CreateModernSubsection(
+                    "modernAppearanceColorSection",
+                    label29,
+                    colorGrid);
+                color.Margin = new Padding(0, 0, 0, 8);
+                right.Controls.Add(color, 0, 1);
+
+                TableLayoutPanel reduction = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    ColumnCount = 2,
+                    Dock = DockStyle.Bottom,
+                    Margin = new Padding(0),
+                    RowCount = 3
+                };
+                reduction.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                reduction.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+                reduction.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                reduction.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                reduction.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                PrepareModernColumnHeader(labelMeshReduction);
+                PrepareModernColumnHeader(labelMeshReductionValue);
+                labelMeshReductionValue.TextAlign = ContentAlignment.MiddleRight;
+                reduction.Controls.Add(labelMeshReduction, 0, 0);
+                reduction.Controls.Add(labelMeshReductionValue, 1, 0);
+                trackBarMeshReduction.Dock = DockStyle.Fill;
+                trackBarMeshReduction.Margin = new Padding(0, 2, 0, 0);
+                reduction.Controls.Add(trackBarMeshReduction, 0, 1);
+                reduction.SetColumnSpan(trackBarMeshReduction, 2);
+                labelEstimatedMeshSize.AutoSize = true;
+                labelEstimatedMeshSize.Dock = DockStyle.Fill;
+                labelEstimatedMeshSize.ForeColor = ModernWinFormsTheme.MutedText;
+                labelEstimatedMeshSize.Margin = new Padding(0, 0, 0, 0);
+                labelEstimatedMeshSize.MaximumSize = new Size(420, 0);
+                ModernWinFormsTheme.SetFont(
+                    labelEstimatedMeshSize,
+                    8.5F,
+                    FontStyle.Regular);
+                reduction.Controls.Add(labelEstimatedMeshSize, 0, 2);
+                reduction.SetColumnSpan(labelEstimatedMeshSize, 2);
+                Control reductionSection = CreateModernSubsection(
+                    "modernMeshReductionSection",
+                    ChineseUiText.Translate("Mesh export", "网格导出"),
+                    reduction);
+                right.Controls.Add(reductionSection, 0, 2);
+
+                root.Controls.Add(left, 0, 0);
+                root.Controls.Add(right, 1, 0);
+                groupBox4.Controls.Add(root);
+                groupBox4.Controls.Add(label19);
+                label19.Visible = false;
+            }
+            finally
+            {
+                groupBox4.ResumeLayout(true);
+            }
+        }
+
+        private static Control CreateModernSubsection(
+            string name,
+            string title,
+            Control content)
+        {
+            return CreateModernSubsection(
+                name,
+                ModernWinFormsTheme.CreateTextLabel(title, 9F, FontStyle.Bold),
+                content);
+        }
+
+        private static Control CreateModernSubsection(
+            string name,
+            Label title,
+            Control content)
+        {
+            TableLayoutPanel section = new TableLayoutPanel
+            {
+                Name = name,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = ModernWinFormsTheme.SurfaceAlt,
+                ColumnCount = 1,
+                Dock = DockStyle.Top,
+                Margin = new Padding(0),
+                Padding = new Padding(10, 8, 10, 10),
+                RowCount = 2
+            };
+            section.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            section.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            section.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            section.Paint += ModernWinFormsTheme.DrawCardBorder;
+
+            title.AutoSize = true;
+            title.Dock = DockStyle.Top;
+            title.ForeColor = ModernWinFormsTheme.Text;
+            title.Margin = new Padding(0, 0, 0, 6);
+            ModernWinFormsTheme.SetFont(title, 9F, FontStyle.Bold);
+            content.Dock = DockStyle.Top;
+            content.Margin = new Padding(0);
+            section.Controls.Add(title, 0, 0);
+            section.Controls.Add(content, 0, 1);
+            return section;
+        }
+
         private Control CreateModernPackageCard()
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernPackageCard");
             card.Controls.Add(CreateModernCardTitle(
-                ChineseUiText.Translate("Package output", "功能包输出"),
+                ChineseUiText.Translate(
+                    "Model metadata and output targets",
+                    "模型信息与输出目标"),
                 null));
 
             FlowLayoutPanel targets = new FlowLayoutPanel
@@ -774,7 +1546,15 @@ namespace SW2URDF.UI
             modernModelLicenseTextBox = CreateTargetTextBox(string.Empty);
             modernModelAuthorTextBox = CreateTargetTextBox(string.Empty);
             AddModernField(grid, CreateTargetLabel("Model license", "模型许可证"), modernModelLicenseTextBox, 4, 0, 1);
-            AddModernField(grid, CreateTargetLabel("Model author", "模型作者"), modernModelAuthorTextBox, 4, 2, 3);
+            AddModernField(
+                grid,
+                CreateTargetLabel(
+                    "Model author / configurator",
+                    "模型作者 / 配置者"),
+                modernModelAuthorTextBox,
+                4,
+                2,
+                3);
 
             modernRos2PairComboBox = new ComboBox
             {
@@ -824,6 +1604,11 @@ namespace SW2URDF.UI
             AddModernField(grid, CreateTargetLabel("Actuators", "Actuator 配置"), profilePicker, 8, 0, 1);
             grid.SetColumnSpan(profilePicker, 3);
             card.Controls.Add(grid);
+            ModernWinFormsTheme.ApplyControlTree(card);
+            // Picker buttons live in auto-sized flow rows, so restore AutoSize
+            // after the shared button theme applies its fixed-size default.
+            modernRos2ControlProfileButton.AutoSize = true;
+            modernIsaacLabProfileButton.AutoSize = true;
             SynchronizeIsaacTargetControls();
             return card;
         }
@@ -840,6 +1625,10 @@ namespace SW2URDF.UI
             };
             textBox.Width = 280;
             textBox.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            textBox.TabIndex = 0;
+            button.Margin = new Padding(8, 0, 0, 0);
+            button.MinimumSize = new Size(0, 28);
+            button.TabIndex = 1;
             picker.Controls.Add(textBox);
             picker.Controls.Add(button);
             return picker;
@@ -1002,8 +1791,10 @@ namespace SW2URDF.UI
 
             buttonJointCancel.Size = new Size(92, 36);
             buttonJointCancel.Margin = new Padding(0, 4, 0, 0);
+            buttonJointCancel.TabIndex = 0;
             buttonJointNext.Size = new Size(104, 36);
             buttonJointNext.Margin = new Padding(0, 4, 0, 0);
+            buttonJointNext.TabIndex = 1;
             layout.Controls.Add(buttonJointCancel, 0, 0);
             layout.Controls.Add(notes, 1, 0);
             layout.Controls.Add(buttonJointNext, 2, 0);
@@ -1015,6 +1806,60 @@ namespace SW2URDF.UI
         {
             Panel footer = new Panel
             {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = ModernWinFormsTheme.Surface,
+                Dock = DockStyle.Bottom,
+                Height = 68,
+                MinimumSize = new Size(0, 68),
+                Padding = new Padding(20, 14, 20, 12)
+            };
+            footer.Paint += ModernWinFormsTheme.DrawTopBorder;
+
+            TableLayoutPanel layout = new TableLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 4,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0),
+                RowCount = 1
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            buttonLinksCancel.Size = new Size(92, 36);
+            buttonLinksCancel.TabIndex = 0;
+            buttonLinksPrevious.Size = new Size(92, 36);
+            buttonLinksPrevious.Margin = new Padding(0, 0, 8, 0);
+            buttonLinksPrevious.TabIndex = 1;
+            modernLinkNextButton = new Button
+            {
+                Name = "modernLinkNextButton",
+                Size = new Size(156, 36),
+                Text = ChineseUiText.Translate(
+                    "Next: Model settings",
+                    "下一步：模型设置"),
+                TabIndex = 2
+            };
+            modernLinkNextButton.Click += ModernLinkNextClick;
+
+            layout.Controls.Add(buttonLinksCancel, 0, 0);
+            layout.Controls.Add(new Panel { Dock = DockStyle.Fill }, 1, 0);
+            layout.Controls.Add(buttonLinksPrevious, 2, 0);
+            layout.Controls.Add(modernLinkNextButton, 3, 0);
+            footer.Controls.Add(layout);
+            return footer;
+        }
+
+        private Control CreateModernModelFooter()
+        {
+            Panel footer = new Panel
+            {
+                Name = "modernModelFooter",
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 BackColor = ModernWinFormsTheme.Surface,
@@ -1041,16 +1886,32 @@ namespace SW2URDF.UI
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            buttonLinksCancel.Size = new Size(92, 36);
-            buttonLinksPrevious.Size = new Size(92, 36);
+            modernModelCancelButton = new Button
+            {
+                Name = "modernModelCancelButton",
+                Size = new Size(92, 36),
+                Text = buttonLinksCancel.Text,
+                TabIndex = 0
+            };
+            modernModelCancelButton.Click += ButtonLinksCancelClick;
+            modernModelPreviousButton = new Button
+            {
+                Name = "modernModelPreviousButton",
+                Size = new Size(92, 36),
+                Text = buttonLinksPrevious.Text,
+                TabIndex = 1
+            };
+            modernModelPreviousButton.Click += ModernModelPreviousClick;
+            modernModelPreviousButton.Margin = new Padding(0, 0, 8, 0);
             buttonLinksExportUrdfOnly.Size = new Size(150, 36);
             buttonLinksFinish.Size = new Size(176, 36);
-            buttonLinksPrevious.Margin = new Padding(0, 0, 8, 0);
             buttonLinksExportUrdfOnly.Margin = new Padding(0, 0, 8, 0);
+            buttonLinksExportUrdfOnly.TabIndex = 2;
+            buttonLinksFinish.TabIndex = 3;
 
-            layout.Controls.Add(buttonLinksCancel, 0, 0);
+            layout.Controls.Add(modernModelCancelButton, 0, 0);
             layout.Controls.Add(new Panel { Dock = DockStyle.Fill }, 1, 0);
-            layout.Controls.Add(buttonLinksPrevious, 2, 0);
+            layout.Controls.Add(modernModelPreviousButton, 2, 0);
             layout.Controls.Add(buttonLinksExportUrdfOnly, 3, 0);
             layout.Controls.Add(buttonLinksFinish, 4, 0);
             footer.Controls.Add(layout);
@@ -1135,6 +1996,10 @@ namespace SW2URDF.UI
             ModernWinFormsTheme.StyleInput(control);
             control.MinimumSize = new Size(control.MinimumSize.Width, 28);
             control.Dock = DockStyle.Fill;
+            // Reparented designer controls retain their legacy absolute-page
+            // TabIndex values. Derive the order from the new grid so keyboard
+            // navigation follows the same left-to-right, top-to-bottom flow.
+            control.TabIndex = row * grid.ColumnCount + controlColumn;
             grid.Controls.Add(label, labelColumn, row);
             grid.Controls.Add(control, controlColumn, row);
         }
@@ -1165,16 +2030,23 @@ namespace SW2URDF.UI
         {
             ModernWinFormsTheme.StyleSecondaryButton(buttonUsageGuide);
             ModernWinFormsTheme.StyleSecondaryButton(modernLinkUsageGuideButton);
+            ModernWinFormsTheme.StyleSecondaryButton(modernModelUsageGuideButton);
             ModernWinFormsTheme.StyleSecondaryButton(buttonJointCancel);
             ModernWinFormsTheme.StylePrimaryButton(buttonJointNext);
             ModernWinFormsTheme.StyleSecondaryButton(buttonLinksCancel);
             ModernWinFormsTheme.StyleSecondaryButton(buttonLinksPrevious);
+            ModernWinFormsTheme.StylePrimaryButton(modernLinkNextButton);
+            ModernWinFormsTheme.StyleSecondaryButton(modernModelCancelButton);
+            ModernWinFormsTheme.StyleSecondaryButton(modernModelPreviousButton);
             ModernWinFormsTheme.StyleSecondaryButton(buttonLinksExportUrdfOnly);
             ModernWinFormsTheme.StylePrimaryButton(buttonLinksFinish);
             ResizeButtonToText(buttonJointCancel);
             ResizeButtonToText(buttonJointNext);
             ResizeButtonToText(buttonLinksCancel);
             ResizeButtonToText(buttonLinksPrevious);
+            ResizeButtonToText(modernLinkNextButton);
+            ResizeButtonToText(modernModelCancelButton);
+            ResizeButtonToText(modernModelPreviousButton);
             ResizeButtonToText(buttonLinksExportUrdfOnly);
             ResizeButtonToText(buttonLinksFinish);
 
@@ -1187,19 +2059,28 @@ namespace SW2URDF.UI
 
         private void WireModernAssemblyLayoutEvents()
         {
-            panelLinkProperties.VisibleChanged += delegate
-            {
-                ActivateModernAssemblyPage();
-                if (!panelLinkProperties.Visible)
-                {
-                    EnsureModernMimicHandler();
-                }
-            };
             treeViewJointTree.AfterSelect += delegate
             {
                 EnsureModernMimicHandler();
             };
-            EnsureModernMimicHandler();
+        }
+
+        private void ModernLinkNextClick(object sender, EventArgs e)
+        {
+            LinkNode node = treeViewLinkProperties.SelectedNode as LinkNode;
+            if (node != null)
+            {
+                SaveLinkDataFromPropertyBoxes(node.Link);
+            }
+            ShowModernAssemblyPage(ModernAssemblyPage.Model);
+            Focus();
+        }
+
+        private void ModernModelPreviousClick(object sender, EventArgs e)
+        {
+            ResetLinkPanelScroll();
+            ShowModernAssemblyPage(ModernAssemblyPage.Link);
+            Focus();
         }
 
         private void EnsureModernMimicHandler()
@@ -1280,15 +2161,41 @@ namespace SW2URDF.UI
             }
         }
 
-        private void ActivateModernAssemblyPage()
+        private void ShowModernAssemblyPage(ModernAssemblyPage page)
         {
-            if (panelLinkProperties.Visible)
+            Control activePage;
+            switch (page)
             {
-                panelLinkProperties.BringToFront();
+                case ModernAssemblyPage.Joint:
+                    activePage = modernJointRoot;
+                    break;
+                case ModernAssemblyPage.Link:
+                    activePage = panelLinkProperties;
+                    break;
+                case ModernAssemblyPage.Model:
+                    activePage = modernModelRoot;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException("page");
             }
-            else if (modernJointRoot != null)
+
+            SuspendLayout();
+            try
             {
-                modernJointRoot.BringToFront();
+                modernJointRoot.Visible = page == ModernAssemblyPage.Joint;
+                panelLinkProperties.Visible = page == ModernAssemblyPage.Link;
+                modernModelRoot.Visible = page == ModernAssemblyPage.Model;
+                activePage.BringToFront();
+                modernActivePage = page;
+            }
+            finally
+            {
+                ResumeLayout(true);
+            }
+
+            if (page == ModernAssemblyPage.Joint)
+            {
+                EnsureModernMimicHandler();
             }
         }
     }

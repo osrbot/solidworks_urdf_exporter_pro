@@ -482,8 +482,8 @@ namespace SW2URDF.UI
                 treeViewLinkProperties.SelectedNode = BaseNode;
             }
             DisplayLinkNode(BaseNode);
-            panelLinkProperties.Visible = true;
             ResetLinkPanelScroll();
+            ShowModernAssemblyPage(ModernAssemblyPage.Link);
             Focus();
         }
 
@@ -734,7 +734,7 @@ namespace SW2URDF.UI
             previouslySelectedNode = null;
             ChangeAllNodeFont(BaseNode, new Font(treeViewJointTree.Font, FontStyle.Regular));
             FillJointTree();
-            panelLinkProperties.Visible = false;
+            ShowModernAssemblyPage(ModernAssemblyPage.Joint);
             SelectFirstJointNodeForEditing();
         }
 
@@ -1506,7 +1506,10 @@ namespace SW2URDF.UI
 
         private void CaptureCurrentExportSession()
         {
-            if (panelLinkProperties.Visible)
+            bool editingLink = modernUiInitialized
+                ? modernActivePage != ModernAssemblyPage.Joint
+                : panelLinkProperties.Visible;
+            if (editingLink)
             {
                 LinkNode selectedLinkNode = (LinkNode)treeViewLinkProperties.SelectedNode;
                 if (selectedLinkNode != null)
@@ -1959,9 +1962,8 @@ namespace SW2URDF.UI
 
         private void ResetLinkPanelScroll()
         {
-            if (modernUiInitialized && modernLinkScrollPanel != null)
+            if (modernUiInitialized)
             {
-                modernLinkScrollPanel.AutoScrollPosition = Point.Empty;
                 return;
             }
             panelLinkProperties.AutoScrollPosition = Point.Empty;
