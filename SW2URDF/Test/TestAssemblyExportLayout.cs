@@ -170,7 +170,11 @@ namespace SW2URDF.Test
 
             try
             {
+                TabControl sections = GetControl<TabControl>(form, "modernLinkSections");
+                sections.SelectedIndex = 1;
+                sections.PerformLayout();
                 GroupBox meshGroup = GetControl<GroupBox>(form, "groupBox4");
+                meshGroup.PerformLayout();
                 Button automaticColors = GetControl<Button>(
                     form,
                     "buttonAutomaticLinkColors");
@@ -178,12 +182,17 @@ namespace SW2URDF.Test
                 DomainUpDown alpha = GetControl<DomainUpDown>(form, "domainUpDownAlpha");
                 Label meshReduction = GetControl<Label>(form, "labelMeshReduction");
 
-                Assert.True(meshGroup.Controls.Contains(automaticColors));
+                Assert.True(IsDescendantOf(automaticColors, meshGroup));
                 Assert.True(automaticColors.Enabled);
-                Assert.False(automaticColors.Bounds.IntersectsWith(pickColor.Bounds));
-                Assert.False(automaticColors.Bounds.IntersectsWith(alpha.Bounds));
-                Assert.True(automaticColors.Bottom <= meshReduction.Top);
-                Assert.True(automaticColors.Right <= meshGroup.ClientSize.Width);
+                Assert.False(BoundsRelativeTo(automaticColors, meshGroup).IntersectsWith(
+                    BoundsRelativeTo(pickColor, meshGroup)));
+                Assert.False(BoundsRelativeTo(automaticColors, meshGroup).IntersectsWith(
+                    BoundsRelativeTo(alpha, meshGroup)));
+                Assert.False(BoundsRelativeTo(automaticColors, meshGroup).IntersectsWith(
+                    BoundsRelativeTo(meshReduction, meshGroup)));
+                Assert.True(BoundsRelativeTo(
+                    automaticColors,
+                    meshGroup).Right <= meshGroup.ClientSize.Width);
                 Assert.False(String.IsNullOrWhiteSpace(automaticColors.Text));
                 Assert.True(automaticColors.Width >= TextRenderer.MeasureText(
                     automaticColors.Text,
@@ -209,7 +218,8 @@ namespace SW2URDF.Test
                     Assert.Equal(AutoScaleMode.Dpi, form.AutoScaleMode);
                     Panel jointRoot = GetControl<Panel>(form, "modernJointRoot");
                     Panel linkRoot = GetControl<Panel>(form, "panelLinkProperties");
-                    Panel linkScroll = GetControl<Panel>(form, "modernLinkScrollPanel");
+                    Panel jointContent = GetControl<Panel>(form, "modernJointContentPanel");
+                    Panel linkContent = GetControl<Panel>(form, "modernLinkContentPanel");
                     TableLayoutPanel jointBody = GetControl<TableLayoutPanel>(
                         form,
                         "modernJointBody");
@@ -224,7 +234,8 @@ namespace SW2URDF.Test
 
                     Assert.Equal(DockStyle.Fill, jointRoot.Dock);
                     Assert.False(linkRoot.AutoScroll);
-                    Assert.True(linkScroll.AutoScroll);
+                    Assert.False(jointContent.AutoScroll);
+                    Assert.False(linkContent.AutoScroll);
                     Assert.Equal(
                         DockStyle.Fill,
                         GetControl<TreeView>(form, "treeViewJointTree").Dock);
@@ -322,7 +333,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestModernLinkScrollOwnerCanBeReset()
+        public void TestModernPropertyPagesDoNotRequireWholePageScrolling()
         {
             AssemblyExportForm form = (AssemblyExportForm)
                 Activator.CreateInstance(typeof(AssemblyExportForm), true);
@@ -330,31 +341,24 @@ namespace SW2URDF.Test
             try
             {
                 Panel outerPanel = GetControl<Panel>(form, "panelLinkProperties");
-                Panel scrollPanel = GetControl<Panel>(form, "modernLinkScrollPanel");
+                Panel linkContent = GetControl<Panel>(form, "modernLinkContentPanel");
+                Panel jointPanel = GetControl<Panel>(form, "modernJointContentPanel");
+                TabControl jointSections = GetControl<TabControl>(
+                    form,
+                    "modernJointSections");
+                TabControl linkSections = GetControl<TabControl>(
+                    form,
+                    "modernLinkSections");
                 Control footer = GetControl<Control>(form, "modernLinkFooter");
 
                 Assert.False(outerPanel.AutoScroll);
-                Assert.True(scrollPanel.AutoScroll);
-                Assert.True(IsDescendantOf(scrollPanel, outerPanel));
+                Assert.False(jointPanel.AutoScroll);
+                Assert.False(linkContent.AutoScroll);
+                Assert.True(IsDescendantOf(linkContent, outerPanel));
                 Assert.True(IsDescendantOf(footer, outerPanel));
-                Assert.False(IsDescendantOf(footer, scrollPanel));
-
-                form.CreateControl();
-                outerPanel.CreateControl();
-                scrollPanel.CreateControl();
-                scrollPanel.Size = new Size(400, 300);
-                scrollPanel.AutoScrollMinSize = new Size(0, 1200);
-                scrollPanel.PerformLayout();
-                scrollPanel.AutoScrollPosition = new Point(0, 180);
-
-                MethodInfo reset = typeof(AssemblyExportForm).GetMethod(
-                    "ResetLinkPanelScroll",
-                    BindingFlags.Instance | BindingFlags.NonPublic);
-                Assert.NotNull(reset);
-                reset.Invoke(form, null);
-                form.PerformLayout();
-
-                Assert.Equal(0, scrollPanel.AutoScrollPosition.Y);
+                Assert.False(IsDescendantOf(footer, linkContent));
+                Assert.Equal(3, jointSections.TabPages.Count);
+                Assert.Equal(2, linkSections.TabPages.Count);
             }
             finally
             {
@@ -371,17 +375,14 @@ namespace SW2URDF.Test
             try
             {
                 Panel linkRoot = GetControl<Panel>(form, "panelLinkProperties");
-                Panel scrollPanel = GetControl<Panel>(form, "modernLinkScrollPanel");
+                Panel linkContent = GetControl<Panel>(form, "modernLinkContentPanel");
                 Control footer = GetControl<Control>(form, "modernLinkFooter");
-                Label packageLabel = GetControl<Label>(form, "labelRosPackageName");
-                Label packageHint = GetControl<Label>(form, "labelRosPackageNameHint");
-                TextBox packageName = GetControl<TextBox>(form, "textBoxRosPackageName");
 
                 form.ClientSize = new Size(1344, 812);
                 form.PerformLayout();
                 linkRoot.PerformLayout();
                 Rectangle footerBounds = footer.Bounds;
-                Rectangle scrollBounds = scrollPanel.Bounds;
+                Rectangle contentBounds = linkContent.Bounds;
 
                 for (int i = 0; i < 20; i++)
                 {
@@ -390,18 +391,8 @@ namespace SW2URDF.Test
                 }
 
                 Assert.Equal(footerBounds, footer.Bounds);
-                Assert.Equal(scrollBounds, scrollPanel.Bounds);
-                Assert.True(scrollPanel.AutoScroll);
-
-                packageName.Text = "rover_description";
-                Assert.Equal(
-                    "Bundle | ROS2 | ROS1 legacy: rover_description",
-                    packageHint.Text);
-                Assert.DoesNotContain("and", packageHint.Text);
-                Assert.DoesNotContain("\u548c", packageHint.Text);
-                Assert.True(
-                    packageLabel.Text == "ROS package" ||
-                    packageLabel.Text == "ROS \u5305\u540d");
+                Assert.Equal(contentBounds, linkContent.Bounds);
+                Assert.False(linkContent.AutoScroll);
             }
             finally
             {
@@ -512,6 +503,8 @@ namespace SW2URDF.Test
 
                 Panel jointRoot = GetControl<Panel>(form, "modernJointRoot");
                 Panel linkRoot = GetControl<Panel>(form, "panelLinkProperties");
+                Panel modelRoot = GetControl<Panel>(form, "modernModelRoot");
+                Label reusedLinkSubtitle = GetControl<Label>(form, "label2");
                 GroupBox inertiaGroup = GetControl<GroupBox>(form, "groupBox5");
                 GroupBox meshGroup = GetControl<GroupBox>(form, "groupBox4");
                 ComboBox linkFrame = GetControl<ComboBox>(
@@ -536,11 +529,14 @@ namespace SW2URDF.Test
                 Assert.True(IsDescendantOf(
                     GetControl<TreeView>(form, "treeViewLinkProperties"),
                     linkRoot));
-                Assert.Same(inertiaGroup, linkFrame.Parent);
-                Assert.Same(inertiaGroup, inertiaPreview.Parent);
-                Assert.Same(meshGroup, automaticColors.Parent);
-                Assert.Same(meshGroup, collisionPreview.Parent);
-                Assert.NotNull(FindDescendant(linkRoot, "modernPackageCard"));
+                Assert.True(IsDescendantOf(reusedLinkSubtitle, linkRoot));
+                Assert.Equal("modernLinkSubtitle", reusedLinkSubtitle.Name);
+                Assert.True(IsDescendantOf(linkFrame, inertiaGroup));
+                Assert.True(IsDescendantOf(inertiaPreview, inertiaGroup));
+                Assert.True(IsDescendantOf(automaticColors, meshGroup));
+                Assert.True(IsDescendantOf(collisionPreview, meshGroup));
+                Assert.Null(FindDescendant(linkRoot, "modernPackageCard"));
+                Assert.NotNull(FindDescendant(modelRoot, "modernPackageCard"));
                 Assert.NotNull(FindDescendant(jointRoot, "modernMimicCard"));
 
                 Assert.Equal(FlatStyle.Flat, next.FlatStyle);
@@ -554,6 +550,8 @@ namespace SW2URDF.Test
                     ModernWinFormsTheme.AccentHover) >= 4.5D);
                 AssertInertiaMatrixMirrors(form);
                 AssertCollisionPreviewDoesNotCoverColorControls(form);
+                AssertEditorTabOrder(form);
+                AssertFooterTabOrder(form);
 
                 CheckBox mimic = GetControl<CheckBox>(form, "MimicCheckBox");
                 TextBox multiplier = GetControl<TextBox>(
@@ -571,6 +569,166 @@ namespace SW2URDF.Test
                 form.InitializeModernUi();
                 Assert.Same(jointRoot, GetControl<Panel>(form, "modernJointRoot"));
                 Assert.Equal(jointControlCount, jointRoot.Controls.Count);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestJointIdentityShowsParentToChildDirection()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                form.PerformLayout();
+
+                Control card = GetControl<Control>(form, "modernJointIdentityCard");
+                Label parent = GetControl<Label>(form, "labelParent");
+                Label child = GetControl<Label>(form, "labelChild");
+                Label arrow = GetControl<Label>(form, "modernJointRelationArrow");
+                Rectangle parentBounds = BoundsRelativeTo(parent, card);
+                Rectangle childBounds = BoundsRelativeTo(child, card);
+                Rectangle arrowBounds = BoundsRelativeTo(arrow, card);
+
+                Assert.Equal("\u2192", arrow.Text);
+                Assert.False(String.IsNullOrWhiteSpace(arrow.AccessibleName));
+                Assert.True(parent.AutoEllipsis);
+                Assert.True(child.AutoEllipsis);
+                Assert.True(parentBounds.Right <= arrowBounds.Left);
+                Assert.True(arrowBounds.Right <= childBounds.Left);
+                Assert.False(parentBounds.IntersectsWith(childBounds));
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestModelMetadataLivesOnDedicatedThirdPage()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                Panel linkRoot = GetControl<Panel>(form, "panelLinkProperties");
+                Panel modelRoot = GetControl<Panel>(form, "modernModelRoot");
+                TextBox maintainer = GetControl<TextBox>(
+                    form,
+                    "modernMaintainerNameTextBox");
+                TextBox author = GetControl<TextBox>(form, "modernModelAuthorTextBox");
+                Label packageLabel = GetControl<Label>(form, "labelRosPackageName");
+                Label packageHint = GetControl<Label>(form, "labelRosPackageNameHint");
+                TextBox packageName = GetControl<TextBox>(
+                    form,
+                    "textBoxRosPackageName");
+                Button ros2Profile = GetControl<Button>(
+                    form,
+                    "modernRos2ControlProfileButton");
+                Button actuatorProfile = GetControl<Button>(
+                    form,
+                    "modernIsaacLabProfileButton");
+
+                Assert.False(IsDescendantOf(maintainer, linkRoot));
+                Assert.False(IsDescendantOf(author, linkRoot));
+                Assert.True(IsDescendantOf(maintainer, modelRoot));
+                Assert.True(IsDescendantOf(author, modelRoot));
+                Assert.True(IsDescendantOf(ros2Profile, modelRoot));
+                Assert.True(IsDescendantOf(actuatorProfile, modelRoot));
+                Assert.Equal(FlatStyle.Flat, ros2Profile.FlatStyle);
+                Assert.Equal(FlatStyle.Flat, actuatorProfile.FlatStyle);
+                Assert.True(ros2Profile.AutoSize);
+                Assert.True(actuatorProfile.AutoSize);
+                Assert.Equal(0, GetControl<TextBox>(
+                    form,
+                    "modernRos2ControlProfileTextBox").TabIndex);
+                Assert.Equal(1, ros2Profile.TabIndex);
+                Assert.True(IsDescendantOf(
+                    GetControl<Button>(form, "modernLinkNextButton"),
+                    linkRoot));
+                Assert.True(IsDescendantOf(
+                    GetControl<Button>(form, "modernModelPreviousButton"),
+                    modelRoot));
+                Assert.True(IsDescendantOf(
+                    GetControl<Button>(form, "buttonLinksFinish"),
+                    modelRoot));
+                string jointStep = GetControl<Label>(form, "modernJointStep").Text;
+                string linkStep = GetControl<Label>(form, "modernLinkStep").Text;
+                string modelStep = GetControl<Label>(form, "modernModelStep").Text;
+                Assert.True(jointStep.Contains("1/3") || jointStep.Contains("1 of 3"));
+                Assert.True(linkStep.Contains("2/3") || linkStep.Contains("2 of 3"));
+                Assert.True(modelStep.Contains("3/3") || modelStep.Contains("3 of 3"));
+
+                packageName.Text = "rover_description";
+                Assert.Equal(
+                    "Bundle | ROS2 | ROS1 legacy: rover_description",
+                    packageHint.Text);
+                Assert.DoesNotContain("and", packageHint.Text);
+                Assert.DoesNotContain("\u548c", packageHint.Text);
+                Assert.True(
+                    packageLabel.Text == "ROS package" ||
+                    packageLabel.Text == "ROS \u5305\u540d");
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestModernPageSwitcherKeepsOneExplicitActiveState()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                FieldInfo activePage = typeof(AssemblyExportForm).GetField(
+                    "modernActivePage",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                MethodInfo showPage = typeof(AssemblyExportForm).GetMethod(
+                    "ShowModernAssemblyPage",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(activePage);
+                Assert.NotNull(showPage);
+                Type pageType = showPage.GetParameters()[0].ParameterType;
+
+                Assert.Equal("Joint", activePage.GetValue(form).ToString());
+                foreach (string pageName in new string[] { "Link", "Model", "Joint" })
+                {
+                    object page = Enum.Parse(pageType, pageName);
+                    showPage.Invoke(form, new object[] { page });
+                    Assert.Equal(pageName, activePage.GetValue(form).ToString());
+                }
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestModernThemeUsesWindowsHostDialogFont()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                string hostFamily = SystemFonts.MessageBoxFont.FontFamily.Name;
+                Assert.Equal(hostFamily, form.Font.FontFamily.Name);
+                Assert.Equal(
+                    hostFamily,
+                    GetControl<Button>(form, "buttonJointNext").Font.FontFamily.Name);
+                Assert.Equal(
+                    hostFamily,
+                    GetControl<Label>(form, "modernJointRelationArrow").Font.FontFamily.Name);
             }
             finally
             {
@@ -613,14 +771,17 @@ namespace SW2URDF.Test
             AssemblyExportForm form = (AssemblyExportForm)
                 Activator.CreateInstance(typeof(AssemblyExportForm), true);
             Button next = GetControl<Button>(form, "buttonJointNext");
+            Label linkSubtitle = GetControl<Label>(form, "label2");
 
             try
             {
                 Assert.True(UiFontResources.OwnsFont(form));
                 Assert.True(UiFontResources.OwnsFont(next));
+                Assert.True(UiFontResources.OwnsFont(linkSubtitle));
                 form.Dispose();
                 Assert.False(UiFontResources.OwnsFont(form));
                 Assert.False(UiFontResources.OwnsFont(next));
+                Assert.False(UiFontResources.OwnsFont(linkSubtitle));
             }
             finally
             {
@@ -785,14 +946,28 @@ namespace SW2URDF.Test
 
         private static Rectangle BoundsRelativeTo(Control control, Control ancestor)
         {
+            if (control == ancestor)
+            {
+                return new Rectangle(Point.Empty, control.Size);
+            }
+
             Point location = control.Location;
             for (Control parent = control.Parent;
-                parent != null && parent != ancestor;
+                parent != null;
                 parent = parent.Parent)
             {
+                if (parent == ancestor)
+                {
+                    return new Rectangle(location, control.Size);
+                }
                 location.Offset(parent.Location);
             }
-            return new Rectangle(location, control.Size);
+
+            throw new InvalidOperationException(String.Format(
+                CultureInfo.InvariantCulture,
+                "{0} is not a descendant of {1}.",
+                control.Name,
+                ancestor.Name));
         }
 
         private static void AssertContainedIn(Control child, Control parent)
@@ -835,15 +1010,36 @@ namespace SW2URDF.Test
         private static void AssertCollisionPreviewDoesNotCoverColorControls(
             AssemblyExportForm form)
         {
+            TabControl sections = GetControl<TabControl>(form, "modernLinkSections");
+            sections.SelectedIndex = 1;
+            sections.PerformLayout();
             Button previewButton = GetControl<Button>(form, "buttonShowCollisionPreview");
             Label previewStatus = GetControl<Label>(form, "labelCollisionPreviewStatus");
             DomainUpDown red = GetControl<DomainUpDown>(form, "domainUpDownRed");
             DomainUpDown blue = GetControl<DomainUpDown>(form, "domainUpDownBlue");
             DomainUpDown alpha = GetControl<DomainUpDown>(form, "domainUpDownAlpha");
+            GroupBox geometry = GetControl<GroupBox>(form, "groupBox4");
+            Panel colorPreview = GetControl<Panel>(form, "panelMaterialColorPreview");
+            Button pickColor = GetControl<Button>(form, "buttonMaterialColorPick");
+            Button automaticColors = GetControl<Button>(form, "buttonAutomaticLinkColors");
+            TrackBar reduction = GetControl<TrackBar>(form, "trackBarMeshReduction");
+            Label estimate = GetControl<Label>(form, "labelEstimatedMeshSize");
+            geometry.PerformLayout();
 
-            Assert.False(previewButton.Bounds.IntersectsWith(red.Bounds));
-            Assert.False(previewStatus.Bounds.IntersectsWith(blue.Bounds));
-            Assert.False(previewStatus.Bounds.IntersectsWith(alpha.Bounds));
+            Assert.False(BoundsRelativeTo(previewButton, geometry).IntersectsWith(
+                BoundsRelativeTo(red, geometry)));
+            Assert.False(BoundsRelativeTo(previewStatus, geometry).IntersectsWith(
+                BoundsRelativeTo(blue, geometry)));
+            Assert.False(BoundsRelativeTo(previewStatus, geometry).IntersectsWith(
+                BoundsRelativeTo(alpha, geometry)));
+            Assert.False(BoundsRelativeTo(previewButton, geometry).IntersectsWith(
+                BoundsRelativeTo(previewStatus, geometry)));
+            Assert.False(BoundsRelativeTo(colorPreview, geometry).IntersectsWith(
+                BoundsRelativeTo(pickColor, geometry)));
+            Assert.False(BoundsRelativeTo(pickColor, geometry).IntersectsWith(
+                BoundsRelativeTo(automaticColors, geometry)));
+            Assert.False(BoundsRelativeTo(reduction, geometry).IntersectsWith(
+                BoundsRelativeTo(estimate, geometry)));
         }
 
         private static void AssertJointFooterGeometry(AssemblyExportForm form)
@@ -909,12 +1105,15 @@ namespace SW2URDF.Test
 
         private static void AssertMimicControlsDoNotOverlapFooter(AssemblyExportForm form)
         {
+            TabControl sections = GetControl<TabControl>(form, "modernJointSections");
+            sections.SelectedIndex = 2;
+            sections.PerformLayout();
             CheckBox mimicCheckBox = GetControl<CheckBox>(form, "MimicCheckBox");
             mimicCheckBox.Checked = true;
             form.PerformLayout();
 
             Control mimicCard = GetControl<Control>(form, "modernMimicCard");
-            Panel jointScroll = GetControl<Panel>(form, "modernJointScrollPanel");
+            Panel jointContent = GetControl<Panel>(form, "modernJointContentPanel");
             Control[] mimicControls = new Control[]
             {
                 mimicCheckBox,
@@ -931,7 +1130,7 @@ namespace SW2URDF.Test
             {
                 Assert.True(IsDescendantOf(mimicControl, mimicCard));
             }
-            Assert.True(IsDescendantOf(mimicCard, jointScroll));
+            Assert.True(IsDescendantOf(mimicCard, jointContent));
 
             TextBox offsetBox = GetControl<TextBox>(form, "textBoxMimicOffset");
             Label equation = GetControl<Label>(form, "MimicEquationLabel");
@@ -954,6 +1153,9 @@ namespace SW2URDF.Test
                 GetControl<Button>(form, "buttonJointNext"),
                 GetControl<Button>(form, "buttonLinksCancel"),
                 GetControl<Button>(form, "buttonLinksPrevious"),
+                GetControl<Button>(form, "modernLinkNextButton"),
+                GetControl<Button>(form, "modernModelCancelButton"),
+                GetControl<Button>(form, "modernModelPreviousButton"),
                 GetControl<Button>(form, "buttonLinksExportUrdfOnly"),
                 GetControl<Button>(form, "buttonLinksFinish")
             };
@@ -972,8 +1174,40 @@ namespace SW2URDF.Test
             }
         }
 
+        private static void AssertFooterTabOrder(AssemblyExportForm form)
+        {
+            Assert.Equal(0, GetControl<Button>(form, "buttonJointCancel").TabIndex);
+            Assert.Equal(1, GetControl<Button>(form, "buttonJointNext").TabIndex);
+            Assert.Equal(0, GetControl<Button>(form, "buttonLinksCancel").TabIndex);
+            Assert.Equal(1, GetControl<Button>(form, "buttonLinksPrevious").TabIndex);
+            Assert.Equal(2, GetControl<Button>(form, "modernLinkNextButton").TabIndex);
+            Assert.Equal(0, GetControl<Button>(form, "modernModelCancelButton").TabIndex);
+            Assert.Equal(1, GetControl<Button>(form, "modernModelPreviousButton").TabIndex);
+            Assert.Equal(2, GetControl<Button>(form, "buttonLinksExportUrdfOnly").TabIndex);
+            Assert.Equal(3, GetControl<Button>(form, "buttonLinksFinish").TabIndex);
+        }
+
+        private static void AssertEditorTabOrder(AssemblyExportForm form)
+        {
+            Assert.True(
+                GetControl<TextBox>(form, "textBoxJointName").TabIndex <
+                GetControl<ComboBox>(form, "comboBoxJointType").TabIndex);
+            Assert.True(
+                GetControl<ComboBox>(form, "comboBoxOrigin").TabIndex <
+                GetControl<ComboBox>(form, "comboBoxAxis").TabIndex);
+            Assert.True(
+                GetControl<TextBox>(form, "textBoxMass").TabIndex <
+                GetControl<Button>(form, "buttonShowInertiaPreview").TabIndex);
+            Assert.True(
+                GetControl<ComboBox>(form, "comboBoxCollisionStrategy").TabIndex <
+                GetControl<Button>(form, "buttonShowCollisionPreview").TabIndex);
+        }
+
         private static void AssertInertiaMatrixMirrors(AssemblyExportForm form)
         {
+            TabControl sections = GetControl<TabControl>(form, "modernLinkSections");
+            sections.SelectedIndex = 0;
+            sections.PerformLayout();
             TextBox ixy = GetControl<TextBox>(form, "textBoxIxy");
             TextBox ixz = GetControl<TextBox>(form, "textBoxIxz");
             TextBox iyz = GetControl<TextBox>(form, "textBoxIyz");
@@ -983,6 +1217,8 @@ namespace SW2URDF.Test
             TextBox iyy = GetControl<TextBox>(form, "textBoxIyy");
             TextBox izz = GetControl<TextBox>(form, "textBoxIzz");
             Button previewButton = GetControl<Button>(form, "buttonShowInertiaPreview");
+            GroupBox inertia = GetControl<GroupBox>(form, "groupBox5");
+            inertia.PerformLayout();
 
             ixy.Text = "1.2e-6";
             ixz.Text = "-2.3e-6";
@@ -997,10 +1233,18 @@ namespace SW2URDF.Test
             Assert.Equal(ixy.Text, iyxMirror.Text);
             Assert.Equal(ixz.Text, izxMirror.Text);
             Assert.Equal(iyz.Text, izyMirror.Text);
-            Assert.True(iyxMirror.Right < iyy.Left);
-            Assert.True(izxMirror.Right < izyMirror.Left);
-            Assert.True(izyMirror.Right < izz.Left);
-            Assert.True(izz.Bottom < previewButton.Top);
+            Assert.True(
+                BoundsRelativeTo(iyxMirror, inertia).Right <
+                BoundsRelativeTo(iyy, inertia).Left);
+            Assert.True(
+                BoundsRelativeTo(izxMirror, inertia).Right <
+                BoundsRelativeTo(izyMirror, inertia).Left);
+            Assert.True(
+                BoundsRelativeTo(izyMirror, inertia).Right <
+                BoundsRelativeTo(izz, inertia).Left);
+            Assert.True(
+                BoundsRelativeTo(izz, inertia).Bottom <
+                BoundsRelativeTo(previewButton, inertia).Top);
         }
     }
 }

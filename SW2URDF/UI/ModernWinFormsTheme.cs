@@ -54,6 +54,37 @@ namespace SW2URDF.UI
             }
 
             Font replacement = new Font(family, size, style, GraphicsUnit.Point);
+            ReplaceOwnedFont(control, replacement);
+        }
+
+        internal static void SetFont(
+            Control control,
+            Font prototype,
+            float size,
+            FontStyle style)
+        {
+            if (prototype == null)
+            {
+                throw new ArgumentNullException("prototype");
+            }
+
+            if (control == null)
+            {
+                throw new ArgumentNullException("control");
+            }
+
+            Font replacement = new Font(
+                prototype.FontFamily,
+                size,
+                style,
+                GraphicsUnit.Point,
+                prototype.GdiCharSet,
+                prototype.GdiVerticalFont);
+            ReplaceOwnedFont(control, replacement);
+        }
+
+        private static void ReplaceOwnedFont(Control control, Font replacement)
+        {
             OwnedFont previous;
             bool hadPrevious = Fonts.TryGetValue(control, out previous);
             if (hadPrevious &&
@@ -124,12 +155,16 @@ namespace SW2URDF.UI
         internal static readonly Color AccentHover = Color.FromArgb(0, 124, 146);
         internal static readonly Color AccentTint = Color.FromArgb(226, 247, 251);
 
+        internal static Font HostFont
+        {
+            // A SolidWorks-hosted WinForms dialog should follow the current
+            // Windows dialog font so locale and fallback glyphs stay aligned.
+            get { return SystemFonts.MessageBoxFont; }
+        }
+
         internal static void SetFont(Control control, float size, FontStyle style)
         {
-            string family = ChineseUiText.ShouldUseChinese()
-                ? "Microsoft YaHei UI"
-                : "Segoe UI";
-            UiFontResources.SetFont(control, family, size, style);
+            UiFontResources.SetFont(control, HostFont, size, style);
         }
 
         internal static Label CreateTextLabel(string text, float size, FontStyle style)
@@ -170,7 +205,7 @@ namespace SW2URDF.UI
             try
             {
                 form.BackColor = Background;
-                SetFont(form, 9F, FontStyle.Regular);
+                SetFont(form, HostFont.SizeInPoints, FontStyle.Regular);
                 ApplyControlTree(form);
             }
             finally
@@ -211,6 +246,7 @@ namespace SW2URDF.UI
         internal static void StyleReadoutLabel(Label label)
         {
             label.AutoSize = false;
+            label.AutoEllipsis = true;
             label.BackColor = SurfaceAlt;
             label.BorderStyle = BorderStyle.FixedSingle;
             label.Dock = DockStyle.Fill;

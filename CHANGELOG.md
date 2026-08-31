@@ -4,6 +4,16 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## Unreleased
 
+### Changed
+
+- Validate inertia triangle inequalities in the principal frame using scale-aware eigenvalue
+  checks, including rotated and very small tensors.
+
+### Fixed
+
+- Made standalone Bundle profile JSON use exactly the same canonical null-elision as embedded
+  `robot.json` profiles, allowing sparse non-ROS models to pass Isaac adapter preflight.
+
 ## 2026-08-29
 
 ### Changed

@@ -847,9 +847,13 @@ namespace OSURDF.Core.Validation
             {
                 report.Add(ValidationSeverity.Error, "INERTIA_POSITIVE_DEFINITE", path + ".inertia", "Inertia tensor must be positive definite.");
             }
-            if (tensor.Ixx + tensor.Iyy < tensor.Izz - 1e-12 ||
-                tensor.Ixx + tensor.Izz < tensor.Iyy - 1e-12 ||
-                tensor.Iyy + tensor.Izz < tensor.Ixx - 1e-12)
+            double[] principalMoments;
+            if (!InertiaTensorMath.TryGetPrincipalMoments(tensor, out principalMoments))
+            {
+                report.Add(ValidationSeverity.Error, "INERTIA_EIGENVALUES", path + ".inertia", "Principal moments could not be computed.");
+                return;
+            }
+            if (!InertiaTensorMath.SatisfiesTriangleInequality(principalMoments))
             {
                 report.Add(ValidationSeverity.Error, "INERTIA_TRIANGLE", path + ".inertia", "Principal-axis triangle inequality is violated.");
             }
