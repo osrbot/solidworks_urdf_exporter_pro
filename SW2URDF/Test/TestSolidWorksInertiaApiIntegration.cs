@@ -10,19 +10,13 @@ using Xunit;
 
 namespace SW2URDF.Test
 {
+    [Trait("Category", "LiveSolidWorks")]
     public class TestSolidWorksInertiaApiIntegration
     {
         [Fact]
         public void TestApiTensorEigenvaluesMatchApiPrincipalMoments()
         {
-            if (!string.Equals(
-                System.Environment.GetEnvironmentVariable(
-                    "SW2URDF_RUN_SW_INTEGRATION_TESTS"),
-                "1",
-                StringComparison.Ordinal))
-            {
-                return;
-            }
+            RequireLiveSolidWorksOptIn();
 
             SldWorks swApp = null;
             ModelDoc2 model = null;
@@ -74,22 +68,14 @@ namespace SW2URDF.Test
         [Fact]
         public void TestApiCenterOfMassUsesRequestedCoordinateSystem()
         {
-            if (!string.Equals(
-                System.Environment.GetEnvironmentVariable(
-                    "SW2URDF_RUN_SW_INTEGRATION_TESTS"),
-                "1",
-                StringComparison.Ordinal))
-            {
-                return;
-            }
+            RequireLiveSolidWorksOptIn();
 
             string coordinateSystemName =
                 System.Environment.GetEnvironmentVariable(
                     "SW2URDF_TEST_COORDINATE_SYSTEM");
-            if (string.IsNullOrWhiteSpace(coordinateSystemName))
-            {
-                return;
-            }
+            Assert.False(
+                string.IsNullOrWhiteSpace(coordinateSystemName),
+                "Set SW2URDF_TEST_COORDINATE_SYSTEM for this Live SolidWorks test.");
 
             SldWorks swApp = null;
             ModelDoc2 model = null;
@@ -201,14 +187,7 @@ namespace SW2URDF.Test
         [Fact]
         public void TestSelectedComponentTensorEigenvaluesMatchApiPrincipalMoments()
         {
-            if (!string.Equals(
-                System.Environment.GetEnvironmentVariable(
-                    "SW2URDF_RUN_SW_INTEGRATION_TESTS"),
-                "1",
-                StringComparison.Ordinal))
-            {
-                return;
-            }
+            RequireLiveSolidWorksOptIn();
 
             string coordinateSystemName =
                 System.Environment.GetEnvironmentVariable(
@@ -216,11 +195,11 @@ namespace SW2URDF.Test
             string componentName =
                 System.Environment.GetEnvironmentVariable(
                     "SW2URDF_TEST_COMPONENT_NAME");
-            if (string.IsNullOrWhiteSpace(coordinateSystemName) ||
-                string.IsNullOrWhiteSpace(componentName))
-            {
-                return;
-            }
+            Assert.False(
+                string.IsNullOrWhiteSpace(coordinateSystemName) ||
+                string.IsNullOrWhiteSpace(componentName),
+                "Set SW2URDF_TEST_COORDINATE_SYSTEM and SW2URDF_TEST_COMPONENT_NAME " +
+                "for this Live SolidWorks test.");
 
             SldWorks swApp = null;
             ModelDoc2 model = null;
@@ -265,14 +244,7 @@ namespace SW2URDF.Test
         [Fact]
         public void TestDocumentFrameConversionProducesExpectedLinkLocalMassProperties()
         {
-            if (!string.Equals(
-                System.Environment.GetEnvironmentVariable(
-                    "SW2URDF_RUN_SW_INTEGRATION_TESTS"),
-                "1",
-                StringComparison.Ordinal))
-            {
-                return;
-            }
+            RequireLiveSolidWorksOptIn();
 
             string coordinateSystemName =
                 System.Environment.GetEnvironmentVariable(
@@ -280,11 +252,11 @@ namespace SW2URDF.Test
             string componentName =
                 System.Environment.GetEnvironmentVariable(
                     "SW2URDF_TEST_COMPONENT_NAME");
-            if (string.IsNullOrWhiteSpace(coordinateSystemName) ||
-                string.IsNullOrWhiteSpace(componentName))
-            {
-                return;
-            }
+            Assert.False(
+                string.IsNullOrWhiteSpace(coordinateSystemName) ||
+                string.IsNullOrWhiteSpace(componentName),
+                "Set SW2URDF_TEST_COORDINATE_SYSTEM and SW2URDF_TEST_COMPONENT_NAME " +
+                "for this Live SolidWorks test.");
 
             SldWorks swApp = null;
             ModelDoc2 model = null;
@@ -452,6 +424,17 @@ namespace SW2URDF.Test
                         mappedPrincipalMoments[i],
                         expectedPrincipalMoments[i]));
             }
+        }
+
+        private static void RequireLiveSolidWorksOptIn()
+        {
+            Assert.True(
+                string.Equals(
+                    System.Environment.GetEnvironmentVariable(
+                        "SW2URDF_RUN_SW_INTEGRATION_TESTS"),
+                    "1",
+                    StringComparison.Ordinal),
+                "Set SW2URDF_RUN_SW_INTEGRATION_TESTS=1 to run Live SolidWorks tests.");
         }
 
         private static DispatchWrapper[] CreateDispatchWrappers(object[] bodies)

@@ -562,12 +562,20 @@
       <Link>schemas\README.md</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\tools\isaac_adapter\osurdf_isaac_adapter.py">
-      <Link>tools\isaac_adapter\osurdf_isaac_adapter.py</Link>
+    <None Include="..\tools\usd_adapter\osurdf_usd_adapter.py">
+      <Link>tools\usd_adapter\osurdf_usd_adapter.py</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\tools\isaac_adapter\README.md">
-      <Link>tools\isaac_adapter\README.md</Link>
+    <None Include="..\tools\usd_adapter\README.md">
+      <Link>tools\usd_adapter\README.md</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\tools\openusd_runtime.lock.json">
+      <Link>tools\openusd_runtime.lock.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\tools\mujoco_runtime.lock.json">
+      <Link>tools\mujoco_runtime.lock.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="Properties\DataSources\SwAddin.datasource">

@@ -11,6 +11,7 @@ using Xunit;
 namespace SW2URDF.Test
 {
     [Collection("Requires SW Test Collection")]
+    [Trait("Category", "LiveSolidWorks")]
     public sealed class TestDeepReferenceGeometryIntegration : SW2URDFTest
     {
         private const string UnicodeFrameName = "\u5750\u6807\u7cfb1";
@@ -24,12 +25,13 @@ namespace SW2URDF.Test
         [Fact]
         public void PersistentReferencesResolveDeepUnicodeGeometryAcrossReopen()
         {
-            Assert.True(string.Equals(
-                System.Environment.GetEnvironmentVariable(
-                    "SW2URDF_RUN_DEEP_REFERENCE_TESTS"),
-                "1",
-                StringComparison.Ordinal),
-                "Set SW2URDF_RUN_DEEP_REFERENCE_TESTS=1 and provide the disposable fixture path.");
+            Assert.True(
+                string.Equals(
+                    System.Environment.GetEnvironmentVariable(
+                        "SW2URDF_RUN_DEEP_REFERENCE_TESTS"),
+                    "1",
+                    StringComparison.Ordinal),
+                "Set SW2URDF_RUN_DEEP_REFERENCE_TESTS=1 to run this mutating Live test.");
 
             string assemblyPath = System.Environment.GetEnvironmentVariable(
                 "SW2URDF_TEST_DEEP_REFERENCE_ASSEMBLY");

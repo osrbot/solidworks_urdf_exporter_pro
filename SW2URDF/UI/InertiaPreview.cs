@@ -89,7 +89,6 @@ namespace SW2URDF.UI
                 if (!TemporaryBodyDisplayContext.TryCreate(
                     swApp,
                     model,
-                    link,
                     linkCoordinateTransform,
                     out TemporaryBodyDisplayContext createdDisplayContext,
                     out string displayContextError))

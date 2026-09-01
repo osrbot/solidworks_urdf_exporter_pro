@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.InteropServices;
 using DrawingColor = System.Drawing.Color;
 
@@ -88,7 +89,6 @@ namespace SW2URDF.UI
                 if (!TemporaryBodyDisplayContext.TryCreate(
                     swApp,
                     model,
-                    link,
                     linkCoordinateTransform,
                     out TemporaryBodyDisplayContext createdDisplayContext,
                     out string displayContextError))
@@ -156,9 +156,8 @@ namespace SW2URDF.UI
                     case CollisionMeshStrategy.VisualMesh:
                         displayedBodyCount = ShowComponentBodies(
                             link,
-                            linkCoordinateTransform,
-                            displayContext.LinkToDisplayTarget,
-                            displayContext.DisplayTarget);
+                            displayContext.DisplayTarget,
+                            displayContext.DisplayTargetToDocument);
                         status = ChineseUiText.Translate(
                             "Visual-mesh collision geometry preview shown from SolidWorks bodies.",
                             "已使用 SolidWorks 实体显示复用可视网格的碰撞几何预览。");
@@ -166,9 +165,8 @@ namespace SW2URDF.UI
                     case CollisionMeshStrategy.AccurateMesh:
                         displayedBodyCount = ShowComponentBodies(
                             link,
-                            linkCoordinateTransform,
-                            displayContext.LinkToDisplayTarget,
-                            displayContext.DisplayTarget);
+                            displayContext.DisplayTarget,
+                            displayContext.DisplayTargetToDocument);
                         status = ChineseUiText.Translate(
                             "Accurate collision geometry preview shown from SolidWorks bodies.",
                             "已使用 SolidWorks 实体显示精确碰撞几何预览。");
@@ -176,9 +174,8 @@ namespace SW2URDF.UI
                     case CollisionMeshStrategy.SimplifiedMesh:
                         displayedBodyCount = ShowComponentBodies(
                             link,
-                            linkCoordinateTransform,
-                            displayContext.LinkToDisplayTarget,
-                            displayContext.DisplayTarget);
+                            displayContext.DisplayTarget,
+                            displayContext.DisplayTargetToDocument);
                         status = ChineseUiText.Translate(
                             "CAD shape preview shown. The final coarse-tessellation STL uses the selected tolerance and may have fewer facets.",
                             "已显示 CAD 外形预览；最终粗化三角化 STL 使用所选公差，分面数量可能更少。");
@@ -280,16 +277,12 @@ namespace SW2URDF.UI
         }
 
         internal static Matrix<double> BuildBodyToDisplayTarget(
-            Matrix<double> linkToDisplayTarget,
-            Matrix<double> linkToDocument,
-            Matrix<double> componentToDocument)
+            Matrix<double> componentToRoot,
+            Matrix<double> displayTargetToRoot)
         {
-            if (linkToDisplayTarget == null || linkToDocument == null ||
-                componentToDocument == null)
-            {
-                throw new ArgumentNullException("A collision preview transform is missing.");
-            }
-            return linkToDisplayTarget * linkToDocument.Inverse() * componentToDocument;
+            return TemporaryBodyDisplayContext.BuildBodyToDisplayTarget(
+                componentToRoot,
+                displayTargetToRoot);
         }
 
         internal static bool IsDisplaySuccess(int result) { return result == 0; }
@@ -642,9 +635,8 @@ namespace SW2URDF.UI
 
         private int ShowComponentBodies(
             Link link,
-            MathTransform linkToDocument,
-            MathTransform linkToDisplayTarget,
-            object displayTarget)
+            object displayTarget,
+            Matrix<double> displayTargetToRoot)
         {
             if (link.SWComponents == null || link.SWComponents.Count == 0)
             {
@@ -653,9 +645,6 @@ namespace SW2URDF.UI
                     "该 Link 没有可供预览的 SolidWorks 组件。"));
             }
 
-            Matrix<double> linkToDocumentMatrix = MathOps.GetTransformation(linkToDocument);
-            Matrix<double> linkToDisplayTargetMatrix =
-                MathOps.GetTransformation(linkToDisplayTarget);
             MathUtility mathUtility = null;
             try
             {
@@ -674,9 +663,8 @@ namespace SW2URDF.UI
                 {
                     displayedBodyCount += ShowComponentBodiesRecursive(
                         component,
-                        linkToDocumentMatrix,
-                        linkToDisplayTargetMatrix,
                         displayTarget,
+                        displayTargetToRoot,
                         mathUtility,
                         visitedComponents);
                 }
@@ -696,9 +684,8 @@ namespace SW2URDF.UI
 
         private int ShowComponentBodiesRecursive(
             Component2 component,
-            Matrix<double> linkToDocument,
-            Matrix<double> linkToDisplayTarget,
             object displayTarget,
+            Matrix<double> displayTargetToRoot,
             MathUtility mathUtility,
             ISet<string> visitedComponents)
         {
@@ -708,33 +695,12 @@ namespace SW2URDF.UI
                 return 0;
             }
 
-            Matrix<double> componentToDocument = Matrix<double>.Build.DenseIdentity(4);
             MathTransform componentTransform = null;
             MathTransform bodyToDisplayTarget = null;
+            object[] bodies = null;
             int displayedBodyCount = 0;
             try
             {
-                componentTransform =
-                    ReferenceGeometryResolver.GetComponentToRootTransform(component);
-                if (componentTransform != null)
-                {
-                    componentToDocument = MathOps.GetTransformation(componentTransform);
-                }
-                Matrix<double> bodyTransformMatrix = BuildBodyToDisplayTarget(
-                    linkToDisplayTarget,
-                    linkToDocument,
-                    componentToDocument);
-                bodyToDisplayTarget = mathUtility.CreateTransform(
-                    TemporaryBodyDisplayContext.ToSolidWorksTransformData(bodyTransformMatrix))
-                    as MathTransform;
-                if (bodyToDisplayTarget == null)
-                {
-                    throw new InvalidOperationException(ChineseUiText.Translate(
-                        "SolidWorks could not create the collision body preview transform.",
-                        "SolidWorks 无法创建碰撞实体预览变换。"));
-                }
-
-                object[] bodies = null;
                 try
                 {
                     object bodyInfo;
@@ -746,6 +712,31 @@ namespace SW2URDF.UI
                 {
                     bodies = null;
                 }
+
+                if ((bodies ?? new object[0]).Any(body => body is Body2))
+                {
+                    componentTransform = ReferenceGeometryResolver
+                        .GetComponentToRootTransform(component);
+                    if (componentTransform == null)
+                    {
+                        throw new InvalidOperationException(ChineseUiText.Translate(
+                            "The authoritative component-to-root transform is unavailable for collision preview.",
+                            "碰撞预览无法取得组件到根装配体的权威变换。"));
+                    }
+                    Matrix<double> bodyTransformMatrix = BuildBodyToDisplayTarget(
+                        MathOps.GetTransformation(componentTransform),
+                        displayTargetToRoot);
+                    bodyToDisplayTarget = mathUtility.CreateTransform(
+                        TemporaryBodyDisplayContext.ToSolidWorksTransformData(
+                            bodyTransformMatrix)) as MathTransform;
+                    if (bodyToDisplayTarget == null)
+                    {
+                        throw new InvalidOperationException(ChineseUiText.Translate(
+                            "SolidWorks could not create the collision body preview transform.",
+                            "SolidWorks 无法创建碰撞实体预览变换。"));
+                    }
+                }
+
                 foreach (object bodyObject in bodies ?? new object[0])
                 {
                     Body2 sourceBody = bodyObject as Body2;
@@ -753,27 +744,24 @@ namespace SW2URDF.UI
                     {
                         continue;
                     }
-                    try
+                    Body2 copiedBody = sourceBody.Copy() as Body2;
+                    if (copiedBody == null)
                     {
-                        Body2 copiedBody = sourceBody.Copy() as Body2;
-                        if (copiedBody == null)
-                        {
-                            continue;
-                        }
-                        Body2 ownedBody = copiedBody;
-                        copiedBody = null;
-                        AddBody(ownedBody, bodyToDisplayTarget,
-                            DrawingColor.OrangeRed, displayTarget);
-                        displayedBodyCount++;
+                        continue;
                     }
-                    finally
-                    {
-                        ReleaseComReference(sourceBody);
-                    }
+                    Body2 ownedBody = copiedBody;
+                    copiedBody = null;
+                    AddBody(ownedBody, bodyToDisplayTarget,
+                        DrawingColor.OrangeRed, displayTarget);
+                    displayedBodyCount++;
                 }
             }
             finally
             {
+                foreach (object body in bodies ?? new object[0])
+                {
+                    ReleaseComReference(body);
+                }
                 ReleaseComReference(bodyToDisplayTarget);
                 ReleaseComReference(componentTransform);
             }
@@ -786,13 +774,19 @@ namespace SW2URDF.UI
             catch (COMException) { }
             foreach (object childObject in children ?? new object[0])
             {
-                displayedBodyCount += ShowComponentBodiesRecursive(
-                    childObject as Component2,
-                    linkToDocument,
-                    linkToDisplayTarget,
-                    displayTarget,
-                    mathUtility,
-                    visitedComponents);
+                try
+                {
+                    displayedBodyCount += ShowComponentBodiesRecursive(
+                        childObject as Component2,
+                        displayTarget,
+                        displayTargetToRoot,
+                        mathUtility,
+                        visitedComponents);
+                }
+                finally
+                {
+                    ReleaseComReference(childObject);
+                }
             }
             return displayedBodyCount;
         }

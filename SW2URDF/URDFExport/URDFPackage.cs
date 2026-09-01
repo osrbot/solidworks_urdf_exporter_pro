@@ -63,7 +63,8 @@ namespace SW2URDF.URDFExport
         public string WindowsRos2LaunchDirectory { get; }
         public string WindowsRos2ConfigDirectory { get; }
         public string WindowsRos2ResourceDirectory { get; }
-        public string WindowsBundleDirectory { get; }
+        public string WindowsUsdAssetDirectory { get; }
+        public string WindowsMjcfAssetDirectory { get; }
 
         public URDFPackage(string name, string dir)
             : this(name, name, dir)
@@ -103,7 +104,8 @@ namespace SW2URDF.URDFExport
             WindowsRos2LaunchDirectory = WindowsRos2PackageDirectory + @"launch\";
             WindowsRos2ConfigDirectory = WindowsRos2PackageDirectory + @"config\";
             WindowsRos2ResourceDirectory = WindowsRos2PackageDirectory + @"resource\";
-            WindowsBundleDirectory = dir + @"Bundle\" + PackageName + @".osurdf";
+            WindowsUsdAssetDirectory = dir + @"USD\" + PackageName + @"\";
+            WindowsMjcfAssetDirectory = dir + @"MuJoCo\";
         }
 
         public void CreateDirectories()

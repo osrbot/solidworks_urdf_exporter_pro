@@ -208,12 +208,12 @@ namespace SW2URDF.UI
                 displayedJointType = string.Empty;
                 jointUnitInputsResetForCurrentChange = false;
                 AutoUpdatingForm = false;
+                ValidateJointLimitInputs();
                 return;
             }
             if (joint != null) //For the base_link or if none is selected
             {
-                // Limits are required for prismatic and revolute joints
-                LimitRequiredLabel.Visible = (joint.Type == "prismatic" || joint.Type == "revolute");
+                LimitRequiredLabel.Visible = IsMovingOneAxisJoint(joint.Type);
 
                 AxisRequiredLabel.Visible = JointConfigurationPolicy.RequiresMotionAxis(joint.Type);
 
@@ -244,7 +244,6 @@ namespace SW2URDF.UI
                                           textBoxLimitVelocity,
                                           GeneralDisplayFormat);
                 }
-
                 if (joint.Calibration != null)
                 {
                     joint.Calibration.FillBoxes(textBoxCalibrationRising,
@@ -292,6 +291,7 @@ namespace SW2URDF.UI
 
             // We'll be setting this automatically, so unsubscribe callback
             MimicCheckBox.CheckedChanged -= MimicCheckBoxCheckedChanged;
+            MimicCheckBox.CheckedChanged -= ModernMimicCheckBoxCheckedChanged;
 
             MimicJointComboBox.Items.Clear();
             MimicJointComboBox.Items.AddRange(jointNames.ToArray());
@@ -308,12 +308,20 @@ namespace SW2URDF.UI
                 ShowMimicControls(false);
                 MimicCheckBox.Checked = false;
             }
-            // Resubscribe to callback
-            MimicCheckBox.CheckedChanged += MimicCheckBoxCheckedChanged;
+            if (modernUiInitialized)
+            {
+                MimicCheckBox.CheckedChanged += ModernMimicCheckBoxCheckedChanged;
+                SynchronizeModernMimicLayout();
+            }
+            else
+            {
+                MimicCheckBox.CheckedChanged += MimicCheckBoxCheckedChanged;
+            }
 
             displayedJointType = JointConfigurationPolicy.Normalize(joint.Type);
             jointUnitInputsResetForCurrentChange = false;
             AutoUpdatingForm = false;
+            ValidateJointLimitInputs();
         }
 
         private void UpdateJointUnitLabels(string jointType)
@@ -367,7 +375,8 @@ namespace SW2URDF.UI
                 return;
             }
 
-            string nextType = JointConfigurationPolicy.Normalize(comboBoxJointType.Text);
+            string nextType = JointConfigurationPolicy.Normalize(
+                ChineseUiText.JointTypeValue(comboBoxJointType.Text));
             if (JointConfigurationPolicy.ChangesMotionUnits(displayedJointType, nextType))
             {
                 FillBlank(new Control[]
@@ -383,9 +392,10 @@ namespace SW2URDF.UI
                 jointUnitInputsResetForCurrentChange = true;
             }
             displayedJointType = nextType;
-            LimitRequiredLabel.Visible = nextType == "revolute" || nextType == "prismatic";
+            LimitRequiredLabel.Visible = IsMovingOneAxisJoint(nextType);
             AxisRequiredLabel.Visible = JointConfigurationPolicy.RequiresMotionAxis(nextType);
             UpdateJointUnitLabels(nextType);
+            ValidateJointLimitInputs();
         }
 
         public static void FillBlank(Control[] boxes)
@@ -427,12 +437,31 @@ namespace SW2URDF.UI
                                              textBoxIyz,
                                              textBoxIzz);
 
+                if (TryReadMaterialRgba(out double[] rgba))
+                {
+                    Link.Visual.Material.Color.SetColor(rgba);
+                }
+                else
+                {
+                    Link.Visual.Material.Color.SetColor(previousColor);
+                    updatingMaterialColorControls = true;
+                    try
+                    {
+                        Link.Visual.Material.Color.FillBoxes(
+                            domainUpDownRed,
+                            domainUpDownGreen,
+                            domainUpDownBlue,
+                            domainUpDownAlpha,
+                            "G17");
+                    }
+                    finally
+                    {
+                        updatingMaterialColorControls = false;
+                    }
+                    ValidateMaterialColorInputs();
+                }
+                SynchronizeMaterialIdFromRgba();
                 Link.Visual.Material.Name = comboBoxMaterials.Text;
-
-                Link.Visual.Material.Color.Update(domainUpDownRed,
-                                                  domainUpDownGreen,
-                                                  domainUpDownBlue,
-                                                  domainUpDownAlpha);
 
                 if (!String.Equals(previousMaterialName, Link.Visual.Material.Name,
                         StringComparison.Ordinal) ||
@@ -472,7 +501,8 @@ namespace SW2URDF.UI
         {
             Joint Joint = link.Joint;
             string previousType = JointConfigurationPolicy.Normalize(Joint.Type);
-            string selectedType = JointConfigurationPolicy.Normalize(comboBoxJointType.Text);
+            string selectedType = JointConfigurationPolicy.Normalize(
+                ChineseUiText.JointTypeValue(comboBoxJointType.Text));
             if (JointConfigurationPolicy.ChangesMotionUnits(previousType, selectedType) &&
                 !jointUnitInputsResetForCurrentChange)
             {

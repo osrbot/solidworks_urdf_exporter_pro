@@ -52,7 +52,8 @@ namespace SW2URDF.URDFExport
             HashSet<string> files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             AddFiles(files, package.WindowsPackageDirectory, outputBeforeExport);
             AddFiles(files, package.WindowsRos2PackageDirectory, outputBeforeExport);
-            AddFiles(files, package.WindowsBundleDirectory, outputBeforeExport);
+            AddFiles(files, package.WindowsUsdAssetDirectory, outputBeforeExport);
+            AddFiles(files, package.WindowsMjcfAssetDirectory, outputBeforeExport);
             AddFile(files, package.WindowsExportReportFile, outputBeforeExport);
             AddFile(files, package.WindowsExportLogFile, outputBeforeExport);
 
@@ -190,7 +191,8 @@ namespace SW2URDF.URDFExport
                 new Dictionary<string, FileStamp>(StringComparer.OrdinalIgnoreCase);
             CaptureDirectory(files, package.WindowsPackageDirectory);
             CaptureDirectory(files, package.WindowsRos2PackageDirectory);
-            CaptureDirectory(files, package.WindowsBundleDirectory);
+            CaptureDirectory(files, package.WindowsUsdAssetDirectory);
+            CaptureDirectory(files, package.WindowsMjcfAssetDirectory);
             CaptureFile(files, package.WindowsExportReportFile);
             CaptureFile(files, package.WindowsExportLogFile);
             return new ExportOutputSnapshot(files);

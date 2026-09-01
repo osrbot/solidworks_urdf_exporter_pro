@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 2,
+  "name": "usd_fixture_robot",
+  "units": "SI",
+  "metadata": {
+    "generator": "test",
+    "generatorVersion": "1.0.0",
+    "commit": "fixture",
+    "sourceFormat": "fixture"
+  },
+  "links": [
+    {
+      "id": "link-base",
+      "name": "base link",
+      "inertial": {
+        "origin": {
+          "xyz": { "x": 0.1, "y": 0.2, "z": 0.3 },
+          "rpy": { "x": 0.0, "y": 0.0, "z": 0.0 }
+        },
+        "mass": 2.0,
+        "inertia": {
+          "ixx": 0.2,
+          "ixy": 0.01,
+          "ixz": 0.0,
+          "iyy": 0.3,
+          "iyz": 0.0,
+          "izz": 0.4
+        }
+      },
+      "visuals": [
+        {
+          "name": "base visual",
+          "origin": {
+            "xyz": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "rpy": { "x": 0.0, "y": 0.0, "z": 0.0 }
+          },
+          "geometry": {
+            "type": "mesh",
+            "uri": "meshes/base.stl",
+            "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+          },
+          "material": {
+            "name": "material_base",
+            "rgba": { "x": 0.2, "y": 0.4, "z": 0.8, "w": 1.0 }
+          }
+        }
+      ],
+      "collisions": [
+        {
+          "name": "base collision",
+          "origin": {
+            "xyz": { "x": 0.0, "y": 0.0, "z": 0.0 },
+            "rpy": { "x": 0.0, "y": 0.0, "z": 0.0 }
+          },
+          "geometry": {
+            "type": "box",
+            "size": { "x": 1.0, "y": 0.5, "z": 0.2 }
+          }
+        }
+      ],
+      "source": { "kind": "fixture", "userConfirmed": true }
+    },
+    {
+      "id": "link-arm",
+      "name": "arm link",
+      "inertial": {
+        "origin": {
+          "xyz": { "x": 0.0, "y": 0.0, "z": 0.0 },
+          "rpy": { "x": 0.0, "y": 0.0, "z": 0.0 }
+        },
+        "mass": 1.0,
+        "inertia": {
+          "ixx": 0.1,
+          "ixy": 0.0,
+          "ixz": 0.0,
+          "iyy": 0.1,
+          "iyz": 0.0,
+          "izz": 0.1
+        }
+      },
+      "visuals": [
+        {
+          "name": "arm visual",
+          "geometry": { "type": "sphere", "radius": 0.2 },
+          "material": {
+            "name": "material_arm",
+            "rgba": { "x": 0.8, "y": 0.3, "z": 0.2, "w": 0.9 }
+          }
+        }
+      ],
+      "collisions": [
+        {
+          "name": "arm collision",
+          "geometry": { "type": "cylinder", "radius": 0.2, "length": 0.5 }
+        }
+      ],
+      "source": { "kind": "fixture", "userConfirmed": true }
+    },
+    {
+      "id": "link-planar",
+      "name": "planar link",
+      "inertial": {
+        "origin": {
+          "xyz": { "x": 0.0, "y": 0.0, "z": 0.0 },
+          "rpy": { "x": 0.0, "y": 0.0, "z": 0.0 }
+        },
+        "mass": 0.5,
+        "inertia": {
+          "ixx": 0.05,
+          "ixy": 0.0,
+          "ixz": 0.0,
+          "iyy": 0.05,
+          "iyz": 0.0,
+          "izz": 0.05
+        }
+      },
+      "visuals": [
+        {
+          "name": "planar visual",
+          "geometry": {
+            "type": "box",
+            "size": { "x": 0.3, "y": 0.3, "z": 0.1 }
+          }
+        }
+      ],
+      "collisions": [
+        {
+          "name": "planar collision",
+          "geometry": {
+            "type": "box",
+            "size": { "x": 0.3, "y": 0.3, "z": 0.1 }
+          }
+        }
+      ],
+      "source": { "kind": "fixture", "userConfirmed": true }
+    }
+  ],
+  "joints": [
+    {
+      "id": "joint-arm",
+      "name": "arm joint",
+      "type": "revolute",
+      "parent": "base link",
+      "child": "arm link",
+      "origin": {
+        "xyz": { "x": 0.8, "y": 0.0, "z": 0.1 },
+        "rpy": { "x": 0.0, "y": 0.0, "z": 0.25 }
+      },
+      "axis": { "x": 0.0, "y": 1.0, "z": 0.0 },
+      "limit": { "lower": -1.0, "upper": 1.0, "effort": 1.0, "velocity": 1.0 },
+      "source": { "kind": "fixture", "userConfirmed": true }
+    },
+    {
+      "id": "joint-planar",
+      "name": "planar joint",
+      "type": "planar",
+      "parent": "arm link",
+      "child": "planar link",
+      "origin": {
+        "xyz": { "x": 0.0, "y": 0.0, "z": 0.5 },
+        "rpy": { "x": 0.0, "y": 0.0, "z": 0.0 }
+      },
+      "axis": { "x": 0.0, "y": 0.0, "z": 1.0 },
+      "source": { "kind": "fixture", "userConfirmed": true }
+    }
+  ],
+  "profiles": {}
+}

@@ -81,20 +81,24 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestBodyTransformMovesDocumentGeometryIntoDisplayTarget()
+        public void TestDeepBodyTransformUsesAuthoritativeDisplayHostFrame()
         {
-            Matrix<double> linkToDisplayTarget = CreateTranslation(2.0, 0.0, 0.0);
-            Matrix<double> linkToDocument = CreateTranslation(10.0, 0.0, 0.0);
-            Matrix<double> componentToDocument = CreateTranslation(12.0, 3.0, 0.0);
+            Matrix<double> componentToRoot = CreateTranslation(12.0, 3.0, 0.0);
+            componentToRoot[0, 0] = 0.0;
+            componentToRoot[1, 0] = 1.0;
+            componentToRoot[0, 1] = -1.0;
+            componentToRoot[1, 1] = 0.0;
+            Matrix<double> hostToRoot = CreateTranslation(10.0, 1.0, 0.0);
 
-            Matrix<double> result = CollisionPreview.BuildBodyToDisplayTarget(
-                linkToDisplayTarget,
-                linkToDocument,
-                componentToDocument);
+            Matrix<double> result = CollisionPreview
+                .BuildBodyToDisplayTarget(componentToRoot, hostToRoot);
 
-            Assert.Equal(4.0, result[0, 3], 12);
-            Assert.Equal(3.0, result[1, 3], 12);
+            Assert.Equal(2.0, result[0, 3], 12);
+            Assert.Equal(2.0, result[1, 3], 12);
             Assert.Equal(0.0, result[2, 3], 12);
+            Assert.Equal(-1.0, result[0, 1], 12);
+            Assert.Equal(1.0, result[1, 0], 12);
+            Assert.NotSame(componentToRoot, result);
         }
 
         [Theory]
@@ -108,15 +112,16 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        [Trait("Category", "LiveSolidWorks")]
         public void TestLiveCollisionStrategiesPreserveComponentAppearance()
         {
-            if (!String.Equals(
-                System.Environment.GetEnvironmentVariable("SW2URDF_RUN_SW_INTEGRATION_TESTS"),
-                "1",
-                StringComparison.Ordinal))
-            {
-                return;
-            }
+            Assert.True(
+                String.Equals(
+                    System.Environment.GetEnvironmentVariable(
+                        "SW2URDF_RUN_SW_INTEGRATION_TESTS"),
+                    "1",
+                    StringComparison.Ordinal),
+                "Set SW2URDF_RUN_SW_INTEGRATION_TESTS=1 to run this Live SolidWorks test.");
 
             Exception failure = null;
             Thread staThread = new Thread(() =>
@@ -146,10 +151,8 @@ namespace SW2URDF.Test
             SldWorks swApp = null;
             ModelDoc2 model = null;
             Component2 component = null;
-            Component2 displayHost = null;
             MathTransform coordinateTransform = null;
             int? originalVisibility = null;
-            int? originalDisplayHostVisibility = null;
             bool ownsApplication = false;
             bool openedTestDocument = false;
             try
@@ -189,8 +192,8 @@ namespace SW2URDF.Test
                 }
                 AssemblyDoc assembly = model as AssemblyDoc;
                 Assert.NotNull(assembly);
-                object[] topLevelComponents = assembly.GetComponents(true) as object[];
-                Component2[] usableComponents = (topLevelComponents ?? new object[0])
+                object[] allComponents = assembly.GetComponents(false) as object[];
+                Component2[] usableComponents = (allComponents ?? new object[0])
                     .Cast<Component2>()
                     .Where(candidate =>
                     {
@@ -204,20 +207,19 @@ namespace SW2URDF.Test
                             return false;
                         }
                     })
-                    .Take(2)
+                    .OrderByDescending(GetComponentDepth)
                     .ToArray();
                 Assert.True(
-                    usableComponents.Length >= 2,
-                    "The live collision preview test requires two top-level components with usable geometry.");
+                    usableComponents.Length > 0,
+                    "The live collision preview test requires a deep component with usable geometry.");
                 component = usableComponents[0];
-                displayHost = usableComponents[1];
+                Assert.True(
+                    GetComponentDepth(component) >= 2,
+                    "The live collision preview test requires a part below a subassembly.");
                 originalVisibility = component.Visible;
-                originalDisplayHostVisibility = displayHost.Visible;
                 component.Visible = (int)swComponentVisibilityState_e.swComponentHidden;
-                displayHost.Visible = (int)swComponentVisibilityState_e.swComponentVisible;
                 model.GraphicsRedraw2();
                 Assert.True(component.IsHidden(false));
-                Assert.False(displayHost.IsHidden(false));
 
                 string coordinateSystemName =
                     System.Environment.GetEnvironmentVariable("SW2URDF_TEST_COORDINATE_SYSTEM");
@@ -241,16 +243,22 @@ namespace SW2URDF.Test
                 link.FrameReference = frameEntry.Reference.Clone();
                 link.SWComponents.Add(component);
                 using (TemporaryBodyDisplayContext context =
-                    CreateDisplayContext(swApp, model, link, coordinateTransform))
+                    CreateDisplayContext(swApp, model, coordinateTransform))
                 {
                     Component2 displayTarget = context.DisplayTarget as Component2;
                     Assert.NotNull(displayTarget);
-                    Assert.False(displayTarget.IsHidden(false));
-                    ModelDoc2 displayTargetModel = displayTarget.GetModelDoc2() as ModelDoc2;
-                    Assert.NotNull(displayTargetModel);
+                    Component2 parent = displayTarget.GetParent();
+                    try
+                    {
+                        Assert.Null(parent);
+                    }
+                    finally
+                    {
+                        ReleaseComObject(parent);
+                    }
                     Assert.Equal(
                         (int)swDocumentTypes_e.swDocPART,
-                        displayTargetModel.GetType());
+                        context.HideTarget.GetType());
                 }
                 double[] before = CloneAppearance(component.MaterialPropertyValues);
                 ExportHelper.LinkLocalBoundingBox previewBounds =
@@ -298,19 +306,29 @@ namespace SW2URDF.Test
                     }
                 }
 
+                CollisionPreview disposePreview =
+                    new CollisionPreview(swApp, model, exporter);
+                try
+                {
+                    Assert.True(disposePreview.Show(
+                        link,
+                        CollisionMeshStrategy.BoxPrimitive,
+                        coordinateTransform,
+                        out _,
+                        out string disposeError), disposeError);
+                }
+                finally { disposePreview.Dispose(); }
+                Assert.False(disposePreview.IsVisible);
+
                 Assert.Equal(before, CloneAppearance(component.MaterialPropertyValues));
 
                 var visibilitySnapshot = ExportHelper.CaptureComponentVisibility(
-                    new[] { component, displayHost });
+                    new[] { component });
                 component.Visible = (int)swComponentVisibilityState_e.swComponentVisible;
-                displayHost.Visible = (int)swComponentVisibilityState_e.swComponentHidden;
                 ExportHelper.RestoreComponentVisibility(model, visibilitySnapshot);
                 Assert.Equal(
                     (int)swComponentVisibilityState_e.swComponentHidden,
                     component.Visible);
-                Assert.Equal(
-                    (int)swComponentVisibilityState_e.swComponentVisible,
-                    displayHost.Visible);
             }
             finally
             {
@@ -319,15 +337,6 @@ namespace SW2URDF.Test
                     try
                     {
                         component.Visible = originalVisibility.Value;
-                        model?.GraphicsRedraw2();
-                    }
-                    catch { }
-                }
-                if (displayHost != null && originalDisplayHostVisibility.HasValue)
-                {
-                    try
-                    {
-                        displayHost.Visible = originalDisplayHostVisibility.Value;
                         model?.GraphicsRedraw2();
                     }
                     catch { }
@@ -350,19 +359,34 @@ namespace SW2URDF.Test
         private static TemporaryBodyDisplayContext CreateDisplayContext(
             SldWorks swApp,
             ModelDoc2 model,
-            Link link,
             MathTransform coordinateTransform)
         {
             Assert.True(
                 TemporaryBodyDisplayContext.TryCreate(
                     swApp,
                     model,
-                    link,
                     coordinateTransform,
                     out TemporaryBodyDisplayContext context,
                     out string error),
                 error);
             return context;
+        }
+
+        private static int GetComponentDepth(Component2 component)
+        {
+            int depth = 0;
+            Component2 current = component;
+            while (current != null)
+            {
+                Component2 parent = current.GetParent();
+                if (parent == null)
+                {
+                    break;
+                }
+                depth++;
+                current = parent;
+            }
+            return depth;
         }
 
         private static double[] CloneAppearance(object values)

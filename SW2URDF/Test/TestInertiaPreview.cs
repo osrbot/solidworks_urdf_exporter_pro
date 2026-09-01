@@ -16,21 +16,22 @@ namespace SW2URDF.Test
     public class TestInertiaPreview
     {
         [Fact]
-        public void TestAssemblyDisplayTransformConvertsLinkFrameToComponentFrame()
+        public void TestAssemblyDisplayTransformConvertsLinkIntoHostLocalFrame()
         {
             Matrix<double> linkToDocument = Matrix<double>.Build.DenseIdentity(4);
             linkToDocument[0, 3] = 13.0;
             linkToDocument[1, 3] = 2.0;
-            Matrix<double> componentToDocument = Matrix<double>.Build.DenseIdentity(4);
-            componentToDocument[0, 3] = 10.0;
+            Matrix<double> hostToDocument = Matrix<double>.Build.DenseIdentity(4);
+            hostToDocument[0, 3] = 10.0;
+            hostToDocument[1, 3] = -1.0;
 
-            Matrix<double> result = TemporaryBodyDisplayContext.BuildLinkToDisplayTarget(
-                linkToDocument,
-                componentToDocument);
+            Matrix<double> result = TemporaryBodyDisplayContext
+                .BuildLinkToDisplayTarget(linkToDocument, hostToDocument);
 
             Assert.Equal(3.0, result[0, 3], 12);
-            Assert.Equal(2.0, result[1, 3], 12);
+            Assert.Equal(3.0, result[1, 3], 12);
             Assert.Equal(0.0, result[2, 3], 12);
+            Assert.NotSame(linkToDocument, result);
         }
 
         [Fact]
@@ -68,38 +69,30 @@ namespace SW2URDF.Test
         }
 
         [Theory]
-        [InlineData((int)swDocumentTypes_e.swDocPART, "host.SLDASM", true)]
-        [InlineData((int)swDocumentTypes_e.swDocASSEMBLY, "host.SLDPRT", false)]
-        [InlineData(-1, "host.SLDPRT", true)]
-        [InlineData(-1, "host.sldprt", true)]
-        [InlineData(-1, "host.SLDASM", false)]
-        [InlineData(-1, "", false)]
-        public void TestTemporaryBodyHostMustBePartInstance(
+        [InlineData((int)swDocumentTypes_e.swDocPART, true)]
+        [InlineData((int)swDocumentTypes_e.swDocASSEMBLY, true)]
+        [InlineData((int)swDocumentTypes_e.swDocDRAWING, false)]
+        [InlineData(-1, false)]
+        public void TestTemporaryBodyPreviewSupportsPartAndAssemblyRootDocuments(
             int documentType,
-            string path,
             bool expected)
         {
-            int? resolvedDocumentType = documentType < 0
-                ? (int?)null
-                : documentType;
-
             Assert.Equal(
                 expected,
-                TemporaryBodyDisplayContext.IsPartDocument(
-                    resolvedDocumentType,
-                path));
+                TemporaryBodyDisplayContext.IsSupportedRootDocument(documentType));
         }
 
-        [Fact]
-        public void TestDeepPartHostSelectionRejectsRepeatedDocumentInstances()
+        [Theory]
+        [InlineData((int)swDocumentTypes_e.swDocPART, true)]
+        [InlineData((int)swDocumentTypes_e.swDocASSEMBLY, false)]
+        [InlineData((int)swDocumentTypes_e.swDocDRAWING, false)]
+        public void TestDisplay3DocumentTargetMustBePart(
+            int documentType,
+            bool expected)
         {
-            long? selected = TemporaryBodyDisplayContext.SelectUniqueDocumentIdentity(
-                new long[] { 10L, 10L, 20L, 30L, 30L });
-
-            Assert.Equal(20L, selected);
-            Assert.Null(TemporaryBodyDisplayContext.SelectUniqueDocumentIdentity(
-                new long[] { 10L, 10L, 30L, 30L }));
-            Assert.Null(TemporaryBodyDisplayContext.SelectUniqueDocumentIdentity(null));
+            Assert.Equal(
+                expected,
+                TemporaryBodyDisplayContext.IsValidDisplayTargetDocument(documentType));
         }
 
         [Fact]
@@ -220,22 +213,23 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestLiveInertiaPreviewUsesVisibleAssemblyDisplayHost()
+        [Trait("Category", "LiveSolidWorks")]
+        public void TestLiveInertiaPreviewUsesValidHostForHiddenDeepComponent()
         {
-            if (!String.Equals(
-                System.Environment.GetEnvironmentVariable("SW2URDF_RUN_SW_INTEGRATION_TESTS"),
-                "1",
-                StringComparison.Ordinal))
-            {
-                return;
-            }
+            Assert.True(
+                String.Equals(
+                    System.Environment.GetEnvironmentVariable(
+                        "SW2URDF_RUN_SW_INTEGRATION_TESTS"),
+                    "1",
+                    StringComparison.Ordinal),
+                "Set SW2URDF_RUN_SW_INTEGRATION_TESTS=1 to run this Live SolidWorks test.");
 
             Exception failure = null;
             var staThread = new Thread(() =>
             {
                 try
                 {
-                    RunLiveInertiaPreviewUsesVisibleAssemblyDisplayHost();
+                    RunLiveInertiaPreviewUsesValidHostForHiddenDeepComponent();
                 }
                 catch (Exception exception)
                 {
@@ -252,40 +246,37 @@ namespace SW2URDF.Test
             }
         }
 
-        private static void RunLiveInertiaPreviewUsesVisibleAssemblyDisplayHost()
+        private static void RunLiveInertiaPreviewUsesValidHostForHiddenDeepComponent()
         {
             SldWorks swApp = null;
             ModelDoc2 model = null;
             Component2 component = null;
-            Component2 displayHost = null;
             MathTransform coordinateTransform = null;
             int? originalVisibility = null;
-            int? originalDisplayHostVisibility = null;
             try
             {
                 swApp = (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
                 model = swApp.ActiveDoc as ModelDoc2;
                 AssemblyDoc assembly = model as AssemblyDoc;
                 Assert.NotNull(assembly);
-                object[] topLevelComponents = assembly.GetComponents(true) as object[];
-                Component2[] usableComponents = (topLevelComponents ?? new object[0])
+                object[] allComponents = assembly.GetComponents(false) as object[];
+                Component2[] usableComponents = (allComponents ?? new object[0])
                     .Cast<Component2>()
                     .Where(candidate => candidate != null)
-                    .Take(2)
+                    .OrderByDescending(GetComponentDepth)
                     .ToArray();
                 Assert.True(
-                    usableComponents.Length >= 2,
-                    "The live inertia preview test requires two top-level components.");
+                    usableComponents.Length > 0,
+                    "The live inertia preview test requires a deep assembly component.");
                 component = usableComponents[0];
-                displayHost = usableComponents[1];
+                Assert.True(
+                    GetComponentDepth(component) >= 2,
+                    "The live inertia preview test requires a component below a subassembly.");
 
                 originalVisibility = component.Visible;
-                originalDisplayHostVisibility = displayHost.Visible;
-                displayHost.Visible = (int)swComponentVisibilityState_e.swComponentVisible;
                 component.Visible = (int)swComponentVisibilityState_e.swComponentHidden;
                 model.GraphicsRedraw2();
                 Assert.True(component.IsHidden(false));
-                Assert.False(displayHost.IsHidden(false));
 
                 string coordinateSystemName =
                     System.Environment.GetEnvironmentVariable("SW2URDF_TEST_COORDINATE_SYSTEM");
@@ -317,7 +308,6 @@ namespace SW2URDF.Test
                     TemporaryBodyDisplayContext.TryCreate(
                         swApp,
                         model,
-                        link,
                         coordinateTransform,
                         out TemporaryBodyDisplayContext displayContext,
                         out string displayContextError),
@@ -326,11 +316,18 @@ namespace SW2URDF.Test
                 {
                     Component2 displayTarget = displayContext.DisplayTarget as Component2;
                     Assert.NotNull(displayTarget);
-                    ModelDoc2 displayTargetModel = displayTarget.GetModelDoc2() as ModelDoc2;
-                    Assert.NotNull(displayTargetModel);
+                    Component2 parent = displayTarget.GetParent();
+                    try
+                    {
+                        Assert.Null(parent);
+                    }
+                    finally
+                    {
+                        ReleaseComObject(parent);
+                    }
                     Assert.Equal(
                         (int)swDocumentTypes_e.swDocPART,
-                        displayTargetModel.GetType());
+                        displayContext.HideTarget.GetType());
                 }
 
                 using (InertiaPreview preview = new InertiaPreview(swApp, model))
@@ -347,6 +344,18 @@ namespace SW2URDF.Test
                     preview.Hide();
                     Assert.False(preview.IsVisible);
                 }
+
+                InertiaPreview disposePreview = new InertiaPreview(swApp, model);
+                try
+                {
+                    Assert.True(disposePreview.Show(
+                        link,
+                        coordinateTransform,
+                        out _,
+                        out string disposeError), disposeError);
+                }
+                finally { disposePreview.Dispose(); }
+                Assert.False(disposePreview.IsVisible);
             }
             finally
             {
@@ -359,17 +368,25 @@ namespace SW2URDF.Test
                     }
                     catch { }
                 }
-                if (displayHost != null && originalDisplayHostVisibility.HasValue)
-                {
-                    try
-                    {
-                        displayHost.Visible = originalDisplayHostVisibility.Value;
-                        model?.GraphicsRedraw2();
-                    }
-                    catch { }
-                }
                 ReleaseComObject(coordinateTransform);
             }
+        }
+
+        private static int GetComponentDepth(Component2 component)
+        {
+            int depth = 0;
+            Component2 current = component;
+            while (current != null)
+            {
+                Component2 parent = current.GetParent();
+                if (parent == null)
+                {
+                    break;
+                }
+                depth++;
+                current = parent;
+            }
+            return depth;
         }
 
         private static void ReleaseComObject(object value)

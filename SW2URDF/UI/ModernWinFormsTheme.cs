@@ -351,6 +351,12 @@ namespace SW2URDF.UI
                 }
             }
 
+            UpDownBase upDown = control as UpDownBase;
+            if (upDown != null)
+            {
+                upDown.BorderStyle = BorderStyle.FixedSingle;
+            }
+
             ComboBox comboBox = control as ComboBox;
             if (comboBox != null)
             {
@@ -532,6 +538,34 @@ namespace SW2URDF.UI
             SetFont(button, 9F, FontStyle.Regular);
             button.Padding = new Padding(10, 0, 10, 0);
             button.UseVisualStyleBackColor = false;
+            button.SizeChanged -= RoundedButtonSizeChanged;
+            button.SizeChanged += RoundedButtonSizeChanged;
+            ApplyRoundedButtonRegion(button);
+        }
+
+        private static void RoundedButtonSizeChanged(object sender, EventArgs e)
+        {
+            ApplyRoundedButtonRegion(sender as Button);
+        }
+
+        private static void ApplyRoundedButtonRegion(Button button)
+        {
+            if (button == null || button.Width < 12 || button.Height < 12)
+            {
+                return;
+            }
+
+            Region previous = button.Region;
+            using (GraphicsPath path = CreateRoundedRectangle(
+                new Rectangle(0, 0, button.Width, button.Height),
+                ModernCardPanel.CornerRadius))
+            {
+                button.Region = new Region(path);
+            }
+            if (previous != null)
+            {
+                previous.Dispose();
+            }
         }
 
         private sealed class RedrawScope : IDisposable

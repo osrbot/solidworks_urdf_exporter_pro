@@ -26,7 +26,7 @@ internal static class Program
     {
         "package-name", "package-version", "description", "maintainer-name",
         "maintainer-email", "model-license", "model-author", "ros1", "ros2",
-        "ros-distro", "gazebo-distro", "isaac-sim-version", "isaac-lab-version"
+        "ros-distro", "gazebo-distro"
     };
 
     public static int Main(string[] args)
@@ -51,6 +51,8 @@ internal static class Program
                 "export-urdf" => ExportUrdf(options),
                 "export-ros2" => ExportRos(options, ros2: true),
                 "export-ros1" => ExportRos(options, ros2: false),
+                "export-usd" => ExportUsd(options),
+                "export-mjcf" => ExportMjcf(options),
                 "version" => Version(options),
                 _ => Fail(UsageError, "UNKNOWN_COMMAND", "Unknown command: " + args[0])
             };
@@ -285,6 +287,63 @@ internal static class Program
         return 0;
     }
 
+    private static int ExportUsd(Arguments options)
+    {
+        options.AssertOnly("bundle", "output", "python", "adapter", "overwrite");
+        UsdAssetExportResult result = new UsdAssetExporter().Export(new UsdAssetExportOptions
+        {
+            BundleDirectory = options.Required("bundle"),
+            OutputDirectory = options.Required("output"),
+            PythonExecutable = options.Required("python"),
+            AdapterScript = options.Required("adapter"),
+            Overwrite = options.Flag("overwrite")
+        });
+        WriteResult(new
+        {
+            ok = true,
+            command = "export-usd",
+            output = result.OutputDirectory,
+            usd = result.UsdFile,
+            report = result.ReportFile,
+            openUsdVersion = result.OpenUsdVersion,
+            validationScope = "OpenUSD structural validation; Isaac Sim and Isaac Lab were not executed."
+        });
+        return 0;
+    }
+
+    private static int ExportMjcf(Arguments options)
+    {
+        options.AssertOnly("bundle", "output", "mujoco-bin", "mujoco-version", "overwrite");
+        string runtime = Path.GetFullPath(options.Required("mujoco-bin"));
+        BundledMjcfCompilerValidator validator = new(
+            Path.Combine(runtime, "compile.exe"),
+            Path.Combine(runtime, "testspeed.exe"),
+            options.Required("mujoco-version"));
+        MjcfExportResult result = new MjcfAssetExporter().Export(new MjcfExportOptions
+        {
+            BundleDirectory = options.Required("bundle"),
+            OutputDirectory = options.Required("output"),
+            Overwrite = options.Flag("overwrite"),
+            CompilerValidator = validator
+        });
+        if (!string.Equals(result.OfficialCompilationStatus, "passed", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                "The generated MJCF did not pass the bundled official MuJoCo validation.");
+        }
+        WriteResult(new
+        {
+            ok = true,
+            command = "export-mjcf",
+            output = result.OutputDirectory,
+            robot = result.RobotXmlPath,
+            scene = result.SceneXmlPath,
+            report = result.ExportReportPath,
+            officialCompilation = result.OfficialCompilationStatus
+        });
+        return 0;
+    }
+
     private static int Version(Arguments options)
     {
         options.AssertOnly();
@@ -332,18 +391,6 @@ internal static class Program
         robot.Profiles.Ros2.Distribution = options.Value("ros-distro") ?? robot.Profiles.Ros2.Distribution;
         robot.Profiles.Ros2.GazeboDistribution = options.Value("gazebo-distro") ?? robot.Profiles.Ros2.GazeboDistribution;
 
-        string? isaacVersion = options.Value("isaac-sim-version");
-        if (isaacVersion != null)
-        {
-            robot.Profiles.Isaac.Enabled = true;
-            robot.Profiles.Isaac.IsaacSimVersion = isaacVersion;
-        }
-        string? isaacLabVersion = options.Value("isaac-lab-version");
-        if (isaacLabVersion != null)
-        {
-            robot.Profiles.IsaacLab.Enabled = true;
-            robot.Profiles.IsaacLab.IsaacLabVersion = isaacLabVersion;
-        }
     }
 
     private static IReadOnlyList<string> RootLinks(RobotDocument robot)
@@ -404,6 +451,8 @@ internal static class Program
               export-urdf  --input robot.json --output robot.urdf
               export-ros2  --bundle bundle --output packages [--overwrite]
               export-ros1  --bundle bundle --output packages [--overwrite]
+              export-usd   --bundle bundle --output asset --python python.exe --adapter osurdf_usd_adapter.py [--overwrite]
+              export-mjcf  --bundle bundle --output assets --mujoco-bin DIR --mujoco-version X.Y.Z [--overwrite]
               version
 
             Bundle configuration:
@@ -415,10 +464,9 @@ internal static class Program
               --model-license SPDX-OR-TEXT --model-author NAME
               --ros2 [--ros-distro lyrical --gazebo-distro jetty]
               --ros1
-              --isaac-sim-version EXACT --isaac-lab-version EXACT
 
-            Complex ros2_control and Isaac Lab actuator settings belong in robot.json.
             The CLI never guesses joint types, actuator gains, package license, or maintainer identity.
+            USD validation proves OpenUSD structure only. MJCF validation uses the official MuJoCo tools.
             """;
     }
 

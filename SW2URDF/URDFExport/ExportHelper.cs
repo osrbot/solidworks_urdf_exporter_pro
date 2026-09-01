@@ -213,6 +213,7 @@ namespace SW2URDF.URDFExport
             ExportOutputSnapshot outputBeforeExport = null;
             string stagingDirectory = null;
             V2ExportResult v2Result = null;
+            string pendingTopLevelReport = null;
             try
             {
                 int progressBarBound = GetMeshExportLinks(URDFRobot.BaseLink).Count;
@@ -325,8 +326,8 @@ namespace SW2URDF.URDFExport
 
                 if (ExportTargets != null && ExportTargets.UseV2Pipeline)
                 {
-                    UpdateProgressTitle("Creating selected target packages", "\u6b63\u5728\u521b\u5efa\u5df2\u9009\u76ee\u6807\u529f\u80fd\u5305");
-                    logger.Info("Creating v2 Robot Bundle at " + deliveryPackage.WindowsBundleDirectory);
+                    UpdateProgressTitle("Creating selected output targets", "\u6b63\u5728\u521b\u5efa\u5df2\u9009\u5bfc\u51fa\u76ee\u6807");
+                    logger.Info("Creating selected outputs through the canonical v2 pipeline");
                     v2Result = V2ExportBridge.Export(
                         package,
                         deliveryPackage,
@@ -334,12 +335,6 @@ namespace SW2URDF.URDFExport
                         outputRobot,
                         meshRecords,
                         ExportTargets);
-                    if (!string.IsNullOrWhiteSpace(v2Result.RetainedPreviousBundleDirectory))
-                    {
-                        logger.Warn(
-                            "The new Robot Bundle was published, but the prior recovery copy could not be removed: " +
-                            v2Result.RetainedPreviousBundleDirectory);
-                    }
                 }
                 else
                 {
@@ -352,22 +347,50 @@ namespace SW2URDF.URDFExport
                 IEnumerable<MeshExportRecord> reportMeshRecords = v2Result != null
                     ? v2Result.DeliveryMeshRecords
                     : meshRecords;
-                WriteExportReport(
-                    deliveryPackage,
-                    Path.Combine(
-                        deliveryPackage.WindowsRobotsDirectory,
-                        URDFRobot.Name + ".urdf"),
-                    inertialRecords,
-                    reportMeshRecords,
-                    exportSTL,
-                    meshFormat,
-                    exportStopwatch.Elapsed,
-                    ExportTargets);
-                V2ExportBridge.RefreshRosChecksums(v2Result);
-
-                UpdateProgressTitle("Copying export log", "\u6b63\u5728\u590d\u5236\u5bfc\u51fa\u65e5\u5fd7");
-                logger.Info("Copying log file");
-                CopyLogFile(deliveryPackage);
+                string ros1UrdfFileName = Path.Combine(
+                    deliveryPackage.WindowsRobotsDirectory,
+                    URDFRobot.Name + ".urdf");
+                if (v2Result != null)
+                {
+                    ExportReportBuildResult reportResult = BuildExportReportResult(
+                        deliveryPackage,
+                        ros1UrdfFileName,
+                        inertialRecords,
+                        reportMeshRecords,
+                        exportSTL,
+                        meshFormat,
+                        exportStopwatch.Elapsed,
+                        ExportTargets);
+                    pendingTopLevelReport = reportResult.Content;
+                    WriteExportReportContent(
+                        exportedPackage,
+                        pendingTopLevelReport,
+                        ExportTargets,
+                        false,
+                        true);
+                    if (reportResult.HasBlockingFailures)
+                    {
+                        throw new InvalidDataException(
+                            "Export health validation failed: " +
+                            reportResult.BlockingFailureSummary());
+                    }
+                    V2ExportBridge.RefreshRosChecksums(v2Result);
+                }
+                else
+                {
+                    WriteExportReport(
+                        deliveryPackage,
+                        ros1UrdfFileName,
+                        inertialRecords,
+                        reportMeshRecords,
+                        exportSTL,
+                        meshFormat,
+                        exportStopwatch.Elapsed,
+                        ExportTargets);
+                    UpdateProgressTitle("Copying export log", "\u6b63\u5728\u590d\u5236\u5bfc\u51fa\u65e5\u5fd7");
+                    logger.Info("Copying log file");
+                    CopyLogFile(deliveryPackage);
+                }
                 success = true;
             }
             catch (Exception e)
@@ -384,20 +407,69 @@ namespace SW2URDF.URDFExport
                     preferencesSaved,
                     progressStarted) && success;
                 bool stagingDeleted = DeleteV2ExportStagingDirectory(stagingDirectory);
-                if (!stagingDeleted && string.IsNullOrWhiteSpace(ExportErrorWhy))
+                if (!stagingDeleted)
                 {
-                    ExportErrorWhy = "Export files were created, but temporary v2 staging cleanup failed. " +
-                        "See the UTF-8 export log at " + Logger.GetFileName() + ".";
+                    logger.Warn(
+                        "Export outputs are complete, but temporary v2 staging was retained. " +
+                        "The path is recorded earlier in this log for maintenance cleanup.");
                 }
-                success = stagingDeleted && success;
                 exportStopwatch.Stop();
             }
 
             if (!success)
             {
+                IList<string> rollbackFailures = V2ExportBridge.RollBack(v2Result);
+                if (rollbackFailures.Count > 0)
+                {
+                    logger.Error(
+                        "The selected output transaction could not be fully rolled back: " +
+                        string.Join(" | ", rollbackFailures));
+                }
                 logger.Error("Export process failed after " +
                     OperationHeartbeat.FormatElapsed(exportStopwatch.Elapsed));
                 return false;
+            }
+            if (v2Result != null)
+            {
+                try
+                {
+                    V2ExportBridge.Commit(
+                        v2Result,
+                        () => WriteExportReportContent(
+                            exportedPackage,
+                            pendingTopLevelReport,
+                            ExportTargets,
+                            true,
+                            false));
+                }
+                catch (Exception commitException)
+                {
+                    ExportErrorWhy = "URDF export failed while committing selected outputs: " +
+                        commitException.Message + ". See the UTF-8 export log at " +
+                        Logger.GetFileName();
+                    logger.Error(
+                        "The selected output transaction could not be committed.",
+                        commitException);
+                    IList<string> rollbackFailures = V2ExportBridge.RollBack(v2Result);
+                    if (rollbackFailures.Count > 0)
+                    {
+                        logger.Error(
+                            "The failed output commit could not be fully rolled back: " +
+                            string.Join(" | ", rollbackFailures));
+                    }
+                    return false;
+                }
+                try
+                {
+                    logger.Info("Copying export log");
+                    CopyLogFile(exportedPackage);
+                }
+                catch (Exception logException)
+                {
+                    logger.Warn(
+                        "Selected outputs were committed, but the auxiliary export log copy failed.",
+                        logException);
+                }
             }
             try
             {
@@ -435,22 +507,32 @@ namespace SW2URDF.URDFExport
             {
                 return true;
             }
-            try
+            Exception lastFailure = null;
+            for (int attempt = 0; attempt < 3; ++attempt)
             {
-                Directory.Delete(directory, true);
-                logger.Info("Removed temporary v2 export staging at " + directory);
-                return true;
+                try
+                {
+                    if (Directory.Exists(directory))
+                    {
+                        Directory.Delete(directory, true);
+                    }
+                    logger.Info("Removed temporary v2 export staging at " + directory);
+                    return true;
+                }
+                catch (Exception exception) when (
+                    exception is IOException || exception is UnauthorizedAccessException)
+                {
+                    lastFailure = exception;
+                    if (attempt < 2)
+                    {
+                        Thread.Sleep(75 * (attempt + 1));
+                    }
+                }
             }
-            catch (IOException exception)
-            {
-                logger.Error("Could not remove temporary v2 export staging at " + directory, exception);
-                return false;
-            }
-            catch (UnauthorizedAccessException exception)
-            {
-                logger.Error("Could not remove temporary v2 export staging at " + directory, exception);
-                return false;
-            }
+            logger.Warn(
+                "Could not remove temporary v2 export staging at " + directory,
+                lastFailure);
+            return false;
         }
 
         private bool RestoreExportEnvironment(

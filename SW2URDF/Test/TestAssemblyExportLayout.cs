@@ -3,9 +3,12 @@ using SW2URDF.URDFExport;
 using System;
 using System.Drawing;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
+using System.Runtime.Serialization;
 using System.Windows.Forms;
 using Xunit;
+using UrdfJoint = SW2URDF.URDF.Joint;
 
 namespace SW2URDF.Test
 {
@@ -42,28 +45,53 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestRos2CompatibilityPairIsCapturedAsOneAtomicSelection()
+        public void TestFourExportTargetsAreExplicitAndCapturedWithoutLegacyProfiles()
         {
             AssemblyExportForm form = (AssemblyExportForm)
                 Activator.CreateInstance(typeof(AssemblyExportForm), true);
             try
             {
-                ComboBox pair = GetControl<ComboBox>(form, "modernRos2PairComboBox");
-                pair.SelectedIndex = 1;
+                CheckBox ros1 = GetControl<CheckBox>(form, "modernRos1CheckBox");
+                CheckBox ros2 = GetControl<CheckBox>(form, "modernRos2CheckBox");
+                CheckBox usd = GetControl<CheckBox>(form, "modernUsdAssetCheckBox");
+                CheckBox mjcf = GetControl<CheckBox>(form, "modernMjcfAssetCheckBox");
+                Assert.Equal(
+                    ChineseUiText.Translate("ROS 1 package", "ROS 1 功能包"),
+                    ros1.Text);
+                Assert.Equal(
+                    ChineseUiText.Translate("ROS 2 package", "ROS 2 功能包"),
+                    ros2.Text);
+                Assert.Equal(
+                    ChineseUiText.Translate(
+                        "OpenUSD robot asset",
+                        "OpenUSD 机器人资产"),
+                    usd.Text);
+                Assert.Equal(
+                    ChineseUiText.Translate("MuJoCo MJCF asset", "MuJoCo MJCF 资产"),
+                    mjcf.Text);
+                Assert.Null(FindDescendant(form, "modernRos2PairComboBox"));
+                Assert.Null(FindDescendant(form, "modernRos2ControlProfileButton"));
+                Assert.Null(FindDescendant(form, "modernIsaacLabProfileButton"));
+
+                ros1.Checked = false;
+                ros2.Checked = true;
+                usd.Checked = true;
+                mjcf.Checked = true;
                 MethodInfo capture = typeof(AssemblyExportForm).GetMethod(
                     "CaptureExportTargetOptions",
                     BindingFlags.Instance | BindingFlags.NonPublic);
                 Assert.NotNull(capture);
                 ExportTargetOptions options = (ExportTargetOptions)capture.Invoke(form, null);
-                Assert.True(options.CreateRobotBundle);
-                Assert.Equal("jazzy", options.Ros2Distribution);
-                Assert.Equal("harmonic", options.GazeboDistribution);
+                Assert.False(ReadBooleanProperty(options, "ExportRos1Legacy"));
+                Assert.True(ReadBooleanProperty(options, "ExportRos2"));
+                AssertOptionalBooleanProperty(options, "ExportUsdAsset", true);
+                AssertOptionalBooleanProperty(options, "ExportMjcfAsset", true);
+                Assert.True(GetControl<RadioButton>(form, "radioButtonStl").Checked);
+                Assert.False(GetControl<RadioButton>(form, "radioButton3dxml").Enabled);
 
-                pair.SelectedIndex = 0;
-                options = (ExportTargetOptions)capture.Invoke(form, null);
-                Assert.True(options.CreateRobotBundle);
-                Assert.Equal("lyrical", options.Ros2Distribution);
-                Assert.Equal("jetty", options.GazeboDistribution);
+                usd.Checked = false;
+                mjcf.Checked = false;
+                Assert.True(GetControl<RadioButton>(form, "radioButton3dxml").Enabled);
             }
             finally
             {
@@ -72,21 +100,25 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestMaterialPresetUpdatesRgbaWithoutTextureEditor()
+        public void TestAssemblyMaterialIdIsReadOnlyAndGeneratedOnlyFromRgba()
         {
             AssemblyExportForm form = (AssemblyExportForm)
                 Activator.CreateInstance(typeof(AssemblyExportForm), true);
 
             try
             {
-                ComboBox materials = GetControl<ComboBox>(form, "comboBoxMaterials");
-                materials.Text = "green";
+                ComboBox legacyMaterials = GetControl<ComboBox>(form, "comboBoxMaterials");
+                TextBox materialId = GetControl<TextBox>(form, "modernMaterialIdTextBox");
+                Label materialLabel = GetControl<Label>(form, "label28");
+                DomainUpDown red = GetControl<DomainUpDown>(form, "domainUpDownRed");
+                DomainUpDown green = GetControl<DomainUpDown>(form, "domainUpDownGreen");
+                DomainUpDown blue = GetControl<DomainUpDown>(form, "domainUpDownBlue");
+                DomainUpDown alpha = GetControl<DomainUpDown>(form, "domainUpDownAlpha");
 
-                MethodInfo applyPreset = typeof(AssemblyExportForm).GetMethod(
-                    "MaterialPresetSelectionChangeCommitted",
-                    BindingFlags.Instance | BindingFlags.NonPublic);
-                Assert.NotNull(applyPreset);
-                applyPreset.Invoke(form, new object[] { materials, EventArgs.Empty });
+                red.Text = "0.05";
+                green.Text = "0.6";
+                blue.Text = "0.1";
+                alpha.Text = "1";
 
                 Assert.Null(typeof(AssemblyExportForm).GetField(
                     "textBoxTexture",
@@ -94,10 +126,30 @@ namespace SW2URDF.Test
                 Assert.Null(typeof(AssemblyExportForm).GetField(
                     "buttonTextureBrowse",
                     BindingFlags.Instance | BindingFlags.NonPublic));
-                Assert.Equal("0.05", GetControl<DomainUpDown>(form, "domainUpDownRed").Text);
-                Assert.Equal("0.6", GetControl<DomainUpDown>(form, "domainUpDownGreen").Text);
-                Assert.Equal("0.1", GetControl<DomainUpDown>(form, "domainUpDownBlue").Text);
-                Assert.Equal("1", GetControl<DomainUpDown>(form, "domainUpDownAlpha").Text);
+                Assert.False(legacyMaterials.Visible);
+                Assert.Empty(legacyMaterials.Items.Cast<object>().Where(
+                    item => !String.Equals(item.ToString(), materialId.Text, StringComparison.Ordinal)));
+                Assert.True(materialId.ReadOnly);
+                Assert.Matches(
+                    "^material_0d991aff_[0-9a-f]{12}$",
+                    materialId.Text);
+                Assert.True(materialLabel.Bottom <= materialId.Top);
+
+                string firstMaterialId = materialId.Text;
+                red.Text = "0.0501";
+                Assert.NotEqual(firstMaterialId, materialId.Text);
+                Assert.Matches(
+                    "^material_0d991aff_[0-9a-f]{12}$",
+                    materialId.Text);
+
+                red.Text = "1.1";
+                Assert.Equal(String.Empty, materialId.Text);
+
+                red.Text = "0.05";
+                alpha.Text = "0.5";
+                Assert.Matches(
+                    "^material_0d991a80_[0-9a-f]{12}$",
+                    materialId.Text);
             }
             finally
             {
@@ -630,27 +682,28 @@ namespace SW2URDF.Test
                 TextBox packageName = GetControl<TextBox>(
                     form,
                     "textBoxRosPackageName");
-                Button ros2Profile = GetControl<Button>(
+                CheckBox usdTarget = GetControl<CheckBox>(
                     form,
-                    "modernRos2ControlProfileButton");
-                Button actuatorProfile = GetControl<Button>(
+                    "modernUsdAssetCheckBox");
+                CheckBox mjcfTarget = GetControl<CheckBox>(
                     form,
-                    "modernIsaacLabProfileButton");
+                    "modernMjcfAssetCheckBox");
+                CheckBox ros1Target = GetControl<CheckBox>(
+                    form,
+                    "modernRos1CheckBox");
+                CheckBox ros2Target = GetControl<CheckBox>(
+                    form,
+                    "modernRos2CheckBox");
 
                 Assert.False(IsDescendantOf(maintainer, linkRoot));
                 Assert.False(IsDescendantOf(author, linkRoot));
                 Assert.True(IsDescendantOf(maintainer, modelRoot));
                 Assert.True(IsDescendantOf(author, modelRoot));
-                Assert.True(IsDescendantOf(ros2Profile, modelRoot));
-                Assert.True(IsDescendantOf(actuatorProfile, modelRoot));
-                Assert.Equal(FlatStyle.Flat, ros2Profile.FlatStyle);
-                Assert.Equal(FlatStyle.Flat, actuatorProfile.FlatStyle);
-                Assert.True(ros2Profile.AutoSize);
-                Assert.True(actuatorProfile.AutoSize);
-                Assert.Equal(0, GetControl<TextBox>(
-                    form,
-                    "modernRos2ControlProfileTextBox").TabIndex);
-                Assert.Equal(1, ros2Profile.TabIndex);
+                Assert.True(IsDescendantOf(usdTarget, modelRoot));
+                Assert.True(IsDescendantOf(mjcfTarget, modelRoot));
+                Assert.Null(FindDescendant(modelRoot, "modernRos2ControlProfileTextBox"));
+                Assert.Null(FindDescendant(modelRoot, "modernIsaacVersionTextBox"));
+                Assert.Null(FindDescendant(modelRoot, "modernIsaacLabProfileTextBox"));
                 Assert.True(IsDescendantOf(
                     GetControl<Button>(form, "modernLinkNextButton"),
                     linkRoot));
@@ -669,13 +722,25 @@ namespace SW2URDF.Test
 
                 packageName.Text = "rover_description";
                 Assert.Equal(
-                    "ROS2 | ROS1 legacy: rover_description",
+                    "ROS1/rover_description | ROS2/rover_description",
                     packageHint.Text);
                 Assert.DoesNotContain("and", packageHint.Text);
                 Assert.DoesNotContain("\u548c", packageHint.Text);
                 Assert.True(
                     packageLabel.Text == "ROS package" ||
                     packageLabel.Text == "ROS \u5305\u540d");
+
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(
+                    typeof(ExportHelper));
+                form.Exporter.PackageName = "Robot Model";
+                ros1Target.Checked = false;
+                ros2Target.Checked = false;
+                usdTarget.Checked = true;
+                mjcfTarget.Checked = true;
+                InvokePrivate(form, "UpdateRosPackageNameHint");
+                Assert.Equal(
+                    "USD/rover_description | MuJoCo/robot_model",
+                    packageHint.Text);
             }
             finally
             {
@@ -819,7 +884,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestUsageGuideButtonAndMaterialNamesAreAvailable()
+        public void TestUsageGuideButtonAndGeneratedMaterialIdAreAvailable()
         {
             AssemblyExportForm form = (AssemblyExportForm)
                 Activator.CreateInstance(typeof(AssemblyExportForm), true);
@@ -830,7 +895,7 @@ namespace SW2URDF.Test
                 form.PerformLayout();
 
                 Button guideButton = GetControl<Button>(form, "buttonUsageGuide");
-                ComboBox materials = GetControl<ComboBox>(form, "comboBoxMaterials");
+                TextBox materialId = GetControl<TextBox>(form, "modernMaterialIdTextBox");
 
                 Panel jointRoot = GetControl<Panel>(form, "modernJointRoot");
                 Assert.True(IsDescendantOf(guideButton, jointRoot));
@@ -839,9 +904,8 @@ namespace SW2URDF.Test
                     guideButton.Text,
                     guideButton.Font).Width + guideButton.Padding.Horizontal);
                 Assert.True(guideButton.Text == "Guide" || guideButton.Text == "使用说明");
-                Assert.True(materials.Items.Contains("aluminum"));
-                Assert.True(materials.Items.Contains("rubber_black"));
-                Assert.True(materials.Items.Contains("transparent_blue"));
+                Assert.True(materialId.ReadOnly);
+                Assert.StartsWith("material_", materialId.Text);
             }
             finally
             {
@@ -920,6 +984,204 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestJointTabsReuseControlsAndFooterButtonsShareGeometry()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                form.PerformLayout();
+                TabControl sections = GetControl<TabControl>(form, "modernJointSections");
+                TextBox effort = GetControl<TextBox>(form, "textBoxLimitEffort");
+                Font effortFont = effort.Font;
+                int controlCount = CountDescendants(sections);
+
+                for (int iteration = 0; iteration < 20; iteration++)
+                {
+                    sections.SelectedIndex = iteration % sections.TabPages.Count;
+                    sections.PerformLayout();
+                }
+
+                Assert.Same(effortFont, effort.Font);
+                Assert.Equal(controlCount, CountDescendants(sections));
+
+                Button[] footerButtons = new Button[]
+                {
+                    GetControl<Button>(form, "buttonJointCancel"),
+                    GetControl<Button>(form, "buttonJointNext"),
+                    GetControl<Button>(form, "buttonLinksCancel"),
+                    GetControl<Button>(form, "buttonLinksPrevious"),
+                    GetControl<Button>(form, "modernLinkNextButton"),
+                    GetControl<Button>(form, "modernModelCancelButton"),
+                    GetControl<Button>(form, "modernModelPreviousButton"),
+                    GetControl<Button>(form, "buttonLinksExportUrdfOnly"),
+                    GetControl<Button>(form, "buttonLinksFinish")
+                };
+                int footerButtonHeight = footerButtons[0].Height;
+                Assert.True(footerButtonHeight >= 36);
+                Assert.All(footerButtons, button =>
+                {
+                    Assert.Equal(footerButtonHeight, button.Height);
+                    Assert.Equal(0, button.Margin.Top);
+                    Assert.Equal(0, button.Margin.Bottom);
+                    Assert.NotNull(button.Region);
+                });
+
+                Control safetyCard = GetControl<Control>(form, "modernSafetyCard");
+                TextBox lastInput = GetControl<TextBox>(form, "textBoxKVelocity");
+                Rectangle lastBounds = BoundsRelativeTo(lastInput, safetyCard);
+                Assert.True(
+                    lastBounds.Bottom <= safetyCard.ClientSize.Height - safetyCard.Padding.Bottom,
+                    String.Format(
+                        CultureInfo.InvariantCulture,
+                        "Last input bottom {0} exceeds card content bottom {1}.",
+                        lastBounds.Bottom,
+                        safetyCard.ClientSize.Height - safetyCard.Padding.Bottom));
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestMovingJointDefaultsApplyOnceAndClearedValuesRemainInvalid()
+        {
+            UrdfJoint joint = new UrdfJoint
+            {
+                Type = "continuous"
+            };
+            MethodInfo applyDefaults = typeof(AssemblyExportForm).GetMethod(
+                "ApplyMissingRequiredJointLimitDefaults",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(applyDefaults);
+            applyDefaults.Invoke(null, new object[] { joint });
+            Assert.Equal(1.0, joint.Limit.Effort);
+            Assert.Equal(1.0, joint.Limit.Velocity);
+
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+            try
+            {
+                ComboBox type = GetControl<ComboBox>(form, "comboBoxJointType");
+                TextBox effort = GetControl<TextBox>(form, "textBoxLimitEffort");
+                TextBox velocity = GetControl<TextBox>(form, "textBoxLimitVelocity");
+                type.Text = ChineseUiText.JointTypeDisplay(
+                    "continuous",
+                    ChineseUiText.ShouldUseChinese());
+                effort.Text = "1";
+                velocity.Text = "1";
+
+                effort.Text = String.Empty;
+                velocity.Text = String.Empty;
+                MethodInfo leave = typeof(AssemblyExportForm).GetMethod(
+                    "JointRequiredLimitInputLeave",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.NotNull(leave);
+                leave.Invoke(form, new object[] { effort, EventArgs.Empty });
+                leave.Invoke(form, new object[] { velocity, EventArgs.Empty });
+
+                Assert.Equal(String.Empty, effort.Text);
+                Assert.Equal(String.Empty, velocity.Text);
+                Assert.False((bool)InvokePrivate(form, "ValidateJointLimitInputs"));
+                ErrorProvider errors = GetPrivateField<ErrorProvider>(
+                    form,
+                    "jointLimitErrorProvider");
+                Assert.False(String.IsNullOrWhiteSpace(errors.GetError(effort)));
+                Assert.False(String.IsNullOrWhiteSpace(errors.GetError(velocity)));
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestUnvisitedMovingJointDefaultsMissingValuesWithoutMaskingInvalidValues()
+        {
+            UrdfJoint joint = new UrdfJoint
+            {
+                Type = "continuous"
+            };
+            MethodInfo applyDefaults = typeof(AssemblyExportForm).GetMethod(
+                "ApplyMissingRequiredJointLimitDefaults",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.NotNull(applyDefaults);
+
+            applyDefaults.Invoke(null, new object[] { joint });
+            Assert.Equal(1.0, joint.Limit.Effort);
+            Assert.Equal(1.0, joint.Limit.Velocity);
+            Assert.False(joint.Limit.HasPositionBounds());
+
+            joint.Limit.Effort = Double.NaN;
+            joint.Limit.Velocity = 2.5;
+            applyDefaults.Invoke(null, new object[] { joint });
+            Assert.True(Double.IsNaN(joint.Limit.Effort));
+            Assert.Equal(2.5, joint.Limit.Velocity);
+        }
+
+        [Fact]
+        public void TestJointLimitValidationIsImmediateAndActionable()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+            try
+            {
+                GetControl<ComboBox>(form, "comboBoxJointType").Text =
+                    ChineseUiText.JointTypeDisplay(
+                        "revolute",
+                        ChineseUiText.ShouldUseChinese());
+                TextBox lower = GetControl<TextBox>(form, "textBoxLimitLower");
+                TextBox upper = GetControl<TextBox>(form, "textBoxLimitUpper");
+                TextBox effort = GetControl<TextBox>(form, "textBoxLimitEffort");
+                TextBox velocity = GetControl<TextBox>(form, "textBoxLimitVelocity");
+                TextBox softLower = GetControl<TextBox>(form, "textBoxSoftLower");
+                TextBox softUpper = GetControl<TextBox>(form, "textBoxSoftUpper");
+                TextBox kVelocity = GetControl<TextBox>(form, "textBoxKVelocity");
+                ErrorProvider errors = GetPrivateField<ErrorProvider>(
+                    form,
+                    "jointLimitErrorProvider");
+
+                lower.Text = "2";
+                upper.Text = "1";
+                effort.Text = "0";
+                velocity.Text = "NaN";
+                softLower.Text = "3";
+                softUpper.Text = "-1";
+                kVelocity.Text = "Infinity";
+
+                Assert.False(String.IsNullOrWhiteSpace(errors.GetError(lower)));
+                Assert.False(String.IsNullOrWhiteSpace(errors.GetError(upper)));
+                Assert.False(String.IsNullOrWhiteSpace(errors.GetError(effort)));
+                Assert.False(String.IsNullOrWhiteSpace(errors.GetError(velocity)));
+                Assert.False(String.IsNullOrWhiteSpace(errors.GetError(softLower)));
+                Assert.False(String.IsNullOrWhiteSpace(errors.GetError(softUpper)));
+                Assert.False(String.IsNullOrWhiteSpace(errors.GetError(kVelocity)));
+
+                lower.Text = "-2";
+                upper.Text = "2";
+                effort.Text = "3";
+                velocity.Text = "4";
+                softLower.Text = "-1";
+                softUpper.Text = "1";
+                kVelocity.Text = "8";
+
+                Assert.True((bool)InvokePrivate(form, "ValidateJointLimitInputs"));
+                Assert.All(
+                    new Control[]
+                    {
+                        lower, upper, effort, velocity, softLower, softUpper, kVelocity
+                    },
+                    input => Assert.Equal(String.Empty, errors.GetError(input)));
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
         public void TestExportDiagnosticsRemainSearchableAndActionable()
         {
             ExportTargetValidationFinding finding =
@@ -937,6 +1199,34 @@ namespace SW2URDF.Test
             Assert.Contains("NOASSERTION", validationReport);
             Assert.Contains(@"C:\logs\sw2urdf.log", validationReport);
 
+            ExportTargetValidationFinding targetRequired =
+                new ExportTargetValidationFinding(
+                    "TARGET_REQUIRED",
+                    "Targets",
+                    "Select at least one output target.");
+            string englishTargetReport = ExportDiagnosticsDialog.FormatValidationFindings(
+                new[] { targetRequired },
+                false,
+                null);
+            string chineseTargetReport = ExportDiagnosticsDialog.FormatValidationFindings(
+                new[] { targetRequired },
+                true,
+                null);
+            Assert.Contains("SELECT AT LEAST ONE", englishTargetReport.ToUpperInvariant());
+            Assert.Contains("至少勾选", chineseTargetReport);
+
+            ExportTargetValidationFinding internalRos2Profile =
+                new ExportTargetValidationFinding(
+                    "ROS2_CONTROL_PROFILE",
+                    "Ros2ControlProfileFile",
+                    "Invalid internal profile.");
+            Assert.Contains(
+                "existing ros2_control JSON file",
+                ExportDiagnosticsDialog.FormatValidationFindings(
+                    new[] { internalRos2Profile },
+                    false,
+                    null));
+
             string failureReport = ExportDiagnosticsDialog.FormatFailure(
                 "URDF export failed: ERROR JOINT_LIMIT $.joints[0].limit: " +
                 "Moving one-axis Joint requires effort and velocity limits.",
@@ -946,6 +1236,64 @@ namespace SW2URDF.Test
             Assert.Contains("$.joints[0].limit", failureReport);
             Assert.Contains("effort", failureReport);
             Assert.Contains("velocity", failureReport);
+        }
+
+        private static object InvokePrivate(
+            AssemblyExportForm form,
+            string methodName)
+        {
+            MethodInfo method = typeof(AssemblyExportForm).GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+            return method.Invoke(form, null);
+        }
+
+        private static T GetPrivateField<T>(
+            AssemblyExportForm form,
+            string fieldName)
+            where T : class
+        {
+            FieldInfo field = typeof(AssemblyExportForm).GetField(
+                fieldName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field);
+            T value = field.GetValue(form) as T;
+            Assert.NotNull(value);
+            return value;
+        }
+
+        private static bool ReadBooleanProperty(object target, string propertyName)
+        {
+            PropertyInfo property = target.GetType().GetProperty(
+                propertyName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.NotNull(property);
+            return (bool)property.GetValue(target, null);
+        }
+
+        private static void AssertOptionalBooleanProperty(
+            object target,
+            string propertyName,
+            bool expected)
+        {
+            PropertyInfo property = target.GetType().GetProperty(
+                propertyName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (property != null)
+            {
+                Assert.Equal(expected, (bool)property.GetValue(target, null));
+            }
+        }
+
+        private static int CountDescendants(Control root)
+        {
+            int count = 1;
+            foreach (Control child in root.Controls)
+            {
+                count += CountDescendants(child);
+            }
+            return count;
         }
 
         private static T GetControl<T>(AssemblyExportForm form, string fieldName)

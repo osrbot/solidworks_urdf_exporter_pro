@@ -30,6 +30,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
@@ -74,6 +75,8 @@ namespace SW2URDF.UI
         private bool ownedResourcesDisposed;
         private Font treeNodeRegularFont;
         private Font treeNodeBoldFont;
+        private ErrorProvider jointLimitErrorProvider;
+        private ErrorProvider materialColorErrorProvider;
 
         private AssemblyExportForm()
         {
@@ -87,7 +90,7 @@ namespace SW2URDF.UI
                 ChineseUiText.Apply(this);
                 InitializeLinkCoordinateSystemControls();
                 InitializeUsageGuideButton();
-                InitializeCommonMaterialNames();
+                InitializeMaterialIdentityControls();
                 InitializeAutomaticLinkColorControls();
                 buttonDesignSizes = CaptureButtonDesignSizes();
                 enableLayoutFixes = true;
@@ -100,6 +103,7 @@ namespace SW2URDF.UI
                 comboBoxJointType.TextChanged += ComboBoxJointTypeTextChanged;
                 UpdateInertiaMatrixMirrorBoxes();
                 InitializeModernUi();
+                InitializeJointLimitValidation();
             }
             finally
             {
@@ -179,50 +183,116 @@ namespace SW2URDF.UI
             Controls.Add(buttonUsageGuide);
         }
 
-        private void InitializeCommonMaterialNames()
+        private void InitializeMaterialIdentityControls()
         {
-            foreach (string materialName in UsageGuideForm.CommonMaterialNames)
-            {
-                if (!comboBoxMaterials.Items.Contains(materialName))
-                {
-                    comboBoxMaterials.Items.Add(materialName);
-                }
-            }
+            comboBoxMaterials.Items.Clear();
+            comboBoxMaterials.DropDownStyle = ComboBoxStyle.DropDownList;
+            comboBoxMaterials.Enabled = false;
+            comboBoxMaterials.Visible = false;
             label28.Text = ChineseUiText.Translate(
-                "URDF material ID (preset updates RGBA)",
-                "URDF 材质 ID（选择预设会同步 RGBA）");
+                "URDF material ID (generated from RGBA)",
+                "URDF 材质 ID（由 RGBA 自动生成）");
             label29.Text = ChineseUiText.Translate(
                 "Appearance color (RGBA)",
                 "外观颜色（RGBA）");
-            packagePathToolTip.SetToolTip(
-                comboBoxMaterials,
-                ChineseUiText.Translate(
-                    "This value is the URDF material ID. Choosing a built-in ID applies its RGBA automatically; a custom ID keeps the current RGBA.",
-                    "此字段是 URDF 材质 ID。选择内置 ID 会自动应用对应 RGBA；自定义 ID 保持当前 RGBA。"));
-            comboBoxMaterials.SelectionChangeCommitted +=
-                MaterialPresetSelectionChangeCommitted;
-        }
-
-        private void MaterialPresetSelectionChangeCommitted(object sender, EventArgs e)
-        {
-            if (!MaterialAppearancePresets.TryGet(comboBoxMaterials.Text, out double[] rgba))
+            materialColorErrorProvider = new ErrorProvider(components)
             {
-                return;
-            }
-
-            updatingMaterialColorControls = true;
-            try
+                BlinkStyle = ErrorBlinkStyle.NeverBlink,
+                ContainerControl = this
+            };
+            foreach (DomainUpDown input in GetMaterialColorInputs())
             {
-                domainUpDownRed.Text = rgba[0].ToString("G5", URDFAttribute.URDFNumberFormat);
-                domainUpDownGreen.Text = rgba[1].ToString("G5", URDFAttribute.URDFNumberFormat);
-                domainUpDownBlue.Text = rgba[2].ToString("G5", URDFAttribute.URDFNumberFormat);
-                domainUpDownAlpha.Text = rgba[3].ToString("G5", URDFAttribute.URDFNumberFormat);
-            }
-            finally
-            {
-                updatingMaterialColorControls = false;
+                materialColorErrorProvider.SetIconAlignment(
+                    input,
+                    ErrorIconAlignment.MiddleRight);
+                materialColorErrorProvider.SetIconPadding(input, 2);
             }
             UpdateMaterialColorPreview();
+        }
+
+        private void SynchronizeMaterialIdFromRgba()
+        {
+            string materialId = BuildMaterialIdFromRgba(
+                domainUpDownRed.Text,
+                domainUpDownGreen.Text,
+                domainUpDownBlue.Text,
+                domainUpDownAlpha.Text);
+            comboBoxMaterials.Items.Clear();
+            if (!String.IsNullOrEmpty(materialId))
+            {
+                comboBoxMaterials.Items.Add(materialId);
+                comboBoxMaterials.SelectedIndex = 0;
+            }
+            if (modernMaterialIdTextBox != null)
+            {
+                modernMaterialIdTextBox.Text = materialId;
+            }
+        }
+
+        internal static string BuildMaterialIdFromRgba(
+            string redText,
+            string greenText,
+            string blueText,
+            string alphaText)
+        {
+            if (!TryParseRgba(
+                redText,
+                greenText,
+                blueText,
+                alphaText,
+                out double[] rgba))
+            {
+                return String.Empty;
+            }
+
+            int red = ToColorByte(rgba[0]);
+            int green = ToColorByte(rgba[1]);
+            int blue = ToColorByte(rgba[2]);
+            int alpha = ToColorByte(rgba[3]);
+            string canonical = String.Join(
+                ",",
+                rgba.Select(value => value.ToString(
+                    "G17",
+                    URDFAttribute.URDFNumberFormat)));
+            string digest = BuildShortSha256(canonical);
+
+            return String.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "material_{0:x2}{1:x2}{2:x2}{3:x2}_{4}",
+                red,
+                green,
+                blue,
+                alpha,
+                digest);
+        }
+
+        private static string BuildMaterialIdFromRgba(double[] rgba)
+        {
+            if (rgba == null || rgba.Length != 4)
+            {
+                return String.Empty;
+            }
+            return BuildMaterialIdFromRgba(
+                rgba[0].ToString("G17", URDFAttribute.URDFNumberFormat),
+                rgba[1].ToString("G17", URDFAttribute.URDFNumberFormat),
+                rgba[2].ToString("G17", URDFAttribute.URDFNumberFormat),
+                rgba[3].ToString("G17", URDFAttribute.URDFNumberFormat));
+        }
+
+        private static string BuildShortSha256(string value)
+        {
+            byte[] hash;
+            using (SHA256 algorithm = SHA256.Create())
+            {
+                hash = algorithm.ComputeHash(Encoding.UTF8.GetBytes(value));
+            }
+            StringBuilder result = new StringBuilder(12);
+            for (int index = 0; index < 6; index++)
+            {
+                result.Append(hash[index].ToString("x2",
+                    System.Globalization.CultureInfo.InvariantCulture));
+            }
+            return result.ToString();
         }
 
         private void InitializeAutomaticLinkColorControls()
@@ -314,6 +384,24 @@ namespace SW2URDF.UI
                 maximum = Math.Max(maximum, GetMaximumLinkDepth(child, depth + 1));
             }
             return maximum;
+        }
+
+        private static void NormalizeGeneratedMaterialIds(LinkNode node)
+        {
+            if (node == null)
+            {
+                return;
+            }
+            if (node.Link != null && node.Link.Visual != null &&
+                node.Link.Visual.Material != null)
+            {
+                node.Link.Visual.Material.Name = BuildMaterialIdFromRgba(
+                    node.Link.Visual.Material.Color.GetColor());
+            }
+            foreach (LinkNode child in node.Nodes)
+            {
+                NormalizeGeneratedMaterialIds(child);
+            }
         }
 
         private void InitializeCollisionPreviewControls()
@@ -453,11 +541,29 @@ namespace SW2URDF.UI
             UpdateRosPackageNameHint();
             Exporter.UpdateReferenceGeometries();
             FillJointTree();
+            ApplyMissingRequiredJointLimitDefaultsToTree();
             SelectFirstJointNodeForEditing();
         }
 
         private void ButtonJointNextClick(object sender, EventArgs e)
         {
+            if (!ValidateJointLimitInputs())
+            {
+                if (modernJointSections != null)
+                {
+                    modernJointSections.SelectedIndex = 1;
+                }
+                MessageBox.Show(
+                    ChineseUiText.Translate(
+                        "Correct the highlighted Joint limit fields before continuing.",
+                        "请先修正高亮的 Joint 限位字段，再继续。"),
+                    ChineseUiText.Translate(
+                        "Joint limit validation",
+                        "Joint 限位校验"),
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
             if (!(previouslySelectedNode == null || previouslySelectedNode.Link.Joint == null))
             {
                 SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link);
@@ -655,6 +761,7 @@ namespace SW2URDF.UI
             {
                 builder.Append(node.Link.Joint.Name).Append("\r\n");
             }
+            AppendJointLimitSemanticErrors(node.Link.Joint, builder);
             if (JointConfigurationPolicy.RequiresUserConfirmation(node.Link.Joint))
             {
                 builder.Append(node.Link.Joint.ConfigurationSource == "solidworks_mate_suggestion"
@@ -669,6 +776,179 @@ namespace SW2URDF.UI
                 CheckJointsForErrors(child, builder);
             }
             return builder;
+        }
+
+        private void ApplyMissingRequiredJointLimitDefaultsToTree()
+        {
+            foreach (LinkNode node in treeViewJointTree.Nodes)
+            {
+                ApplyMissingRequiredJointLimitDefaultsToTree(node);
+            }
+        }
+
+        private static void ApplyMissingRequiredJointLimitDefaultsToTree(LinkNode node)
+        {
+            if (node == null)
+            {
+                return;
+            }
+
+            ApplyMissingRequiredJointLimitDefaults(node.Link == null ? null : node.Link.Joint);
+            foreach (LinkNode child in node.Nodes)
+            {
+                ApplyMissingRequiredJointLimitDefaultsToTree(child);
+            }
+        }
+
+        private static void ApplyMissingRequiredJointLimitDefaults(Joint joint)
+        {
+            if (joint == null || joint.Limit == null ||
+                !IsMovingOneAxisJoint(JointConfigurationPolicy.Normalize(joint.Type)))
+            {
+                return;
+            }
+
+            if (IsJointValueMissing(() => joint.Limit.Effort))
+            {
+                joint.Limit.Effort = 1.0;
+            }
+            if (IsJointValueMissing(() => joint.Limit.Velocity))
+            {
+                joint.Limit.Velocity = 1.0;
+            }
+        }
+
+        private static bool IsJointValueMissing(Func<double> valueAccessor)
+        {
+            try
+            {
+                valueAccessor();
+                return false;
+            }
+            catch (InvalidCastException)
+            {
+                return true;
+            }
+            catch (NullReferenceException)
+            {
+                return true;
+            }
+        }
+
+        private static void AppendJointLimitSemanticErrors(
+            Joint joint,
+            StringBuilder builder)
+        {
+            string jointType = JointConfigurationPolicy.Normalize(joint.Type);
+            double effort;
+            double velocity;
+            bool hasEffort = TryReadFiniteJointValue(() => joint.Limit.Effort, out effort);
+            bool hasVelocity = TryReadFiniteJointValue(() => joint.Limit.Velocity, out velocity);
+            if (IsMovingOneAxisJoint(jointType))
+            {
+                if (!hasEffort || effort <= 0.0)
+                {
+                    AppendJointFieldError(
+                        builder,
+                        joint,
+                        ChineseUiText.Translate(
+                            "effort must be a finite value greater than 0",
+                            "effort 必须是大于 0 的有限数值"));
+                }
+                if (!hasVelocity || velocity <= 0.0)
+                {
+                    AppendJointFieldError(
+                        builder,
+                        joint,
+                        ChineseUiText.Translate(
+                            "velocity must be a finite value greater than 0",
+                            "velocity 必须是大于 0 的有限数值"));
+                }
+            }
+
+            double lower;
+            double upper;
+            bool hasLower = TryReadFiniteJointValue(() => joint.Limit.Lower, out lower);
+            bool hasUpper = TryReadFiniteJointValue(() => joint.Limit.Upper, out upper);
+            if (IsBoundedOneAxisJoint(jointType) &&
+                (!hasLower || !hasUpper || lower >= upper))
+            {
+                AppendJointFieldError(
+                    builder,
+                    joint,
+                    ChineseUiText.Translate(
+                        "bounded lower/upper limits must be finite and lower must be smaller than upper",
+                        "有限位 Joint 的 lower/upper 必须为有限数值，且 lower 必须小于 upper"));
+            }
+
+            double softLower;
+            double softUpper;
+            bool hasSoftLower = TryReadFiniteJointValue(
+                () => joint.Safety.SoftLower,
+                out softLower);
+            bool hasSoftUpper = TryReadFiniteJointValue(
+                () => joint.Safety.SoftUpper,
+                out softUpper);
+            if (hasSoftLower &&
+                (!hasLower || !hasUpper || softLower < lower || softLower > upper))
+            {
+                AppendJointFieldError(
+                    builder,
+                    joint,
+                    ChineseUiText.Translate(
+                        "soft lower limit must stay within the hard limits",
+                        "软下限必须位于硬限位范围内"));
+            }
+            if (hasSoftUpper &&
+                (!hasLower || !hasUpper || softUpper < lower || softUpper > upper))
+            {
+                AppendJointFieldError(
+                    builder,
+                    joint,
+                    ChineseUiText.Translate(
+                        "soft upper limit must stay within the hard limits",
+                        "软上限必须位于硬限位范围内"));
+            }
+            if (hasSoftLower && hasSoftUpper && softLower > softUpper)
+            {
+                AppendJointFieldError(
+                    builder,
+                    joint,
+                    ChineseUiText.Translate(
+                        "soft lower limit must not exceed soft upper limit",
+                        "软下限不能大于软上限"));
+            }
+        }
+
+        private static bool TryReadFiniteJointValue(
+            Func<double> valueAccessor,
+            out double value)
+        {
+            value = 0.0;
+            try
+            {
+                value = valueAccessor();
+                return !Double.IsNaN(value) && !Double.IsInfinity(value);
+            }
+            catch (InvalidCastException)
+            {
+                return false;
+            }
+            catch (NullReferenceException)
+            {
+                return false;
+            }
+        }
+
+        private static void AppendJointFieldError(
+            StringBuilder builder,
+            Joint joint,
+            string message)
+        {
+            builder.Append(String.IsNullOrWhiteSpace(joint.Name) ? "<unnamed>" : joint.Name)
+                .Append(": ")
+                .Append(message)
+                .Append(".\r\n");
         }
 
         private void AppendDuplicateJointNameErrors(TreeNodeCollection nodes, StringBuilder builder)
@@ -787,6 +1067,7 @@ namespace SW2URDF.UI
             {
                 SaveLinkDataFromPropertyBoxes(node.Link);
             }
+            NormalizeGeneratedMaterialIds(BaseNode);
 
             ApplyEditedMeshReductionToExportTree();
             string jointErrors = CheckJointsForErrors(BaseNode);
@@ -931,26 +1212,40 @@ namespace SW2URDF.UI
         private void UpdateRosPackageNameHint()
         {
             string sanitized = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
-            List<string> targets = new List<string>();
-            if (modernRos2CheckBox == null || modernRos2CheckBox.Checked)
+            string robotName = Exporter == null
+                ? sanitized
+                : URDFPackage.SanitizePackageName(Exporter.PackageName);
+            if (string.IsNullOrWhiteSpace(robotName))
             {
-                targets.Add("ROS2");
+                robotName = sanitized;
             }
+            List<string> paths = new List<string>();
             if (modernRos1CheckBox == null || modernRos1CheckBox.Checked)
             {
-                targets.Add("ROS1 legacy");
+                paths.Add("ROS1/" + sanitized);
             }
-            if (modernIsaacCheckBox != null && modernIsaacCheckBox.Checked)
+            if (modernRos2CheckBox == null || modernRos2CheckBox.Checked)
             {
-                targets.Add("Isaac");
+                paths.Add("ROS2/" + sanitized);
             }
-            string targetSummary = targets.Count == 0
+            if (modernUsdAssetCheckBox != null && modernUsdAssetCheckBox.Checked)
+            {
+                paths.Add("USD/" + sanitized);
+            }
+            if (modernMjcfAssetCheckBox != null && modernMjcfAssetCheckBox.Checked)
+            {
+                paths.Add("MuJoCo/" + robotName);
+            }
+            labelRosPackageNameHint.Text = paths.Count == 0
                 ? ChineseUiText.Translate("No target selected", "未选择输出目标")
-                : string.Join(" | ", targets);
-            labelRosPackageNameHint.Text = targetSummary + ": " + sanitized;
+                : string.Join(" | ", paths);
             packagePathToolTip.SetToolTip(
                 labelRosPackageNameHint,
-                "ROS1/" + sanitized + " | ROS2/" + sanitized);
+                paths.Count == 0
+                    ? ChineseUiText.Translate(
+                        "Select an output target to see its destination.",
+                        "请选择输出目标以查看对应目录。")
+                    : string.Join(" | ", paths));
         }
 
         private void InitializeExportTargetControls()
@@ -964,56 +1259,41 @@ namespace SW2URDF.UI
             ExportTargetOptions options = restore
                 ? existing
                 : ExportTargetOptions.RecommendedDefaults(Exporter.RosPackageName);
-            modernRos2CheckBox.Checked = options.ExportRos2;
             modernRos1CheckBox.Checked = options.ExportRos1Legacy;
-            modernIsaacCheckBox.Checked = options.ExportIsaacSim;
-            modernIsaacLabCheckBox.Checked = options.ExportIsaacLab;
+            modernRos2CheckBox.Checked = options.ExportRos2;
+            modernUsdAssetCheckBox.Checked = options.ExportUsdAsset;
+            modernMjcfAssetCheckBox.Checked = options.ExportMjcfAsset;
             modernPackageVersionTextBox.Text = options.PackageVersion;
             modernPackageDescriptionTextBox.Text = options.Description;
             modernMaintainerNameTextBox.Text = options.MaintainerName;
             modernMaintainerEmailTextBox.Text = options.MaintainerEmail;
             modernModelLicenseTextBox.Text = options.ModelLicense;
             modernModelAuthorTextBox.Text = options.ModelAuthor;
-            modernRos2PairComboBox.SelectedIndex =
-                string.Equals(options.Ros2Distribution, "jazzy", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(options.GazeboDistribution, "harmonic", StringComparison.OrdinalIgnoreCase)
-                    ? 1
-                    : 0;
-            modernIsaacVersionTextBox.Text = options.IsaacSimVersion;
-            modernIsaacLabVersionTextBox.Text = options.IsaacLabVersion;
-            modernRos2ControlProfileTextBox.Text = options.Ros2ControlProfileFile;
-            modernIsaacLabProfileTextBox.Text = options.IsaacLabProfileFile;
             packagePathToolTip.SetToolTip(
                 modernModelLicenseTextBox,
                 ChineseUiText.Translate(
                     "NOASSERTION means the model license has not been confirmed. Review it before publishing.",
                     "NOASSERTION 表示模型许可证尚未确认；公开发布前必须审核。"));
-            SynchronizeIsaacTargetControls();
+            SynchronizeAssetMeshFormatControls();
         }
 
         private ExportTargetOptions CaptureExportTargetOptions()
         {
-            return new ExportTargetOptions
+            ExportTargetOptions options = new ExportTargetOptions
             {
                 UseV2Pipeline = true,
-                CreateRobotBundle = true,
-                ExportRos2 = modernRos2CheckBox.Checked,
                 ExportRos1Legacy = modernRos1CheckBox.Checked,
-                ExportIsaacSim = modernIsaacCheckBox.Checked,
-                ExportIsaacLab = modernIsaacLabCheckBox.Checked,
+                ExportRos2 = modernRos2CheckBox.Checked,
+                ExportUsdAsset = modernUsdAssetCheckBox.Checked,
+                ExportMjcfAsset = modernMjcfAssetCheckBox.Checked,
                 PackageVersion = modernPackageVersionTextBox.Text.Trim(),
                 Description = modernPackageDescriptionTextBox.Text.Trim(),
                 MaintainerName = modernMaintainerNameTextBox.Text.Trim(),
                 MaintainerEmail = modernMaintainerEmailTextBox.Text.Trim(),
                 ModelLicense = modernModelLicenseTextBox.Text.Trim(),
-                ModelAuthor = modernModelAuthorTextBox.Text.Trim(),
-                Ros2Distribution = modernRos2PairComboBox.SelectedIndex == 1 ? "jazzy" : "lyrical",
-                GazeboDistribution = modernRos2PairComboBox.SelectedIndex == 1 ? "harmonic" : "jetty",
-                Ros2ControlProfileFile = modernRos2ControlProfileTextBox.Text.Trim(),
-                IsaacSimVersion = modernIsaacVersionTextBox.Text.Trim(),
-                IsaacLabVersion = modernIsaacLabVersionTextBox.Text.Trim(),
-                IsaacLabProfileFile = modernIsaacLabProfileTextBox.Text.Trim()
+                ModelAuthor = modernModelAuthorTextBox.Text.Trim()
             };
+            return options;
         }
 
         private void LinkCoordinateSystemSelectionChangeCommitted(object sender, EventArgs e)
@@ -1151,6 +1431,242 @@ namespace SW2URDF.UI
                          potentialText != "+");
         }
 
+        private void InitializeJointLimitValidation()
+        {
+            jointLimitErrorProvider = new ErrorProvider(components)
+            {
+                BlinkStyle = ErrorBlinkStyle.NeverBlink
+            };
+            jointLimitErrorProvider.ContainerControl = this;
+
+            TextBox[] inputs = new TextBox[]
+            {
+                textBoxLimitLower,
+                textBoxLimitUpper,
+                textBoxLimitEffort,
+                textBoxLimitVelocity,
+                textBoxSoftLower,
+                textBoxSoftUpper,
+                textBoxKPosition,
+                textBoxKVelocity
+            };
+            foreach (TextBox input in inputs)
+            {
+                input.TextChanged += JointLimitInputChanged;
+                jointLimitErrorProvider.SetIconAlignment(input, ErrorIconAlignment.MiddleRight);
+                jointLimitErrorProvider.SetIconPadding(input, 2);
+            }
+            textBoxLimitEffort.Leave += JointRequiredLimitInputLeave;
+            textBoxLimitVelocity.Leave += JointRequiredLimitInputLeave;
+            ValidateJointLimitInputs();
+        }
+
+        private void JointLimitInputChanged(object sender, EventArgs e)
+        {
+            if (!AutoUpdatingForm)
+            {
+                ValidateJointLimitInputs();
+            }
+        }
+
+        private void JointRequiredLimitInputLeave(object sender, EventArgs e)
+        {
+            ValidateJointLimitInputs();
+        }
+
+        private bool ValidateJointLimitInputs()
+        {
+            if (jointLimitErrorProvider == null)
+            {
+                return true;
+            }
+
+            TextBox[] inputs = new TextBox[]
+            {
+                textBoxLimitLower,
+                textBoxLimitUpper,
+                textBoxLimitEffort,
+                textBoxLimitVelocity,
+                textBoxSoftLower,
+                textBoxSoftUpper,
+                textBoxKPosition,
+                textBoxKVelocity
+            };
+            foreach (TextBox input in inputs)
+            {
+                jointLimitErrorProvider.SetError(input, String.Empty);
+            }
+
+            string jointType = JointConfigurationPolicy.Normalize(
+                ChineseUiText.JointTypeValue(comboBoxJointType.Text));
+            bool moving = IsMovingOneAxisJoint(jointType);
+            bool bounded = IsBoundedOneAxisJoint(jointType);
+            double lower;
+            double upper;
+            double effort;
+            double velocity;
+            double softLower;
+            double softUpper;
+
+            bool hasLower = ValidateFiniteInput(textBoxLimitLower, out lower);
+            bool hasUpper = ValidateFiniteInput(textBoxLimitUpper, out upper);
+            bool hasEffort = ValidateFiniteInput(textBoxLimitEffort, out effort);
+            bool hasVelocity = ValidateFiniteInput(textBoxLimitVelocity, out velocity);
+            bool hasSoftLower = ValidateFiniteInput(textBoxSoftLower, out softLower);
+            bool hasSoftUpper = ValidateFiniteInput(textBoxSoftUpper, out softUpper);
+            ValidateFiniteInput(textBoxKPosition, out _);
+            ValidateFiniteInput(textBoxKVelocity, out _);
+
+            if (moving)
+            {
+                ValidateRequiredPositiveInput(textBoxLimitEffort, hasEffort, effort);
+                ValidateRequiredPositiveInput(textBoxLimitVelocity, hasVelocity, velocity);
+            }
+            if (bounded)
+            {
+                ValidateRequiredFiniteInput(textBoxLimitLower, hasLower);
+                ValidateRequiredFiniteInput(textBoxLimitUpper, hasUpper);
+                if (hasLower && hasUpper && lower >= upper)
+                {
+                    string error = ChineseUiText.Translate(
+                        "Lower limit must be smaller than upper limit.",
+                        "下限必须小于上限。");
+                    SetJointLimitError(textBoxLimitLower, error);
+                    SetJointLimitError(textBoxLimitUpper, error);
+                }
+            }
+
+            if (hasSoftLower)
+            {
+                if (!hasLower || !hasUpper)
+                {
+                    SetJointLimitError(
+                        textBoxSoftLower,
+                        ChineseUiText.Translate(
+                            "Set valid hard lower and upper limits first.",
+                            "请先填写有效的硬下限和硬上限。"));
+                }
+                else if (softLower < lower || softLower > upper)
+                {
+                    SetJointLimitError(
+                        textBoxSoftLower,
+                        ChineseUiText.Translate(
+                            "Soft lower limit must stay within the hard limits.",
+                            "软下限必须位于硬限位范围内。"));
+                }
+            }
+            if (hasSoftUpper)
+            {
+                if (!hasLower || !hasUpper)
+                {
+                    SetJointLimitError(
+                        textBoxSoftUpper,
+                        ChineseUiText.Translate(
+                            "Set valid hard lower and upper limits first.",
+                            "请先填写有效的硬下限和硬上限。"));
+                }
+                else if (softUpper < lower || softUpper > upper)
+                {
+                    SetJointLimitError(
+                        textBoxSoftUpper,
+                        ChineseUiText.Translate(
+                            "Soft upper limit must stay within the hard limits.",
+                            "软上限必须位于硬限位范围内。"));
+                }
+            }
+            if (hasSoftLower && hasSoftUpper && softLower > softUpper)
+            {
+                string error = ChineseUiText.Translate(
+                    "Soft lower limit must not exceed soft upper limit.",
+                    "软下限不能大于软上限。");
+                SetJointLimitError(textBoxSoftLower, error);
+                SetJointLimitError(textBoxSoftUpper, error);
+            }
+
+            return inputs.All(input =>
+                String.IsNullOrEmpty(jointLimitErrorProvider.GetError(input)));
+        }
+
+        private bool ValidateFiniteInput(TextBox input, out double value)
+        {
+            value = 0.0;
+            if (String.IsNullOrWhiteSpace(input.Text))
+            {
+                return false;
+            }
+            if (!Double.TryParse(
+                    input.Text,
+                    URDFAttribute.URDFNumberStyle,
+                    URDFAttribute.URDFNumberFormat,
+                    out value) ||
+                Double.IsNaN(value) ||
+                Double.IsInfinity(value))
+            {
+                SetJointLimitError(
+                    input,
+                    ChineseUiText.Translate(
+                        "Enter a finite number.",
+                        "请输入有限数值。"));
+                return false;
+            }
+            return true;
+        }
+
+        private void ValidateRequiredFiniteInput(TextBox input, bool hasFiniteValue)
+        {
+            if (!hasFiniteValue && String.IsNullOrWhiteSpace(input.Text))
+            {
+                SetJointLimitError(
+                    input,
+                    ChineseUiText.Translate(
+                        "This bounded Joint requires a finite limit.",
+                        "有限位 Joint 必须填写有限数值。"));
+            }
+        }
+
+        private void ValidateRequiredPositiveInput(
+            TextBox input,
+            bool hasFiniteValue,
+            double value)
+        {
+            if (!hasFiniteValue && String.IsNullOrWhiteSpace(input.Text))
+            {
+                SetJointLimitError(
+                    input,
+                    ChineseUiText.Translate(
+                        "Enter a finite value greater than 0.",
+                        "请输入大于 0 的有限数值。"));
+            }
+            else if (hasFiniteValue && value <= 0.0)
+            {
+                SetJointLimitError(
+                    input,
+                    ChineseUiText.Translate(
+                        "Value must be greater than 0.",
+                        "数值必须大于 0。"));
+            }
+        }
+
+        private void SetJointLimitError(Control input, string message)
+        {
+            if (String.IsNullOrEmpty(jointLimitErrorProvider.GetError(input)))
+            {
+                jointLimitErrorProvider.SetError(input, message);
+            }
+        }
+
+        private static bool IsMovingOneAxisJoint(string jointType)
+        {
+            return jointType == "revolute" ||
+                jointType == "continuous" ||
+                jointType == "prismatic";
+        }
+
+        private static bool IsBoundedOneAxisJoint(string jointType)
+        {
+            return jointType == "revolute" || jointType == "prismatic";
+        }
+
         #region Link Properties Controls Handlers
 
         private void ButtonMaterialColorPickClick(object sender, EventArgs e)
@@ -1176,6 +1692,7 @@ namespace SW2URDF.UI
         {
             if (!updatingMaterialColorControls)
             {
+                ValidateMaterialColorInputs();
                 UpdateMaterialColorPreview();
             }
         }
@@ -1197,6 +1714,7 @@ namespace SW2URDF.UI
 
         private void UpdateMaterialColorPreview()
         {
+            SynchronizeMaterialIdFromRgba();
             if (TryGetMaterialColor(out DrawingColor color))
             {
                 panelMaterialColorPreview.BackColor = color;
@@ -1220,15 +1738,101 @@ namespace SW2URDF.UI
         private static bool TryGetColorChannel(string text, out int channel)
         {
             channel = 0;
-            if (!double.TryParse(text, URDFAttribute.URDFNumberStyle,
-                URDFAttribute.URDFNumberFormat, out double normalized))
+            if (!TryParseNormalizedColorChannel(text, out double normalized))
             {
                 return false;
             }
-
-            normalized = Math.Max(0.0, Math.Min(1.0, normalized));
-            channel = (int)Math.Round(normalized * 255);
+            channel = ToColorByte(normalized);
             return true;
+        }
+
+        private bool ValidateMaterialColorInputs()
+        {
+            if (materialColorErrorProvider == null)
+            {
+                return true;
+            }
+
+            string message = ChineseUiText.Translate(
+                "RGBA channels must be finite values from 0 through 1.",
+                "RGBA 通道必须是 0 到 1 之间的有限数值。");
+            bool valid = true;
+            foreach (DomainUpDown input in GetMaterialColorInputs())
+            {
+                bool inputValid = TryParseNormalizedColorChannel(
+                    input.Text,
+                    out _);
+                materialColorErrorProvider.SetError(
+                    input,
+                    inputValid ? String.Empty : message);
+                valid &= inputValid;
+            }
+            return valid;
+        }
+
+        private DomainUpDown[] GetMaterialColorInputs()
+        {
+            return new[]
+            {
+                domainUpDownRed,
+                domainUpDownGreen,
+                domainUpDownBlue,
+                domainUpDownAlpha
+            };
+        }
+
+        private bool TryReadMaterialRgba(out double[] rgba)
+        {
+            return TryParseRgba(
+                domainUpDownRed.Text,
+                domainUpDownGreen.Text,
+                domainUpDownBlue.Text,
+                domainUpDownAlpha.Text,
+                out rgba);
+        }
+
+        private static bool TryParseRgba(
+            string redText,
+            string greenText,
+            string blueText,
+            string alphaText,
+            out double[] rgba)
+        {
+            rgba = null;
+            if (!TryParseNormalizedColorChannel(redText, out double red) ||
+                !TryParseNormalizedColorChannel(greenText, out double green) ||
+                !TryParseNormalizedColorChannel(blueText, out double blue) ||
+                !TryParseNormalizedColorChannel(alphaText, out double alpha))
+            {
+                return false;
+            }
+            rgba = new[] { red, green, blue, alpha };
+            return true;
+        }
+
+        private static bool TryParseNormalizedColorChannel(
+            string text,
+            out double normalized)
+        {
+            if (!Double.TryParse(
+                text,
+                URDFAttribute.URDFNumberStyle,
+                URDFAttribute.URDFNumberFormat,
+                out normalized) ||
+                Double.IsNaN(normalized) ||
+                Double.IsInfinity(normalized) ||
+                normalized < 0.0 ||
+                normalized > 1.0)
+            {
+                normalized = 0.0;
+                return false;
+            }
+            return true;
+        }
+
+        private static int ToColorByte(double normalized)
+        {
+            return (int)Math.Round(normalized * 255.0);
         }
 
         private static string ColorChannelToText(int channel)

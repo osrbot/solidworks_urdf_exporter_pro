@@ -12,6 +12,36 @@ namespace SW2URDF.URDFExport
     {
         private const string ExportReportFileName = "export_report.md";
 
+        internal sealed class ExportReportBuildResult
+        {
+            public string Content { get; set; }
+            public string Status { get; set; }
+            public IList<string> Findings { get; set; }
+
+            public bool HasBlockingFailures
+            {
+                get
+                {
+                    return Findings != null && Findings.Any(
+                        finding => finding.StartsWith("FAIL:", StringComparison.Ordinal));
+                }
+            }
+
+            public string BlockingFailureSummary()
+            {
+                if (!HasBlockingFailures)
+                {
+                    return String.Empty;
+                }
+
+                return String.Join(
+                    " | ",
+                    Findings.Where(finding =>
+                            finding.StartsWith("FAIL:", StringComparison.Ordinal))
+                        .Select(finding => finding.Substring("FAIL:".Length).Trim()));
+            }
+        }
+
         internal static void WriteExportReport(
             URDFPackage package,
             string ros1UrdfFileName,
@@ -32,11 +62,34 @@ namespace SW2URDF.URDFExport
                 elapsed,
                 targets);
 
-            if (targets != null && targets.UseV2Pipeline)
+            WriteExportReportContent(
+                package,
+                report,
+                targets,
+                true,
+                true);
+        }
+
+        internal static void WriteExportReportContent(
+            URDFPackage package,
+            string report,
+            ExportTargetOptions targets,
+            bool writeTopLevel,
+            bool writeTargetReports)
+        {
+            if (package == null) throw new ArgumentNullException("package");
+            if (report == null) throw new ArgumentNullException("report");
+
+            if (writeTopLevel && targets != null && targets.UseV2Pipeline)
             {
                 Directory.CreateDirectory(package.WindowsExportRootDirectory);
-                File.WriteAllText(package.WindowsExportReportFile, report, new UTF8Encoding(false));
+                WriteUtf8TextAtomically(package.WindowsExportReportFile, report);
                 logger.Info("Wrote v2 export report to " + package.WindowsExportReportFile);
+            }
+
+            if (!writeTargetReports)
+            {
+                return;
             }
 
             bool writeRos1 = targets == null || !targets.UseV2Pipeline || targets.ExportRos1Legacy;
@@ -45,7 +98,7 @@ namespace SW2URDF.URDFExport
             {
                 string ros1ReportFileName = Path.Combine(package.WindowsConfigDirectory, ExportReportFileName);
                 Directory.CreateDirectory(package.WindowsConfigDirectory);
-                File.WriteAllText(ros1ReportFileName, report, new UTF8Encoding(false));
+                WriteUtf8TextAtomically(ros1ReportFileName, report);
                 logger.Info("Wrote ROS 1 export report to " + ros1ReportFileName);
             }
 
@@ -53,12 +106,66 @@ namespace SW2URDF.URDFExport
             {
                 string ros2ReportFileName = Path.Combine(package.WindowsRos2ConfigDirectory, ExportReportFileName);
                 Directory.CreateDirectory(package.WindowsRos2ConfigDirectory);
-                File.WriteAllText(ros2ReportFileName, report, new UTF8Encoding(false));
+                WriteUtf8TextAtomically(ros2ReportFileName, report);
                 logger.Info("Wrote ROS 2 export report to " + ros2ReportFileName);
             }
         }
 
+        private static void WriteUtf8TextAtomically(string fileName, string content)
+        {
+            string directory = Path.GetDirectoryName(fileName);
+            if (String.IsNullOrWhiteSpace(directory))
+            {
+                throw new ArgumentException("The report path must include a directory.", "fileName");
+            }
+
+            Directory.CreateDirectory(directory);
+            string temporaryFileName = Path.Combine(
+                directory,
+                "." + Path.GetFileName(fileName) + ".tmp-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                File.WriteAllText(temporaryFileName, content, new UTF8Encoding(false));
+                if (File.Exists(fileName))
+                {
+                    File.Replace(temporaryFileName, fileName, null, true);
+                }
+                else
+                {
+                    File.Move(temporaryFileName, fileName);
+                }
+            }
+            finally
+            {
+                if (File.Exists(temporaryFileName))
+                {
+                    File.Delete(temporaryFileName);
+                }
+            }
+        }
+
         internal static string BuildExportReport(
+            URDFPackage package,
+            string ros1UrdfFileName,
+            IEnumerable<InertialValidationRecord> inertialRecords,
+            IEnumerable<MeshExportRecord> meshRecords,
+            bool exportMeshes,
+            MeshExportFormat meshFormat,
+            TimeSpan elapsed,
+            ExportTargetOptions targets = null)
+        {
+            return BuildExportReportResult(
+                package,
+                ros1UrdfFileName,
+                inertialRecords,
+                meshRecords,
+                exportMeshes,
+                meshFormat,
+                elapsed,
+                targets).Content;
+        }
+
+        internal static ExportReportBuildResult BuildExportReportResult(
             URDFPackage package,
             string ros1UrdfFileName,
             IEnumerable<InertialValidationRecord> inertialRecords,
@@ -88,7 +195,8 @@ namespace SW2URDF.URDFExport
             bool includeRos2 = targets == null || !targets.UseV2Pipeline || targets.ExportRos2;
             bool ros2AmentCmake = targets != null && targets.UseV2Pipeline;
             bool requireCollisionMeshes = exportMeshes &&
-                meshRows.Any(record => !UsesNativeCollisionGeometry(record));
+                (meshRows.Count == 0 ||
+                    meshRows.Any(record => !UsesNativeCollisionGeometry(record)));
             List<PackageCheck> packageChecks = BuildPackageChecks(
                 package,
                 ros1UrdfFileName,
@@ -133,6 +241,12 @@ namespace SW2URDF.URDFExport
             builder.AppendLine("Dirty state: " + Versioning.Version.GetDirtyState());
             builder.AppendLine("Robot name: " + package.RobotName);
             builder.AppendLine("ROS package: " + package.PackageName);
+            if (targets != null && targets.UseV2Pipeline)
+            {
+                builder.AppendLine("Selected targets: " + BuildSelectedTargetSummary(targets));
+                builder.AppendLine(
+                    "Unselected target directories: retained and not validated by this export");
+            }
             builder.AppendLine("Export meshes: " + (exportMeshes ? "true" : "false"));
             builder.AppendLine("Mesh format: " + meshFormat);
             builder.AppendLine("Export parameters: " +
@@ -173,7 +287,12 @@ namespace SW2URDF.URDFExport
             AppendCollisionStrategySection(builder, meshRows);
             AppendFindingsSection(builder, findings);
 
-            return builder.ToString();
+            return new ExportReportBuildResult
+            {
+                Content = builder.ToString(),
+                Status = status,
+                Findings = findings.AsReadOnly()
+            };
         }
 
         private static List<string> BuildExportFindings(
@@ -250,7 +369,7 @@ namespace SW2URDF.URDFExport
                         "Visual mesh for link " + record.LinkName + " is missing at " +
                         record.VisualWindowsPath);
                 }
-                if (!record.CollisionExists && !UsesNativeCollisionGeometry(record))
+                if (IsRequiredCollisionArtifactMissing(record))
                 {
                     findings.Add((exportMeshes ? "FAIL: " : "WARN: ") +
                         "Collision mesh for link " + record.LinkName + " is missing at " +
@@ -339,8 +458,11 @@ namespace SW2URDF.URDFExport
             AddDirectoryCheck(checks, "ROS 1 meshes directory", package.WindowsMeshesDirectory, exportMeshes);
             AddDirectoryCheck(checks, "ROS 1 visual meshes directory", Path.Combine(package.WindowsMeshesDirectory, "visual"), exportMeshes);
             AddDirectoryFilesCheck(checks, "ROS 1 visual mesh files", Path.Combine(package.WindowsMeshesDirectory, "visual"), exportMeshes);
-            AddDirectoryCheck(checks, "ROS 1 collision meshes directory", Path.Combine(package.WindowsMeshesDirectory, "collision"), requireCollisionMeshes);
-            AddDirectoryFilesCheck(checks, "ROS 1 collision mesh files", Path.Combine(package.WindowsMeshesDirectory, "collision"), requireCollisionMeshes);
+            if (requireCollisionMeshes)
+            {
+                AddDirectoryCheck(checks, "ROS 1 collision meshes directory", Path.Combine(package.WindowsMeshesDirectory, "collision"), true);
+                AddDirectoryFilesCheck(checks, "ROS 1 collision mesh files", Path.Combine(package.WindowsMeshesDirectory, "collision"), true);
+            }
             AddFileCheck(checks, "ROS 1 inertial validation CSV",
                 Path.Combine(package.WindowsConfigDirectory, "inertial_validation.csv"), true);
             AddFileCheck(checks, "ROS 1 mesh manifest CSV",
@@ -368,8 +490,11 @@ namespace SW2URDF.URDFExport
             AddDirectoryCheck(checks, "ROS 2 meshes directory", package.WindowsRos2MeshesDirectory, exportMeshes);
             AddDirectoryCheck(checks, "ROS 2 visual meshes directory", Path.Combine(package.WindowsRos2MeshesDirectory, "visual"), exportMeshes);
             AddDirectoryFilesCheck(checks, "ROS 2 visual mesh files", Path.Combine(package.WindowsRos2MeshesDirectory, "visual"), exportMeshes);
-            AddDirectoryCheck(checks, "ROS 2 collision meshes directory", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), requireCollisionMeshes);
-            AddDirectoryFilesCheck(checks, "ROS 2 collision mesh files", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), requireCollisionMeshes);
+            if (requireCollisionMeshes)
+            {
+                AddDirectoryCheck(checks, "ROS 2 collision meshes directory", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), true);
+                AddDirectoryFilesCheck(checks, "ROS 2 collision mesh files", Path.Combine(package.WindowsRos2MeshesDirectory, "collision"), true);
+            }
             AddFileCheck(checks, "ROS 2 inertial validation CSV",
                 Path.Combine(package.WindowsRos2ConfigDirectory, "inertial_validation.csv"), true);
             AddFileCheck(checks, "ROS 2 mesh manifest CSV",
@@ -700,7 +825,7 @@ namespace SW2URDF.URDFExport
         {
             List<MeshExportRecord> rows = records.ToList();
             int missingVisual = rows.Count(r => !r.VisualExists);
-            int missingCollision = rows.Count(r => !r.CollisionExists);
+            int missingCollision = rows.Count(IsRequiredCollisionArtifactMissing);
             string status;
             if (!exportMeshes)
             {
@@ -874,17 +999,101 @@ namespace SW2URDF.URDFExport
                 .ToList();
         }
 
-        private static string ResolvePackageUri(string uri, string packageName, string packageRootDirectory)
+        internal static string ResolvePackageUri(
+            string uri,
+            string packageName,
+            string packageRootDirectory)
         {
-            string prefix = "package://" + packageName + "/";
             if (String.IsNullOrWhiteSpace(uri) ||
-                !uri.StartsWith(prefix, StringComparison.Ordinal))
+                String.IsNullOrWhiteSpace(packageName) ||
+                String.IsNullOrWhiteSpace(packageRootDirectory))
             {
                 return null;
             }
 
-            string relativePath = uri.Substring(prefix.Length).Replace('/', Path.DirectorySeparatorChar);
-            return Path.Combine(packageRootDirectory, relativePath);
+            string prefix = "package://" + packageName + "/";
+            if (!uri.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            try
+            {
+                string relativeUri = Uri.UnescapeDataString(uri.Substring(prefix.Length));
+                if (String.IsNullOrWhiteSpace(relativeUri) ||
+                    relativeUri.IndexOf('\\') >= 0 ||
+                    Path.IsPathRooted(relativeUri))
+                {
+                    return null;
+                }
+
+                string[] segments = relativeUri.Split('/');
+                if (segments.Any(segment =>
+                    String.IsNullOrWhiteSpace(segment) ||
+                    String.Equals(segment, ".", StringComparison.Ordinal) ||
+                    String.Equals(segment, "..", StringComparison.Ordinal) ||
+                    segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
+                {
+                    return null;
+                }
+
+                string root = Path.GetFullPath(packageRootDirectory).TrimEnd(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar);
+                if (!Directory.Exists(root) || HasReparsePoint(root))
+                {
+                    return null;
+                }
+
+                string relativePath = String.Join(
+                    Path.DirectorySeparatorChar.ToString(),
+                    segments);
+                string candidate = Path.GetFullPath(Path.Combine(root, relativePath));
+                string rootPrefix = root + Path.DirectorySeparatorChar;
+                if (!candidate.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) ||
+                    HasReparsePointBetween(root, candidate))
+                {
+                    return null;
+                }
+                return candidate;
+            }
+            catch (Exception exception) when (
+                exception is ArgumentException ||
+                exception is IOException ||
+                exception is NotSupportedException ||
+                exception is UnauthorizedAccessException ||
+                exception is UriFormatException)
+            {
+                return null;
+            }
+        }
+
+        private static bool HasReparsePointBetween(string root, string candidate)
+        {
+            string relative = candidate.Substring(root.Length).TrimStart(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+            string current = root;
+            foreach (string segment in relative.Split(
+                new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+                StringSplitOptions.RemoveEmptyEntries))
+            {
+                current = Path.Combine(current, segment);
+                if (!Directory.Exists(current) && !File.Exists(current))
+                {
+                    break;
+                }
+                if (HasReparsePoint(current))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool HasReparsePoint(string path)
+        {
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
         }
 
         private static void AppendExportParametersSection(
@@ -1345,6 +1554,23 @@ namespace SW2URDF.URDFExport
             return record != null &&
                 !String.IsNullOrWhiteSpace(record.CollisionUrdfReference) &&
                 record.CollisionUrdfReference.StartsWith("native:", StringComparison.Ordinal);
+        }
+
+        private static string BuildSelectedTargetSummary(ExportTargetOptions targets)
+        {
+            List<string> selected = new List<string>();
+            if (targets.ExportRos1Legacy) selected.Add("ROS 1");
+            if (targets.ExportRos2) selected.Add("ROS 2");
+            if (targets.ExportUsdAsset) selected.Add("OpenUSD");
+            if (targets.ExportMjcfAsset) selected.Add("MuJoCo MJCF");
+            return selected.Count == 0 ? "none" : string.Join(", ", selected);
+        }
+
+        private static bool IsRequiredCollisionArtifactMissing(MeshExportRecord record)
+        {
+            return record != null &&
+                !record.CollisionExists &&
+                !UsesNativeCollisionGeometry(record);
         }
 
         private static string FormatStlReductionRatios(IEnumerable<MeshExportRecord> records)

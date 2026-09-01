@@ -44,6 +44,28 @@ namespace SW2URDF.Test
                 new UTF8Encoding(false));
         }
 
+        private static void CreateDirectoryJunction(string junction, string target)
+        {
+            System.Diagnostics.ProcessStartInfo startInfo =
+                new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = "/c mklink /J \"" + junction + "\" \"" + target + "\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+            using (System.Diagnostics.Process process =
+                System.Diagnostics.Process.Start(startInfo))
+            {
+                string output = process.StandardOutput.ReadToEnd() +
+                    process.StandardError.ReadToEnd();
+                process.WaitForExit();
+                Assert.True(process.ExitCode == 0, output);
+            }
+        }
+
         [Fact]
         public void RecommendedExportTargetsAreImmediatelyValidAndConservative()
         {
@@ -51,11 +73,11 @@ namespace SW2URDF.Test
                 ExportTargetOptions.RecommendedDefaults("production_robot");
 
             Assert.True(options.UseV2Pipeline);
-            Assert.True(options.CreateRobotBundle);
+            Assert.Null(typeof(ExportTargetOptions).GetProperty("CreateRobotBundle"));
             Assert.True(options.ExportRos2);
             Assert.False(options.ExportRos1Legacy);
-            Assert.False(options.ExportIsaacSim);
-            Assert.False(options.ExportIsaacLab);
+            Assert.False(options.ExportUsdAsset);
+            Assert.False(options.ExportMjcfAsset);
             Assert.Equal("0.1.0", options.PackageVersion);
             Assert.Equal("NOASSERTION", options.ModelLicense);
             Assert.Equal(PackageXML.DefaultMaintainerName, options.MaintainerName);
@@ -64,19 +86,692 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void BundleOnlyTargetDoesNotRequireRosOrIsaacMetadata()
+        public void PackageUriResolutionAllowsOnlySelfContainedNonReparseAssets()
+        {
+            string root = CreateRandomTempDirectory();
+            string junction = null;
+            try
+            {
+                string packageRoot = Path.Combine(root, "rover_description");
+                string meshDirectory = Path.Combine(packageRoot, "meshes");
+                string outsideDirectory = Path.Combine(root, "outside");
+                Directory.CreateDirectory(meshDirectory);
+                Directory.CreateDirectory(outsideDirectory);
+                string validMesh = Path.Combine(meshDirectory, "base_link.STL");
+                string outsideMesh = Path.Combine(outsideDirectory, "outside.STL");
+                File.WriteAllText(validMesh, "valid", new UTF8Encoding(false));
+                File.WriteAllText(outsideMesh, "outside", new UTF8Encoding(false));
+
+                Assert.Equal(
+                    validMesh,
+                    ExportHelper.ResolvePackageUri(
+                        "package://rover_description/meshes/base_link.STL",
+                        "rover_description",
+                        packageRoot));
+                Assert.Null(ExportHelper.ResolvePackageUri(
+                    "package://rover_description/C:/outside.STL",
+                    "rover_description",
+                    packageRoot));
+                Assert.Null(ExportHelper.ResolvePackageUri(
+                    "package://rover_description/../outside/outside.STL",
+                    "rover_description",
+                    packageRoot));
+                Assert.Null(ExportHelper.ResolvePackageUri(
+                    "package://rover_description/%2e%2e/outside/outside.STL",
+                    "rover_description",
+                    packageRoot));
+                Assert.Null(ExportHelper.ResolvePackageUri(
+                    "package://rover_description/meshes/base_link.STL:metadata",
+                    "rover_description",
+                    packageRoot));
+                Assert.Null(ExportHelper.ResolvePackageUri(
+                    "package://another_package/meshes/base_link.STL",
+                    "rover_description",
+                    packageRoot));
+
+                junction = Path.Combine(packageRoot, "linked");
+                CreateDirectoryJunction(junction, outsideDirectory);
+                Assert.Null(ExportHelper.ResolvePackageUri(
+                    "package://rover_description/linked/outside.STL",
+                    "rover_description",
+                    packageRoot));
+            }
+            finally
+            {
+                if (!String.IsNullOrWhiteSpace(junction) && Directory.Exists(junction))
+                {
+                    Directory.Delete(junction);
+                }
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void NoPublicTargetReturnsStableTargetRequiredFinding()
         {
             ExportTargetOptions options = new ExportTargetOptions
             {
                 UseV2Pipeline = true,
-                CreateRobotBundle = true,
                 ExportRos1Legacy = false,
                 ExportRos2 = false,
-                ExportIsaacSim = false,
-                ExportIsaacLab = false
+                ExportUsdAsset = false,
+                ExportMjcfAsset = false
             };
 
-            Assert.Empty(options.ValidateFindings());
+            ExportTargetValidationFinding finding = Assert.Single(options.ValidateFindings());
+            Assert.Equal("TARGET_REQUIRED", finding.Code);
+            Assert.Equal("Targets", finding.Field);
+        }
+
+        [Theory]
+        [InlineData("ros1")]
+        [InlineData("ros2")]
+        [InlineData("usd")]
+        [InlineData("mjcf")]
+        public void EveryPublicExportTargetSatisfiesTargetRequirement(string target)
+        {
+            ExportTargetOptions options =
+                ExportTargetOptions.RecommendedDefaults("production_robot");
+            options.ExportRos1Legacy = target == "ros1";
+            options.ExportRos2 = target == "ros2";
+            options.ExportUsdAsset = target == "usd";
+            options.ExportMjcfAsset = target == "mjcf";
+
+            Assert.DoesNotContain(
+                options.ValidateFindings(),
+                finding => finding.Code == "TARGET_REQUIRED");
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherReplacesAllSelectedTargetsTogether()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stageA = Path.Combine(root, "transaction", "ros1");
+                string stageB = Path.Combine(root, "transaction", "usd");
+                string destinationA = Path.Combine(root, "delivery", "ros1");
+                string destinationB = Path.Combine(root, "delivery", "usd");
+                WriteMarker(stageA, "new-ros1");
+                WriteMarker(stageB, "new-usd");
+                WriteMarker(destinationA, "old-ros1");
+                WriteMarker(destinationB, "old-usd");
+
+                IList<string> warnings = AtomicDirectoryPublisher.Publish(
+                    new List<DirectoryPublishRequest>
+                    {
+                        new DirectoryPublishRequest
+                        {
+                            Label = "ROS 1",
+                            StagingDirectory = stageA,
+                            DestinationDirectory = destinationA
+                        },
+                        new DirectoryPublishRequest
+                        {
+                            Label = "USD",
+                            StagingDirectory = stageB,
+                            DestinationDirectory = destinationB
+                        }
+                    });
+
+                Assert.Empty(warnings);
+                Assert.Equal("new-ros1", ReadMarker(destinationA));
+                Assert.Equal("new-usd", ReadMarker(destinationB));
+                Assert.False(Directory.Exists(stageA));
+                Assert.False(Directory.Exists(stageB));
+                Assert.Empty(Directory.GetDirectories(
+                    Path.Combine(root, "delivery"),
+                    "*.previous-transaction-*"));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherRestoresEarlierTargetsWhenLaterTargetFails()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stageA = Path.Combine(root, "transaction", "ros1");
+                string stageB = Path.Combine(root, "transaction", "usd");
+                string destinationA = Path.Combine(root, "delivery", "ros1");
+                string invalidDestinationB = Path.Combine(root, "delivery", "usd");
+                WriteMarker(stageA, "new-ros1");
+                WriteMarker(stageB, "new-usd");
+                WriteMarker(destinationA, "old-ros1");
+                Directory.CreateDirectory(Path.GetDirectoryName(invalidDestinationB));
+                File.WriteAllText(invalidDestinationB, "occupied", new UTF8Encoding(false));
+
+                Assert.Throws<IOException>(() => AtomicDirectoryPublisher.Publish(
+                    new List<DirectoryPublishRequest>
+                    {
+                        new DirectoryPublishRequest
+                        {
+                            Label = "ROS 1",
+                            StagingDirectory = stageA,
+                            DestinationDirectory = destinationA
+                        },
+                        new DirectoryPublishRequest
+                        {
+                            Label = "USD",
+                            StagingDirectory = stageB,
+                            DestinationDirectory = invalidDestinationB
+                        }
+                    }));
+
+                Assert.Equal("old-ros1", ReadMarker(destinationA));
+                Assert.Equal("new-ros1", ReadMarker(stageA));
+                Assert.Equal("new-usd", ReadMarker(stageB));
+                Assert.Equal("occupied", File.ReadAllText(invalidDestinationB));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherCanRollBackAfterPostPublishValidationFails()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stage = Path.Combine(root, "transaction", "ros1");
+                string destination = Path.Combine(root, "delivery", "ros1");
+                WriteMarker(stage, "new-ros1");
+                WriteMarker(destination, "old-ros1");
+
+                AtomicDirectoryPublication publication = AtomicDirectoryPublisher.Begin(
+                    new List<DirectoryPublishRequest>
+                    {
+                        new DirectoryPublishRequest
+                        {
+                            Label = "ROS 1",
+                            StagingDirectory = stage,
+                            DestinationDirectory = destination
+                        }
+                    });
+
+                Assert.Equal("new-ros1", ReadMarker(destination));
+                Assert.Empty(publication.RollBack());
+                Assert.Equal("old-ros1", ReadMarker(destination));
+                Assert.Equal("new-ros1", ReadMarker(stage));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherRecoversInterruptedPublishedTransaction()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stage = Path.Combine(root, ".sw2urdf-targets-test", "ros1");
+                string destination = Path.Combine(root, "ROS1", "robot");
+                string transactionId = Guid.NewGuid().ToString("N");
+                string previous = destination +
+                    ".previous-transaction-" + transactionId + "-00";
+                WriteMarker(destination, "new-ros1");
+                WriteMarker(previous, "old-ros1");
+                WriteInterruptedPublicationJournal(
+                    root,
+                    transactionId,
+                    "published",
+                    "ROS 1",
+                    stage,
+                    destination,
+                    previous,
+                    true,
+                    "published");
+
+                Assert.Equal("new-ros1", ReadMarker(destination));
+                Assert.Single(Directory.GetFiles(
+                    root,
+                    ".sw2urdf-publication-*.json",
+                    SearchOption.TopDirectoryOnly));
+
+                IList<string> warnings =
+                    AtomicDirectoryPublisher.RecoverInterruptedPublications(root);
+
+                Assert.Contains(
+                    warnings,
+                    warning => warning.Contains("Rolled back an interrupted"));
+                Assert.Equal("old-ros1", ReadMarker(destination));
+                Assert.Equal("new-ros1", ReadMarker(stage));
+                Assert.Empty(Directory.GetFiles(
+                    root,
+                    ".sw2urdf-publication-*.json",
+                    SearchOption.TopDirectoryOnly));
+                Assert.Empty(Directory.GetDirectories(
+                    root,
+                    "*.previous-transaction-*",
+                    SearchOption.AllDirectories));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherCompletesInterruptedDurableCommitDecision()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stage = Path.Combine(root, ".sw2urdf-targets-test", "ros2");
+                string destination = Path.Combine(root, "ROS2", "robot");
+                string transactionId = Guid.NewGuid().ToString("N");
+                string previous = destination +
+                    ".previous-transaction-" + transactionId + "-00";
+                WriteMarker(destination, "new-ros2");
+                WriteMarker(previous, "old-ros2");
+                WriteInterruptedPublicationJournal(
+                    root,
+                    transactionId,
+                    "committing",
+                    "ROS 2",
+                    stage,
+                    destination,
+                    previous,
+                    true,
+                    "published");
+
+                IList<string> warnings =
+                    AtomicDirectoryPublisher.RecoverInterruptedPublications(root);
+
+                Assert.Contains(
+                    warnings,
+                    warning => warning.Contains("Completed an interrupted output commit"));
+                Assert.Equal("new-ros2", ReadMarker(destination));
+                Assert.False(Directory.Exists(stage));
+                Assert.Empty(Directory.GetFiles(
+                    root,
+                    ".sw2urdf-publication-*.json",
+                    SearchOption.TopDirectoryOnly));
+                Assert.Empty(Directory.GetDirectories(
+                    root,
+                    "*.previous-transaction-*",
+                    SearchOption.AllDirectories));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherRetainsJournalUntilCommitCleanupCanResume()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stage = Path.Combine(root, "transaction", "ros2");
+                string destination = Path.Combine(root, "ROS2", "robot");
+                WriteMarker(stage, "new-ros2");
+                WriteMarker(destination, "old-ros2");
+                List<DirectoryPublishRequest> requests =
+                    new List<DirectoryPublishRequest>
+                    {
+                        new DirectoryPublishRequest
+                        {
+                            Label = "ROS 2",
+                            StagingDirectory = stage,
+                            DestinationDirectory = destination
+                        }
+                    };
+                AtomicDirectoryPublication publication =
+                    AtomicDirectoryPublisher.Begin(requests, root);
+                string previous = requests[0].PreviousDirectory;
+
+                IList<string> warnings;
+                using (new FileStream(
+                    Path.Combine(previous, "marker.txt"),
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.None))
+                {
+                    warnings = publication.Commit();
+                }
+
+                Assert.Contains(
+                    warnings,
+                    warning => warning.Contains("journal was retained"));
+                Assert.True(Directory.Exists(previous));
+                Assert.Single(Directory.GetFiles(
+                    root,
+                    ".sw2urdf-publication-*.json",
+                    SearchOption.TopDirectoryOnly));
+
+                IList<string> recoveryWarnings =
+                    AtomicDirectoryPublisher.RecoverInterruptedPublications(root);
+
+                Assert.Contains(
+                    recoveryWarnings,
+                    warning => warning.Contains("Completed an interrupted output commit"));
+                Assert.Equal("new-ros2", ReadMarker(destination));
+                Assert.False(Directory.Exists(previous));
+                Assert.Empty(Directory.GetFiles(
+                    root,
+                    ".sw2urdf-publication-*.json",
+                    SearchOption.TopDirectoryOnly));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Theory]
+        [InlineData("publishing", "planned")]
+        [InlineData("rolling_back", "published")]
+        public void AtomicDirectoryPublisherRecoversAnUnchangedOrAlreadyRestoredRequest(
+            string phase,
+            string state)
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stage = Path.Combine(root, ".sw2urdf-targets-test", "ros1");
+                string destination = Path.Combine(root, "ROS1", "robot");
+                string transactionId = Guid.NewGuid().ToString("N");
+                string previous = destination +
+                    ".previous-transaction-" + transactionId + "-00";
+                WriteMarker(stage, "generated-ros1");
+                WriteMarker(destination, "old-ros1");
+                WriteInterruptedPublicationJournal(
+                    root,
+                    transactionId,
+                    phase,
+                    "ROS 1",
+                    stage,
+                    destination,
+                    previous,
+                    true,
+                    state);
+
+                IList<string> warnings =
+                    AtomicDirectoryPublisher.RecoverInterruptedPublications(root);
+
+                Assert.Contains(
+                    warnings,
+                    warning => warning.Contains("Rolled back an interrupted"));
+                Assert.Equal("old-ros1", ReadMarker(destination));
+                Assert.Equal("generated-ros1", ReadMarker(stage));
+                Assert.False(Directory.Exists(previous));
+                Assert.Empty(Directory.GetFiles(
+                    root,
+                    ".sw2urdf-publication-*.json",
+                    SearchOption.TopDirectoryOnly));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherSerializesWritersWithAnOutputRootLock()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stage = Path.Combine(root, "transaction", "usd");
+                string destination = Path.Combine(root, "USD", "robot");
+                WriteMarker(stage, "new-usd");
+
+                AtomicDirectoryPublication publication = AtomicDirectoryPublisher.Begin(
+                    new List<DirectoryPublishRequest>
+                    {
+                        new DirectoryPublishRequest
+                        {
+                            Label = "USD",
+                            StagingDirectory = stage,
+                            DestinationDirectory = destination
+                        }
+                    },
+                    root);
+                try
+                {
+                    IOException exception = Assert.Throws<IOException>(() =>
+                        AtomicDirectoryPublisher.RecoverInterruptedPublications(root));
+                    Assert.Contains("Another export is publishing", exception.Message);
+                }
+                finally
+                {
+                    Assert.Empty(publication.RollBack());
+                }
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherRunsFinalReportWriteUnderOutputRootLock()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stage = Path.Combine(root, "transaction", "ros1");
+                string destination = Path.Combine(root, "ROS1", "robot");
+                string report = Path.Combine(root, "export_report.md");
+                WriteMarker(stage, "new-ros1");
+
+                AtomicDirectoryPublication publication = AtomicDirectoryPublisher.Begin(
+                    new List<DirectoryPublishRequest>
+                    {
+                        new DirectoryPublishRequest
+                        {
+                            Label = "ROS 1",
+                            StagingDirectory = stage,
+                            DestinationDirectory = destination
+                        }
+                    },
+                    root);
+
+                publication.Commit(() =>
+                {
+                    Assert.Throws<IOException>(() =>
+                        AtomicDirectoryPublisher.RecoverInterruptedPublications(root));
+                    File.WriteAllText(report, "current-export", new UTF8Encoding(false));
+                });
+
+                Assert.Equal("current-export", File.ReadAllText(report, Encoding.UTF8));
+                Assert.Equal("new-ros1", ReadMarker(destination));
+                Assert.Empty(AtomicDirectoryPublisher.RecoverInterruptedPublications(root));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherKeepsFinalReportFailureRollbackable()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stage = Path.Combine(root, "transaction", "ros2");
+                string destination = Path.Combine(root, "ROS2", "robot");
+                WriteMarker(stage, "new-ros2");
+                WriteMarker(destination, "old-ros2");
+                AtomicDirectoryPublication publication = AtomicDirectoryPublisher.Begin(
+                    new List<DirectoryPublishRequest>
+                    {
+                        new DirectoryPublishRequest
+                        {
+                            Label = "ROS 2",
+                            StagingDirectory = stage,
+                            DestinationDirectory = destination
+                        }
+                    },
+                    root);
+
+                InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                    publication.Commit(() =>
+                    {
+                        throw new InvalidOperationException("report write failed");
+                    }));
+
+                Assert.Equal("report write failed", exception.Message);
+                Assert.Equal("new-ros2", ReadMarker(destination));
+                Assert.Empty(publication.RollBack());
+                Assert.Equal("old-ros2", ReadMarker(destination));
+                Assert.Empty(AtomicDirectoryPublisher.RecoverInterruptedPublications(root));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void TransactionRootReferencedByRetainedJournalSurvivesCleanupAndRecovers()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string transactionRoot = Path.Combine(root, ".sw2urdf-targets-test");
+                string stage = Path.Combine(transactionRoot, "ros1");
+                string destination = Path.Combine(root, "ROS1", "robot");
+                string transactionId = Guid.NewGuid().ToString("N");
+                string previous = destination +
+                    ".previous-transaction-" + transactionId + "-00";
+                Directory.CreateDirectory(transactionRoot);
+                WriteMarker(destination, "new-ros1");
+                WriteMarker(previous, "old-ros1");
+                WriteInterruptedPublicationJournal(
+                    root,
+                    transactionId,
+                    "rolling_back",
+                    "ROS 1",
+                    stage,
+                    destination,
+                    previous,
+                    true,
+                    "published");
+
+                Exception cleanupFailure;
+                Assert.False(AtomicDirectoryPublisher.TryDeleteUnreferencedTransactionRoot(
+                    root,
+                    transactionRoot,
+                    out cleanupFailure));
+                Assert.Contains("recovery journal", cleanupFailure.Message);
+                Assert.True(Directory.Exists(transactionRoot));
+
+                IList<string> warnings =
+                    AtomicDirectoryPublisher.RecoverInterruptedPublications(root);
+
+                Assert.Contains(warnings, warning =>
+                    warning.Contains("Rolled back an interrupted"));
+                Assert.Equal("old-ros1", ReadMarker(destination));
+                Assert.Equal("new-ros1", ReadMarker(stage));
+                Assert.Empty(Directory.GetFiles(
+                    root,
+                    ".sw2urdf-publication-*.json",
+                    SearchOption.TopDirectoryOnly));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherRefusesAmbiguousInterruptedState()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stage = Path.Combine(root, ".sw2urdf-targets-test", "mjcf");
+                string destination = Path.Combine(root, "MuJoCo", "robot");
+                string transactionId = Guid.NewGuid().ToString("N");
+                string previous = destination +
+                    ".previous-transaction-" + transactionId + "-00";
+                WriteMarker(stage, "staged-copy");
+                WriteMarker(destination, "published-copy");
+                WriteMarker(previous, "old-copy");
+                WriteInterruptedPublicationJournal(
+                    root,
+                    transactionId,
+                    "published",
+                    "MJCF",
+                    stage,
+                    destination,
+                    previous,
+                    true,
+                    "published");
+
+                InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+                    AtomicDirectoryPublisher.RecoverInterruptedPublications(root));
+
+                Assert.Contains("ambiguous", exception.Message);
+                Assert.Equal("staged-copy", ReadMarker(stage));
+                Assert.Equal("published-copy", ReadMarker(destination));
+                Assert.Equal("old-copy", ReadMarker(previous));
+                Assert.Single(Directory.GetFiles(
+                    root,
+                    ".sw2urdf-publication-*.json",
+                    SearchOption.TopDirectoryOnly));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Fact]
+        public void AtomicDirectoryPublisherRejectsOverlappingTargetsBeforeMutation()
+        {
+            string root = CreateRandomTempDirectory();
+            try
+            {
+                string stageA = Path.Combine(root, "transaction", "ros1");
+                string stageB = Path.Combine(root, "transaction", "usd");
+                string destination = Path.Combine(root, "delivery", "shared");
+                WriteMarker(stageA, "new-ros1");
+                WriteMarker(stageB, "new-usd");
+                WriteMarker(destination, "old-output");
+
+                InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+                    AtomicDirectoryPublisher.Publish(
+                        new List<DirectoryPublishRequest>
+                        {
+                            new DirectoryPublishRequest
+                            {
+                                Label = "ROS 1",
+                                StagingDirectory = stageA,
+                                DestinationDirectory = destination
+                            },
+                            new DirectoryPublishRequest
+                            {
+                                Label = "USD",
+                                StagingDirectory = stageB,
+                                DestinationDirectory = destination
+                            }
+                        }));
+
+                Assert.Contains("destinations overlap", exception.Message);
+                Assert.Equal("old-output", ReadMarker(destination));
+                Assert.Equal("new-ros1", ReadMarker(stageA));
+                Assert.Equal("new-usd", ReadMarker(stageB));
+                Assert.Empty(Directory.GetDirectories(
+                    Path.Combine(root, "delivery"),
+                    "*.previous-transaction-*"));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
         }
 
         [Fact]
@@ -93,6 +788,63 @@ namespace SW2URDF.Test
             Assert.Contains(findings, finding =>
                 finding.Code == "MAINTAINER_EMAIL_FORMAT" &&
                 finding.Field == "MaintainerEmail");
+        }
+
+        private static void WriteMarker(string directory, string value)
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(
+                Path.Combine(directory, "marker.txt"),
+                value,
+                new UTF8Encoding(false));
+        }
+
+        private static string ReadMarker(string directory)
+        {
+            return File.ReadAllText(Path.Combine(directory, "marker.txt"), Encoding.UTF8);
+        }
+
+        private static void WriteInterruptedPublicationJournal(
+            string root,
+            string transactionId,
+            string phase,
+            string label,
+            string staging,
+            string destination,
+            string previous,
+            bool hadPrevious,
+            string state)
+        {
+            DirectoryPublicationJournal journal = new DirectoryPublicationJournal
+            {
+                SchemaVersion = 1,
+                TransactionId = transactionId,
+                PublicationRoot = root,
+                CreatedUtc = DateTime.UtcNow.ToString("o"),
+                Phase = phase,
+                Requests = new List<DirectoryPublishRequest>
+                {
+                    new DirectoryPublishRequest
+                    {
+                        Label = label,
+                        StagingDirectory = staging,
+                        DestinationDirectory = destination,
+                        PreviousDirectory = previous,
+                        HadPreviousDirectory = hadPrevious,
+                        Published = String.Equals(state, "published", StringComparison.Ordinal),
+                        PublicationState = state
+                    }
+                }
+            };
+            string journalPath = Path.Combine(
+                root,
+                ".sw2urdf-publication-" + transactionId + ".json");
+            File.WriteAllText(
+                journalPath,
+                Newtonsoft.Json.JsonConvert.SerializeObject(
+                    journal,
+                    Newtonsoft.Json.Formatting.Indented),
+                new UTF8Encoding(false));
         }
 
         [Fact]
@@ -113,7 +865,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void V2BundleOnlyExportStillWritesATopLevelHealthReport()
+        public void V2AssetOnlyExportStillWritesATopLevelHealthReport()
         {
             string tempDirectory = CreateRandomTempDirectory();
             try
@@ -130,13 +882,18 @@ namespace SW2URDF.Test
                     new ExportTargetOptions
                     {
                         UseV2Pipeline = true,
-                        CreateRobotBundle = true,
                         ExportRos1Legacy = false,
-                        ExportRos2 = false
+                        ExportRos2 = false,
+                        ExportUsdAsset = true,
+                        ExportMjcfAsset = false
                     });
 
                 Assert.True(File.Exists(pkg.WindowsExportReportFile));
                 string report = File.ReadAllText(pkg.WindowsExportReportFile);
+                Assert.Contains("Selected targets: OpenUSD", report);
+                Assert.Contains(
+                    "Unselected target directories: retained and not validated by this export",
+                    report);
                 Assert.Contains("| ROS package completeness | SKIP |", report);
                 Assert.Contains("| ROS package parity | SKIP |", report);
                 Assert.False(File.Exists(Path.Combine(pkg.WindowsConfigDirectory, "export_report.md")));
@@ -698,7 +1455,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestExportReportFailsDuplicateJointNames()
+        public void TestBuildExportReportResultExposesBlockingFailureSummary()
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("robot_900001", "rover_description", tempDirectory);
@@ -722,6 +1479,21 @@ namespace SW2URDF.Test
             string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
             File.WriteAllText(ros1Urdf, urdf, new UTF8Encoding(false));
             pkg.CreateRos2Package(ros1Urdf);
+
+            ExportHelper.ExportReportBuildResult result =
+                ExportHelper.BuildExportReportResult(
+                    pkg,
+                    ros1Urdf,
+                    new ExportHelper.InertialValidationRecord[0],
+                    new ExportHelper.MeshExportRecord[0],
+                    false,
+                    MeshExportFormat.STL,
+                    TimeSpan.FromSeconds(1));
+
+            Assert.True(result.HasBlockingFailures);
+            Assert.Contains(
+                "ROS 1 URDF contains duplicate joint name: dup",
+                result.BlockingFailureSummary());
 
             ExportHelper.WriteExportReport(
                 pkg,
@@ -773,7 +1545,6 @@ namespace SW2URDF.Test
             string visualMesh = Path.Combine(visualMeshDirectory, "base_link.STL");
             string collisionMesh = Path.Combine(collisionMeshDirectory, "base_link.STL");
             File.WriteAllText(visualMesh, "visual", new UTF8Encoding(false));
-            File.WriteAllText(collisionMesh, "collision primitive artifact", new UTF8Encoding(false));
 
             string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
             File.WriteAllText(
@@ -803,15 +1574,16 @@ namespace SW2URDF.Test
                     visualMesh,
                     collisionMesh,
                     true,
-                    true,
+                    false,
                     new FileInfo(visualMesh).Length,
-                    new FileInfo(collisionMesh).Length,
+                    null,
                     0,
-                    12,
+                    null,
                     ExportHelper.StlExportStats.NotExported(),
                     "native:box");
 
-            ExportHelper.WriteExportReport(
+            ExportHelper.ExportReportBuildResult result =
+                ExportHelper.BuildExportReportResult(
                 pkg,
                 ros1Urdf,
                 new[] { inertialRecord },
@@ -820,11 +1592,14 @@ namespace SW2URDF.Test
                 MeshExportFormat.STL,
                 TimeSpan.FromSeconds(1));
 
-            string report = File.ReadAllText(
-                Path.Combine(pkg.WindowsConfigDirectory, "export_report.md"),
-                Encoding.UTF8);
+            string report = result.Content;
 
+            Assert.Equal("PASS", result.Status);
+            Assert.False(result.HasBlockingFailures);
             Assert.Contains("Status: PASS", report);
+            Assert.Contains(
+                "| Mesh manifest paths | PASS | rows=1, missing_visual=0, missing_collision=0 |",
+                report);
             Assert.Contains("| ROS 1 URDF | PASS | links=1, joints=0, mesh_refs=1, missing_mesh_refs=0, duplicate_links=0, duplicate_joints=0 |", report);
             Assert.Contains("| ROS 2 URDF | PASS | links=1, joints=0, mesh_refs=1, missing_mesh_refs=0, duplicate_links=0, duplicate_joints=0 |", report);
             Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=Primitive=1, effective=BoxPrimitive=1, urdf_refs=native:box=1 |", report);
@@ -832,11 +1607,12 @@ namespace SW2URDF.Test
             Assert.Contains("| collision_urdf_refs | native:box=1 |", report);
             Assert.Contains("Collision URDF refs: native:box=1", report);
             Assert.Contains(
-                "| base_link | Primitive | BoxPrimitive | urdf_box_primitive | native:box | ok | true | " +
-                new FileInfo(collisionMesh).Length.ToString() +
-                " | 12 | ",
+                "| base_link | Primitive | BoxPrimitive | urdf_box_primitive | native:box | ok | false |  |  |",
                 report);
             Assert.Contains(" | none | package://rover_description/meshes/collision/base_link.STL |", report);
+            Assert.DoesNotContain(
+                result.Findings,
+                finding => finding.Contains("Collision mesh for link base_link is missing"));
             Assert.DoesNotContain("FAIL:", report);
 
             Directory.Delete(tempDirectory, true);

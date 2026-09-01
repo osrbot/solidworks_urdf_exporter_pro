@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "python": {
+    "version": "3.11.9",
+    "url": "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip",
+    "sha256": "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b"
+  },
+  "usdCore": {
+    "version": "26.8",
+    "filename": "usd_core-26.8-cp311-none-win_amd64.whl",
+    "url": "https://files.pythonhosted.org/packages/66/18/7ccfb5c69366fa0d7590697e0f62adb4b5c20f02a3c3a674331b4bf40d43/usd_core-26.8-cp311-none-win_amd64.whl",
+    "sha256": "d39cef20efdfc29473e92887487bb8c10c45e966c492b5356d32a52724c3578f"
+  }
+}

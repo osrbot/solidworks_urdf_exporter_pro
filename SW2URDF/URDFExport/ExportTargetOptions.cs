@@ -31,11 +31,10 @@ namespace SW2URDF.URDFExport
             RegexOptions.CultureInvariant);
 
         public bool UseV2Pipeline { get; set; }
-        public bool CreateRobotBundle { get; set; }
         public bool ExportRos1Legacy { get; set; }
         public bool ExportRos2 { get; set; }
-        public bool ExportIsaacSim { get; set; }
-        public bool ExportIsaacLab { get; set; }
+        public bool ExportUsdAsset { get; set; }
+        public bool ExportMjcfAsset { get; set; }
 
         public string PackageVersion { get; set; }
         public string Description { get; set; }
@@ -47,9 +46,6 @@ namespace SW2URDF.URDFExport
         public string Ros2Distribution { get; set; }
         public string GazeboDistribution { get; set; }
         public string Ros2ControlProfileFile { get; set; }
-        public string IsaacSimVersion { get; set; }
-        public string IsaacLabVersion { get; set; }
-        public string IsaacLabProfileFile { get; set; }
 
         public ExportTargetOptions()
         {
@@ -62,9 +58,6 @@ namespace SW2URDF.URDFExport
             MaintainerEmail = string.Empty;
             ModelLicense = string.Empty;
             ModelAuthor = string.Empty;
-            IsaacSimVersion = string.Empty;
-            IsaacLabVersion = string.Empty;
-            IsaacLabProfileFile = string.Empty;
         }
 
         public static ExportTargetOptions LegacyCompatibilityDefaults()
@@ -72,7 +65,6 @@ namespace SW2URDF.URDFExport
             return new ExportTargetOptions
             {
                 UseV2Pipeline = false,
-                CreateRobotBundle = false,
                 ExportRos1Legacy = true,
                 ExportRos2 = true
             };
@@ -86,11 +78,10 @@ namespace SW2URDF.URDFExport
             return new ExportTargetOptions
             {
                 UseV2Pipeline = true,
-                CreateRobotBundle = true,
                 ExportRos1Legacy = false,
                 ExportRos2 = true,
-                ExportIsaacSim = false,
-                ExportIsaacLab = false,
+                ExportUsdAsset = false,
+                ExportMjcfAsset = false,
                 PackageVersion = "0.1.0",
                 Description = "Robot description package for " + normalizedName,
                 MaintainerName = SW2URDF.URDF.PackageXML.DefaultMaintainerName,
@@ -120,23 +111,18 @@ namespace SW2URDF.URDFExport
             {
                 return errors;
             }
-            if (!CreateRobotBundle)
+            if (!(ExportRos1Legacy || ExportRos2 || ExportUsdAsset || ExportMjcfAsset))
             {
-                Add(errors, "V2_BUNDLE_REQUIRED", "CreateRobotBundle",
-                    "The v2 pipeline requires a Robot Bundle as its canonical output.");
-            }
-            if (ExportIsaacLab && !ExportIsaacSim)
-            {
-                Add(errors, "TARGET_DEPENDENCY", "ExportIsaacLab",
-                    "Isaac Lab output requires the Isaac Sim USD profile.");
-            }
-            if (!ExactVersion.IsMatch(PackageVersion ?? string.Empty))
-            {
-                Add(errors, "PACKAGE_VERSION", "PackageVersion",
-                    "Package version must be an exact semantic version, for example 0.1.0.");
+                Add(errors, "TARGET_REQUIRED", "Targets",
+                    "Select at least one output target: ROS 1, ROS 2, OpenUSD, or MuJoCo MJCF.");
             }
             if (ExportRos1Legacy || ExportRos2)
             {
+                if (!ExactVersion.IsMatch(PackageVersion ?? string.Empty))
+                {
+                    Add(errors, "PACKAGE_VERSION", "PackageVersion",
+                        "Package version must be an exact semantic version, for example 0.1.0.");
+                }
                 Require(errors, Description, "PACKAGE_DESCRIPTION", "Description",
                     "Package description");
                 Require(errors, ModelLicense, "MODEL_LICENSE", "ModelLicense",
@@ -166,33 +152,6 @@ namespace SW2URDF.URDFExport
             {
                 Add(errors, "ROS2_CONTROL_PROFILE", "Ros2ControlProfileFile",
                     "A ros2_control profile must be an existing JSON file and requires ROS 2 output.");
-            }
-            if (ExportIsaacSim)
-            {
-                if (!ExactVersion.IsMatch(IsaacSimVersion ?? string.Empty))
-                {
-                    Add(errors, "ISAAC_SIM_VERSION", "IsaacSimVersion",
-                        "Pin an exact Isaac Sim version, for example 6.0.0.");
-                }
-                if (!(ExportRos1Legacy || ExportRos2))
-                {
-                    Require(errors, ModelLicense, "MODEL_LICENSE", "ModelLicense",
-                        "Model license");
-                }
-            }
-            if (ExportIsaacLab)
-            {
-                if (!ExactVersion.IsMatch(IsaacLabVersion ?? string.Empty))
-                {
-                    Add(errors, "ISAAC_LAB_VERSION", "IsaacLabVersion",
-                        "Pin an exact Isaac Lab version, for example 2.3.2.");
-                }
-                if (string.IsNullOrWhiteSpace(IsaacLabProfileFile) ||
-                    !File.Exists(IsaacLabProfileFile))
-                {
-                    Add(errors, "ISAAC_LAB_PROFILE", "IsaacLabProfileFile",
-                        "Select an Isaac Lab actuator profile JSON file. Gains are never guessed from CAD.");
-                }
             }
             return errors;
         }

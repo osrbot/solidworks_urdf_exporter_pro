@@ -240,8 +240,10 @@ namespace SW2URDF.UI
                     return chinese
                         ? "内部模型包配置异常；重新打开导出器后再试。"
                         : "The internal model package configuration is invalid; reopen the exporter and try again.";
-                case "TARGET_DEPENDENCY":
-                    return chinese ? "启用 Isaac Sim，或取消 Isaac Lab。" : "Enable Isaac Sim or clear Isaac Lab.";
+                case "TARGET_REQUIRED":
+                    return chinese
+                        ? "返回“模型与导出”，至少勾选 ROS 1、ROS 2、USD 或 MuJoCo MJCF 中的一项。"
+                        : "Return to Model and export and select at least one of ROS 1, ROS 2, USD, or MuJoCo MJCF.";
                 case "PACKAGE_VERSION":
                     return chinese ? "填写完整语义版本，例如 0.1.0。" : "Enter an exact semantic version such as 0.1.0.";
                 case "PACKAGE_DESCRIPTION":
@@ -256,12 +258,6 @@ namespace SW2URDF.UI
                     return chinese ? "选择界面提供的 ROS 2 / Gazebo 兼容组合。" : "Choose one of the offered ROS 2 / Gazebo compatibility pairs.";
                 case "ROS2_CONTROL_PROFILE":
                     return chinese ? "启用 ROS 2 并选择存在的 ros2_control JSON 文件，或清空该字段。" : "Enable ROS 2 and select an existing ros2_control JSON file, or clear the field.";
-                case "ISAAC_SIM_VERSION":
-                    return chinese ? "填写精确 Isaac Sim 版本。" : "Enter an exact Isaac Sim version.";
-                case "ISAAC_LAB_VERSION":
-                    return chinese ? "填写精确 Isaac Lab 版本。" : "Enter an exact Isaac Lab version.";
-                case "ISAAC_LAB_PROFILE":
-                    return chinese ? "选择包含执行器参数的现有 JSON 文件；插件不会从 CAD 猜测增益。" : "Select an existing actuator JSON file; gains are not guessed from CAD.";
                 case "JOINT_LIMIT":
                     return chinese ? "在 Joint 属性 > 约束与安全 中填写 effort 和 velocity；若关节确实无限连续转动，再明确选择 continuous。" : "Set effort and velocity under Joint properties > Limits and safety, or explicitly choose continuous when appropriate.";
                 case "UI_JOINT_CONFIG":

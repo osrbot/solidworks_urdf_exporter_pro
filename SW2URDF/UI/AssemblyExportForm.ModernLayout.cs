@@ -57,21 +57,15 @@ namespace SW2URDF.UI
         private Size modernClientSizeAfterInitialScale;
         private CheckBox modernRos2CheckBox;
         private CheckBox modernRos1CheckBox;
-        private CheckBox modernIsaacCheckBox;
-        private CheckBox modernIsaacLabCheckBox;
+        private CheckBox modernUsdAssetCheckBox;
+        private CheckBox modernMjcfAssetCheckBox;
+        private TextBox modernMaterialIdTextBox;
         private TextBox modernPackageVersionTextBox;
         private TextBox modernPackageDescriptionTextBox;
         private TextBox modernMaintainerNameTextBox;
         private TextBox modernMaintainerEmailTextBox;
         private TextBox modernModelLicenseTextBox;
         private TextBox modernModelAuthorTextBox;
-        private ComboBox modernRos2PairComboBox;
-        private TextBox modernIsaacVersionTextBox;
-        private TextBox modernIsaacLabVersionTextBox;
-        private TextBox modernRos2ControlProfileTextBox;
-        private Button modernRos2ControlProfileButton;
-        private TextBox modernIsaacLabProfileTextBox;
-        private Button modernIsaacLabProfileButton;
 
         internal void InitializeModernUi()
         {
@@ -467,7 +461,6 @@ namespace SW2URDF.UI
             };
             tabs.SelectedIndexChanged += SynchronizeModernSelectedTabPage;
             tabs.SizeChanged += SynchronizeModernSelectedTabPage;
-            tabs.Layout += SynchronizeModernSelectedTabPage;
             return tabs;
         }
 
@@ -924,6 +917,7 @@ namespace SW2URDF.UI
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernMimicCard");
             MimicCheckBox.AutoSize = true;
+            MimicCheckBox.Dock = DockStyle.Top;
             ModernWinFormsTheme.SetFont(MimicCheckBox, 10.5F, FontStyle.Bold);
             MimicCheckBox.ForeColor = ModernWinFormsTheme.Text;
             MimicCheckBox.Margin = new Padding(0);
@@ -953,6 +947,15 @@ namespace SW2URDF.UI
             modernMimicDetails.SetColumnSpan(MimicJointComboBox, 3);
             AddModernField(modernMimicDetails, MimicMultiplierLabel, textBoxMimicMultiplier, 1, 0, 1);
             AddModernField(modernMimicDetails, MimicOffsetLabel, textBoxMimicOffset, 1, 2, 3);
+            MimicJointLabel.AutoSize = false;
+            MimicJointLabel.Dock = DockStyle.Fill;
+            MimicJointComboBox.Dock = DockStyle.Fill;
+            MimicMultiplierLabel.AutoSize = false;
+            MimicMultiplierLabel.Dock = DockStyle.Fill;
+            textBoxMimicMultiplier.Dock = DockStyle.Fill;
+            MimicOffsetLabel.AutoSize = false;
+            MimicOffsetLabel.Dock = DockStyle.Fill;
+            textBoxMimicOffset.Dock = DockStyle.Fill;
             MimicEquationLabel.AutoSize = true;
             MimicEquationLabel.Dock = DockStyle.Fill;
             ModernWinFormsTheme.SetFont(MimicEquationLabel, 8.5F, FontStyle.Italic);
@@ -1227,14 +1230,31 @@ namespace SW2URDF.UI
                 TableLayoutPanel material = new TableLayoutPanel
                 {
                     AutoSize = true,
-                    ColumnCount = 2,
+                    ColumnCount = 1,
                     Dock = DockStyle.Top,
                     Margin = new Padding(0, 0, 0, 8),
-                    RowCount = 1
+                    RowCount = 2
                 };
-                material.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 124F));
                 material.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-                AddModernField(material, label28, comboBoxMaterials, 0, 0, 1);
+                material.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                material.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                ModernWinFormsTheme.StyleFieldLabel(label28);
+                label28.AutoSize = true;
+                label28.Dock = DockStyle.Fill;
+                label28.Margin = new Padding(0, 2, 0, 2);
+                modernMaterialIdTextBox = new TextBox
+                {
+                    Name = "modernMaterialIdTextBox",
+                    ReadOnly = true,
+                    Dock = DockStyle.Fill,
+                    Margin = new Padding(0, 0, 0, 4),
+                    TabStop = false
+                };
+                ModernWinFormsTheme.StyleInput(modernMaterialIdTextBox);
+                modernMaterialIdTextBox.Margin = new Padding(0, 0, 0, 4);
+                material.Controls.Add(label28, 0, 0);
+                material.Controls.Add(modernMaterialIdTextBox, 0, 1);
+                SynchronizeMaterialIdFromRgba();
                 left.Controls.Add(material, 0, 1);
 
                 TableLayoutPanel meshOptions = new TableLayoutPanel
@@ -1535,20 +1555,34 @@ namespace SW2URDF.UI
                 Margin = new Padding(0, 10, 0, 8),
                 WrapContents = true
             };
-            modernRos2CheckBox = CreateTargetCheckBox(
-                ChineseUiText.Translate("ROS 2 + modern Gazebo", "ROS 2 + 现代 Gazebo"),
+            modernRos1CheckBox = CreateTargetCheckBox(
+                "ROS 1 package",
+                "ROS 1 功能包",
                 true);
-            modernRos1CheckBox = CreateTargetCheckBox("ROS 1 legacy", true);
-            modernIsaacCheckBox = CreateTargetCheckBox("Isaac Sim USD profile", false);
-            modernIsaacLabCheckBox = CreateTargetCheckBox("Isaac Lab RL profile", false);
-            modernIsaacCheckBox.CheckedChanged += ModernIsaacSelectionChanged;
+            modernRos1CheckBox.Name = "modernRos1CheckBox";
+            modernRos2CheckBox = CreateTargetCheckBox(
+                "ROS 2 package",
+                "ROS 2 功能包",
+                true);
+            modernRos2CheckBox.Name = "modernRos2CheckBox";
+            modernUsdAssetCheckBox = CreateTargetCheckBox(
+                "OpenUSD robot asset",
+                "OpenUSD 机器人资产",
+                false);
+            modernUsdAssetCheckBox.Name = "modernUsdAssetCheckBox";
+            modernMjcfAssetCheckBox = CreateTargetCheckBox(
+                "MuJoCo MJCF asset",
+                "MuJoCo MJCF 资产",
+                false);
+            modernMjcfAssetCheckBox.Name = "modernMjcfAssetCheckBox";
             modernRos1CheckBox.CheckedChanged += ModernTargetSelectionChanged;
             modernRos2CheckBox.CheckedChanged += ModernTargetSelectionChanged;
-            modernIsaacLabCheckBox.CheckedChanged += ModernTargetSelectionChanged;
-            targets.Controls.Add(modernRos2CheckBox);
+            modernUsdAssetCheckBox.CheckedChanged += ModernTargetSelectionChanged;
+            modernMjcfAssetCheckBox.CheckedChanged += ModernTargetSelectionChanged;
             targets.Controls.Add(modernRos1CheckBox);
-            targets.Controls.Add(modernIsaacCheckBox);
-            targets.Controls.Add(modernIsaacLabCheckBox);
+            targets.Controls.Add(modernRos2CheckBox);
+            targets.Controls.Add(modernUsdAssetCheckBox);
+            targets.Controls.Add(modernMjcfAssetCheckBox);
             card.Controls.Add(targets);
 
             TableLayoutPanel grid = new TableLayoutPanel
@@ -1557,7 +1591,7 @@ namespace SW2URDF.UI
                 ColumnCount = 4,
                 Dock = DockStyle.Top,
                 Margin = new Padding(0, 4, 0, 0),
-                RowCount = 9
+                RowCount = 5
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
@@ -1598,92 +1632,23 @@ namespace SW2URDF.UI
                 2,
                 3);
 
-            modernRos2PairComboBox = new ComboBox
-            {
-                Dock = DockStyle.Fill,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Margin = new Padding(0, 2, 8, 6)
-            };
-            modernRos2PairComboBox.Items.Add("ROS 2 Lyrical + Gazebo Jetty (recommended)");
-            modernRos2PairComboBox.Items.Add("ROS 2 Jazzy + Gazebo Harmonic (compatibility)");
-            modernRos2PairComboBox.SelectedIndex = 0;
-            AddModernField(
-                grid,
-                CreateTargetLabel("ROS / Gazebo pair", "ROS / Gazebo 版本组合"),
-                modernRos2PairComboBox,
-                5,
-                0,
-                1);
-            grid.SetColumnSpan(modernRos2PairComboBox, 3);
-
-            modernIsaacVersionTextBox = CreateTargetTextBox(string.Empty);
-            modernIsaacLabVersionTextBox = CreateTargetTextBox(string.Empty);
-            AddModernField(grid, CreateTargetLabel("Isaac Sim", "Isaac Sim 版本"), modernIsaacVersionTextBox, 6, 0, 1);
-            AddModernField(grid, CreateTargetLabel("Isaac Lab", "Isaac Lab 版本"), modernIsaacLabVersionTextBox, 6, 2, 3);
-            modernRos2ControlProfileTextBox = CreateTargetTextBox(string.Empty);
-            modernRos2ControlProfileButton = new Button
-            {
-                AutoSize = true,
-                Text = ChineseUiText.Translate("Browse control profile...", "选择 ros2_control 配置...")
-            };
-            modernRos2ControlProfileButton.Click += ModernRos2ControlProfileBrowseClick;
-            FlowLayoutPanel controlProfilePicker = CreateProfilePicker(
-                modernRos2ControlProfileTextBox,
-                modernRos2ControlProfileButton);
-            AddModernField(grid, CreateTargetLabel("ros2_control", "ros2_control 配置"), controlProfilePicker, 7, 0, 1);
-            grid.SetColumnSpan(controlProfilePicker, 3);
-
-            modernIsaacLabProfileTextBox = CreateTargetTextBox(string.Empty);
-            modernIsaacLabProfileButton = new Button
-            {
-                AutoSize = true,
-                Text = ChineseUiText.Translate("Browse actuator profile...", "选择 actuator 配置...")
-            };
-            modernIsaacLabProfileButton.Click += ModernIsaacLabProfileBrowseClick;
-            FlowLayoutPanel profilePicker = CreateProfilePicker(
-                modernIsaacLabProfileTextBox,
-                modernIsaacLabProfileButton);
-            AddModernField(grid, CreateTargetLabel("Actuators", "Actuator 配置"), profilePicker, 8, 0, 1);
-            grid.SetColumnSpan(profilePicker, 3);
             card.Controls.Add(grid);
             ModernWinFormsTheme.ApplyControlTree(card);
-            // Picker buttons live in auto-sized flow rows, so restore AutoSize
-            // after the shared button theme applies its fixed-size default.
-            modernRos2ControlProfileButton.AutoSize = true;
-            modernIsaacLabProfileButton.AutoSize = true;
-            SynchronizeIsaacTargetControls();
+            SynchronizeAssetMeshFormatControls();
             return card;
         }
 
-        private static FlowLayoutPanel CreateProfilePicker(TextBox textBox, Button button)
-        {
-            FlowLayoutPanel picker = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.LeftToRight,
-                Margin = new Padding(0),
-                WrapContents = false
-            };
-            textBox.Width = 280;
-            textBox.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-            textBox.TabIndex = 0;
-            button.Margin = new Padding(8, 0, 0, 0);
-            button.MinimumSize = new Size(0, 28);
-            button.TabIndex = 1;
-            picker.Controls.Add(textBox);
-            picker.Controls.Add(button);
-            return picker;
-        }
-
-        private CheckBox CreateTargetCheckBox(string text, bool isChecked)
+        private CheckBox CreateTargetCheckBox(
+            string english,
+            string chinese,
+            bool isChecked)
         {
             return new CheckBox
             {
                 AutoSize = true,
                 Checked = isChecked,
                 Margin = new Padding(0, 0, 16, 4),
-                Text = text,
+                Text = ChineseUiText.Translate(english, chinese),
                 UseVisualStyleBackColor = true
             };
         }
@@ -1710,72 +1675,35 @@ namespace SW2URDF.UI
             };
         }
 
-        private void ModernIsaacSelectionChanged(object sender, EventArgs e)
-        {
-            if (!modernIsaacCheckBox.Checked)
-            {
-                modernIsaacLabCheckBox.Checked = false;
-            }
-            SynchronizeIsaacTargetControls();
-            UpdateRosPackageNameHint();
-        }
-
         private void ModernTargetSelectionChanged(object sender, EventArgs e)
         {
-            SynchronizeIsaacTargetControls();
+            SynchronizeAssetMeshFormatControls();
             UpdateRosPackageNameHint();
         }
 
-        private void SynchronizeIsaacTargetControls()
+        private void SynchronizeAssetMeshFormatControls()
         {
-            if (modernIsaacCheckBox == null || modernIsaacLabCheckBox == null ||
-                modernIsaacVersionTextBox == null || modernIsaacLabVersionTextBox == null ||
-                modernIsaacLabProfileTextBox == null || modernIsaacLabProfileButton == null ||
-                modernRos2CheckBox == null || modernRos2PairComboBox == null ||
-                modernRos2ControlProfileTextBox == null || modernRos2ControlProfileButton == null)
+            if (modernUsdAssetCheckBox == null || modernMjcfAssetCheckBox == null ||
+                radioButtonStl == null || radioButton3dxml == null)
             {
                 return;
             }
-            modernIsaacLabCheckBox.Enabled = modernIsaacCheckBox.Checked;
-            modernIsaacVersionTextBox.Enabled = modernIsaacCheckBox.Checked;
-            modernIsaacLabVersionTextBox.Enabled = modernIsaacLabCheckBox.Checked;
-            modernIsaacLabProfileTextBox.Enabled = modernIsaacLabCheckBox.Checked;
-            modernIsaacLabProfileButton.Enabled = modernIsaacLabCheckBox.Checked;
-            modernRos2PairComboBox.Enabled = modernRos2CheckBox.Checked;
-            modernRos2ControlProfileTextBox.Enabled = modernRos2CheckBox.Checked;
-            modernRos2ControlProfileButton.Enabled = modernRos2CheckBox.Checked;
-        }
-
-        private void ModernRos2ControlProfileBrowseClick(object sender, EventArgs e)
-        {
-            BrowseProfileFile(
-                modernRos2ControlProfileTextBox,
-                ChineseUiText.Translate("Select a ros2_control profile", "选择 ros2_control 配置"));
-        }
-
-        private void ModernIsaacLabProfileBrowseClick(object sender, EventArgs e)
-        {
-            BrowseProfileFile(
-                modernIsaacLabProfileTextBox,
-                ChineseUiText.Translate(
-                    "Select an Isaac Lab actuator profile",
-                    "选择 Isaac Lab actuator 配置"));
-        }
-
-        private void BrowseProfileFile(TextBox target, string title)
-        {
-            using (OpenFileDialog dialog = new OpenFileDialog
+            bool requiresCanonicalStl =
+                modernUsdAssetCheckBox.Checked || modernMjcfAssetCheckBox.Checked;
+            if (requiresCanonicalStl)
             {
-                CheckFileExists = true,
-                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
-                Title = title
-            })
-            {
-                if (dialog.ShowDialog(this) == DialogResult.OK)
-                {
-                    target.Text = dialog.FileName;
-                }
+                radioButtonStl.Checked = true;
             }
+            radioButton3dxml.Enabled = !requiresCanonicalStl;
+            packagePathToolTip.SetToolTip(
+                radioButton3dxml,
+                requiresCanonicalStl
+                    ? ChineseUiText.Translate(
+                        "USD and MJCF assets require canonical STL meshes.",
+                        "USD 与 MJCF 资产需要规范 STL 网格。")
+                    : ChineseUiText.Translate(
+                        "Available when USD and MJCF asset export are both off.",
+                        "仅在未导出 USD/MJCF 资产时可选。"));
         }
 
         private Control CreateModernJointFooter()
@@ -1787,8 +1715,8 @@ namespace SW2URDF.UI
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 BackColor = ModernWinFormsTheme.Surface,
                 Dock = DockStyle.Bottom,
-                Height = 74,
-                MinimumSize = new Size(0, 74),
+                Height = 92,
+                MinimumSize = new Size(0, 92),
                 Padding = new Padding(20, 14, 20, 12)
             };
             footer.Paint += ModernWinFormsTheme.DrawTopBorder;
@@ -1805,7 +1733,7 @@ namespace SW2URDF.UI
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             TableLayoutPanel notes = new TableLayoutPanel
             {
@@ -1819,24 +1747,30 @@ namespace SW2URDF.UI
             notes.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             notes.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             label4.AutoSize = true;
+            label4.Dock = DockStyle.Fill;
             ModernWinFormsTheme.SetFont(label4, 8.5F, FontStyle.Regular);
             label4.ForeColor = ModernWinFormsTheme.MutedText;
             label4.Margin = new Padding(0, 0, 0, 2);
-            label4.MaximumSize = new Size(720, 0);
+            label4.MaximumSize = Size.Empty;
             label27.AutoSize = true;
+            label27.Dock = DockStyle.Fill;
             ModernWinFormsTheme.SetFont(label27, 8.5F, FontStyle.Regular);
             label27.ForeColor = ModernWinFormsTheme.Accent;
             label27.Margin = new Padding(0);
-            label27.MaximumSize = new Size(720, 0);
+            label27.MaximumSize = Size.Empty;
             notes.Controls.Add(label4, 0, 0);
             notes.Controls.Add(label27, 0, 1);
 
-            buttonJointCancel.Size = new Size(92, 36);
-            buttonJointCancel.Margin = new Padding(0, 4, 0, 0);
-            buttonJointCancel.TabIndex = 0;
-            buttonJointNext.Size = new Size(104, 36);
-            buttonJointNext.Margin = new Padding(0, 4, 0, 0);
-            buttonJointNext.TabIndex = 1;
+            ConfigureModernFooterButton(
+                buttonJointCancel,
+                92,
+                0,
+                new Padding(0));
+            ConfigureModernFooterButton(
+                buttonJointNext,
+                104,
+                1,
+                new Padding(0));
             layout.Controls.Add(buttonJointCancel, 0, 0);
             layout.Controls.Add(notes, 1, 0);
             layout.Controls.Add(buttonJointNext, 2, 0);
@@ -1873,20 +1807,28 @@ namespace SW2URDF.UI
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            buttonLinksCancel.Size = new Size(92, 36);
-            buttonLinksCancel.TabIndex = 0;
-            buttonLinksPrevious.Size = new Size(92, 36);
-            buttonLinksPrevious.Margin = new Padding(0, 0, 8, 0);
-            buttonLinksPrevious.TabIndex = 1;
+            ConfigureModernFooterButton(
+                buttonLinksCancel,
+                92,
+                0,
+                new Padding(0));
+            ConfigureModernFooterButton(
+                buttonLinksPrevious,
+                92,
+                1,
+                new Padding(0, 0, 8, 0));
             modernLinkNextButton = new Button
             {
                 Name = "modernLinkNextButton",
-                Size = new Size(156, 36),
                 Text = ChineseUiText.Translate(
                     "Next: Model settings",
-                    "下一步：模型设置"),
-                TabIndex = 2
+                    "下一步：模型设置")
             };
+            ConfigureModernFooterButton(
+                modernLinkNextButton,
+                156,
+                2,
+                new Padding(0));
             modernLinkNextButton.Click += ModernLinkNextClick;
 
             layout.Controls.Add(buttonLinksCancel, 0, 0);
@@ -1931,25 +1873,35 @@ namespace SW2URDF.UI
             modernModelCancelButton = new Button
             {
                 Name = "modernModelCancelButton",
-                Size = new Size(92, 36),
-                Text = buttonLinksCancel.Text,
-                TabIndex = 0
+                Text = buttonLinksCancel.Text
             };
+            ConfigureModernFooterButton(
+                modernModelCancelButton,
+                92,
+                0,
+                new Padding(0));
             modernModelCancelButton.Click += ButtonLinksCancelClick;
             modernModelPreviousButton = new Button
             {
                 Name = "modernModelPreviousButton",
-                Size = new Size(92, 36),
-                Text = buttonLinksPrevious.Text,
-                TabIndex = 1
+                Text = buttonLinksPrevious.Text
             };
+            ConfigureModernFooterButton(
+                modernModelPreviousButton,
+                92,
+                1,
+                new Padding(0, 0, 8, 0));
             modernModelPreviousButton.Click += ModernModelPreviousClick;
-            modernModelPreviousButton.Margin = new Padding(0, 0, 8, 0);
-            buttonLinksExportUrdfOnly.Size = new Size(150, 36);
-            buttonLinksFinish.Size = new Size(176, 36);
-            buttonLinksExportUrdfOnly.Margin = new Padding(0, 0, 8, 0);
-            buttonLinksExportUrdfOnly.TabIndex = 2;
-            buttonLinksFinish.TabIndex = 3;
+            ConfigureModernFooterButton(
+                buttonLinksExportUrdfOnly,
+                150,
+                2,
+                new Padding(0, 0, 8, 0));
+            ConfigureModernFooterButton(
+                buttonLinksFinish,
+                176,
+                3,
+                new Padding(0));
 
             layout.Controls.Add(modernModelCancelButton, 0, 0);
             layout.Controls.Add(new Panel { Dock = DockStyle.Fill }, 1, 0);
@@ -1958,6 +1910,20 @@ namespace SW2URDF.UI
             layout.Controls.Add(buttonLinksFinish, 4, 0);
             footer.Controls.Add(layout);
             return footer;
+        }
+
+        private static void ConfigureModernFooterButton(
+            Button button,
+            int minimumWidth,
+            int tabIndex,
+            Padding margin)
+        {
+            button.Anchor = AnchorStyles.None;
+            button.AutoSize = false;
+            button.Margin = margin;
+            button.MinimumSize = new Size(minimumWidth, 36);
+            button.Size = new Size(Math.Max(button.Width, minimumWidth), 36);
+            button.TabIndex = tabIndex;
         }
 
         private Control CreateModernTwoColumnFieldCard(
@@ -1977,7 +1943,7 @@ namespace SW2URDF.UI
                 AutoSize = true,
                 ColumnCount = 2,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 12, 0, 0),
+                Margin = new Padding(0, 12, 0, 2),
                 RowCount = labels.Length
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, labelWidth));
@@ -1986,6 +1952,11 @@ namespace SW2URDF.UI
             {
                 grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 AddModernField(grid, labels[row], controls[row], row, 0, 1);
+            }
+            if (controls.Length > 0)
+            {
+                controls[controls.Length - 1].Margin = new Padding(0, 4, 0, 6);
+                labels[labels.Length - 1].Margin = new Padding(0, 4, 8, 6);
             }
             card.Controls.Add(grid);
             return card;
@@ -2157,60 +2128,42 @@ namespace SW2URDF.UI
             }
 
             bool show = MimicCheckBox.Checked;
-            MimicCheckBox.AutoSize = true;
-            MimicCheckBox.Dock = DockStyle.Top;
-            MimicCheckBox.Margin = new Padding(0);
-
-            MimicJointLabel.Visible = show;
-            MimicJointComboBox.Visible = show;
-            MimicMultiplierLabel.Visible = show;
-            textBoxMimicMultiplier.Visible = show;
-            MimicOffsetLabel.Visible = show;
-            textBoxMimicOffset.Visible = show;
-            MimicEquationLabel.Visible = show;
-            modernMimicDetails.Visible = show;
-
-            MimicJointLabel.AutoSize = false;
-            MimicJointLabel.Dock = DockStyle.Fill;
-            MimicJointComboBox.Dock = DockStyle.Fill;
-            MimicMultiplierLabel.AutoSize = false;
-            MimicMultiplierLabel.Dock = DockStyle.Fill;
-            textBoxMimicMultiplier.Dock = DockStyle.Fill;
-            MimicOffsetLabel.AutoSize = false;
-            MimicOffsetLabel.Dock = DockStyle.Fill;
-            textBoxMimicOffset.Dock = DockStyle.Fill;
-            MimicEquationLabel.AutoSize = true;
-            MimicEquationLabel.MaximumSize = new Size(700, 0);
-            MimicEquationLabel.Dock = DockStyle.Fill;
-
-            label4.AutoSize = true;
-            label4.MaximumSize = new Size(720, 0);
-            label4.Dock = DockStyle.Fill;
-            label4.Margin = new Padding(0, 0, 0, 2);
-            label27.AutoSize = true;
-            label27.MaximumSize = new Size(720, 0);
-            label27.Dock = DockStyle.Fill;
-            label27.Margin = new Padding(0);
-
-            modernMimicDetails.PerformLayout();
-            UpdateModernMimicEquationWrapWidth();
-            modernMimicDetails.PerformLayout();
-            if (modernMimicDetails.Parent != null)
+            bool visibilityChanged = modernMimicDetails.Visible != show ||
+                MimicJointLabel.Visible != show ||
+                MimicJointComboBox.Visible != show ||
+                MimicMultiplierLabel.Visible != show ||
+                textBoxMimicMultiplier.Visible != show ||
+                MimicOffsetLabel.Visible != show ||
+                textBoxMimicOffset.Visible != show ||
+                MimicEquationLabel.Visible != show;
+            if (!visibilityChanged)
             {
-                modernMimicDetails.Parent.PerformLayout();
-            }
-            if (modernJointRoot != null)
-            {
-                modernJointRoot.PerformLayout();
-            }
-            if (modernJointSections != null)
-            {
-                SynchronizeModernSelectedTabPage(
-                    modernJointSections,
-                    EventArgs.Empty);
-                modernMimicDetails.PerformLayout();
                 UpdateModernMimicEquationWrapWidth();
-                modernMimicDetails.PerformLayout();
+                return;
+            }
+
+            Control layoutRoot = modernMimicDetails.Parent ?? modernMimicDetails;
+            using (ModernWinFormsTheme.SuspendRedraw(layoutRoot))
+            {
+                layoutRoot.SuspendLayout();
+                modernMimicDetails.SuspendLayout();
+                try
+                {
+                    MimicJointLabel.Visible = show;
+                    MimicJointComboBox.Visible = show;
+                    MimicMultiplierLabel.Visible = show;
+                    textBoxMimicMultiplier.Visible = show;
+                    MimicOffsetLabel.Visible = show;
+                    textBoxMimicOffset.Visible = show;
+                    MimicEquationLabel.Visible = show;
+                    modernMimicDetails.Visible = show;
+                    UpdateModernMimicEquationWrapWidth();
+                }
+                finally
+                {
+                    modernMimicDetails.ResumeLayout(false);
+                    layoutRoot.ResumeLayout(true);
+                }
             }
         }
 
@@ -2229,6 +2182,15 @@ namespace SW2URDF.UI
             if (MimicEquationLabel.MaximumSize.Width != availableWidth)
             {
                 MimicEquationLabel.MaximumSize = new Size(availableWidth, 0);
+            }
+            int requiredHeight = TextRenderer.MeasureText(
+                MimicEquationLabel.Text ?? String.Empty,
+                MimicEquationLabel.Font,
+                new Size(availableWidth, Int32.MaxValue),
+                TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl).Height;
+            if (MimicEquationLabel.MinimumSize.Height != requiredHeight)
+            {
+                MimicEquationLabel.MinimumSize = new Size(0, requiredHeight);
             }
         }
 
