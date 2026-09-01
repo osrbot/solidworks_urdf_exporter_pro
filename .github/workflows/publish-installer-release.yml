@@ -1,16 +1,15 @@
-name: Publish installer release
+name: Create draft installer release candidate (manual approval)
 
 on:
-  push:
-    branches:
-      - master
-      - main
-    paths:
-      - "INSTALL/OUTPUT/sw2urdfSetup_*.exe"
   workflow_dispatch:
     inputs:
+      confirm_tested:
+        description: "I confirm that the candidate was manually tested and is approved for Draft Release creation."
+        required: true
+        default: false
+        type: boolean
       installer:
-        description: "Installer path, for example INSTALL/OUTPUT/sw2urdfSetup_20260629_598c7dd.exe. Leave empty to publish the newest installer."
+        description: "Installer path, for example INSTALL/OUTPUT/sw2urdfSetup_20260629_598c7dd.exe. Leave empty to select the newest committed candidate."
         required: false
         type: string
 
@@ -22,7 +21,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish-installer:
+  create-draft-installer:
+    if: inputs.confirm_tested == true
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -79,28 +79,23 @@ jobs:
         run: |
           set -euo pipefail
 
+          canonical_text_sha256() {
+            python3 -B -c '
+          import hashlib
+          import pathlib
+          import sys
+
+          text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8-sig")
+          normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+          print(hashlib.sha256(normalized.encode("utf-8")).hexdigest())
+          ' "$1"
+          }
+
           input_installer="$INPUT_INSTALLER"
           installer=""
 
           if [[ -n "$input_installer" ]]; then
             installer="$input_installer"
-          elif [[ "${{ github.event_name }}" == "push" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
-            mapfile -t changed_installers < <(
-              git diff --diff-filter=AMR --name-only "${{ github.event.before }}" "${{ github.sha }}" -- "INSTALL/OUTPUT/sw2urdfSetup_*.exe" |
-              while IFS= read -r candidate; do
-                [[ -f "$candidate" ]] && printf '%s\n' "$candidate"
-              done |
-              sort -u
-            )
-            if [[ "${#changed_installers[@]}" -eq 1 ]]; then
-              installer="${changed_installers[0]}"
-            elif [[ "${#changed_installers[@]}" -gt 1 ]]; then
-              echo "A release commit must contain exactly one current installer artifact." >&2
-              exit 1
-            else
-              echo "publish=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
           fi
 
           if [[ -z "$installer" ]]; then
@@ -173,6 +168,7 @@ jobs:
           source_tree="$(git rev-parse "${source_sha}^{tree}")"
           if [[ "$(jq -r '.schemaVersion' "$provenance_path")" != "2" ||
                 "$(jq -r '.trustModel' "$provenance_path")" != "local-build-from-immutable-git-worktree" ||
+                "$(jq -r '.evidenceModel' "$provenance_path")" != "traceable-build-inputs-not-bit-reproducible" ||
                 "$(jq -r '.sourceCommit' "$provenance_path")" != "$source_sha" ||
                 "$(jq -r '.sourceTree' "$provenance_path")" != "$source_tree" ||
                 "$(jq -r '.sourceCommitShort' "$provenance_path")" != "$release_commit" ||
@@ -191,11 +187,20 @@ jobs:
               (.tools.nuget.sha256 | test("^[0-9a-f]{64}$")) and
               (.tools.msbuild.sha256 | test("^[0-9a-f]{64}$")) and
               (.tools.innoSetup.sha256 | test("^[0-9a-f]{64}$")) and
+              (.tools.dotnet.version == "8.0.424") and
+              (.tools.dotnet.sha256 | test("^[0-9a-f]{64}$")) and
               (all(.packageInputs[]; .id != "" and .version != "" and
                 (.sha256 | test("^[0-9a-f]{64}$")))) and
-              (.sdkPackageLocks | length >= 2) and
+              (.sdkPackageLocks | length == 3) and
               (all(.sdkPackageLocks[];
                 (.path | test("^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+packages\\.lock\\.json$")) and
+                (.sha256 | test("^[0-9a-f]{64}$")))) and
+              (.legacyTestPackageLock.path == "scripts/legacy-test-packages.lock.json") and
+              (.legacyTestPackageLock.sha256 | test("^[0-9a-f]{64}$")) and
+              (.legacyTestPackageLock.packagesConfigPath == "SW2URDF/packages.config") and
+              (.legacyTestPackageLock.packagesConfigSha256 | test("^[0-9a-f]{64}$")) and
+              (.legacyTestPackageInputs | length > 0) and
+              (all(.legacyTestPackageInputs[]; .id != "" and .version != "" and
                 (.sha256 | test("^[0-9a-f]{64}$")))) and
               (all(.solidWorksInputs[]; .file != "" and
                 (.sha256 | test("^[0-9a-f]{64}$")))) and
@@ -203,7 +208,16 @@ jobs:
               (.pluginTests.platform == "x64") and
               (.pluginTests.result == "passed") and
               (.pluginTests.runner == "TestRunner/bin/Release/net48/TestRunner.exe") and
+              (.pluginTests.selection == "exclude-live-solidworks") and
               (.pluginTests.testAssemblySha256 | test("^[0-9a-f]{64}$")) and
+              (.pluginTests.deepReferenceLiveApi == "not_requested") and
+              (.pluginTests.crossVersionSolidWorks == "not_run") and
+              (.coreTests.result == "passed") and
+              (.coreTests.bundledOpenUsdIntegration == "passed") and
+              (.coreTests.bundledMuJoCoIntegration == "passed") and
+              (.assetRuntimeInputs | length == 3) and
+              (all(.assetRuntimeInputs[]; .id != "" and .version != "" and
+                (.sha256 | test("^[0-9a-f]{64}$")))) and
               (.payloadInputs | length > 0) and
               (any(.payloadInputs[]; .path == "SW2URDF.dll")) and
               (any(.payloadInputs[]; .path == "OSURDF.Core.dll")) and
@@ -211,7 +225,13 @@ jobs:
               (any(.payloadInputs[]; .path == "THIRD_PARTY_LICENSES/APACHE-2.0.txt")) and
               (any(.payloadInputs[]; .path == "THIRD_PARTY_LICENSES/MIT.txt")) and
               (any(.payloadInputs[]; .path == "schemas/robot.schema.v2.json")) and
-              (any(.payloadInputs[]; .path == "tools/isaac_adapter/osurdf_isaac_adapter.py")) and
+              (all(.payloadInputs[];
+                (.path | test("^schemas/(isaac-profile|isaaclab-profile|isaaclab-actuator-profile)")) | not)) and
+              (any(.payloadInputs[]; .path == "tools/usd_adapter/osurdf_usd_adapter.py")) and
+              (any(.payloadInputs[]; .path == "tools/openusd_runtime/python.exe")) and
+              (any(.payloadInputs[]; .path == "tools/mujoco_runtime/compile.exe")) and
+              (any(.payloadInputs[]; .path == "tools/mujoco_runtime/testspeed.exe")) and
+              (any(.payloadInputs[]; .path == "tools/mujoco_runtime/mujoco.dll")) and
               (all(.payloadInputs[]; .path != "" and
                 (.sha256 | test("^[0-9a-f]{64}$"))))
             ' "$provenance_path" >/dev/null; then
@@ -221,11 +241,79 @@ jobs:
           while IFS=$'\t' read -r lock_path expected_hash; do
             lock_copy="$(mktemp)"
             if ! git show "${source_sha}:${lock_path}" > "$lock_copy" ||
-               [[ "$(sha256sum "$lock_copy" | awk '{print $1}')" != "$expected_hash" ]]; then
+               [[ "$(canonical_text_sha256 "$lock_copy")" != "$expected_hash" ]]; then
               echo "SDK package lock provenance mismatch: $lock_path" >&2
               exit 1
             fi
           done < <(jq -r '.sdkPackageLocks[] | [.path, .sha256] | @tsv' "$provenance_path")
+          expected_sdk_locks="$(
+            printf '%s\n' \
+              "TestRunner/packages.lock.json" \
+              "src/OSURDF.Core/packages.lock.json" \
+              "tests/OSURDF.Core.Tests/packages.lock.json" | sort
+          )"
+          provenance_sdk_locks="$(jq -r '.sdkPackageLocks[].path' "$provenance_path" | sort)"
+          if [[ "$provenance_sdk_locks" != "$expected_sdk_locks" ]]; then
+            echo "Installer provenance does not contain the exact required SDK package locks." >&2
+            exit 1
+          fi
+
+          legacy_lock="$(mktemp)"
+          legacy_packages_config="$(mktemp)"
+          git show "${source_sha}:scripts/legacy-test-packages.lock.json" > "$legacy_lock"
+          git show "${source_sha}:SW2URDF/packages.config" > "$legacy_packages_config"
+          if [[ "$(canonical_text_sha256 "$legacy_lock")" !=
+                "$(jq -r '.legacyTestPackageLock.sha256' "$provenance_path")" ||
+                "$(canonical_text_sha256 "$legacy_packages_config")" !=
+                "$(jq -r '.legacyTestPackageLock.packagesConfigSha256' "$provenance_path")" ||
+                "$(jq -r '.packagesConfig.sha256' "$legacy_lock")" !=
+                "$(jq -r '.legacyTestPackageLock.packagesConfigSha256' "$provenance_path")" ]]; then
+            echo "Legacy test dependency lock provenance does not match the source commit." >&2
+            exit 1
+          fi
+          locked_legacy_packages="$(
+            jq -S -c '[.packages[] | {id, version, sha256}] | sort_by(.id, .version)' "$legacy_lock"
+          )"
+          provenance_legacy_packages="$(
+            jq -S -c '.legacyTestPackageInputs | sort_by(.id, .version)' "$provenance_path"
+          )"
+          if [[ "$locked_legacy_packages" != "$provenance_legacy_packages" ]]; then
+            echo "Legacy test package provenance does not match the content-hash lock." >&2
+            exit 1
+          fi
+          openusd_lock="$(mktemp)"
+          mujoco_lock="$(mktemp)"
+          git show "${source_sha}:tools/openusd_runtime.lock.json" > "$openusd_lock"
+          git show "${source_sha}:tools/mujoco_runtime.lock.json" > "$mujoco_lock"
+          locked_asset_runtimes="$(
+            jq -n -S -c \
+              --slurpfile openusd "$openusd_lock" \
+              --slurpfile mujoco "$mujoco_lock" '
+                [
+                  {
+                    id: "python-embed",
+                    version: ($openusd[0].python.version | tostring),
+                    sha256: $openusd[0].python.sha256
+                  },
+                  {
+                    id: "usd-core",
+                    version: ($openusd[0].usdCore.version | tostring),
+                    sha256: $openusd[0].usdCore.sha256
+                  },
+                  {
+                    id: "mujoco",
+                    version: ($mujoco[0].version | tostring),
+                    sha256: $mujoco[0].archive.sha256
+                  }
+                ] | sort_by(.id, .version)'
+          )"
+          provenance_asset_runtimes="$(
+            jq -S -c '.assetRuntimeInputs | sort_by(.id, .version)' "$provenance_path"
+          )"
+          if [[ "$locked_asset_runtimes" != "$provenance_asset_runtimes" ]]; then
+            echo "Installer asset runtime provenance does not match the source runtime locks." >&2
+            exit 1
+          fi
           release_lock="$(mktemp)"
           git show "${source_sha}:SW2URDF/packages.release.lock.json" > "$release_lock"
           locked_packages="$(jq -S -c '.packages | sort_by(.id, .version)' "$release_lock")"
@@ -274,11 +362,11 @@ jobs:
             echo "source_sha=$source_sha"
             echo "artifact_sha=$artifact_sha"
             echo "tag=$release_tag"
-            echo "publish=true"
+            echo "create_draft=true"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create draft GitHub release candidate
-        if: steps.installer.outputs.publish == 'true'
+        if: steps.installer.outputs.create_draft == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -303,12 +391,53 @@ jobs:
             exit 1
           fi
 
-          for required_heading in "## English" "## 简体中文"; do
-            if ! grep -Fqx "$required_heading" "$notes_template"; then
-              echo "Release notes are missing required heading: ${required_heading}" >&2
-              exit 1
-            fi
-          done
+          python3 - "$notes_template" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          text = Path(sys.argv[1]).read_text(encoding="utf-8")
+          first = next((line.strip() for line in text.splitlines() if line.strip()), "")
+          if not first.startswith("# "):
+              raise SystemExit("Release notes must start with a level-one bilingual title.")
+          title = first[2:].strip()
+          if not re.search(r"[A-Za-z]", title) or not re.search(r"[\u4e00-\u9fff]", title):
+              raise SystemExit("Release notes title must contain English and Simplified Chinese.")
+          if title.count("{{RELEASE_DATE}}") != 1:
+              raise SystemExit("The bilingual release-notes title must contain {{RELEASE_DATE}} exactly once.")
+
+          sections = {}
+          positions = {}
+          for heading in ("English", "简体中文"):
+              matches = list(re.finditer(rf"(?m)^## {re.escape(heading)}[ \t]*$", text))
+              if len(matches) != 1:
+                  raise SystemExit(f"Release notes require exactly one non-empty ## {heading} section.")
+              positions[heading] = matches[0].start()
+              start = matches[0].end()
+              following = re.search(r"(?m)^#{1,2} .+$", text[start:])
+              body = text[start:start + following.start()] if following else text[start:]
+              sections[heading] = body
+              reviewed = re.sub(r"<!--.*?-->", "", body, flags=re.S)
+              reviewed = re.sub(r"\{\{[A-Z0-9_]+\}\}", "", reviewed)
+              reviewed = re.sub(r"(?m)^#{1,6} .*$", "", reviewed)
+              if not re.search(r"[A-Za-z\u4e00-\u9fff]", reviewed):
+                  raise SystemExit(f"Release notes section ## {heading} must contain reviewed text.")
+          if positions["English"] >= positions["简体中文"]:
+              raise SystemExit("The English release-notes section must precede Simplified Chinese.")
+
+          fact_placeholders = (
+              "{{INSTALLER_FILE}}",
+              "{{INSTALLER_SHA256}}",
+              "{{RELEASE_SOURCE_SHA}}",
+              "{{RELEASE_ARTIFACT_SHA}}",
+          )
+          for heading, body in sections.items():
+              for placeholder in fact_placeholders:
+                  if body.count(placeholder) != 1:
+                      raise SystemExit(
+                          f"## {heading} must contain shared fact placeholder {placeholder} exactly once."
+                      )
+          PY
 
           for required_placeholder in \
             "{{RELEASE_DATE}}" \
@@ -364,5 +493,5 @@ jobs:
             "$INSTALLER_PROVENANCE_PATH" \
             --draft \
             --target "$RELEASE_SOURCE_SHA" \
-            --title "SW2URDF installer ${RELEASE_DATE}" \
+            --title "SW2URDF Installer Candidate ${RELEASE_DATE} / SW2URDF 安装包候选 ${RELEASE_DATE}" \
             --notes-file "$notes"

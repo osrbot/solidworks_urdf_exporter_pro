@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "packagesConfig": {
+    "path": "SW2URDF/packages.config",
+    "sha256": "cb2988f98cfa8b8abe60f8a07f714d6ffe2736aaeb5da0dd3d5ba132192acc94"
+  },
+  "packages": [
+    { "id": "Castle.Core", "version": "4.3.1", "sha256": "c08048ebdf1eae74ac11733e8e9d2020bf0e69ab04f1ef6649aad92ccf176450" },
+    { "id": "CsvHelper", "version": "7.1.1", "sha256": "9c4344ce14c6a988f11e29252ab2270d0da227792beac2185253c551014c37aa" },
+    { "id": "log4net", "version": "3.4.0", "sha256": "8e03eab8ca3da1e2a45e094763a3c15c58f39438ecfb5fa891abcad6282d8e7c" },
+    { "id": "MathNet.Numerics.Signed", "version": "4.7.0", "sha256": "82a429b5da0b00fde7de73224cb70081f0cd5b55ae6e0f0e305d47508276776b" },
+    { "id": "Microsoft.CodeAnalysis.FxCopAnalyzers", "version": "2.9.6", "sha256": "e932282c9389e477b5c5b0947206d0dccc20bf45bb09503346c5b3c5d3465bf4" },
+    { "id": "Microsoft.CodeAnalysis.VersionCheckAnalyzer", "version": "2.9.6", "sha256": "d0b1e4151c4f8cbcd58a09696801310f77a6d4ec43e4ed5b66a0fe3f3a7089ad" },
+    { "id": "Microsoft.CodeQuality.Analyzers", "version": "2.9.6", "sha256": "3094a2e50dd103c91ed004a7126e4f10271e735372d2a327df33378b9f11a1dd" },
+    { "id": "Microsoft.Net.Compilers", "version": "3.11.0", "sha256": "e4a540a9cb41d15e6e1cc05fa2cadb847454df9ebe49d683cded2780506ef880" },
+    { "id": "Microsoft.NetCore.Analyzers", "version": "2.9.6", "sha256": "4e4c108414498635d152418e9d50381eefbaee06647c7eeed1898edb3fff08e6" },
+    { "id": "Microsoft.NetFramework.Analyzers", "version": "2.9.6", "sha256": "61545dae6f3d52f72e49e803505c279e76f677842af02a0a62cb74bd21c452f5" },
+    { "id": "Microsoft.VisualStudio.TestPlatform", "version": "14.0.0.0", "archiveVersion": "14.0.0", "sha256": "c498df5d2a99cccfef38e889a4333fde9c51aa1e7db5d89175b10732d908591f" },
+    { "id": "Moq", "version": "4.10.1", "sha256": "93dd451f77271cdff1b65de011ee0ebd9cf78979994eac952e71b88f95d39270" },
+    { "id": "Newtonsoft.Json", "version": "13.0.3", "sha256": "872fc189e638ab1056555b03aaa38f68bcb54286e221aa646eb1129babf63c77" },
+    { "id": "System.Runtime.CompilerServices.Unsafe", "version": "4.5.0", "sha256": "83d8c8750b57480858f9ecd0b583601c4528411dc7cf39c7b3724ccc3f5b8a9e" },
+    { "id": "System.Threading.Tasks.Extensions", "version": "4.5.1", "sha256": "dcd7810beafb793573ddff9c126d4d9158714abecbad8197fcd754c237bd79c6" },
+    { "id": "xunit", "version": "2.4.1", "sha256": "4060ee134667b31c8424e34ff06709f343e63de6fe39ac307525bccbbd9ac375" },
+    { "id": "xunit.abstractions", "version": "2.0.3", "sha256": "d03d72fc2df8880448f7a81bddb00e1bcb5c18f323c7e7cc69b4cfa727469403" },
+    { "id": "xunit.analyzers", "version": "0.10.0", "sha256": "f254598688171d892c6bd0a19e4157a419d33252e5608beedc0bfba90616c096" },
+    { "id": "xunit.assert", "version": "2.4.1", "sha256": "865d5c3126a4025c24a4511c87108d31dbd089ee8f309d6e16b87380e0b7bec6" },
+    { "id": "xunit.core", "version": "2.4.1", "sha256": "2a05200082483c7439550e05881fa2e6ed895d26319af30257ccd73f891ccbda" },
+    { "id": "xunit.extensibility.core", "version": "2.4.1", "sha256": "a000953abbc5e1798a16bfbc66a3d5a636e8a5981e470697bde2465b65d47880" },
+    { "id": "xunit.extensibility.execution", "version": "2.4.1", "sha256": "2a6284760b14ab8cee409dac689034613d42219d80ba164be55edc1760a771dd" },
+    { "id": "xunit.runner.utility", "version": "2.4.1", "sha256": "bad17c7ff07272389565d8cbaed448a6dafb474098726bdfd1a51e80a3bc0b6c" },
+    { "id": "xunit.runner.visualstudio", "version": "2.4.1", "sha256": "166e438c55d92734c9b80a626f4b613c6503d30d1e6af7c17d287d14e62d963a" }
+  ]
+}

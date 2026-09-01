@@ -1,4 +1,4 @@
-name: SolidWorks integration gate
+name: SolidWorks installer build gate (no Live API)
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-test-installer:
+  build-deterministic-installer:
     runs-on: [self-hosted, Windows, X64, solidworks]
     timeout-minutes: 60
     steps:
@@ -29,13 +29,15 @@ jobs:
       - name: Set up .NET 8
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 8.0.424
 
       - name: Test portable Core first
         shell: pwsh
         run: |
           dotnet restore tests/OSURDF.Core.Tests/OSURDF.Core.Tests.csproj --locked-mode
-          dotnet test tests/OSURDF.Core.Tests/OSURDF.Core.Tests.csproj --configuration Release --no-restore
+          dotnet test tests/OSURDF.Core.Tests/OSURDF.Core.Tests.csproj `
+            --configuration Release --no-restore `
+            --filter "Category!=PinnedMuJoCoRuntime"
 
       - name: Build immutable SolidWorks installer candidate
         shell: pwsh

@@ -34,17 +34,24 @@ jobs:
       - name: Set up .NET 8
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 8.0.424
           cache: true
           cache-dependency-path: |
             src/**/packages.lock.json
             tests/**/packages.lock.json
 
+      - name: Validate installer and release gates
+        shell: pwsh
+        run: ./scripts/Test-ReleaseGates.ps1
+
       - name: Restore locked dependencies
         run: dotnet restore tests/OSURDF.Core.Tests/OSURDF.Core.Tests.csproj --locked-mode
 
       - name: Test Core
-        run: dotnet test tests/OSURDF.Core.Tests/OSURDF.Core.Tests.csproj --configuration Release --no-restore
+        run: >-
+          dotnet test tests/OSURDF.Core.Tests/OSURDF.Core.Tests.csproj
+          --configuration Release --no-restore
+          --filter "Category!=PinnedMuJoCoRuntime"
 
       - name: Restore CLI
         run: dotnet restore src/OSURDF.Cli/OSURDF.Cli.csproj --locked-mode
@@ -53,7 +60,7 @@ jobs:
         run: dotnet build src/OSURDF.Cli/OSURDF.Cli.csproj --configuration Release --no-restore
 
   portable-pipeline:
-    name: Bundle, ROS and Isaac preflight
+    name: Bundle, ROS and adapter unit checks
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -65,7 +72,7 @@ jobs:
       - name: Set up .NET 8
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 8.0.424
           cache: true
           cache-dependency-path: |
             src/**/packages.lock.json
@@ -109,8 +116,10 @@ jobs:
               )
           print(f"Strict JSON validation passed for {len(files)} files.")
           PY
-          python3 -m unittest discover -s tools/isaac_adapter/tests -v
-          python3 -m py_compile tools/isaac_adapter/osurdf_isaac_adapter.py
+          python3 -m unittest discover -s tools/usd_adapter/tests -v
+          python3 -m py_compile tools/usd_adapter/osurdf_usd_adapter.py
+          python3 -m unittest discover -s tools/mujoco_adapter/tests -v
+          python3 -m py_compile tools/mujoco_adapter/validate_mjcf.py
 
       - name: Exercise the portable pipeline end to end
         env:
@@ -132,11 +141,9 @@ jobs:
             --model-license Apache-2.0 \
             --model-author "OSURDF contributors" \
             --ros1 --ros2 \
-            --ros-distro lyrical --gazebo-distro jetty \
-            --isaac-sim-version 6.0.0
+            --ros-distro lyrical --gazebo-distro jetty
           jq --slurpfile profile tests/fixtures/minimal_ros2_control_profile.json \
-            --slurpfile lab tests/fixtures/minimal_isaaclab_profile.json \
-            '.profiles.ros2.ros2Control = $profile[0] | .profiles.isaacLab = $lab[0]' \
+            '.profiles.ros2.ros2Control = $profile[0]' \
             "$work/robot.json" > "$work/robot-with-control.json"
           mv "$work/robot-with-control.json" "$work/robot.json"
           dotnet "$cli" validate --input "$work/robot.json"
@@ -150,16 +157,103 @@ jobs:
           diff -ru "$work/bundle-a" "$work/bundle-b"
           dotnet "$cli" export-ros1 --bundle "$work/bundle-a" --output "$work/ros1"
           dotnet "$cli" export-ros2 --bundle "$work/bundle-a" --output "$work/ros2"
-          python3 tools/isaac_adapter/osurdf_isaac_adapter.py preflight \
-            --bundle "$work/bundle-a" --require-isaac-lab --output "$work/isaac-preflight"
-          python3 tools/isaac_adapter/osurdf_isaac_adapter.py generate-isaaclab \
-            --bundle "$work/bundle-a" --output "$work/isaaclab-generated"
-          python3 -m py_compile \
-            "$work/isaaclab-generated/robot_cfg.py" \
-            "$work/isaaclab-generated/smoke_test.py"
           test -f "$work/ros1/minimal_robot_description/urdf/minimal_robot.urdf"
           test -f "$work/ros2/minimal_robot_description/urdf/minimal_robot.urdf"
           test -f "$work/ros2/minimal_robot_description/urdf/minimal_robot.ros2_control.urdf"
           test -f "$work/ros2/minimal_robot_description/config/controllers.yaml"
-          test -f "$work/isaac-preflight/name_map.json"
-          test -f "$work/isaaclab-generated/actuator_groups.json"
+
+  asset-runtime-integration:
+    name: Pinned OpenUSD and MuJoCo runtime integration
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up exact .NET SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 8.0.424
+          cache: true
+          cache-dependency-path: |
+            src/**/packages.lock.json
+            tests/**/packages.lock.json
+
+      - name: Exercise pinned asset runtimes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+          function Get-PinnedFile($Entry, [string]$Destination, [string]$Label) {
+            Invoke-WebRequest -Uri ([string]$Entry.url) -OutFile $Destination
+            $actual = (Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash.ToLowerInvariant()
+            $expected = ([string]$Entry.sha256).ToLowerInvariant()
+            if ($actual -ne $expected) {
+              throw "$Label SHA256 mismatch. Expected $expected, got $actual."
+            }
+          }
+
+          $root = Join-Path $env:RUNNER_TEMP ("osurdf-assets-" + [Guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Path $root | Out-Null
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+
+          $openUsdLock = Get-Content tools/openusd_runtime.lock.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $pythonArchive = Join-Path $root ([string]$openUsdLock.python.version + ".zip")
+          $wheel = Join-Path $root ([string]$openUsdLock.usdCore.filename)
+          Get-PinnedFile $openUsdLock.python $pythonArchive "Embedded Python"
+          Get-PinnedFile $openUsdLock.usdCore $wheel "usd-core"
+          $openUsdRuntime = Join-Path $root "openusd"
+          New-Item -ItemType Directory -Path $openUsdRuntime | Out-Null
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($pythonArchive, $openUsdRuntime)
+          $sitePackages = Join-Path $openUsdRuntime "Lib\site-packages"
+          New-Item -ItemType Directory -Path $sitePackages -Force | Out-Null
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($wheel, $sitePackages)
+          [System.IO.File]::WriteAllLines(
+            (Join-Path $openUsdRuntime "python311._pth"),
+            @("python311.zip", ".", "Lib\site-packages", "import site"),
+            $utf8)
+          $python = Join-Path $openUsdRuntime "python.exe"
+          $usdOutput = Join-Path $root "usd-output"
+          & $python tools/usd_adapter/osurdf_usd_adapter.py export `
+            --bundle tests/fixtures/usd_bundle --output $usdOutput --overwrite
+          if ($LASTEXITCODE -ne 0) {
+            throw "Pinned OpenUSD adapter integration failed."
+          }
+          $usdReport = Get-Content (Join-Path $usdOutput "export_report.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+          if (-not $usdReport.ok -or -not $usdReport.validation.stageReopened) {
+            throw "Pinned OpenUSD runtime did not reopen the generated stage."
+          }
+
+          $mujocoLock = Get-Content tools/mujoco_runtime.lock.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $mujocoArchive = Join-Path $root ([string]$mujocoLock.archive.filename)
+          Get-PinnedFile $mujocoLock.archive $mujocoArchive "MuJoCo"
+          $mujocoRuntime = Join-Path $root "mujoco"
+          New-Item -ItemType Directory -Path $mujocoRuntime | Out-Null
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($mujocoArchive, $mujocoRuntime)
+          $env:SW2URDF_MUJOCO_BIN = Join-Path $mujocoRuntime "bin"
+          $env:SW2URDF_MUJOCO_VERSION = [string]$mujocoLock.version
+
+          dotnet restore tests/OSURDF.Core.Tests/OSURDF.Core.Tests.csproj --locked-mode
+          $results = Join-Path $root "mujoco-test-results"
+          dotnet test tests/OSURDF.Core.Tests/OSURDF.Core.Tests.csproj `
+            --configuration Release --no-restore `
+            --filter "Category=PinnedMuJoCoRuntime" `
+            --logger "trx;LogFileName=mujoco-runtime.trx" `
+            --results-directory $results
+          if ($LASTEXITCODE -ne 0) {
+            throw "Pinned MuJoCo xUnit gate failed."
+          }
+
+          [xml]$trx = Get-Content (Join-Path $results "mujoco-runtime.trx") -Raw
+          $counters = $trx.SelectSingleNode(
+            "/*[local-name()='TestRun']/*[local-name()='ResultSummary']/*[local-name()='Counters']")
+          if ($null -eq $counters -or
+              [int]$counters.GetAttribute("total") -ne 1 -or
+              [int]$counters.GetAttribute("executed") -ne 1 -or
+              [int]$counters.GetAttribute("passed") -ne 1 -or
+              [int]$counters.GetAttribute("failed") -ne 0) {
+            throw "Pinned MuJoCo gate must execute and pass exactly one test."
+          }

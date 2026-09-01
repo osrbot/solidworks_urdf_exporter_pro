@@ -25,7 +25,12 @@ namespace TestRunner
         static int testsDiscovered = 0;
 
         static string TestNameFilter = "";
+        static bool ExcludeLiveSolidWorksTests;
         static string IsolatedTestLogFile;
+
+        const string RequiresSolidWorksCollection = "Requires SW Test Collection";
+        const string LiveSolidWorksTraitName = "Category";
+        const string LiveSolidWorksTraitValue = "LiveSolidWorks";
 
         [SuppressMessage(
             "Design",
@@ -64,10 +69,10 @@ namespace TestRunner
 
             using (var runner = AssemblyRunner.WithAppDomain(testAssembly))
             {
-                if (null != args && args.Length > 0)
+                ConfigureTestFilter(args);
+                if (ExcludeLiveSolidWorksTests || !String.IsNullOrWhiteSpace(TestNameFilter))
                 {
-                    TestNameFilter = args[0];
-                    runner.TestCaseFilter += FilterByClass;
+                    runner.TestCaseFilter += FilterTestCase;
                 }
                 runner.OnDiscoveryComplete = OnDiscoveryComplete;
                 runner.OnExecutionComplete = OnExecutionComplete;
@@ -85,6 +90,38 @@ namespace TestRunner
 
             CleanupIsolatedTestLog();
             return result;
+        }
+
+        private static void ConfigureTestFilter(string[] args)
+        {
+            TestNameFilter = "";
+            ExcludeLiveSolidWorksTests = false;
+            if (args == null)
+            {
+                return;
+            }
+
+            foreach (string argument in args)
+            {
+                if (String.Equals(
+                    argument,
+                    "--exclude-live-solidworks",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    ExcludeLiveSolidWorksTests = true;
+                    continue;
+                }
+
+                if (!String.IsNullOrWhiteSpace(argument))
+                {
+                    if (!String.IsNullOrWhiteSpace(TestNameFilter))
+                    {
+                        throw new ArgumentException(
+                            "Only one test-name filter may be specified.");
+                    }
+                    TestNameFilter = argument;
+                }
+            }
         }
 
         private static void ConfigureIsolatedTestLog()
@@ -178,13 +215,47 @@ namespace TestRunner
             }
         }
 
-        public static bool FilterByClass(ITestCase testCase)
+        public static bool FilterTestCase(ITestCase testCase)
         {
-            if (null != testCase && testCase.DisplayName.Contains(TestNameFilter))
+            if (testCase == null)
             {
-                return true;
+                return false;
             }
-            return false;
+
+            if (ExcludeLiveSolidWorksTests && IsLiveSolidWorksTest(testCase))
+            {
+                return false;
+            }
+
+            return String.IsNullOrWhiteSpace(TestNameFilter) ||
+                testCase.DisplayName.Contains(TestNameFilter);
+        }
+
+        private static bool IsLiveSolidWorksTest(ITestCase testCase)
+        {
+            if (testCase.Traits != null &&
+                testCase.Traits.TryGetValue(
+                    LiveSolidWorksTraitName,
+                    out System.Collections.Generic.List<string> categories) &&
+                categories != null)
+            {
+                foreach (string category in categories)
+                {
+                    if (String.Equals(
+                        category,
+                        LiveSolidWorksTraitValue,
+                        StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            ITestCollection collection = testCase.TestMethod?.TestClass?.TestCollection;
+            return collection != null && String.Equals(
+                collection.DisplayName,
+                RequiresSolidWorksCollection,
+                StringComparison.Ordinal);
         }
 
         static void OnDiscoveryComplete(DiscoveryCompleteInfo info)

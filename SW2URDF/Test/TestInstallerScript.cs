@@ -30,8 +30,26 @@ namespace SW2URDF.Test
             Assert.Contains("\\*.dll\"}; DestDir: {app}", installerScript);
             Assert.Contains("\\SW2URDF.png\"}; DestDir: {app}", installerScript);
             Assert.Contains("\\images\\*.png\"}; DestDir: {app}\\images", installerScript);
-            Assert.Contains("\\schemas\\*\"}; DestDir: {app}\\schemas", installerScript);
-            Assert.Contains("\\tools\\isaac_adapter\\*\"}; DestDir: {app}\\tools\\isaac_adapter", installerScript);
+            Assert.Contains("\\schemas\\README.md\"}; DestDir: {app}\\schemas", installerScript);
+            Assert.Contains("\\schemas\\robot.schema.v2.json\"}; DestDir: {app}\\schemas", installerScript);
+            Assert.Contains("\\schemas\\robot-bundle-manifest.schema.v1.json\"}; DestDir: {app}\\schemas", installerScript);
+            Assert.Contains("\\schemas\\ros2-control-profile.schema.v1.json\"}; DestDir: {app}\\schemas", installerScript);
+            Assert.Contains("\\schemas\\ros2-control-profile.example.json\"}; DestDir: {app}\\schemas", installerScript);
+            Assert.DoesNotContain("\\schemas\\*\"}; DestDir: {app}\\schemas", installerScript);
+            Assert.DoesNotContain("\\schemas\\isaac-profile.schema.v1.json", installerScript);
+            Assert.DoesNotContain("\\schemas\\isaaclab-profile.schema.v1.json", installerScript);
+            Assert.Contains("\\tools\\usd_adapter\\*\"}; DestDir: {app}\\tools\\usd_adapter", installerScript);
+            Assert.Contains("\\tools\\openusd_runtime\\*\"}; DestDir: {app}\\tools\\openusd_runtime", installerScript);
+            Assert.Contains("\\tools\\openusd_runtime.lock.json\"}; DestDir: {app}\\tools", installerScript);
+            Assert.Contains("\\tools\\mujoco_runtime\\*\"}; DestDir: {app}\\tools\\mujoco_runtime", installerScript);
+            Assert.Contains("\\tools\\mujoco_runtime.lock.json\"}; DestDir: {app}\\tools", installerScript);
+            Assert.Contains("[InstallDelete]", installerScript);
+            Assert.Contains("Type: files; Name: \"{app}\\*.dll\"", installerScript);
+            Assert.Contains("Type: filesandordirs; Name: \"{app}\\images\"", installerScript);
+            Assert.Contains("Type: filesandordirs; Name: \"{app}\\schemas\"", installerScript);
+            Assert.Contains("Type: filesandordirs; Name: \"{app}\\THIRD_PARTY_LICENSES\"", installerScript);
+            Assert.Contains("Type: filesandordirs; Name: \"{app}\\tools\"", installerScript);
+            Assert.Contains("[UninstallDelete]", installerScript);
             Assert.Contains("THIRD_PARTY_NOTICES.md", installerScript);
             Assert.Contains("\\THIRD_PARTY_LICENSES\\*\"}; DestDir: {app}\\THIRD_PARTY_LICENSES", installerScript);
             Assert.DoesNotContain("\\*.pdb", installerScript);
@@ -77,6 +95,11 @@ namespace SW2URDF.Test
             Assert.Contains("\"/DBuildPlatform=$Platform\"", buildScript);
             Assert.Contains("Refusing to package uncommitted source changes", buildScript);
             Assert.Contains("Configuration=Release and Platform=x64", buildScript);
+            Assert.Contains("Pass -SolidWorksInstallDir", buildScript);
+            Assert.Contains(
+                "global.json must pin .NET SDK 8.0.424 with rollForward=disable",
+                buildScript);
+            Assert.Contains("global.json did not activate the exact .NET SDK", buildScript);
             Assert.Contains("Remove-Item -LiteralPath $ResolvedBuildOutput -Recurse -Force", buildScript);
             Assert.Contains("packages.release.config", buildScript);
             Assert.Contains("packages.release.lock.json", buildScript);
@@ -111,18 +134,43 @@ namespace SW2URDF.Test
             Assert.Contains("\"log4net.dll\"", buildScript);
             Assert.Contains("\"APACHE-2.0.txt\"", buildScript);
             Assert.Contains("\"MIT.txt\"", buildScript);
-            Assert.Contains("\"osurdf_isaac_adapter.py\"", buildScript);
+            Assert.Contains("\"osurdf_usd_adapter.py\"", buildScript);
+            Assert.Contains("\"python.exe\"", buildScript);
+            Assert.Contains("\"compile.exe\"", buildScript);
+            Assert.Contains("\"testspeed.exe\"", buildScript);
+            Assert.Contains("\"mujoco.dll\"", buildScript);
+            Assert.Contains("\"openusd_runtime.lock.json\"", buildScript);
+            Assert.Contains("\"mujoco_runtime.lock.json\"", buildScript);
+            Assert.Contains("Get-PinnedDownload", buildScript);
+            Assert.Contains("The pinned OpenUSD runtime did not import successfully", buildScript);
+            Assert.Contains("The pinned MuJoCo zero-step validator did not start", buildScript);
+            Assert.Contains("bundledOpenUsdIntegration = \"passed\"", buildScript);
+            Assert.Contains("bundledMuJoCoIntegration = \"passed\"", buildScript);
+            Assert.Contains("assetRuntimeInputs = $AssetRuntimeInputs", buildScript);
             Assert.Contains("\"robot.schema.v2.json\"", buildScript);
             Assert.Contains("RestoreLockedMode=true", buildScript);
             Assert.Contains("SW2URDFBaseIntermediateOutputPath", buildScript);
             Assert.Contains("sdkPackageLocks = $SdkPackageLocks", buildScript);
+            Assert.Contains("tests\\OSURDF.Core.Tests\\packages.lock.json", buildScript);
             Assert.Contains("TestRunner\\packages.lock.json", buildScript);
+            Assert.Contains("legacy-test-packages.lock.json", buildScript);
+            Assert.Contains("legacyTestPackageInputs = $LegacyTestPackageInputs", buildScript);
+            Assert.Contains("PYTHONDONTWRITEBYTECODE", buildScript);
+            Assert.Contains("& $OpenUsdPython -B -c", buildScript);
+            Assert.Contains("& $OpenUsdPython -B $OpenUsdAdapter", buildScript);
+            Assert.Contains("Assert-NoPythonBytecode $BuildOutputDirectory", buildScript);
             Assert.Contains("SW2URDF_TEST_ASSEMBLY", buildScript);
-            Assert.Contains("SolidWorks regression suite failed", buildScript);
+            Assert.Contains("--exclude-live-solidworks", buildScript);
+            Assert.Contains("Deterministic plugin regression suite failed", buildScript);
+            Assert.Contains("selection = \"exclude-live-solidworks\"", buildScript);
             Assert.Contains("pluginTests = $PluginTestEvidence", buildScript);
             Assert.Contains("required installer payload: $RequiredPayloadFile", buildScript);
             Assert.DoesNotContain("& $MSBuild $Solution", buildScript);
             Assert.DoesNotContain("$NuGetCommand.Source", buildScript);
+
+            string globalJson = ReadRepositoryFile("global.json");
+            Assert.Contains("\"version\": \"8.0.424\"", globalJson);
+            Assert.Contains("\"rollForward\": \"disable\"", globalJson);
         }
 
         [Fact]
@@ -196,17 +244,26 @@ namespace SW2URDF.Test
             string testRunner = ReadRepositoryFile("TestRunner", "TestRunner.cs");
             Assert.Contains("No SW2URDF tests were discovered or executed", testRunner);
             Assert.Contains("testsDiscovered <= 0 || info.TotalTests <= 0", testRunner);
+            Assert.Contains("--exclude-live-solidworks", testRunner);
+            Assert.Contains("Requires SW Test Collection", testRunner);
+            Assert.Contains("IsLiveSolidWorksTest", testRunner);
         }
 
         [Fact]
-        public void TestReleaseWorkflowIgnoresDeletedInstallers()
+        public void TestReleaseWorkflowRequiresExplicitManualApproval()
         {
             string workflow = ReadRepositoryFile(
                 ".github", "workflows", "publish-installer-release.yml");
 
-            Assert.Contains("git diff --diff-filter=AMR", workflow);
-            Assert.Contains("publish=false", workflow);
-            Assert.Contains("if: steps.installer.outputs.publish == 'true'", workflow);
+            Assert.Contains("workflow_dispatch:", workflow);
+            Assert.Contains("confirm_tested:", workflow);
+            Assert.Contains("if: inputs.confirm_tested == true", workflow);
+            Assert.DoesNotContain("  push:", workflow);
+            Assert.DoesNotContain("git diff --diff-filter=AMR", workflow);
+            Assert.Contains("create_draft=true", workflow);
+            Assert.Contains(
+                "if: steps.installer.outputs.create_draft == 'true'",
+                workflow);
             Assert.Contains("RELEASE_COMMIT", workflow);
             Assert.Contains("git log -1 --format=%ct", workflow);
             Assert.Contains("gh release create", workflow);
@@ -220,7 +277,15 @@ namespace SW2URDF.Test
             Assert.Contains("installerSha256", workflow);
             Assert.Contains("sourceTree", workflow);
             Assert.Contains("packages.release.lock.json", workflow);
+            Assert.Contains("tools/openusd_runtime.lock.json", workflow);
+            Assert.Contains("tools/mujoco_runtime.lock.json", workflow);
+            Assert.Contains(
+                "Installer asset runtime provenance does not match the source runtime locks",
+                workflow);
             Assert.Contains(".pluginTests.result == \"passed\"", workflow);
+            Assert.Contains(
+                ".pluginTests.selection == \"exclude-live-solidworks\"",
+                workflow);
             Assert.Contains("TestRunner/bin/Release/net48/TestRunner.exe", workflow);
             Assert.Contains("innoextract", workflow);
             Assert.Contains("Installer payload does not match the provenance manifest", workflow);
@@ -233,8 +298,12 @@ namespace SW2URDF.Test
             Assert.DoesNotContain("gh release edit", workflow);
             Assert.Contains(".github/release-notes/${RELEASE_TAG}.md", workflow);
             Assert.Contains("reviewed bilingual release notes", workflow);
-            Assert.Contains("## English", workflow);
-            Assert.Contains("## \u7b80\u4f53\u4e2d\u6587", workflow);
+            Assert.Contains(
+                "for heading in (\"English\", \"\u7b80\u4f53\u4e2d\u6587\")",
+                workflow);
+            Assert.Contains(
+                "Release notes require exactly one non-empty ## {heading} section",
+                workflow);
             Assert.Contains("{{INSTALLER_SHA256}}", workflow);
             Assert.Contains("Release notes contain an unresolved placeholder", workflow);
             Assert.Contains("Daily releases are immutable", workflow);
@@ -254,7 +323,6 @@ namespace SW2URDF.Test
         [Theory]
         [InlineData("solidworks-integration.yml")]
         [InlineData("ros-integration.yml")]
-        [InlineData("isaac-integration.yml")]
         public void TestSelfHostedIntegrationWorkflowsRequireManualDispatch(string workflowName)
         {
             string workflow = ReadRepositoryFile(
@@ -266,6 +334,56 @@ namespace SW2URDF.Test
             Assert.Contains("timeout-minutes:", workflow);
             Assert.DoesNotContain("pull_request:", workflow);
             Assert.DoesNotContain("pull_request_target:", workflow);
+        }
+
+        [Fact]
+        public void TestAssetRuntimeLocksPinOpenUsdAndMuJoCoInstallInputs()
+        {
+            string openUsdLock = ReadRepositoryFile("tools", "openusd_runtime.lock.json");
+            string mujocoLock = ReadRepositoryFile("tools", "mujoco_runtime.lock.json");
+
+            Assert.Contains("\"schemaVersion\": 1", openUsdLock);
+            Assert.Contains("\"version\": \"3.11.9\"", openUsdLock);
+            Assert.Contains("\"version\": \"26.8\"", openUsdLock);
+            Assert.Contains("usd_core-26.8-cp311-none-win_amd64.whl", openUsdLock);
+            Assert.Contains(
+                "d39cef20efdfc29473e92887487bb8c10c45e966c492b5356d32a52724c3578f",
+                openUsdLock);
+
+            Assert.Contains("\"schemaVersion\": 1", mujocoLock);
+            Assert.Contains("\"version\": \"3.12.0\"", mujocoLock);
+            Assert.Contains("mujoco-3.12.0-windows-x86_64.zip", mujocoLock);
+            Assert.Contains(
+                "ffe071c2747dd9513a1c59e7d2428bb678d887f9edec9eb9674b4288a248a8e9",
+                mujocoLock);
+            Assert.Contains("\"bin/compile.exe\"", mujocoLock);
+            Assert.Contains("\"bin/testspeed.exe\"", mujocoLock);
+            Assert.Contains("\"bin/mujoco.dll\"", mujocoLock);
+        }
+
+        [Fact]
+        public void TestCoreCiRunsPinnedAssetRuntimeIntegration()
+        {
+            string workflow = ReadRepositoryFile(".github", "workflows", "ci.yml");
+
+            Assert.Contains("Pinned OpenUSD and MuJoCo runtime integration", workflow);
+            Assert.Contains("dotnet-version: 8.0.424", workflow);
+            Assert.Contains("tools/openusd_runtime.lock.json", workflow);
+            Assert.Contains("tools/mujoco_runtime.lock.json", workflow);
+            Assert.Contains("Get-FileHash -LiteralPath $Destination -Algorithm SHA256", workflow);
+            Assert.Contains("validation.stageReopened", workflow);
+            Assert.Contains("SW2URDF_MUJOCO_BIN", workflow);
+            Assert.Contains("tools/mujoco_adapter/tests", workflow);
+            Assert.Contains("Category!=PinnedMuJoCoRuntime", workflow);
+            Assert.Contains("Category=PinnedMuJoCoRuntime", workflow);
+            Assert.Contains("mujoco-runtime.trx", workflow);
+            Assert.Contains("GetAttribute(\"executed\")", workflow);
+
+            string installerScript = ReadRepositoryFile("scripts", "BuildInstaller.ps1");
+            Assert.Contains("Category!=PinnedMuJoCoRuntime", installerScript);
+            Assert.Contains("Category=PinnedMuJoCoRuntime", installerScript);
+            Assert.Contains("mujoco-runtime.trx", installerScript);
+            Assert.Contains("GetAttribute(\"executed\")", installerScript);
         }
 
         [Fact]
@@ -437,7 +555,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestUrdfOnlyExportCannotSelectBundleOrIsaacTargets()
+        public void TestUrdfOnlyExportCannotSelectDerivedTargets()
         {
             string form = ReadRepositoryFile("SW2URDF", "UI", "AssemblyExportForm.cs");
             int finishExport = form.IndexOf(

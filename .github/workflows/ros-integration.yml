@@ -32,7 +32,7 @@ jobs:
       - name: Set up .NET 8
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 8.0.424
 
       - name: Export and build the ROS 2 fixture package
         shell: bash

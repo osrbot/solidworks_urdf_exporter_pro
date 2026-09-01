@@ -72,6 +72,18 @@ chinesesimplified.RegisteringControls=正在注册 SolidWorks URDF 导出插件.
 chinesesimplified.UnregisteringControls=正在注销 SolidWorks URDF 导出插件...
 chinesesimplified.DotNet48Required=需要 Microsoft .NET Framework 4.8 或更高版本。请先安装，按提示重启 Windows，然后重新运行本安装程序。
 
+[InstallDelete]
+; Installed payloads are immutable. Remove the previous version before copying so a renamed
+; assembly, schema, image, adapter, runtime or license file cannot survive an in-place upgrade.
+Type: files; Name: "{app}\*.dll"
+Type: files; Name: "{app}\SW2URDF.png"
+Type: files; Name: "{app}\LICENSE"
+Type: files; Name: "{app}\THIRD_PARTY_NOTICES.md"
+Type: filesandordirs; Name: "{app}\images"
+Type: filesandordirs; Name: "{app}\schemas"
+Type: filesandordirs; Name: "{app}\THIRD_PARTY_LICENSES"
+Type: filesandordirs; Name: "{app}\tools"
+
 [Files]
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\*.dll"}; DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\SW2URDF.png"}; DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
@@ -79,8 +91,18 @@ Source: {#BuildPlatform + "\" + BuildConfiguration + "\images\*.png"}; DestDir: 
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\LICENSE"}; DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\THIRD_PARTY_NOTICES.md"}; DestDir: {app}; Flags: ignoreversion; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\THIRD_PARTY_LICENSES\*"}; DestDir: {app}\THIRD_PARTY_LICENSES; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
-Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\*"}; DestDir: {app}\schemas; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
-Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\isaac_adapter\*"}; DestDir: {app}\tools\isaac_adapter; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
+; Install only current public schema entrypoints. Isaac/Isaac Lab schemas remain in source for
+; historical document parsing, but are internal legacy contracts and are not UI-loaded payloads.
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\README.md"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\robot.schema.v2.json"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\robot-bundle-manifest.schema.v1.json"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\ros2-control-profile.schema.v1.json"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\ros2-control-profile.example.json"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\usd_adapter\*"}; DestDir: {app}\tools\usd_adapter; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\openusd_runtime\*"}; DestDir: {app}\tools\openusd_runtime; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\openusd_runtime.lock.json"}; DestDir: {app}\tools; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\mujoco_runtime\*"}; DestDir: {app}\tools\mujoco_runtime; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\mujoco_runtime.lock.json"}; DestDir: {app}\tools; Flags: ignoreversion; Check: IsWin64;
 ;Source: x86\Debug\*;  DestDir: {app}; Flags: regserver ignoreversion; Check: not IsWin64
 
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
@@ -92,6 +114,16 @@ Filename: "{reg:HKLM64\SOFTWARE\Microsoft\.NETFramework,InstallRoot}\v4.0.30319\
 [UninstallRun]
 
 Filename: "{reg:HKLM64\SOFTWARE\Microsoft\.NETFramework,InstallRoot}\v4.0.30319\RegAsm.exe"; Parameters:  """{app}\SW2URDF.dll"" ""/unregister"""; StatusMsg: "{cm:UnregisteringControls}"; Check: IsWin64 and CurrentInstallOwnsComRegistration; RunOnceId: "UnregisterSW2URDF";
+
+[UninstallDelete]
+Type: files; Name: "{app}\*.dll"
+Type: files; Name: "{app}\SW2URDF.png"
+Type: files; Name: "{app}\LICENSE"
+Type: files; Name: "{app}\THIRD_PARTY_NOTICES.md"
+Type: filesandordirs; Name: "{app}\images"
+Type: filesandordirs; Name: "{app}\schemas"
+Type: filesandordirs; Name: "{app}\THIRD_PARTY_LICENSES"
+Type: filesandordirs; Name: "{app}\tools"
 
 [Code]
 const
