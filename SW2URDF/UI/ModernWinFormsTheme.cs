@@ -22,11 +22,69 @@ THE SOFTWARE.
 
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace SW2URDF.UI
 {
+    internal sealed class ModernCardPanel : TableLayoutPanel
+    {
+        internal const int CornerRadius = 6;
+
+        public ModernCardPanel()
+        {
+            SetStyle(
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw |
+                ControlStyles.UserPaint,
+                true);
+        }
+
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            Region previous = Region;
+            if (Width >= CornerRadius * 2 && Height >= CornerRadius * 2)
+            {
+                using (GraphicsPath path = ModernWinFormsTheme.CreateRoundedRectangle(
+                    new Rectangle(0, 0, Width, Height),
+                    CornerRadius))
+                {
+                    Region = new Region(path);
+                }
+            }
+            else
+            {
+                Region = null;
+            }
+            if (previous != null)
+            {
+                previous.Dispose();
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            ModernWinFormsTheme.DrawRoundedBorder(this, e.Graphics, CornerRadius);
+        }
+    }
+
+    internal sealed class ModernTabControl : TabControl
+    {
+        public ModernTabControl()
+        {
+            SetStyle(
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw,
+                true);
+        }
+    }
+
     internal static class UiFontResources
     {
         private sealed class OwnedFont
@@ -182,7 +240,7 @@ namespace SW2URDF.UI
 
         internal static TableLayoutPanel CreateCard(string name)
         {
-            TableLayoutPanel card = new TableLayoutPanel
+            TableLayoutPanel card = new ModernCardPanel
             {
                 Name = name,
                 AutoSize = true,
@@ -195,8 +253,12 @@ namespace SW2URDF.UI
                 RowCount = 0
             };
             card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            card.Paint += DrawCardBorder;
             return card;
+        }
+
+        internal static IDisposable SuspendRedraw(Control control)
+        {
+            return new RedrawScope(control);
         }
 
         internal static void Apply(Form form)
@@ -304,11 +366,41 @@ namespace SW2URDF.UI
                 return;
             }
 
-            using (Pen pen = new Pen(Border))
+            DrawRoundedBorder(control, e.Graphics, ModernCardPanel.CornerRadius);
+        }
+
+        internal static GraphicsPath CreateRoundedRectangle(Rectangle bounds, int radius)
+        {
+            GraphicsPath path = new GraphicsPath();
+            int diameter = Math.Max(1, radius * 2);
+            int right = bounds.Right - diameter;
+            int bottom = bounds.Bottom - diameter;
+            path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+            path.AddArc(right, bounds.Top, diameter, diameter, 270, 90);
+            path.AddArc(right, bottom, diameter, diameter, 0, 90);
+            path.AddArc(bounds.Left, bottom, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        internal static void DrawRoundedBorder(Control control, Graphics graphics, int radius)
+        {
+            if (control == null || graphics == null ||
+                control.Width < radius * 2 || control.Height < radius * 2)
             {
-                Rectangle rectangle = new Rectangle(0, 0, control.Width - 1, control.Height - 1);
-                e.Graphics.DrawRectangle(pen, rectangle);
+                return;
             }
+
+            SmoothingMode previousMode = graphics.SmoothingMode;
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (Pen pen = new Pen(Border))
+            using (GraphicsPath path = CreateRoundedRectangle(
+                new Rectangle(0, 0, control.Width - 1, control.Height - 1),
+                radius))
+            {
+                graphics.DrawPath(pen, path);
+            }
+            graphics.SmoothingMode = previousMode;
         }
 
         internal static void DrawBottomBorder(object sender, PaintEventArgs e)
@@ -440,6 +532,48 @@ namespace SW2URDF.UI
             SetFont(button, 9F, FontStyle.Regular);
             button.Padding = new Padding(10, 0, 10, 0);
             button.UseVisualStyleBackColor = false;
+        }
+
+        private sealed class RedrawScope : IDisposable
+        {
+            private const int WmSetRedraw = 0x000B;
+            private readonly Control control;
+            private readonly IntPtr handle;
+            private bool disposed;
+
+            public RedrawScope(Control control)
+            {
+                this.control = control;
+                if (control != null && control.IsHandleCreated)
+                {
+                    handle = control.Handle;
+                    SendMessage(handle, WmSetRedraw, IntPtr.Zero, IntPtr.Zero);
+                }
+            }
+
+            public void Dispose()
+            {
+                if (disposed)
+                {
+                    return;
+                }
+                disposed = true;
+                if (handle != IntPtr.Zero)
+                {
+                    SendMessage(handle, WmSetRedraw, new IntPtr(1), IntPtr.Zero);
+                    if (control != null && !control.IsDisposed)
+                    {
+                        control.Invalidate(true);
+                    }
+                }
+            }
+
+            [DllImport("user32.dll")]
+            private static extern IntPtr SendMessage(
+                IntPtr windowHandle,
+                int message,
+                IntPtr wordParameter,
+                IntPtr longParameter);
         }
     }
 }

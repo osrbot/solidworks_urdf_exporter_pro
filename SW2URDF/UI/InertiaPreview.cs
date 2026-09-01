@@ -27,6 +27,7 @@ namespace SW2URDF.UI
         private readonly SldWorks swApp;
         private readonly ModelDoc2 model;
         private readonly List<Body2> temporaryBodies = new List<Body2>();
+        private TemporaryBodyDisplayContext displayContext;
 
         public InertiaPreview(SldWorks swApp, ModelDoc2 model)
         {
@@ -90,68 +91,66 @@ namespace SW2URDF.UI
                     model,
                     link,
                     linkCoordinateTransform,
-                    out TemporaryBodyDisplayContext displayContext,
+                    out TemporaryBodyDisplayContext createdDisplayContext,
                     out string displayContextError))
                 {
                     error = displayContextError;
                     failureKind = InertiaPreviewFailureKind.DisplayUnavailable;
                     return false;
                 }
+                displayContext = createdDisplayContext;
 
-                using (displayContext)
+                Matrix<double> linkTransform = MathOps.GetTransformation(
+                    displayContext.LinkToDisplayTarget);
+                Matrix<double> inertialTransform = MathOps.GetTransformation(
+                    link.Inertial.Origin.GetXYZ(),
+                    link.Inertial.Origin.GetRPY());
+                Matrix<double> principalTransform = BuildPrincipalFrameTransform(
+                    ellipsoid.PrincipalAxes);
+                Matrix<double> bodyToDisplayTarget = linkTransform *
+                    inertialTransform * principalTransform;
+                Modeler modeler = null;
+                MathUtility mathUtility = null;
+                MathTransform bodyTransform = null;
+                Body2 body = null;
+                try
                 {
-                    Matrix<double> linkTransform = MathOps.GetTransformation(
-                        displayContext.LinkToDisplayTarget);
-                    Matrix<double> inertialTransform = MathOps.GetTransformation(
-                        link.Inertial.Origin.GetXYZ(),
-                        link.Inertial.Origin.GetRPY());
-                    Matrix<double> principalTransform = BuildPrincipalFrameTransform(
-                        ellipsoid.PrincipalAxes);
-                    Matrix<double> bodyToDisplayTarget = linkTransform *
-                        inertialTransform * principalTransform;
-                    Modeler modeler = null;
-                    MathUtility mathUtility = null;
-                    MathTransform bodyTransform = null;
-                    Body2 body = null;
-                    try
+                    modeler = swApp.GetModeler() as Modeler;
+                    mathUtility = swApp.GetMathUtility() as MathUtility;
+                    if (modeler == null || mathUtility == null)
                     {
-                        modeler = swApp.GetModeler() as Modeler;
-                        mathUtility = swApp.GetMathUtility() as MathUtility;
-                        if (modeler == null || mathUtility == null)
-                        {
-                            throw new InvalidOperationException(ChineseUiText.Translate(
-                                "SolidWorks temporary-body services are unavailable.",
-                                "SolidWorks 临时实体服务不可用。"));
-                        }
-                        bodyTransform = mathUtility.CreateTransform(
-                            TemporaryBodyDisplayContext.ToSolidWorksTransformData(
-                                bodyToDisplayTarget)) as MathTransform;
-                        if (bodyTransform == null)
-                        {
-                            throw new InvalidOperationException(ChineseUiText.Translate(
-                                "SolidWorks could not create the inertia preview transform.",
-                                "SolidWorks 无法创建惯性预览变换。"));
-                        }
-                        body = CreateEquivalentBoxBody(
-                            modeler,
-                            ellipsoid.EquivalentBoxDimensions);
-                        Body2 ownedBody = body;
-                        body = null;
-                        AddBody(ownedBody, bodyTransform, displayContext.DisplayTarget,
-                            DrawingColor.DeepSkyBlue);
-                        AddPrincipalAxes(
-                            modeler,
-                            ellipsoid.EquivalentBoxDimensions,
-                            bodyTransform,
-                            displayContext.DisplayTarget);
+                        throw new InvalidOperationException(ChineseUiText.Translate(
+                            "SolidWorks temporary-body services are unavailable.",
+                            "SolidWorks 临时实体服务不可用。"));
                     }
-                    finally
+                    bodyTransform = mathUtility.CreateTransform(
+                        TemporaryBodyDisplayContext.ToSolidWorksTransformData(
+                            bodyToDisplayTarget)) as MathTransform;
+                    if (bodyTransform == null)
                     {
-                        ReleaseBody(body);
-                        ReleaseComReference(bodyTransform);
-                        ReleaseComReference(mathUtility);
-                        ReleaseComReference(modeler);
+                        throw new InvalidOperationException(ChineseUiText.Translate(
+                            "SolidWorks could not create the inertia preview transform.",
+                            "SolidWorks 无法创建惯性预览变换。"));
                     }
+                    body = CreateEquivalentBoxBody(
+                        modeler,
+                        ellipsoid.EquivalentBoxDimensions);
+                    Body2 ownedBody = body;
+                    body = null;
+                    AddBody(ownedBody, bodyTransform, displayContext.DisplayTarget,
+                        DrawingColor.DeepSkyBlue);
+                    AddPrincipalAxes(
+                        modeler,
+                        ellipsoid.EquivalentBoxDimensions,
+                        bodyTransform,
+                        displayContext.DisplayTarget);
+                }
+                finally
+                {
+                    ReleaseBody(body);
+                    ReleaseComReference(bodyTransform);
+                    ReleaseComReference(mathUtility);
+                    ReleaseComReference(modeler);
                 }
                 model.GraphicsRedraw2();
                 if (temporaryBodies.Count == ExpectedBodyCount)
@@ -179,11 +178,14 @@ namespace SW2URDF.UI
 
         public void Hide()
         {
+            ModelDoc2 hideTarget = displayContext == null
+                ? model
+                : displayContext.HideTarget;
             foreach (Body2 body in temporaryBodies)
             {
                 try
                 {
-                    body.Hide(model);
+                    body.Hide(hideTarget);
                 }
                 catch
                 {
@@ -198,6 +200,11 @@ namespace SW2URDF.UI
                 }
             }
             temporaryBodies.Clear();
+            if (displayContext != null)
+            {
+                displayContext.Dispose();
+                displayContext = null;
+            }
             if (model != null)
             {
                 model.GraphicsRedraw2();
@@ -427,6 +434,11 @@ namespace SW2URDF.UI
             }
             finally
             {
+                if (body != null && displayContext != null)
+                {
+                    try { body.Hide(displayContext.HideTarget); }
+                    catch { }
+                }
                 ReleaseBody(body);
             }
         }

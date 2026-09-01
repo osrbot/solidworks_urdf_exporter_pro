@@ -19,6 +19,7 @@ namespace SW2URDF.UI
         private readonly ModelDoc2 model;
         private readonly ExportHelper exporter;
         private readonly List<Body2> temporaryBodies = new List<Body2>();
+        private TemporaryBodyDisplayContext displayContext;
 
         public CollisionPreview(SldWorks swApp, ModelDoc2 model, ExportHelper exporter)
         {
@@ -89,7 +90,7 @@ namespace SW2URDF.UI
                     model,
                     link,
                     linkCoordinateTransform,
-                    out TemporaryBodyDisplayContext displayContext,
+                    out TemporaryBodyDisplayContext createdDisplayContext,
                     out string displayContextError))
                 {
                     status = ChineseUiText.Translate(
@@ -97,6 +98,7 @@ namespace SW2URDF.UI
                     error = displayContextError;
                     return false;
                 }
+                displayContext = createdDisplayContext;
 
                 modeler = swApp.GetModeler() as Modeler;
                 if (modeler == null)
@@ -106,94 +108,99 @@ namespace SW2URDF.UI
                 }
 
                 int displayedBodyCount;
-                using (displayContext)
+                switch (strategy)
                 {
-                    switch (strategy)
-                    {
-                        case CollisionMeshStrategy.Primitive:
-                        case CollisionMeshStrategy.BoxPrimitive:
-                            displayedBodyCount = ShowBox(modeler, link,
-                                displayContext.LinkToDisplayTarget,
-                                displayContext.DisplayTarget);
-                            status = ChineseUiText.Translate(
-                                "Solid box collision preview shown.",
-                                "已显示实体盒体碰撞预览。");
-                            break;
-                        case CollisionMeshStrategy.CylinderPrimitive:
-                            displayedBodyCount = ShowCylinder(modeler, link,
-                                displayContext.LinkToDisplayTarget,
-                                displayContext.DisplayTarget);
-                            status = ChineseUiText.Translate(
-                                "Solid cylinder collision preview shown.",
-                                "已显示实体圆柱碰撞预览。");
-                            break;
-                        case CollisionMeshStrategy.SpherePrimitive:
-                            displayedBodyCount = ShowSphere(modeler, link,
-                                displayContext.LinkToDisplayTarget,
-                                displayContext.DisplayTarget);
-                            status = ChineseUiText.Translate(
-                                "Spherical collision body preview shown.",
-                                "已显示球形碰撞体预览。");
-                            break;
-                        case CollisionMeshStrategy.ComponentBoxes:
-                            displayedBodyCount = ShowComponentBoxes(modeler, link,
-                                displayContext.LinkToDisplayTarget,
-                                displayContext.DisplayTarget);
-                            status = ChineseUiText.Translate(
-                                "Solid component-box collision preview shown (" +
-                                    displayedBodyCount.ToString(CultureInfo.InvariantCulture) + ").",
-                                "已显示实体组件盒体碰撞预览（" +
-                                    displayedBodyCount.ToString(CultureInfo.InvariantCulture) + " 个）。");
-                            break;
-                        case CollisionMeshStrategy.ConvexHull:
-                            displayedBodyCount = ShowConvexHull(modeler, link,
-                                displayContext.LinkToDisplayTarget,
-                                displayContext.DisplayTarget);
-                            status = ChineseUiText.Translate(
-                                "Faceted convex hull collision preview shown.",
-                                "已显示分面凸包碰撞体预览。");
-                            break;
-                        case CollisionMeshStrategy.VisualMesh:
-                            displayedBodyCount = ShowComponentBodies(
-                                link,
-                                linkCoordinateTransform,
-                                displayContext.LinkToDisplayTarget,
-                                displayContext.DisplayTarget);
-                            status = ChineseUiText.Translate(
-                                "Visual-mesh collision geometry preview shown from SolidWorks bodies.",
-                                "已使用 SolidWorks 实体显示复用可视网格的碰撞几何预览。");
-                            break;
-                        case CollisionMeshStrategy.AccurateMesh:
-                            displayedBodyCount = ShowComponentBodies(
-                                link,
-                                linkCoordinateTransform,
-                                displayContext.LinkToDisplayTarget,
-                                displayContext.DisplayTarget);
-                            status = ChineseUiText.Translate(
-                                "Accurate collision geometry preview shown from SolidWorks bodies.",
-                                "已使用 SolidWorks 实体显示精确碰撞几何预览。");
-                            break;
-                        case CollisionMeshStrategy.SimplifiedMesh:
-                            displayedBodyCount = ShowComponentBodies(
-                                link,
-                                linkCoordinateTransform,
-                                displayContext.LinkToDisplayTarget,
-                                displayContext.DisplayTarget);
-                            status = ChineseUiText.Translate(
-                                "CAD shape preview shown. The final coarse-tessellation STL uses the selected tolerance and may have fewer facets.",
-                                "已显示 CAD 外形预览；最终粗化三角化 STL 使用所选公差，分面数量可能更少。");
-                            break;
-                        default:
-                            status = ChineseUiText.Translate(
-                                "Live preview is unavailable for this collision strategy.",
-                                "此碰撞策略暂不支持实时预览。");
-                            error = status;
-                            return false;
-                    }
+                    case CollisionMeshStrategy.Primitive:
+                    case CollisionMeshStrategy.BoxPrimitive:
+                        displayedBodyCount = ShowBox(modeler, link,
+                            displayContext.LinkToDisplayTarget,
+                            displayContext.DisplayTarget);
+                        status = ChineseUiText.Translate(
+                            "Solid box collision preview shown.",
+                            "已显示实体盒体碰撞预览。");
+                        break;
+                    case CollisionMeshStrategy.CylinderPrimitive:
+                        displayedBodyCount = ShowCylinder(modeler, link,
+                            displayContext.LinkToDisplayTarget,
+                            displayContext.DisplayTarget);
+                        status = ChineseUiText.Translate(
+                            "Solid cylinder collision preview shown.",
+                            "已显示实体圆柱碰撞预览。");
+                        break;
+                    case CollisionMeshStrategy.SpherePrimitive:
+                        displayedBodyCount = ShowSphere(modeler, link,
+                            displayContext.LinkToDisplayTarget,
+                            displayContext.DisplayTarget);
+                        status = ChineseUiText.Translate(
+                            "Spherical collision body preview shown.",
+                            "已显示球形碰撞体预览。");
+                        break;
+                    case CollisionMeshStrategy.ComponentBoxes:
+                        displayedBodyCount = ShowComponentBoxes(modeler, link,
+                            displayContext.LinkToDisplayTarget,
+                            displayContext.DisplayTarget);
+                        status = ChineseUiText.Translate(
+                            "Solid component-box collision preview shown (" +
+                                displayedBodyCount.ToString(CultureInfo.InvariantCulture) + ").",
+                            "已显示实体组件盒体碰撞预览（" +
+                                displayedBodyCount.ToString(CultureInfo.InvariantCulture) + " 个）。");
+                        break;
+                    case CollisionMeshStrategy.ConvexHull:
+                        displayedBodyCount = ShowConvexHull(modeler, link,
+                            displayContext.LinkToDisplayTarget,
+                            displayContext.DisplayTarget);
+                        status = ChineseUiText.Translate(
+                            "Faceted convex hull collision preview shown.",
+                            "已显示分面凸包碰撞体预览。");
+                        break;
+                    case CollisionMeshStrategy.VisualMesh:
+                        displayedBodyCount = ShowComponentBodies(
+                            link,
+                            linkCoordinateTransform,
+                            displayContext.LinkToDisplayTarget,
+                            displayContext.DisplayTarget);
+                        status = ChineseUiText.Translate(
+                            "Visual-mesh collision geometry preview shown from SolidWorks bodies.",
+                            "已使用 SolidWorks 实体显示复用可视网格的碰撞几何预览。");
+                        break;
+                    case CollisionMeshStrategy.AccurateMesh:
+                        displayedBodyCount = ShowComponentBodies(
+                            link,
+                            linkCoordinateTransform,
+                            displayContext.LinkToDisplayTarget,
+                            displayContext.DisplayTarget);
+                        status = ChineseUiText.Translate(
+                            "Accurate collision geometry preview shown from SolidWorks bodies.",
+                            "已使用 SolidWorks 实体显示精确碰撞几何预览。");
+                        break;
+                    case CollisionMeshStrategy.SimplifiedMesh:
+                        displayedBodyCount = ShowComponentBodies(
+                            link,
+                            linkCoordinateTransform,
+                            displayContext.LinkToDisplayTarget,
+                            displayContext.DisplayTarget);
+                        status = ChineseUiText.Translate(
+                            "CAD shape preview shown. The final coarse-tessellation STL uses the selected tolerance and may have fewer facets.",
+                            "已显示 CAD 外形预览；最终粗化三角化 STL 使用所选公差，分面数量可能更少。");
+                        break;
+                    default:
+                        throw new InvalidOperationException(ChineseUiText.Translate(
+                            "Live preview is unavailable for this collision strategy.",
+                            "此碰撞策略暂不支持实时预览。"));
                 }
 
                 model.GraphicsRedraw2();
-                return displayedBodyCount > 0;
+                if (displayedBodyCount > 0)
+                {
+                    return true;
+                }
+
+                Hide();
+                status = ChineseUiText.Translate(
+                    "Collision preview produced no displayable body.",
+                    "碰撞预览未生成可显示实体。");
+                error = status;
+                return false;
             }
             catch (Exception exception)
             {
@@ -211,13 +218,21 @@ namespace SW2URDF.UI
 
         public void Hide()
         {
+            ModelDoc2 hideTarget = displayContext == null
+                ? model
+                : displayContext.HideTarget;
             foreach (Body2 body in temporaryBodies)
             {
-                try { body.Hide(model); }
+                try { body.Hide(hideTarget); }
                 catch { }
                 finally { ReleaseComObject(body); }
             }
             temporaryBodies.Clear();
+            if (displayContext != null)
+            {
+                displayContext.Dispose();
+                displayContext = null;
+            }
             if (model != null)
             {
                 try { model.GraphicsRedraw2(); }
@@ -823,7 +838,12 @@ namespace SW2URDF.UI
             {
                 if (displayed && body != null)
                 {
-                    try { body.Hide(model); }
+                    try
+                    {
+                        body.Hide(displayContext == null
+                            ? model
+                            : displayContext.HideTarget);
+                    }
                     catch { }
                 }
                 ReleaseComObject(body);

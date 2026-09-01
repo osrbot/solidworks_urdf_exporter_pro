@@ -45,6 +45,57 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void RecommendedExportTargetsAreImmediatelyValidAndConservative()
+        {
+            ExportTargetOptions options =
+                ExportTargetOptions.RecommendedDefaults("production_robot");
+
+            Assert.True(options.UseV2Pipeline);
+            Assert.True(options.CreateRobotBundle);
+            Assert.True(options.ExportRos2);
+            Assert.False(options.ExportRos1Legacy);
+            Assert.False(options.ExportIsaacSim);
+            Assert.False(options.ExportIsaacLab);
+            Assert.Equal("0.1.0", options.PackageVersion);
+            Assert.Equal("NOASSERTION", options.ModelLicense);
+            Assert.Equal(PackageXML.DefaultMaintainerName, options.MaintainerName);
+            Assert.Equal(PackageXML.DefaultMaintainerEmail, options.MaintainerEmail);
+            Assert.Empty(options.ValidateFindings());
+        }
+
+        [Fact]
+        public void BundleOnlyTargetDoesNotRequireRosOrIsaacMetadata()
+        {
+            ExportTargetOptions options = new ExportTargetOptions
+            {
+                UseV2Pipeline = true,
+                CreateRobotBundle = true,
+                ExportRos1Legacy = false,
+                ExportRos2 = false,
+                ExportIsaacSim = false,
+                ExportIsaacLab = false
+            };
+
+            Assert.Empty(options.ValidateFindings());
+        }
+
+        [Fact]
+        public void ExportTargetValidationUsesStableCodesAndFields()
+        {
+            ExportTargetOptions options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.MaintainerEmail = "invalid";
+            options.ModelLicense = string.Empty;
+
+            IList<ExportTargetValidationFinding> findings = options.ValidateFindings();
+
+            Assert.Contains(findings, finding =>
+                finding.Code == "MODEL_LICENSE" && finding.Field == "ModelLicense");
+            Assert.Contains(findings, finding =>
+                finding.Code == "MAINTAINER_EMAIL_FORMAT" &&
+                finding.Field == "MaintainerEmail");
+        }
+
+        [Fact]
         public void TestRos1AndRos2PackageDirectories()
         {
             string tempDirectory = CreateRandomTempDirectory();

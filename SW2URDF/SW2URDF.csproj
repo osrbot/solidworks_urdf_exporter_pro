@@ -335,6 +335,7 @@
     <Compile Include="GlobalSuppressions.cs" />
     <Compile Include="UI\ChineseUiText.cs" />
     <Compile Include="UI\CollisionPreview.cs" />
+    <Compile Include="UI\ExportDiagnosticsDialog.cs" />
     <Compile Include="UI\ConfigurationSaveInteraction.cs" />
     <Compile Include="UI\ExportProgressForm.cs" />
     <Compile Include="UI\InertiaPreview.cs" />

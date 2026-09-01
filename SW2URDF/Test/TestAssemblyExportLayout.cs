@@ -879,6 +879,73 @@ namespace SW2URDF.Test
             Assert.Equal("kitso666 <kitso@osrbot.com>", UsageGuideForm.VersionMaintainer);
         }
 
+        [Fact]
+        public void TestModernCardsTabsAndUsageGuideShareResponsiveTheme()
+        {
+            AssemblyExportForm exportForm = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+            using (UsageGuideForm guide = new UsageGuideForm())
+            {
+                try
+                {
+                    Assert.IsType<ModernTabControl>(
+                        GetControl<TabControl>(exportForm, "modernJointSections"));
+                    Assert.IsType<ModernCardPanel>(
+                        GetControl<TableLayoutPanel>(exportForm, "modernPackageCard"));
+                    Assert.Equal(6, ModernCardPanel.CornerRadius);
+
+                    guide.ClientSize = new Size(760, 560);
+                    guide.PerformLayout();
+                    TextBox guideText = Assert.IsType<TextBox>(
+                        FindDescendant(guide, "usageGuideTextBox"));
+                    TableLayoutPanel guideCard = Assert.IsType<ModernCardPanel>(
+                        FindDescendant(guide, "usageGuideCard"));
+                    TableLayoutPanel footer = Assert.IsType<TableLayoutPanel>(
+                        FindDescendant(guide, "usageGuideFooter"));
+                    Button close = Assert.IsType<Button>(
+                        FindDescendant(guide, "usageGuideCloseButton"));
+
+                    Assert.True(guideText.ReadOnly);
+                    Assert.Equal(DockStyle.Fill, guideCard.Dock);
+                    Assert.False(guideCard.Bounds.IntersectsWith(footer.Bounds));
+                    AssertContainedIn(close, footer);
+                }
+                finally
+                {
+                    exportForm.Dispose();
+                }
+            }
+        }
+
+        [Fact]
+        public void TestExportDiagnosticsRemainSearchableAndActionable()
+        {
+            ExportTargetValidationFinding finding =
+                new ExportTargetValidationFinding(
+                    "MODEL_LICENSE",
+                    "ModelLicense",
+                    "Model license is required for the selected output profiles.");
+            string validationReport = ExportDiagnosticsDialog.FormatValidationFindings(
+                new[] { finding },
+                true,
+                @"C:\logs\sw2urdf.log");
+
+            Assert.Contains("[MODEL_LICENSE] ModelLicense", validationReport);
+            Assert.Contains(finding.Message, validationReport);
+            Assert.Contains("NOASSERTION", validationReport);
+            Assert.Contains(@"C:\logs\sw2urdf.log", validationReport);
+
+            string failureReport = ExportDiagnosticsDialog.FormatFailure(
+                "URDF export failed: ERROR JOINT_LIMIT $.joints[0].limit: " +
+                "Moving one-axis Joint requires effort and velocity limits.",
+                true,
+                @"C:\logs\sw2urdf.log");
+            Assert.Contains("JOINT_LIMIT", failureReport);
+            Assert.Contains("$.joints[0].limit", failureReport);
+            Assert.Contains("effort", failureReport);
+            Assert.Contains("velocity", failureReport);
+        }
+
         private static T GetControl<T>(AssemblyExportForm form, string fieldName)
             where T : Control
         {

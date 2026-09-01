@@ -87,7 +87,19 @@ namespace SW2URDF.Test
                 expected,
                 TemporaryBodyDisplayContext.IsPartDocument(
                     resolvedDocumentType,
-                    path));
+                path));
+        }
+
+        [Fact]
+        public void TestDeepPartHostSelectionRejectsRepeatedDocumentInstances()
+        {
+            long? selected = TemporaryBodyDisplayContext.SelectUniqueDocumentIdentity(
+                new long[] { 10L, 10L, 20L, 30L, 30L });
+
+            Assert.Equal(20L, selected);
+            Assert.Null(TemporaryBodyDisplayContext.SelectUniqueDocumentIdentity(
+                new long[] { 10L, 10L, 30L, 30L }));
+            Assert.Null(TemporaryBodyDisplayContext.SelectUniqueDocumentIdentity(null));
         }
 
         [Fact]

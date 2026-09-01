@@ -452,7 +452,7 @@ namespace SW2URDF.Test
                 captureTargets,
                 StringComparison.Ordinal);
             int validateTargets = form.IndexOf(
-                "Exporter.ExportTargets.Validate()",
+                "Exporter.ExportTargets.ValidateFindings()",
                 legacyTargets,
                 StringComparison.Ordinal);
 

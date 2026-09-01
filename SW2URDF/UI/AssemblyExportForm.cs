@@ -72,6 +72,8 @@ namespace SW2URDF.UI
         private Button buttonAutomaticLinkColors;
         private bool collisionPreviewEnabled;
         private bool ownedResourcesDisposed;
+        private Font treeNodeRegularFont;
+        private Font treeNodeBoldFont;
 
         private AssemblyExportForm()
         {
@@ -469,12 +471,16 @@ namespace SW2URDF.UI
             {
                 string message = "The following joints contain invalid or missing fields, please " +
                     "address them before continuing\r\n\r\n" + errors;
-                MessageBox.Show(message, "URDF Joint Errors");
+                ExportDiagnosticsDialog.ShowFailure(
+                    this,
+                    ChineseUiText.Translate("URDF Joint errors", "URDF Joint 配置错误"),
+                    "ERROR UI_JOINT_CONFIG $.joints: " + message,
+                    Logger.GetFileName());
                 return;
             }
 
             MoveJointTreeNodesToBaseNode();
-            ChangeAllNodeFont(BaseNode, new Font(treeViewJointTree.Font, FontStyle.Regular));
+            ChangeAllNodeFont(BaseNode, GetTreeNodeFont(false));
 
             using (treeSelectionUpdateGuard.Suppress())
             {
@@ -732,7 +738,7 @@ namespace SW2URDF.UI
                 SaveLinkDataFromPropertyBoxes(node.Link);
             }
             previouslySelectedNode = null;
-            ChangeAllNodeFont(BaseNode, new Font(treeViewJointTree.Font, FontStyle.Regular));
+            ChangeAllNodeFont(BaseNode, GetTreeNodeFont(false));
             FillJointTree();
             ShowModernAssemblyPage(ModernAssemblyPage.Joint);
             SelectFirstJointNodeForEditing();
@@ -763,14 +769,15 @@ namespace SW2URDF.UI
             {
                 logger.Info("Using the lightweight URDF-only compatibility path; Robot Bundle, profile, and Isaac outputs require a complete mesh export.");
             }
-            IList<string> targetErrors = Exporter.ExportTargets.Validate();
+            IList<ExportTargetValidationFinding> targetErrors =
+                Exporter.ExportTargets.ValidateFindings();
             if (targetErrors.Count > 0)
             {
-                MessageBox.Show(
-                    string.Join("\r\n", targetErrors),
+                ExportDiagnosticsDialog.ShowValidation(
+                    this,
                     ChineseUiText.Translate("Output profile errors", "输出配置错误"),
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    targetErrors,
+                    Logger.GetFileName());
                 return;
             }
 
@@ -789,7 +796,11 @@ namespace SW2URDF.UI
 
                 string message = "The following joints contain invalid or duplicate " +
                     "properties. Please address before continuing\r\n\r\n" + jointErrors;
-                MessageBox.Show(message, "URDF Joint Errors");
+                ExportDiagnosticsDialog.ShowFailure(
+                    this,
+                    ChineseUiText.Translate("URDF Joint errors", "URDF Joint 配置错误"),
+                    "ERROR UI_JOINT_CONFIG $.joints: " + message,
+                    Logger.GetFileName());
                 return;
             }
 
@@ -803,7 +814,11 @@ namespace SW2URDF.UI
 
                 string message = "The following links contained errors in either their link or joint " +
                     "properties. Please address before continuing\r\n\r\n" + errors;
-                MessageBox.Show(message, "URDF Errors");
+                ExportDiagnosticsDialog.ShowFailure(
+                    this,
+                    ChineseUiText.Translate("URDF Link errors", "URDF Link 配置错误"),
+                    "ERROR UI_LINK_CONFIG $.links: " + message,
+                    Logger.GetFileName());
                 return;
             }
 
@@ -884,11 +899,11 @@ namespace SW2URDF.UI
                 if (!exportSucceeded)
                 {
                     logger.Error(Exporter.ExportErrorWhy);
-                    MessageBox.Show(
+                    ExportDiagnosticsDialog.ShowFailure(
+                        this,
+                        ChineseUiText.Translate("URDF export failed", "URDF 导出失败"),
                         Exporter.ExportErrorWhy,
-                        ChineseUiText.Translate("URDF export failed", "URDF \u5bfc\u51fa\u5931\u8d25"),
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
+                        Logger.GetFileName());
                     return;
                 }
 
@@ -943,28 +958,34 @@ namespace SW2URDF.UI
             }
             ExportTargetOptions existing = Exporter.ExportTargets;
             bool restore = existing != null && existing.UseV2Pipeline;
-            modernBundleCheckBox.Checked = true;
-            modernRos2CheckBox.Checked = restore ? existing.ExportRos2 : true;
-            modernRos1CheckBox.Checked = restore ? existing.ExportRos1Legacy : true;
-            modernIsaacCheckBox.Checked = restore && existing.ExportIsaacSim;
-            modernIsaacLabCheckBox.Checked = restore && existing.ExportIsaacLab;
-            modernPackageVersionTextBox.Text = restore ? existing.PackageVersion : "0.1.0";
-            modernPackageDescriptionTextBox.Text = restore
-                ? existing.Description
-                : "Robot description package for " + Exporter.RosPackageName;
-            modernMaintainerNameTextBox.Text = restore ? existing.MaintainerName : string.Empty;
-            modernMaintainerEmailTextBox.Text = restore ? existing.MaintainerEmail : string.Empty;
-            modernModelLicenseTextBox.Text = restore ? existing.ModelLicense : string.Empty;
-            modernModelAuthorTextBox.Text = restore ? existing.ModelAuthor : string.Empty;
-            modernRos2PairComboBox.SelectedIndex = restore &&
-                string.Equals(existing.Ros2Distribution, "jazzy", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(existing.GazeboDistribution, "harmonic", StringComparison.OrdinalIgnoreCase)
+            ExportTargetOptions options = restore
+                ? existing
+                : ExportTargetOptions.RecommendedDefaults(Exporter.RosPackageName);
+            modernBundleCheckBox.Checked = options.CreateRobotBundle;
+            modernRos2CheckBox.Checked = options.ExportRos2;
+            modernRos1CheckBox.Checked = options.ExportRos1Legacy;
+            modernIsaacCheckBox.Checked = options.ExportIsaacSim;
+            modernIsaacLabCheckBox.Checked = options.ExportIsaacLab;
+            modernPackageVersionTextBox.Text = options.PackageVersion;
+            modernPackageDescriptionTextBox.Text = options.Description;
+            modernMaintainerNameTextBox.Text = options.MaintainerName;
+            modernMaintainerEmailTextBox.Text = options.MaintainerEmail;
+            modernModelLicenseTextBox.Text = options.ModelLicense;
+            modernModelAuthorTextBox.Text = options.ModelAuthor;
+            modernRos2PairComboBox.SelectedIndex =
+                string.Equals(options.Ros2Distribution, "jazzy", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(options.GazeboDistribution, "harmonic", StringComparison.OrdinalIgnoreCase)
                     ? 1
                     : 0;
-            modernIsaacVersionTextBox.Text = restore ? existing.IsaacSimVersion : string.Empty;
-            modernIsaacLabVersionTextBox.Text = restore ? existing.IsaacLabVersion : string.Empty;
-            modernRos2ControlProfileTextBox.Text = restore ? existing.Ros2ControlProfileFile : string.Empty;
-            modernIsaacLabProfileTextBox.Text = restore ? existing.IsaacLabProfileFile : string.Empty;
+            modernIsaacVersionTextBox.Text = options.IsaacSimVersion;
+            modernIsaacLabVersionTextBox.Text = options.IsaacLabVersion;
+            modernRos2ControlProfileTextBox.Text = options.Ros2ControlProfileFile;
+            modernIsaacLabProfileTextBox.Text = options.IsaacLabProfileFile;
+            packagePathToolTip.SetToolTip(
+                modernModelLicenseTextBox,
+                ChineseUiText.Translate(
+                    "NOASSERTION means the model license has not been confirmed. Review it before publishing.",
+                    "NOASSERTION 表示模型许可证尚未确认；公开发布前必须审核。"));
             SynchronizeIsaacTargetControls();
         }
 
@@ -1080,14 +1101,12 @@ namespace SW2URDF.UI
         {
             ClearInertiaPreview();
             ClearCollisionPreview();
-            Font fontRegular = new Font(treeViewJointTree.Font, FontStyle.Regular);
-            Font fontBold = new Font(treeViewJointTree.Font, FontStyle.Bold);
             if (previouslySelectedNode != null)
             {
                 SaveLinkDataFromPropertyBoxes(previouslySelectedNode.Link);
-                previouslySelectedNode.NodeFont = fontRegular;
+                previouslySelectedNode.NodeFont = GetTreeNodeFont(false);
             }
-            node.NodeFont = fontBold;
+            node.NodeFont = GetTreeNodeFont(true);
             node.Text = node.Text;
             ActiveSWModel.ClearSelection2(true);
             SelectionMgr manager = ActiveSWModel.SelectionManager;
@@ -1478,6 +1497,16 @@ namespace SW2URDF.UI
             {
                 buttonAutomaticLinkColors.Dispose();
             }
+            if (treeNodeRegularFont != null)
+            {
+                treeNodeRegularFont.Dispose();
+                treeNodeRegularFont = null;
+            }
+            if (treeNodeBoldFont != null)
+            {
+                treeNodeBoldFont.Dispose();
+                treeNodeBoldFont = null;
+            }
         }
 
         private void AssemblyExportFormClosing(object sender, FormClosingEventArgs e)
@@ -1619,15 +1648,13 @@ namespace SW2URDF.UI
 
         private void DisplayJointNode(LinkNode node)
         {
-            Font fontRegular = new Font(treeViewJointTree.Font, FontStyle.Regular);
-            Font fontBold = new Font(treeViewJointTree.Font, FontStyle.Bold);
             if (previouslySelectedNode != null && !previouslySelectedNode.IsBaseNode)
             {
                 SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link);
             }
             if (previouslySelectedNode != null)
             {
-                previouslySelectedNode.NodeFont = fontRegular;
+                previouslySelectedNode.NodeFont = GetTreeNodeFont(false);
             }
             ActiveSWModel.ClearSelection2(true);
             SelectionMgr manager = ActiveSWModel.SelectionManager;
@@ -1638,10 +1665,28 @@ namespace SW2URDF.UI
             {
                 component.Select4(true, data, false);
             }
-            node.NodeFont = fontBold;
+            node.NodeFont = GetTreeNodeFont(true);
             node.Text = node.Text;
             FillJointPropertyBoxes(node.Link);
             previouslySelectedNode = node;
+        }
+
+        private Font GetTreeNodeFont(bool bold)
+        {
+            if (bold)
+            {
+                if (treeNodeBoldFont == null)
+                {
+                    treeNodeBoldFont = new Font(treeViewJointTree.Font, FontStyle.Bold);
+                }
+                return treeNodeBoldFont;
+            }
+
+            if (treeNodeRegularFont == null)
+            {
+                treeNodeRegularFont = new Font(treeViewJointTree.Font, FontStyle.Regular);
+            }
+            return treeNodeRegularFont;
         }
 
         private void SelectFirstJointNodeForEditing()

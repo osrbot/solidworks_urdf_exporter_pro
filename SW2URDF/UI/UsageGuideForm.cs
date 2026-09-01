@@ -43,58 +43,138 @@ namespace SW2URDF.UI
             MinimizeBox = false;
             MaximizeBox = false;
             ShowIcon = false;
-            Size = new Size(760, 620);
-            MinimumSize = new Size(640, 480);
-            if (chinese)
+            AutoScaleMode = AutoScaleMode.Dpi;
+            Size = new Size(840, 680);
+            MinimumSize = new Size(680, 520);
+            BackColor = ModernWinFormsTheme.Background;
+
+            TableLayoutPanel shell = new TableLayoutPanel
             {
-                Font = new Font("Microsoft YaHei UI", Font.Size, Font.Style);
-            }
+                Name = "usageGuideShell",
+                BackColor = ModernWinFormsTheme.Background,
+                ColumnCount = 1,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0),
+                Padding = new Padding(0),
+                RowCount = 3
+            };
+            shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 82F));
+            shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 76F));
+
+            TableLayoutPanel header = new TableLayoutPanel
+            {
+                Name = "usageGuideHeader",
+                BackColor = ModernWinFormsTheme.Surface,
+                ColumnCount = 1,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0),
+                Padding = new Padding(24, 14, 24, 12),
+                RowCount = 2
+            };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            header.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            header.Paint += ModernWinFormsTheme.DrawBottomBorder;
+            Label titleLabel = ModernWinFormsTheme.CreateTextLabel(
+                chinese ? "使用说明" : "Usage guide",
+                15F,
+                FontStyle.Bold);
+            Label subtitleLabel = ModernWinFormsTheme.CreateTextLabel(
+                chinese
+                    ? "工作流、输出目标、惯性与碰撞策略参考"
+                    : "Workflow, output targets, inertia, and collision strategy reference",
+                9F,
+                FontStyle.Regular);
+            subtitleLabel.ForeColor = ModernWinFormsTheme.MutedText;
+            header.Controls.Add(titleLabel, 0, 0);
+            header.Controls.Add(subtitleLabel, 0, 1);
 
             guideTextBox = new TextBox
             {
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
-                Location = new Point(12, 12),
+                Name = "usageGuideTextBox",
+                BackColor = ModernWinFormsTheme.Surface,
+                BorderStyle = BorderStyle.None,
+                Dock = DockStyle.Fill,
                 Multiline = true,
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Vertical,
-                Size = new Size(ClientSize.Width - 24, ClientSize.Height - 92),
-                Text = BuildGuideText(chinese)
+                Text = BuildGuideText(chinese),
+                WordWrap = true
             };
+
+            TableLayoutPanel guideCard = ModernWinFormsTheme.CreateCard("usageGuideCard");
+            guideCard.AutoSize = false;
+            guideCard.Dock = DockStyle.Fill;
+            guideCard.Margin = new Padding(24, 18, 24, 18);
+            guideCard.Padding = new Padding(18);
+            guideCard.RowCount = 1;
+            guideCard.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            guideCard.Controls.Add(guideTextBox, 0, 0);
 
             projectLinkLabel = new LinkLabel
             {
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
-                AutoSize = false,
-                Location = new Point(12, ClientSize.Height - 68),
-                Size = new Size(ClientSize.Width - 24, 22),
+                Name = "usageGuideProjectLink",
+                AutoSize = true,
+                Dock = DockStyle.Fill,
+                LinkColor = ModernWinFormsTheme.Accent,
+                Margin = new Padding(0),
+                TabStop = true,
                 Text = ProjectUrl
             };
             projectLinkLabel.LinkClicked += ProjectLinkLabelLinkClicked;
 
             Label maintainerLabel = new Label
             {
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
-                AutoSize = false,
-                Location = new Point(12, ClientSize.Height - 42),
-                Size = new Size(ClientSize.Width - 128, 22),
+                AutoEllipsis = true,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0),
                 Text = (chinese ? "此版本维护作者: " : "Maintainer for this version: ") +
-                    VersionMaintainer
+                    VersionMaintainer,
+                TextAlign = ContentAlignment.MiddleLeft
             };
 
             closeButton = new Button
             {
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
-                Location = new Point(ClientSize.Width - 96, ClientSize.Height - 38),
-                Size = new Size(84, 26),
+                Name = "usageGuideCloseButton",
+                Anchor = AnchorStyles.Right,
+                DialogResult = DialogResult.Cancel,
+                Margin = new Padding(16, 0, 0, 0),
+                Size = new Size(96, 34),
                 Text = chinese ? "关闭" : "Close",
-                UseVisualStyleBackColor = true
+                UseVisualStyleBackColor = false
             };
             closeButton.Click += (sender, e) => Close();
 
-            Controls.Add(guideTextBox);
-            Controls.Add(projectLinkLabel);
-            Controls.Add(maintainerLabel);
-            Controls.Add(closeButton);
+            TableLayoutPanel footer = new TableLayoutPanel
+            {
+                Name = "usageGuideFooter",
+                BackColor = ModernWinFormsTheme.Surface,
+                ColumnCount = 2,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0),
+                Padding = new Padding(24, 10, 24, 10),
+                RowCount = 2
+            };
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112F));
+            footer.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            footer.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            footer.Paint += ModernWinFormsTheme.DrawTopBorder;
+            footer.Controls.Add(projectLinkLabel, 0, 0);
+            footer.Controls.Add(maintainerLabel, 0, 1);
+            footer.Controls.Add(closeButton, 1, 0);
+            footer.SetRowSpan(closeButton, 2);
+
+            shell.Controls.Add(header, 0, 0);
+            shell.Controls.Add(guideCard, 0, 1);
+            shell.Controls.Add(footer, 0, 2);
+            Controls.Add(shell);
+            CancelButton = closeButton;
+            ModernWinFormsTheme.Apply(this);
+            ModernWinFormsTheme.StyleSecondaryButton(closeButton);
+            guideTextBox.BorderStyle = BorderStyle.None;
         }
 
         internal static string BuildGuideText(bool chinese)

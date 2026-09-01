@@ -5,6 +5,22 @@ using System.Text.RegularExpressions;
 
 namespace SW2URDF.URDFExport
 {
+    public sealed class ExportTargetValidationFinding
+    {
+        public ExportTargetValidationFinding(string code, string field, string message)
+        {
+            Code = code;
+            Field = field;
+            Message = message;
+        }
+
+        public string Code { get; }
+
+        public string Field { get; }
+
+        public string Message { get; }
+    }
+
     public sealed class ExportTargetOptions
     {
         private static readonly Regex ExactVersion = new Regex(
@@ -62,35 +78,78 @@ namespace SW2URDF.URDFExport
             };
         }
 
+        public static ExportTargetOptions RecommendedDefaults(string packageName)
+        {
+            string normalizedName = string.IsNullOrWhiteSpace(packageName)
+                ? "robot_description"
+                : packageName.Trim();
+            return new ExportTargetOptions
+            {
+                UseV2Pipeline = true,
+                CreateRobotBundle = true,
+                ExportRos1Legacy = false,
+                ExportRos2 = true,
+                ExportIsaacSim = false,
+                ExportIsaacLab = false,
+                PackageVersion = "0.1.0",
+                Description = "Robot description package for " + normalizedName,
+                MaintainerName = SW2URDF.URDF.PackageXML.DefaultMaintainerName,
+                MaintainerEmail = SW2URDF.URDF.PackageXML.DefaultMaintainerEmail,
+                ModelLicense = "NOASSERTION",
+                ModelAuthor = string.Empty,
+                Ros2Distribution = "lyrical",
+                GazeboDistribution = "jetty"
+            };
+        }
+
         public IList<string> Validate()
         {
             List<string> errors = new List<string>();
+            foreach (ExportTargetValidationFinding finding in ValidateFindings())
+            {
+                errors.Add(finding.Message);
+            }
+            return errors;
+        }
+
+        public IList<ExportTargetValidationFinding> ValidateFindings()
+        {
+            List<ExportTargetValidationFinding> errors =
+                new List<ExportTargetValidationFinding>();
             if (!UseV2Pipeline)
             {
                 return errors;
             }
             if (!CreateRobotBundle)
             {
-                errors.Add("The v2 pipeline requires a Robot Bundle as its canonical output.");
+                Add(errors, "V2_BUNDLE_REQUIRED", "CreateRobotBundle",
+                    "The v2 pipeline requires a Robot Bundle as its canonical output.");
             }
             if (ExportIsaacLab && !ExportIsaacSim)
             {
-                errors.Add("Isaac Lab output requires the Isaac Sim USD profile.");
+                Add(errors, "TARGET_DEPENDENCY", "ExportIsaacLab",
+                    "Isaac Lab output requires the Isaac Sim USD profile.");
             }
             if (!ExactVersion.IsMatch(PackageVersion ?? string.Empty))
             {
-                errors.Add("Package version must be an exact semantic version, for example 0.1.0.");
+                Add(errors, "PACKAGE_VERSION", "PackageVersion",
+                    "Package version must be an exact semantic version, for example 0.1.0.");
             }
-            Require(errors, Description, "Package description");
-            Require(errors, ModelLicense, "Model license");
             if (ExportRos1Legacy || ExportRos2)
             {
-                Require(errors, MaintainerName, "Maintainer name");
-                Require(errors, MaintainerEmail, "Maintainer email");
+                Require(errors, Description, "PACKAGE_DESCRIPTION", "Description",
+                    "Package description");
+                Require(errors, ModelLicense, "MODEL_LICENSE", "ModelLicense",
+                    "Model license");
+                Require(errors, MaintainerName, "MAINTAINER_NAME", "MaintainerName",
+                    "Maintainer name");
+                Require(errors, MaintainerEmail, "MAINTAINER_EMAIL", "MaintainerEmail",
+                    "Maintainer email");
                 if (!string.IsNullOrWhiteSpace(MaintainerEmail) &&
                     !EmailAddress.IsMatch(MaintainerEmail))
                 {
-                    errors.Add("Maintainer email is not a valid email address.");
+                    Add(errors, "MAINTAINER_EMAIL_FORMAT", "MaintainerEmail",
+                        "Maintainer email is not a valid email address.");
                 }
             }
             if (ExportRos2 &&
@@ -99,42 +158,66 @@ namespace SW2URDF.URDFExport
                   string.Equals(Ros2Distribution, "jazzy", StringComparison.OrdinalIgnoreCase) &&
                   string.Equals(GazeboDistribution, "harmonic", StringComparison.OrdinalIgnoreCase)))
             {
-                errors.Add("Supported ROS 2 / Gazebo pairs are Lyrical / Jetty and Jazzy / Harmonic.");
+                Add(errors, "ROS2_GAZEBO_PAIR", "Ros2Distribution",
+                    "Supported ROS 2 / Gazebo pairs are Lyrical / Jetty and Jazzy / Harmonic.");
             }
             if (!string.IsNullOrWhiteSpace(Ros2ControlProfileFile) &&
                 (!ExportRos2 || !File.Exists(Ros2ControlProfileFile)))
             {
-                errors.Add("A ros2_control profile must be an existing JSON file and requires ROS 2 output.");
+                Add(errors, "ROS2_CONTROL_PROFILE", "Ros2ControlProfileFile",
+                    "A ros2_control profile must be an existing JSON file and requires ROS 2 output.");
             }
             if (ExportIsaacSim)
             {
                 if (!ExactVersion.IsMatch(IsaacSimVersion ?? string.Empty))
                 {
-                    errors.Add("Pin an exact Isaac Sim version, for example 6.0.0.");
+                    Add(errors, "ISAAC_SIM_VERSION", "IsaacSimVersion",
+                        "Pin an exact Isaac Sim version, for example 6.0.0.");
                 }
-                Require(errors, ModelLicense, "Model license");
+                if (!(ExportRos1Legacy || ExportRos2))
+                {
+                    Require(errors, ModelLicense, "MODEL_LICENSE", "ModelLicense",
+                        "Model license");
+                }
             }
             if (ExportIsaacLab)
             {
                 if (!ExactVersion.IsMatch(IsaacLabVersion ?? string.Empty))
                 {
-                    errors.Add("Pin an exact Isaac Lab version, for example 2.3.2.");
+                    Add(errors, "ISAAC_LAB_VERSION", "IsaacLabVersion",
+                        "Pin an exact Isaac Lab version, for example 2.3.2.");
                 }
                 if (string.IsNullOrWhiteSpace(IsaacLabProfileFile) ||
                     !File.Exists(IsaacLabProfileFile))
                 {
-                    errors.Add("Select an Isaac Lab actuator profile JSON file. Gains are never guessed from CAD.");
+                    Add(errors, "ISAAC_LAB_PROFILE", "IsaacLabProfileFile",
+                        "Select an Isaac Lab actuator profile JSON file. Gains are never guessed from CAD.");
                 }
             }
             return errors;
         }
 
-        private static void Require(ICollection<string> errors, string value, string label)
+        private static void Require(
+            ICollection<ExportTargetValidationFinding> errors,
+            string value,
+            string code,
+            string field,
+            string label)
         {
             if (string.IsNullOrWhiteSpace(value))
             {
-                errors.Add(label + " is required for the selected output profiles.");
+                Add(errors, code, field,
+                    label + " is required for the selected output profiles.");
             }
+        }
+
+        private static void Add(
+            ICollection<ExportTargetValidationFinding> errors,
+            string code,
+            string field,
+            string message)
+        {
+            errors.Add(new ExportTargetValidationFinding(code, field, message));
         }
     }
 }

@@ -37,6 +37,7 @@ namespace SW2URDF.UI
         }
 
         private bool modernUiInitialized;
+        private bool modernPageShown;
         // Keep workflow state explicit; visibility is a rendering detail and
         // must not decide which editor data is captured when the form closes.
         private ModernAssemblyPage modernActivePage;
@@ -457,7 +458,7 @@ namespace SW2URDF.UI
 
         private static TabControl CreateModernSectionTabs(string name)
         {
-            TabControl tabs = new TabControl
+            TabControl tabs = new ModernTabControl
             {
                 Name = name,
                 Dock = DockStyle.Fill,
@@ -491,8 +492,10 @@ namespace SW2URDF.UI
             pageBounds.Height = Math.Max(
                 pageBounds.Height,
                 tabs.ClientSize.Height - pageBounds.Top - borderInset);
-            page.Bounds = pageBounds;
-            page.PerformLayout();
+            if (page.Bounds != pageBounds)
+            {
+                page.Bounds = pageBounds;
+            }
         }
 
         private static TabPage CreateModernTabPage(string name, string text)
@@ -2251,18 +2254,29 @@ namespace SW2URDF.UI
                     throw new ArgumentOutOfRangeException("page");
             }
 
-            SuspendLayout();
-            try
+            if (modernPageShown && modernActivePage == page && activePage.Visible)
             {
-                modernJointRoot.Visible = page == ModernAssemblyPage.Joint;
-                panelLinkProperties.Visible = page == ModernAssemblyPage.Link;
-                modernModelRoot.Visible = page == ModernAssemblyPage.Model;
-                activePage.BringToFront();
-                modernActivePage = page;
+                return;
             }
-            finally
+
+            using (ModernWinFormsTheme.SuspendRedraw(this))
             {
-                ResumeLayout(true);
+                SuspendLayout();
+                try
+                {
+                    modernJointRoot.Visible = false;
+                    panelLinkProperties.Visible = false;
+                    modernModelRoot.Visible = false;
+                    activePage.Visible = true;
+                    activePage.BringToFront();
+                    modernActivePage = page;
+                    modernPageShown = true;
+                }
+                finally
+                {
+                    ResumeLayout(false);
+                }
+                activePage.PerformLayout();
             }
 
             if (page == ModernAssemblyPage.Joint)

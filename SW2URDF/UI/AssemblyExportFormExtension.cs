@@ -38,6 +38,8 @@ namespace SW2URDF.UI
         private const string GeneralDisplayFormat = "G5";
         // The preview button saves textbox values before display, so inertia values must round-trip.
         private const string InertiaDisplayFormat = "R";
+        private List<ReferenceGeometryEntry> coordinateSystemEntryCache;
+        private List<ReferenceGeometryEntry> referenceAxisEntryCache;
 
         private void FillReferenceComboBox(
             ComboBox comboBox,
@@ -54,9 +56,7 @@ namespace SW2URDF.UI
                     ChineseUiText.Translate("Automatically generate", "自动生成")));
             }
 
-            List<ReferenceGeometryEntry> entries = kind == ReferenceGeometryKind.CoordinateSystem
-                ? Exporter.GetRefCoordinateSystems()
-                : Exporter.GetRefAxes();
+            IList<ReferenceGeometryEntry> entries = GetReferenceGeometryEntries(kind);
             bool selectedReferenceAvailable = false;
             foreach (ReferenceGeometryEntry entry in entries)
             {
@@ -95,6 +95,25 @@ namespace SW2URDF.UI
                 }
             }
             comboBox.SelectedIndex = comboBox.Items.Count == 0 ? -1 : 0;
+        }
+
+        private IList<ReferenceGeometryEntry> GetReferenceGeometryEntries(
+            ReferenceGeometryKind kind)
+        {
+            if (kind == ReferenceGeometryKind.CoordinateSystem)
+            {
+                if (coordinateSystemEntryCache == null)
+                {
+                    coordinateSystemEntryCache = Exporter.GetRefCoordinateSystems();
+                }
+                return coordinateSystemEntryCache;
+            }
+
+            if (referenceAxisEntryCache == null)
+            {
+                referenceAxisEntryCache = Exporter.GetRefAxes();
+            }
+            return referenceAxisEntryCache;
         }
 
         private static CadFeatureReference ReadReferenceComboBox(
@@ -638,30 +657,46 @@ namespace SW2URDF.UI
         //Fills specifically the joint TreeView
         public void FillJointTree()
         {
-            using (treeSelectionUpdateGuard.Suppress())
+            treeViewJointTree.BeginUpdate();
+            try
             {
-                treeViewJointTree.Nodes.Clear();
-
-                while (BaseNode.Nodes.Count > 0)
+                using (treeSelectionUpdateGuard.Suppress())
                 {
-                    LinkNode node = (LinkNode)BaseNode.FirstNode;
-                    BaseNode.Nodes.Remove(node);
-                    treeViewJointTree.Nodes.Add(node);
-                    UpdateNodeText(node, true);
+                    treeViewJointTree.Nodes.Clear();
+
+                    while (BaseNode.Nodes.Count > 0)
+                    {
+                        LinkNode node = (LinkNode)BaseNode.FirstNode;
+                        BaseNode.Nodes.Remove(node);
+                        treeViewJointTree.Nodes.Add(node);
+                        UpdateNodeText(node, true);
+                    }
+                    treeViewJointTree.ExpandAll();
+                    previouslySelectedNode = null;
                 }
-                treeViewJointTree.ExpandAll();
-                previouslySelectedNode = null;
+            }
+            finally
+            {
+                treeViewJointTree.EndUpdate();
             }
         }
 
         public void FillLinkTree()
         {
-            using (treeSelectionUpdateGuard.Suppress())
+            treeViewLinkProperties.BeginUpdate();
+            try
             {
-                treeViewLinkProperties.Nodes.Clear();
-                treeViewLinkProperties.Nodes.Add(BaseNode);
-                UpdateNodeText(BaseNode, false);
-                treeViewLinkProperties.ExpandAll();
+                using (treeSelectionUpdateGuard.Suppress())
+                {
+                    treeViewLinkProperties.Nodes.Clear();
+                    treeViewLinkProperties.Nodes.Add(BaseNode);
+                    UpdateNodeText(BaseNode, false);
+                    treeViewLinkProperties.ExpandAll();
+                }
+            }
+            finally
+            {
+                treeViewLinkProperties.EndUpdate();
             }
         }
 
