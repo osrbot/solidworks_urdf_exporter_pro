@@ -461,7 +461,7 @@ namespace SW2URDF.Test
             Assert.True(legacyTargets > captureTargets);
             Assert.True(validateTargets > legacyTargets);
             Assert.Contains(
-                "Robot Bundle, profile, and Isaac outputs require a complete mesh export",
+                "derived target packages require a complete mesh export",
                 form.Substring(finishExport, validateTargets - finishExport));
         }
 

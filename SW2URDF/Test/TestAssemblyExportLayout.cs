@@ -55,11 +55,13 @@ namespace SW2URDF.Test
                     BindingFlags.Instance | BindingFlags.NonPublic);
                 Assert.NotNull(capture);
                 ExportTargetOptions options = (ExportTargetOptions)capture.Invoke(form, null);
+                Assert.True(options.CreateRobotBundle);
                 Assert.Equal("jazzy", options.Ros2Distribution);
                 Assert.Equal("harmonic", options.GazeboDistribution);
 
                 pair.SelectedIndex = 0;
                 options = (ExportTargetOptions)capture.Invoke(form, null);
+                Assert.True(options.CreateRobotBundle);
                 Assert.Equal("lyrical", options.Ros2Distribution);
                 Assert.Equal("jetty", options.GazeboDistribution);
             }
@@ -667,7 +669,7 @@ namespace SW2URDF.Test
 
                 packageName.Text = "rover_description";
                 Assert.Equal(
-                    "Bundle | ROS2 | ROS1 legacy: rover_description",
+                    "ROS2 | ROS1 legacy: rover_description",
                     packageHint.Text);
                 Assert.DoesNotContain("and", packageHint.Text);
                 Assert.DoesNotContain("\u548c", packageHint.Text);

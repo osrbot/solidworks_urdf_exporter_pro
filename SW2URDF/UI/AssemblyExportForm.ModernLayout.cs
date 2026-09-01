@@ -55,7 +55,6 @@ namespace SW2URDF.UI
         private Button modernModelPreviousButton;
         private Size modernMinimumSizeAfterInitialScale;
         private Size modernClientSizeAfterInitialScale;
-        private CheckBox modernBundleCheckBox;
         private CheckBox modernRos2CheckBox;
         private CheckBox modernRos1CheckBox;
         private CheckBox modernIsaacCheckBox;
@@ -1536,19 +1535,16 @@ namespace SW2URDF.UI
                 Margin = new Padding(0, 10, 0, 8),
                 WrapContents = true
             };
-            modernBundleCheckBox = CreateTargetCheckBox("Robot Bundle", true);
             modernRos2CheckBox = CreateTargetCheckBox(
                 ChineseUiText.Translate("ROS 2 + modern Gazebo", "ROS 2 + 现代 Gazebo"),
                 true);
             modernRos1CheckBox = CreateTargetCheckBox("ROS 1 legacy", true);
             modernIsaacCheckBox = CreateTargetCheckBox("Isaac Sim USD profile", false);
             modernIsaacLabCheckBox = CreateTargetCheckBox("Isaac Lab RL profile", false);
-            modernBundleCheckBox.Enabled = false;
             modernIsaacCheckBox.CheckedChanged += ModernIsaacSelectionChanged;
             modernRos1CheckBox.CheckedChanged += ModernTargetSelectionChanged;
             modernRos2CheckBox.CheckedChanged += ModernTargetSelectionChanged;
             modernIsaacLabCheckBox.CheckedChanged += ModernTargetSelectionChanged;
-            targets.Controls.Add(modernBundleCheckBox);
             targets.Controls.Add(modernRos2CheckBox);
             targets.Controls.Add(modernRos1CheckBox);
             targets.Controls.Add(modernIsaacCheckBox);

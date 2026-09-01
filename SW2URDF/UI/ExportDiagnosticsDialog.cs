@@ -237,7 +237,9 @@ namespace SW2URDF.UI
             switch (code ?? string.Empty)
             {
                 case "V2_BUNDLE_REQUIRED":
-                    return chinese ? "保持 Robot Bundle 选中。" : "Keep Robot Bundle selected.";
+                    return chinese
+                        ? "内部模型包配置异常；重新打开导出器后再试。"
+                        : "The internal model package configuration is invalid; reopen the exporter and try again.";
                 case "TARGET_DEPENDENCY":
                     return chinese ? "启用 Isaac Sim，或取消 Isaac Lab。" : "Enable Isaac Sim or clear Isaac Lab.";
                 case "PACKAGE_VERSION":

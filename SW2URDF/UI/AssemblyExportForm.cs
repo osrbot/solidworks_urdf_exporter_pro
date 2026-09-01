@@ -767,7 +767,7 @@ namespace SW2URDF.UI
                 : ExportTargetOptions.LegacyCompatibilityDefaults();
             if (!exportSTL)
             {
-                logger.Info("Using the lightweight URDF-only compatibility path; Robot Bundle, profile, and Isaac outputs require a complete mesh export.");
+                logger.Info("Using the lightweight URDF-only compatibility path; derived target packages require a complete mesh export.");
             }
             IList<ExportTargetValidationFinding> targetErrors =
                 Exporter.ExportTargets.ValidateFindings();
@@ -849,8 +849,8 @@ namespace SW2URDF.UI
             {
                 SelectedPath = Directory.Exists(Exporter.SavePath) ? Exporter.SavePath : "",
                 Description = ChineseUiText.Translate(
-                    "Select the export root for the Robot Bundle and selected profiles",
-                    "\u9009\u62e9 Robot Bundle \u4e0e\u5df2\u9009\u8f93\u51fa\u914d\u7f6e\u7684\u5bfc\u51fa\u6839\u76ee\u5f55")
+                    "Select the export root for the selected target packages",
+                    "\u9009\u62e9\u5df2\u9009\u76ee\u6807\u529f\u80fd\u5305\u7684\u5bfc\u51fa\u6839\u76ee\u5f55")
             })
             {
 
@@ -931,7 +931,7 @@ namespace SW2URDF.UI
         private void UpdateRosPackageNameHint()
         {
             string sanitized = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
-            List<string> targets = new List<string> { "Bundle" };
+            List<string> targets = new List<string>();
             if (modernRos2CheckBox == null || modernRos2CheckBox.Checked)
             {
                 targets.Add("ROS2");
@@ -944,15 +944,18 @@ namespace SW2URDF.UI
             {
                 targets.Add("Isaac");
             }
-            labelRosPackageNameHint.Text = string.Join(" | ", targets) + ": " + sanitized;
+            string targetSummary = targets.Count == 0
+                ? ChineseUiText.Translate("No target selected", "未选择输出目标")
+                : string.Join(" | ", targets);
+            labelRosPackageNameHint.Text = targetSummary + ": " + sanitized;
             packagePathToolTip.SetToolTip(
                 labelRosPackageNameHint,
-                "Bundle/" + sanitized + ".osurdf | ROS1/" + sanitized + " | ROS2/" + sanitized);
+                "ROS1/" + sanitized + " | ROS2/" + sanitized);
         }
 
         private void InitializeExportTargetControls()
         {
-            if (modernBundleCheckBox == null)
+            if (modernRos2CheckBox == null)
             {
                 return;
             }
@@ -961,7 +964,6 @@ namespace SW2URDF.UI
             ExportTargetOptions options = restore
                 ? existing
                 : ExportTargetOptions.RecommendedDefaults(Exporter.RosPackageName);
-            modernBundleCheckBox.Checked = options.CreateRobotBundle;
             modernRos2CheckBox.Checked = options.ExportRos2;
             modernRos1CheckBox.Checked = options.ExportRos1Legacy;
             modernIsaacCheckBox.Checked = options.ExportIsaacSim;

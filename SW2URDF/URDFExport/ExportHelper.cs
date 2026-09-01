@@ -325,7 +325,7 @@ namespace SW2URDF.URDFExport
 
                 if (ExportTargets != null && ExportTargets.UseV2Pipeline)
                 {
-                    UpdateProgressTitle("Creating Robot Bundle and target packages", "\u6b63\u5728\u521b\u5efa Robot Bundle \u4e0e\u76ee\u6807\u529f\u80fd\u5305");
+                    UpdateProgressTitle("Creating selected target packages", "\u6b63\u5728\u521b\u5efa\u5df2\u9009\u76ee\u6807\u529f\u80fd\u5305");
                     logger.Info("Creating v2 Robot Bundle at " + deliveryPackage.WindowsBundleDirectory);
                     v2Result = V2ExportBridge.Export(
                         package,
