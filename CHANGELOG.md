@@ -2,17 +2,131 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
-## Unreleased
+## Unreleased / 未发布
 
-### Changed
+### English
 
+#### Added
+
+- Added two first-class, user-selectable robot-asset targets alongside the existing ROS package
+  targets:
+  - OpenUSD writes `USD/<package>/robot.usd`, converted geometry dependencies, retained source mesh
+    evidence, `name_map.json`, and `export_report.json`.
+  - MuJoCo MJCF writes `MuJoCo/<robot>/robot.xml`, `scene.xml`, Visual/Collision assets,
+    `name_map.json`, and `export_report.json`.
+- Added pinned runtime validation for both asset targets. OpenUSD generation must reopen the stage
+  with the bundled OpenUSD runtime. MJCF export must pass the bundled official MuJoCo tools by
+  compiling and canonically saving both XML entry points, reloading them, and advancing one
+  zero-control step.
+- Added bilingual output documentation that separates generation capability, automated validation,
+  and application-level runtime validation.
+
+#### Changed
+
+- Reduced the user-facing export choices to four concrete deliverables: ROS 1 package, ROS 2
+  package, OpenUSD robot asset, and MuJoCo MJCF model. The canonical Robot Bundle is now a private,
+  temporary staging representation and is neither a selectable target nor a delivered artifact.
+- Removed the obsolete Isaac Sim version, Isaac Lab version, actuator-profile, and raw
+  `ros2_control` file selectors from the main export workflow. OpenUSD export does not require or
+  detect a local Isaac installation; MJCF export does not generate actuators, controllers, PID
+  gains, tasks, or reinforcement-learning code.
+- Made RGBA and the color picker the direct Link appearance controls. The stable URDF material ID
+  is derived from that color instead of acting as a second color preset selector.
+- On initial form load, defaulted missing moving-Joint `effort` and `velocity` fields to numeric
+  value `1` in their URDF units. A value the user later clears is treated as invalid instead of
+  being silently restored; position limits remain an engineering decision and are not guessed.
+- Improved the themed WinForms layout, footer spacing, field borders, tab switching, bilingual
+  diagnostics, and immediate Joint validation without changing canonical URDF Joint values.
 - Validate inertia triangle inequalities in the principal frame using scale-aware eigenvalue
   checks, including rotated and very small tensors.
+- Each export atomically replaces only the selected independent target directories. Existing
+  unselected targets are retained, and the top-level report identifies the targets generated and
+  validated by the current run.
 
-### Fixed
+#### Fixed
 
-- Made standalone Bundle profile JSON use exactly the same canonical null-elision as embedded
-  `robot.json` profiles, allowing sparse non-ROS models to pass Isaac adapter preflight.
+- Resolved deep or hidden Link preview display through a root-assembly-safe temporary-body host and
+  the complete component transform, without adding persistent tree objects. Equivalent-inertia and
+  Collision previews still require live validation in the maintainer's target SolidWorks versions.
+- Kept private staging cleanup on both successful and failed export paths so internal Bundle files
+  are not left in the user's delivery directory.
+- Made the pinned MuJoCo integration test a hard-failing dedicated category. Hosted portable jobs
+  exclude it explicitly; runtime CI and installer builds require a TRX proving exactly one executed,
+  passed test, preventing missing-runtime skips or zero-test runs from appearing successful.
+- Made selected-target publication fail closed: a blocking `FAIL` in the generated health report
+  now rolls every selected target back. Directory replacement uses an output-root lock and a
+  durable journal so the next export can finish an interrupted commit or reverse an uncommitted
+  multi-target publication without mixing old and new target directories. The journal is retained
+  when old-output cleanup is temporarily blocked, and recovery is idempotent both before the first
+  directory move and after a partially completed rollback.
+
+#### Validation Scope
+
+- **Generation capability:** the implementation exposes four output routes and defines their file
+  contracts; test results must be reported separately from this capability statement.
+- **Automated runtime validation:** successful USD export requires generation and reopen with the
+  pinned OpenUSD runtime; successful MJCF export requires compile, save, reload, and one
+  zero-control step with pinned official MuJoCo tools. Reproducible installer packaging runs the
+  deterministic plugin suite with `--exclude-live-solidworks`; native SolidWorks COM suites remain
+  explicit Live API evidence and are recorded as not requested when they were not run.
+- **Application runtime validation:** this development state does not claim that the new USD has
+  been run in Isaac Sim or Isaac Lab, that ROS packages have been launched in a ROS installation,
+  or that exported models have passed task-specific controller, contact, stability, performance,
+  or reinforcement-learning validation. Deep SolidWorks preview behavior remains subject to live
+  maintainer testing before a public release.
+
+### 简体中文
+
+#### 新增
+
+- 在现有 ROS 功能包目标之外，新增两种一等、可由用户选择的机器人资产目标：
+  - OpenUSD 写出 `USD/<package>/robot.usd`、转换后的几何依赖、保留的源网格证据、
+    `name_map.json` 和 `export_report.json`。
+  - MuJoCo MJCF 写出 `MuJoCo/<robot>/robot.xml`、`scene.xml`、Visual/Collision 资产、
+    `name_map.json` 和 `export_report.json`。
+- 为两种资产目标增加固定运行时验证。OpenUSD 必须使用安装包内置运行时重新打开生成的 stage；
+  MJCF 必须使用内置 MuJoCo 官方工具对两个 XML 入口完成编译、规范保存、重载和一步零控制推进。
+- 增加双语输出文档，分别说明生成能力、自动化验证和实际应用运行验证。
+
+#### 变更
+
+- 用户可见导出目标收敛为四种具体交付物：ROS 1 功能包、ROS 2 功能包、OpenUSD 机器人资产和
+  MuJoCo MJCF 模型。规范 Robot Bundle 改为私有临时暂存表示，不再可选，也不作为产物交付。
+- 从主导出流程删除旧 Isaac Sim/Isaac Lab 版本、actuator profile 和原始 `ros2_control` 文件选择。
+  OpenUSD 不要求或检测本机 Isaac；MJCF 不生成 actuator、控制器、PID、任务或强化学习代码。
+- RGBA 与选色器成为 Link 外观的直接输入；稳定 URDF material ID 由颜色派生，不再充当第二套
+  颜色预设。
+- 首次载入表单时，缺失的可动 Joint `effort` 和 `velocity` 按对应 URDF 单位默认填写数值 `1`。
+  用户之后主动清空的值会被判定为无效，不会被静默补回；位置上下限仍由用户按工程语义填写，
+  不做猜测。
+- 改进 WinForms 主题布局、页脚间距、输入边框、Tab 切换、双语诊断和 Joint 即时校验，同时保持
+  规范 URDF Joint 值不变。
+- 使用尺度感知的特征值检查，在主轴系校验惯性三角不等式，包括旋转张量和极小张量。
+- 每次导出只原子替换本次选中的独立目标目录；未选目标的既有目录会保留，顶层报告明确记录
+  本次实际生成和验证的目标。
+
+#### 修复
+
+- 使用根装配安全的临时体宿主与完整组件变换，修复深层或隐藏 Link 的预览显示，且不增加持久化
+  树节点。等效惯性与 Collision 预览仍须在维护者目标 SolidWorks 版本中完成 Live 验证。
+- 成功和失败路径都会清理私有暂存，内部 Bundle 文件不会留在用户交付目录。
+- 固定 MuJoCo 集成测试改为硬失败的专用类别。普通可移植作业显式排除；运行时 CI 与安装包构建
+  必须由 TRX 证明恰好 1 项被执行并通过，禁止缺少运行时的跳过或零测试伪绿。
+- 所选目标现在采用失败即关闭的发布语义：导出体检报告出现阻断级 `FAIL` 时回滚全部所选目标。
+  目录替换使用输出根互斥锁与持久化 journal；若进程中断，下一次导出会完成已经确认的提交，或
+  逆转尚未提交的多目标发布，避免新旧目标目录混杂。旧输出清理暂时受阻时会保留 journal；在
+  第一次目录移动前中断以及部分回滚后再次中断时，恢复操作均保持幂等。
+
+#### 验证范围
+
+- **生成能力**：实现提供四条输出路线并定义文件合同；测试结果必须与能力声明分开报告。
+- **自动化运行时验证**：USD 成功要求使用固定 OpenUSD 运行时生成并重开；MJCF 成功要求使用
+  固定 MuJoCo 官方工具完成编译、保存、重载和一步零控制推进。可复现安装包构建使用
+  `--exclude-live-solidworks` 运行确定性插件套件；原生 SolidWorks COM 套件仍是独立的 Live API
+  证据，未运行时明确记录为未请求。
+- **实际应用运行验证**：当前开发状态不声称新 USD 已在 Isaac Sim/Isaac Lab 中运行，不声称
+  ROS 功能包已在 ROS 环境中启动，也不声称目标模型通过了控制器、接触、稳定性、性能、任务或
+  强化学习验证。公开发布前仍须由维护者完成深层 SolidWorks 预览的 Live 测试。
 
 ## 2026-08-29
 

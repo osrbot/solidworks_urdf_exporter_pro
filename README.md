@@ -9,8 +9,8 @@
 This repository is the OSRBot-maintained fork of the ROS
 [`solidworks_urdf_exporter`](https://github.com/ros/solidworks_urdf_exporter). It keeps the
 original SolidWorks add-in workflow and adds maintained Link-tree editing, frame-aware mass
-properties, collision strategies and previews, ROS1/ROS2 package output, validation reports,
-Chinese localization, and auditable installer packaging.
+properties, collision strategies and previews, ROS1/ROS2 packages, OpenUSD and MJCF robot assets,
+validation reports, Chinese localization, and auditable installer packaging.
 
 > **Project status**
 >
@@ -28,9 +28,12 @@ physical validation, and release maintenance:
 | Production gap | Maintained fork response |
 | --- | --- |
 | Link-tree edits could be lost across preview, PropertyManager, or reopen transitions | Transactional editing, strict v2 PID-backed configurations, recovery drafts, and stricter duplicate/stale-state validation |
+| Deep reference geometry, Unicode names, and duplicate names were unsafe to resolve by display text | Component-instance and feature persistent IDs plus occurrence-aware `GetCorresponding` resolution; UI names no longer define identity |
+| STEP/fixed assemblies lack reliable Joint semantics and zero DOF was easy to misread as `fixed` | Manual Joint annotation is primary; Mate detection is explicit assistance and every suggestion requires user confirmation |
 | Mass properties could be zero, sign-inverted, or expressed in the wrong frame | Explicit system units, one part/assembly frame-conversion path, COM/bounds checks, physical tensor validation, and API-principal-moment comparison |
 | Collision choices were difficult to verify before export | Link-local fitting, temporary SolidWorks previews for every strategy, fallback reporting, and requested/effective strategy records |
 | Visual/material controls and large exports were hard to inspect consistently | SolidWorks appearance loading, deterministic Link coloring, bilingual UI, topmost progress, and export summaries |
+| The historical workflow did not provide audited portable USD or MJCF assets | OpenUSD and MJCF targets with pinned structural/runtime checks and explicit non-claims for application, controller, and task validation |
 | Historical installers were difficult to reproduce or audit | Hash and provenance sidecars, payload verification, bilingual release notes, and a draft-only manual publication gate |
 
 The fork preserves the upstream Git history, authorship, and MIT license. Detailed changes and
@@ -50,12 +53,43 @@ Collision selection never changes the mass-property source. A collision preview 
 preview of the selected strategy, not proof that the final simulator behavior is correct. The
 generated package reports remain authoritative for what was actually exported.
 
+## Export Targets and Evidence
+
+The main export page exposes four deliverables. `Robot Bundle` is not a fifth target: it is a
+private canonical staging representation created under the system temporary directory, consumed
+by the selected exporters, and removed after success or failure.
+
+Selected targets are published as one recoverable transaction. A blocking health-report failure
+restores the previous target directories; an interrupted process is reconciled from a durable
+journal before the next export starts.
+
+| User target | Delivered files | Automated evidence | Not claimed |
+| --- | --- | --- | --- |
+| ROS 1 package | `ROS1/<package>` with URDF, meshes, configuration, and reports | Canonical model validation and transactional package generation | A ROS 1 launch, controller, or task run |
+| ROS 2 package | `ROS2/<package>` with URDF, meshes, configuration, and reports | Canonical model validation and transactional package generation | A ROS 2/Gazebo launch or `ros2_control` runtime |
+| OpenUSD robot asset | `USD/<package>/robot.usd`, geometry dependencies, source mesh evidence, name map, and JSON report | Generated and reopened with the pinned OpenUSD runtime bundled by the installer | Import or execution in Isaac Sim/Isaac Lab |
+| MuJoCo MJCF model | `MuJoCo/<robot>/robot.xml`, `scene.xml`, assets, name map, and JSON report | Both XML entry points are compiled, canonically saved, reloaded, and advanced one zero-control step with pinned official MuJoCo tools | Actuators, PID gains, controllers, tasks, contact tuning, or RL code |
+
+These are three different evidence levels:
+
+1. **Generation capability** proves that the exporter wrote the documented files from a validated
+   model.
+2. **Automated validation** proves only the checks named in the table.
+3. **Application runtime validation** belongs to the user's ROS, Isaac, MuJoCo, controller, and
+   task environment. It is not implied by a successful export.
+
+Each run atomically replaces only the selected target directories. Existing directories for
+unselected targets are retained and may belong to an earlier run; the top-level `export_report.md`
+records exactly which targets were generated and validated by the current run.
+
 ## Main Features
 
-- Generates a verified Robot Bundle as the canonical asset, then derives ROS 1 legacy and modern
-  ROS 2/Gazebo description packages from that same model.
-- Supports explicit `ros2_control` hardware/controller profiles and exact-version Isaac Sim USD /
-  Isaac Lab profiles without guessing actuator gains.
+- Exports four concrete user targets: ROS 1 package, ROS 2 package, OpenUSD robot asset, and MuJoCo
+  MJCF model. A private canonical staging model keeps all exporters on the same validated source
+  without becoming a user-visible deliverable.
+- Generates USD with a pinned bundled OpenUSD runtime and verifies that the stage reopens. Generates
+  MJCF with pinned official MuJoCo tools and requires compile/save/reload/one-zero-control-step
+  validation before publishing the local result.
 - Records stable Link/Joint IDs and source evidence. SolidWorks Mate detection is an optional,
   user-confirmed suggestion for native movable assemblies, never a fallback for STEP geometry.
 - Stores Link/Joint configuration in `URDF Export Configuration (v2)`. Explicit root-document
@@ -85,8 +119,8 @@ generated package reports remain authoritative for what was actually exported.
   independent COM/equivalent-inertia preview.
 - Records collision fallbacks instead of silently presenting the requested strategy as successful.
 - Loads SolidWorks component/document appearance when no explicit user override exists.
-- Treats material name as the URDF material ID; built-in IDs update RGBA, and manual RGBA remains
-  editable per Link.
+- Uses RGBA and the color picker as the direct per-Link appearance controls and derives a stable,
+  read-only URDF material ID from the resulting color.
 - Provides whole-tree automatic Link coloring: hierarchy progresses from cool to warm colors, while
   normalized left/right counterparts receive the same stable color.
 - Shows a topmost, non-reentrant export progress window and a completion summary with changed file
@@ -123,10 +157,11 @@ verified target. See the upstream discussion in
 4. Run the x64 installer as an administrator and choose English or Simplified Chinese.
 5. Restart SolidWorks and use `Tools > Export as URDF`.
 
-The public release process is intentionally manual-gated: CI validates a committed maintainer-built
-installer and creates a draft candidate; it does not publish a release until live SolidWorks testing
-has completed, the `solidworkstools.dll` redistribution review in `THIRD_PARTY_NOTICES.md` is
-approved, and the maintainer explicitly approves publication.
+The public release process is intentionally manual-gated. The exact maintainer-built installer must
+first pass live SolidWorks testing and the `solidworkstools.dll` redistribution review in
+`THIRD_PARTY_NOTICES.md`. Only then may the maintainer invoke CI to validate that committed candidate
+and create a Draft Release. CI never makes the Draft public; publication requires a separate,
+explicit maintainer approval.
 
 Historical upstream installers remain available from
 [`ros/solidworks_urdf_exporter` releases](https://github.com/ros/solidworks_urdf_exporter/releases).
@@ -145,42 +180,46 @@ Historical upstream installers remain available from
    equivalent inertia preview.
 6. Choose Visual format, collision strategy, material ID/RGBA, and STL reduction. Preview collision
    coverage in SolidWorks, but treat the exported manifest as the final strategy record.
-7. Select the maintained ROS/Gazebo pair and any explicit ros2_control or Isaac profiles, then
-   export the canonical Robot Bundle and selected packages.
-   `Export URDF Without Meshes` is a lightweight XML-debug compatibility path; it does not create
-   the Robot Bundle, Isaac output, or new profiles. Use the complete mesh export for deliverables.
-8. Review the generated reports before simulation:
-   - `<export-root>/export_report.md` (always written for a v2 export, including Bundle-only)
-   - `config/export_report.md` in each selected ROS package
-   - `config/inertial_validation.csv`
-   - `config/mesh_manifest.csv`
+7. Select at least one concrete target: ROS 1 package, ROS 2 package, OpenUSD robot asset, or MuJoCo
+   MJCF model. USD and MJCF require STL geometry. The exporter does not ask for Isaac versions,
+   actuator profiles, or a user-managed staging Bundle.
+8. Review the common `export_report.md` and target-local reports before simulation. For ROS, inspect
+   `config/export_report.md`, `config/inertial_validation.csv`, and `config/mesh_manifest.csv`. For USD or MJCF, inspect the
+   target's `export_report.json` and `name_map.json`. Then run the asset in the actual application
+   and task environment.
 
 ## Output Layout
 
 ```text
 <export-root>/
-|-- export_report.md                  # top-level v2 health report, including Bundle-only
-|-- Bundle/<package>.osurdf/
-|   |-- robot.json
-|   |-- robot.urdf
-|   |-- manifest.json
-|   |-- checksums.sha256
-|   |-- meshes/
-|   |-- profiles/
-|   `-- reports/
-|-- ROS1/<package>/                 # optional legacy output
+|-- export_report.md                  # common exporter summary
+|-- ROS1/<package>/                   # optional ROS 1 package
 |   |-- meshes/
 |   |-- urdf/
 |   `-- config/
-`-- ROS2/<package>/                 # optional modern output
-    |-- meshes/
-    |-- urdf/
-    `-- config/
+|-- ROS2/<package>/                   # optional ROS 2 package
+|   |-- meshes/
+|   |-- urdf/
+|   `-- config/
+|-- USD/<package>/                    # optional OpenUSD robot asset
+|   |-- robot.usd
+|   |-- geometry/
+|   |-- meshes/
+|   |-- name_map.json
+|   `-- export_report.json
+`-- MuJoCo/<robot>/                   # optional MJCF model
+    |-- robot.xml
+    |-- scene.xml
+    |-- assets/visual/
+    |-- assets/collision/
+    |-- name_map.json
+    `-- export_report.json
 ```
 
-The report files identify the effective collision strategy, fallbacks, mesh records, and per-Link
-inertial validation results. Reusing an output directory is supported; the completion summary counts
-only files created or changed by the current export.
+The private staging Bundle is intentionally absent from this layout. Report files identify the
+effective collision strategy, fallbacks, mesh records, validation runtime, and evidence boundary.
+Reusing an output directory is supported; the completion summary counts only files created or
+changed by the current export.
 
 ## Inertia Conventions
 
@@ -200,11 +239,11 @@ only files created or changed by the current export.
   URDF. An independent eigenvalue check requires the exported tensor to match the API principal
   moments and catches an accidental second sign conversion.
 
-The article
-[“掌握 URDF 中的惯性张量：从 SolidWorks 到强化学习机器人的关键一步”](https://zhuanlan.zhihu.com/p/1887859297221845818)
-by Winter is acknowledged as a useful conceptual reference for COM-relative tensors, output frames,
-and the distinction between tensor terms and displayed products of inertia. The implementation and
-its tests remain the source of truth for the API-to-URDF mapping used by this exporter.
+The maintainers acknowledge this
+[community SolidWorks-to-URDF inertia article](https://zhuanlan.zhihu.com/p/1887859297221845818)
+as background reading. The implementation, tests, and export reports remain the source of truth for
+the API-to-URDF mapping used by this exporter; the acknowledgement does not imply a source-code
+contribution from the article.
 
 ## Collision Guidance
 
@@ -222,9 +261,9 @@ output. 3DXML is primarily a visual interchange path, not the documented collisi
 
 The maintained UI exposes one color model:
 
-- URDF material ID identifies the material.
-- Built-in IDs set the corresponding RGBA values.
-- The color picker and numeric RGBA fields directly edit the selected Link.
+- RGBA fields and the color picker directly set the selected Link color.
+- A stable URDF material ID is derived from RGBA and shown for identification; it is not a second
+  color-preset selector.
 - `Auto Links` applies deterministic whole-tree colors and persists material ID/RGBA through the
   normal configuration model.
 - A manual edit after automatic coloring is an explicit per-Link override.
@@ -242,13 +281,14 @@ not claim to author or validate texture mapping.
 - [Link Tree](docs/wiki/Link-Tree.md)
 - [Inertia](docs/wiki/Inertia.md)
 - [Collision](docs/wiki/Collision.md)
+- [OpenUSD](docs/wiki/OpenUSD.md)
+- [MuJoCo MJCF](docs/wiki/MJCF.md)
 - [Troubleshooting](docs/wiki/Troubleshooting.md)
 - [Contributing](docs/wiki/Contributing.md)
 - [Release Process](docs/wiki/Release-Process.md)
-- [Robot Bundle v2 architecture](docs/architecture/robot-bundle-v2.md)
 - [Joint semantics and provenance](docs/architecture/joint-semantics-and-provenance.md)
 - [Compatibility matrix](docs/development/compatibility-matrix.md)
-- [Isaac Sim / Isaac Lab workflow](docs/isaac/README.md)
+- [OpenUSD downstream Isaac boundary](docs/isaac/README.md)
 - [Changelog](CHANGELOG.md)
 
 The files under `docs/wiki` are the version-controlled source for the public GitHub Wiki. Canonical
@@ -287,10 +327,24 @@ Run a focused class or name filter:
 TestRunner\bin\Debug\net48\TestRunner.exe TestCollisionPreview
 ```
 
+Run the deterministic plugin gate used by the installer build without launching a local
+SolidWorks process:
+
+```powershell
+TestRunner\bin\Debug\net48\TestRunner.exe --exclude-live-solidworks
+```
+
 Pure tests can run without SolidWorks. Live COM tests require a compatible installed SolidWorks and
 can fail with an RPC/COM error when SolidWorks is unavailable or the automation process terminates.
+Tests tagged `Category=LiveSolidWorks`, including tests in the legacy
+`Requires SW Test Collection`, are intentionally excluded from reproducible installer packaging
+and must be run explicitly as Live API evidence. The installer provenance
+records that separation instead of treating an unrequested Live run as passed.
 Live coverage on SolidWorks 2023 is not evidence of compatibility with every release or service
 pack.
+
+Explicit Live runs require `SW2URDF_RUN_SW_INTEGRATION_TESTS=1`; missing opt-in or fixture inputs
+fail rather than being counted as a pass.
 
 The deep-reference Live test uses a disposable five-level assembly. Close SolidWorks first; the
 generator starts and owns an isolated SolidWorks process, writes the fixture under the system
@@ -315,10 +369,12 @@ From a clean source commit:
 
 ```powershell
 .\scripts\BuildInstaller.ps1 -Configuration Release -Platform x64 `
-  -SolidWorksInstallDir "C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS"
+  -SolidWorksInstallDir "C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS" `
+  -DotNetPath "C:\Path\To\dotnet-sdk-8.0.424\dotnet.exe" `
+  -InnoCompilerPath "C:\Path\To\Inno Setup 6.3.3\ISCC.exe"
 ```
 
-The script requires Inno Setup 6.3.0 through 6.3.3 and produces:
+The script requires the exact .NET SDK 8.0.424 and Inno Setup 6.3.0 through 6.3.3, and produces:
 
 ```text
 INSTALL/OUTPUT/sw2urdfSetup_YYYYMMDD_<commit>.exe
@@ -326,9 +382,10 @@ INSTALL/OUTPUT/sw2urdfSetup_YYYYMMDD_<commit>.exe.sha256
 INSTALL/OUTPUT/sw2urdfSetup_YYYYMMDD_<commit>.exe.provenance.json
 ```
 
-Packaging runs from a detached worktree, verifies pinned NuGet inputs and the staged SolidWorks API
-assemblies, and records payload hashes. The provenance file is a maintainer-build trace; it is not an
-Authenticode signature and CI does not rebuild against proprietary SolidWorks assemblies.
+Packaging runs from a detached worktree, verifies pinned NuGet, OpenUSD, and official MuJoCo inputs
+plus the staged SolidWorks API assemblies, and records payload hashes. The provenance file is a
+maintainer-build trace; it is not an Authenticode signature and CI does not rebuild against
+proprietary SolidWorks assemblies.
 
 Before building a candidate, add `.github/release-notes/vYYYYMMDD.md` with reviewed `## English` and
 `## 简体中文` sections. CI renders only traceability placeholders and fails closed when either language
@@ -347,6 +404,12 @@ or a required placeholder is missing; it does not machine-translate the Changelo
   promised to be byte-identical to the final tessellated STL.
 - STL does not carry UV texture coordinates. The maintained UI does not offer texture authoring.
 - Strategy generation can fall back to `VisualMesh`; always review the effective strategy report.
+- Deep/hidden Link preview changes require live validation in the maintainer's target SolidWorks
+  versions before a public release.
+- USD validation proves OpenUSD stage generation and reopen only. It does not prove import or
+  execution in Isaac Sim or Isaac Lab.
+- MJCF validation proves official MuJoCo compile/save/reload and one zero-control step only. It does
+  not prove controllers, contact tuning, long-horizon stability, performance, task behavior, or RL.
 - The project is provided under the MIT License without warranty. Validate the exported robot in the
   target simulator before production use.
 
@@ -361,8 +424,8 @@ the work of the upstream authors and contributors.
   Verb Surgical, Open Robotics, and Willow Garage
 - 3DXML export contribution: Kento Matsuo and the contributors recorded in commit `22cb778`
 - Current OSRBot fork maintainer: `kitso666 <kitso@osrbot.com>`
-- Inertia convention reference: Winter,
-  [“掌握 URDF 中的惯性张量：从 SolidWorks 到强化学习机器人的关键一步”](https://zhuanlan.zhihu.com/p/1887859297221845818)
+- Community inertia reference supplied by the maintainers:
+  [SolidWorks-to-URDF inertia article](https://zhuanlan.zhihu.com/p/1887859297221845818)
 - Original ROS documentation: [sw_urdf_exporter](http://wiki.ros.org/sw_urdf_exporter) and
   [tutorials](http://wiki.ros.org/sw_urdf_exporter/Tutorials)
 

@@ -1,7 +1,12 @@
 # Robot Bundle v2 架构
 
-Robot Bundle 是 OSURDF v2 的规范交付物。ROS、Gazebo、Isaac Sim 和 Isaac Lab 都从同一个
-Bundle 派生，避免每个导出目标各自解释 CAD 数据后产生漂移。
+> **当前状态（2026-09-01）**：本文记录内部规范模型的架构。Robot Bundle 已收敛为插件私有、
+> 短生命周期的暂存表示，不再是 UI 可选目标，也不交付到用户输出目录。现行用户目标和验证边界以
+> [README](../../README.zh-CN.md) 与 [Wiki 首页](../wiki/Home-zh-CN.md) 为准。
+
+Robot Bundle 是 OSURDF v2 导出器之间共享的内部规范表示。ROS 1、ROS 2、OpenUSD 和 MJCF
+导出器从同一份已验证模型派生，避免每个目标各自解释 CAD 数据后产生漂移；暂存目录在成功或失败
+后都应清理。
 
 ## 目录契约
 
@@ -46,6 +51,8 @@ Bundle 构建执行以下顺序：
 
 ## CLI
 
+以下命令面向开发、诊断和测试，不代表桌面插件会向用户交付 Bundle：
+
 ```bash
 osurdf import-urdf --input robot.urdf --output robot.json
 osurdf validate --input robot.json
@@ -66,10 +73,10 @@ limit、dynamics 与 mimic。任意厂商自定义 XML、Gazebo 扩展、transmi
 
 ## 证据边界
 
-- Bundle 校验通过：证明结构、数值约束、文件清单和校验和一致；
-- ROS 包构建通过：证明目标包可被对应工具链接受；
-- Isaac 转换通过：证明特定 Isaac 版本成功生成 USD；
-- 仿真 smoke test 通过：证明目标运行时能够加载并推进；
+- 内部 Bundle 校验通过：证明暂存结构、数值约束、文件清单和校验和一致；
+- ROS 包生成通过：证明插件写出了约定结构，不等于已在 ROS/Gazebo 中启动；
+- OpenUSD 自动验证通过：证明固定 OpenUSD 运行时已生成并重开 stage，不等于 Isaac 验证；
+- MJCF 自动验证通过：证明固定 MuJoCo 官方工具已完成编译、规范保存、重载和一步零控制推进；
 - 机器人运动符合设计：仍需项目级动力学、控制和物理验收。
 
 这些证据不能相互替代。

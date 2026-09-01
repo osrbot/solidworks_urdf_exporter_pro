@@ -35,7 +35,8 @@ SolidWorks COM/RPC 异常可能使 Live API 测试或预览失败。重启 Solid
 
 ## 惯性预览或碰撞预览不可见
 
-- 临时体需要有效、可见的顶层 Part 显示宿主；顶层子装配体本身不是有效宿主。
+- 当前预览通过活动根装配文档显示，并应用所选 Link 的完整组件变换。Link 可以位于深层或已隐藏；
+  FeatureManager 树中不应出现持久化预览组件。
 - 尝试线架图、隐藏线可见或着色视图确认显示状态。
 - 切换 Link 后重新开启预览，避免观察旧 Link 的临时体。
 - 预览报错时记录 SolidWorks `Display3` 返回码和日志。
@@ -50,13 +51,22 @@ SolidWorks COM/RPC 异常可能使 Live API 测试或预览失败。重启 Solid
 
 生成失败会回退到 `VisualMesh`。不要只看 UI 中最后选择的策略。
 
-## 导出文件缺失或 ROS2 meshes 不完整
+## 导出文件缺失或目标输出不完整
 
-- 优先查看 `export_report.md`；
+- ROS：优先查看功能包内的 `config/export_report.md`；
+- USD/MJCF：优先查看目标目录内的 `export_report.json`；
 - 确认输出目录可写且没有被其他程序锁定；
 - 查看完成摘要中的本次变化文件数；
 - 检查 URDF 的 `package://` 路径与 ROS1/ROS2 包名；
 - 复用旧目录时，摘要只统计本次新增或变更文件，不统计无关旧文件。
+
+## USD 或 MJCF 自动化验证失败
+
+- 选择 STL 几何。USD/MJCF 路线会拒绝 3DXML，而不是静默丢失几何。
+- USD 错误来自固定内置 OpenUSD 的生成/重开检查；安装 Isaac 不会修复或改变这项检查。
+- MJCF 错误包含 MuJoCo 官方编译/重载诊断。planar Joint 会被拒绝，因为插件不做静默近似。
+- 不要补填 Isaac 版本、actuator profile、PID 或控制器文件；这些不属于四目标导出合同。
+- 报告通过只证明报告明确列出的自动化检查。生产使用前仍须在实际目标应用中运行资产。
 
 ## 测试失败
 

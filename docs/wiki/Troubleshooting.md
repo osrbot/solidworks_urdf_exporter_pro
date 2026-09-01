@@ -37,8 +37,9 @@ graphics-layer failure neither proves nor disproves numerical validity.
 
 ## Inertia or Collision Preview Is Invisible
 
-- Temporary bodies require a valid visible top-level Part display host; a top-level subassembly is
-  not itself a valid host.
+- Current previews display through the active root assembly document and apply the selected Link's
+  complete component transform. The Link may be nested or hidden; no persistent preview component
+  should appear in the FeatureManager tree.
 - Try wireframe, hidden-lines-visible, or shaded display mode.
 - After switching Link, re-enable the preview so that old temporary bodies are not mistaken for the
   current Link.
@@ -54,14 +55,27 @@ Open:
 
 Generation failure falls back to `VisualMesh`. Do not trust only the last strategy selected in UI.
 
-## Missing Files or Incomplete ROS2 Meshes
+## Missing Files or Incomplete Target Output
 
-- Read `export_report.md` first.
+- ROS: read the package-local `config/export_report.md` first.
+- USD/MJCF: read the target-local `export_report.json` first.
 - Confirm that the output directory is writable and not locked.
 - Check the completion summary's changed-file count.
 - Verify URDF `package://` paths and ROS1/ROS2 package names.
 - When reusing a directory, the summary counts files created or changed by this run, not unrelated
   old files.
+
+## USD or MJCF Validation Failed
+
+- Select STL geometry. The USD/MJCF routes reject 3DXML instead of silently losing geometry.
+- USD failures come from the bundled pinned OpenUSD generation/reopen check; installing Isaac does
+  not repair or change that check.
+- MJCF failures include official MuJoCo compile/reload diagnostics. A planar Joint is rejected
+  because the exporter does not silently approximate it.
+- Do not add an Isaac version, actuator profile, PID file, or controller file. These are outside the
+  four-target export contract.
+- A passed report proves only its named automated check. Run the asset in the actual target
+  application before production use.
 
 ## Test Failures
 

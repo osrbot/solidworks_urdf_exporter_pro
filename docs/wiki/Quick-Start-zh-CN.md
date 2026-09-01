@@ -68,24 +68,36 @@ URDF Joint 类型。0 个剩余自由度可能表示固定、完全约束或 Mat
 
 ## 7. 导出
 
-设置 ROS 包名、模型许可证、维护者和精确版本。选择 Lyrical/Jetty 或 Jazzy/Harmonic；需要
-ros2_control 时选择显式控制 profile，需要 Isaac Lab 时同时选择 Isaac Sim、精确版本和 actuator
-profile。Robot Bundle 始终生成，ROS 1、ROS 2 和 Isaac 为可选派生目标。进度窗口保持在
-SolidWorks 前方并阻止导出重入；完成窗口显示本次变化文件数、总大小、耗时和输出根目录。
-“导出 URDF（不含网格）”是例外：它仅供 XML 调试，使用轻量兼容路径，不生成
-Robot Bundle、Isaac 或新 profile。
+至少选择一种明确交付物：
+
+- **ROS 1 功能包**：写入 `ROS1/<package>` 的 legacy URDF 包；
+- **ROS 2 功能包**：写入 `ROS2/<package>` 的现代描述包；
+- **OpenUSD 机器人资产**：写入 `USD/<package>` 的可移植 USD stage；
+- **MuJoCo MJCF 模型**：写入 `MuJoCo/<robot>` 的 MJCF 模型。
+
+ROS 目标使用 UI 中显示的功能包元数据和维护的 ROS/Gazebo 组合。USD 与 MJCF 要求 STL 几何，
+不要求安装 Isaac，不要求填写 Isaac/Isaac Lab 版本、actuator profile 或用户控制器文件。至少要
+勾选一个目标。进度窗口保持在 SolidWorks 前方并阻止导出重入。
+
+插件只把私有规范 Bundle 用作临时暂存；它不显示为目标、不写入交付目录，并在导出后清理。
 
 ## 8. 检查结果
 
 依次查看：
 
-1. `Bundle/<package>.osurdf/manifest.json` 与 `checksums.sha256`：载荷、profile 和完整性；
-2. `reports/validation.json`：规范模型阻断项与警告；
-3. 输出根目录 `export_report.md`：本次 v2 导出总览（只选 Bundle 时也存在）；所选 ROS 包内的
-   `config/export_report.md` 保留包级副本；
-4. `config/inertial_validation.csv`：质量、COM、张量和误差；
-5. `config/mesh_manifest.csv`：请求/实际碰撞策略、文件和网格记录；
-6. URDF Viewer、MuJoCo、Isaac Sim 或目标求解器中的 Visual、Collision、Inertia、COM、轴和
-   Joint 运动。
+1. 公共：输出根目录的 `export_report.md`，用于查看导出器摘要；
+2. ROS：各功能包中的 `config/export_report.md`、`config/inertial_validation.csv` 和
+   `config/mesh_manifest.csv`；
+3. OpenUSD：`USD/<package>` 中的 `robot.usd`、`name_map.json` 和 `export_report.json`；
+4. MJCF：`MuJoCo/<robot>` 中的 `robot.xml`、`scene.xml`、`name_map.json` 和
+   `export_report.json`；
+5. 在实际目标应用中检查 Visual、Collision、Inertia、COM、轴和 Joint 运动。
 
-导出成功只表示插件校验和文件写入完成，不替代目标仿真器中的工程验证。
+必须按证据字面理解：
+
+- 生成成功只表示由已校验模型写出了约定文件；
+- USD 自动化验证只表示固定的内置 OpenUSD 运行时重新打开了生成的 stage；
+- MJCF 自动化验证只表示固定的 MuJoCo 官方工具对两个 XML 入口完成编译、规范保存、重载和
+  一步零控制推进；
+- 任何结果都不代表已完成 ROS/Gazebo 启动、Isaac Sim/Isaac Lab 导入、控制器质量、接触调参、
+  长时间稳定性、任务行为、性能或强化学习验证。

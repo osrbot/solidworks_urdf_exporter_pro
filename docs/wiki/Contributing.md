@@ -44,6 +44,14 @@ TestRunner\bin\x64\Debug\net48\TestRunner.exe TestMassPropertyFrameConverter
 - `SW2URDF_TEST_ASSEMBLY` can point tests at an isolated plug-in assembly.
 - Live tests may terminate only a SolidWorks process they started themselves.
 
+Record evidence at the level actually exercised:
+
+- **generation tests** assert output contracts and files;
+- **automated runtime tests** may claim only the pinned OpenUSD reopen or official MuJoCo
+  compile/save/reload/one-step checks they execute;
+- **application runtime tests** require the named real ROS, Isaac, MuJoCo task, or SolidWorks
+  environment. Never promote a generated file or parser check to an application-level result.
+
 ## Code Boundaries
 
 - Formal Link Tree code lives under `SW2URDF/UI/LinkTreeCanvas` plus its session/store boundaries.
@@ -63,7 +71,8 @@ Include:
 - exact reproduction steps;
 - expected and actual behavior;
 - the smallest redistributable assembly that reproduces the issue;
-- logs, `export_report.md`, `inertial_validation.csv`, and `mesh_manifest.csv`;
+- logs and the target-local reports: ROS Markdown/CSV files or USD/MJCF `export_report.json` and
+  `name_map.json`;
 - for URDF errors, verifiable expected frame/mass/tensor values or a comparison URDF.
 
 A viewer screenshot alone is insufficient evidence of an inertia algorithm defect. Pair it with
@@ -75,6 +84,7 @@ exported values, frame definitions, and SolidWorks Mass Properties results.
 - Detailed behavior lives in paired English and `-zh-CN` Wiki pages.
 - Keep Wiki sources under `docs/wiki` and synchronize them to the separate GitHub Wiki repository.
 - Keep `CHANGELOG.md` factual; do not record plans as completed work.
+- State generation capability, automated validation, and application runtime validation separately.
 - Distinguish conceptual references, code sources, and historical credits.
 - Every release candidate body must contain both `## English` and `## 简体中文` sections.
 

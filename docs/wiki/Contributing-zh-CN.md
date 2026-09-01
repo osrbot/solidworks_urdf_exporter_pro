@@ -44,6 +44,14 @@ TestRunner\bin\x64\Debug\net48\TestRunner.exe TestMassPropertyFrameConverter
 - `SW2URDF_TEST_ASSEMBLY` 可把测试指向隔离构建的插件程序集。
 - Live 测试必须只关闭由测试自身启动的 SolidWorks 进程。
 
+证据必须按实际覆盖层级记录：
+
+- **生成测试**只断言输出合同与文件；
+- **自动化运行时测试**只能声明实际执行的固定 OpenUSD 重开或 MuJoCo 官方
+  编译/保存/重载/一步检查；
+- **实际应用运行测试**必须发生在明确的 ROS、Isaac、MuJoCo 任务或 SolidWorks 环境中。不能把
+  文件生成或解析器检查升级描述为应用验证。
+
 ## 代码边界
 
 - Link Tree 的正式实现位于 `SW2URDF/UI/LinkTreeCanvas` 及对应 session/store 边界。
@@ -59,7 +67,8 @@ TestRunner\bin\x64\Debug\net48\TestRunner.exe TestMassPropertyFrameConverter
 - 精确复现步骤；
 - 期望与实际结果；
 - 最小可复现装配体（在许可允许时）；
-- 日志、`export_report.md`、`inertial_validation.csv`、`mesh_manifest.csv`；
+- 日志与目标目录报告：ROS 的 Markdown/CSV，或 USD/MJCF 的 `export_report.json` 与
+  `name_map.json`；
 - 若报告 URDF 错误，提供可验证的期望坐标/质量/张量或对照 URDF。
 
 不要只提交 Viewer 截图就断言惯性算法错误；截图应配合导出数值、坐标系定义和 SolidWorks Mass
@@ -70,6 +79,7 @@ Properties 结果。
 - README 是项目入口；详细行为写入 `docs/wiki`。
 - Wiki 源文件与代码一起版本控制，再同步到 GitHub Wiki。
 - CHANGELOG 只记录已实现或明确的未发布变更，不把计划写成完成项。
+- 分别描述生成能力、自动化验证和实际应用运行验证。
 - 引用外部资料时明确区分理论参考、代码来源和历史致谢。
 
 ## 许可

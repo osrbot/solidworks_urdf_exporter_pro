@@ -17,7 +17,7 @@ OSURDF 采用“人工定义为主、识别建议为辅、导出前必须确认�
 | STEP/中性 CAD/纯几何 | 形状和层级，偶尔有装配实例 | `geometry_only` | 不允许自动补 Joint 类型 |
 
 每个 Link/Joint 都保存稳定 ID 和 `source.kind`、`source.evidence`、`source.reference`、
-`source.userConfirmed`。报告和 Bundle 继续携带这些字段，方便回溯“参数从哪里来、谁确认过”。
+`source.userConfirmed`。报告和内部规范暂存继续携带这些字段，方便回溯“参数从哪里来、谁确认过”。
 
 ## Mate 建议的安全边界
 
@@ -43,9 +43,9 @@ limit。识别失败时恢复原 Joint 配置，不保留半完成建议。
 
 1. CAD 提供 Link 几何、质量和坐标参考；
 2. 设计者按电机/减速器/编码器定义 Joint、限制和传动；
-3. ros2_control profile 显式声明硬件接口和控制器；
-4. Isaac Lab profile 使用实测或项目批准的 stiffness、damping、effort、velocity 参数；
-5. 在目标仿真器检查轴方向、限位、自碰撞、足底接触和控制稳定性。
+3. 下游 ROS、Isaac 或 MuJoCo 项目使用实测或项目批准的硬件接口、控制器、stiffness、
+   damping、effort 和 velocity 参数；
+4. 在目标仿真器检查轴方向、限位、自碰撞、足底接触和控制稳定性。
 
 固定 CAD 装配并不是缺陷，但它不能替代机器人运动学模型。
 
@@ -53,7 +53,6 @@ limit。识别失败时恢复原 Joint 配置，不保留半完成建议。
 
 - 空白或非标准 Joint 类型阻断导出；
 - `Automatically Detect` 不是可写入 URDF 的最终类型；
-- 未确认的 Mate 建议阻断 Bundle；
+- 未确认的 Mate 建议阻断所选导出目标；
 - 非 fixed Joint 必须具有适用的轴、limit 和有限数值；
-- ros2_control 与 Isaac actuator 只能引用实际存在且可动的 Joint；
-- actuator 覆盖、gain 和 limit 不允许从 CAD 猜测。
+- 控制器、actuator、gain 和任务限位属于下游工程配置，不由 CAD 几何猜测。

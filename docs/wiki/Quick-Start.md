@@ -74,26 +74,38 @@ motion alone cannot distinguish it from a bounded `revolute` Joint.
 
 ## 7. Export
 
-Set the ROS package name, model license, maintainer, and exact target versions. Select either
-Lyrical/Jetty or Jazzy/Harmonic. A ros2_control target requires an explicit control profile; Isaac
-Lab requires Isaac Sim, exact versions, and an actuator profile. The Robot Bundle is always created,
-while ROS 1, ROS 2, and Isaac are selected derived targets. The progress window remains above
-SolidWorks and blocks export re-entry.
-`Export URDF Without Meshes` is the exception: it is a lightweight XML-debug compatibility path and
-does not create the Robot Bundle, Isaac output, or new profiles.
+Select at least one concrete deliverable:
+
+- **ROS 1 package**: legacy URDF package under `ROS1/<package>`;
+- **ROS 2 package**: modern description package under `ROS2/<package>`;
+- **OpenUSD robot asset**: portable USD stage under `USD/<package>`;
+- **MuJoCo MJCF model**: MJCF model under `MuJoCo/<robot>`.
+
+ROS targets use the package metadata and maintained ROS/Gazebo combination shown by the UI. USD and
+MJCF require STL geometry. They do not require an Isaac installation, Isaac/Isaac Lab version,
+actuator profile, or user-provided controller file. At least one target must be selected. The
+progress window remains above SolidWorks and blocks export re-entry.
+
+The exporter uses a private canonical Bundle only as temporary staging. It is not shown as a target,
+written into the delivery tree, or retained after export.
 
 ## 8. Inspect the Result
 
 Review:
 
-1. `Bundle/<package>.osurdf/manifest.json` and `checksums.sha256` for payload/profile integrity;
-2. `reports/validation.json` for canonical model blockers and warnings;
-3. `<export-root>/export_report.md` for the v2 export summary (also present for Bundle-only), plus
-   the package-local `config/export_report.md` in each selected ROS package;
-4. `config/inertial_validation.csv` for mass, COM, tensor, and error checks;
-5. `config/mesh_manifest.csv` for requested/effective collision strategies and mesh records;
-6. Visual, Collision, Inertia, COM, axes, and Joint motion in a URDF viewer, MuJoCo, Isaac Sim, or
-   the intended solver.
+1. Common: `<export-root>/export_report.md` for the exporter summary;
+2. ROS: `config/export_report.md`, `config/inertial_validation.csv`, and
+   `config/mesh_manifest.csv` inside each selected package;
+3. OpenUSD: `robot.usd`, `name_map.json`, and `export_report.json` under `USD/<package>`;
+4. MJCF: `robot.xml`, `scene.xml`, `name_map.json`, and `export_report.json` under
+   `MuJoCo/<robot>`;
+5. Visual, Collision, Inertia, COM, axes, and Joint motion in the actual target application.
 
-A successful export means the exporter checks and file transaction completed. It does not replace
-task-specific simulator validation.
+Read the evidence literally:
+
+- generation success means the documented files were written from a validated model;
+- USD automated validation means the bundled pinned OpenUSD runtime reopened the generated stage;
+- MJCF automated validation means pinned official MuJoCo tools compiled, canonically saved,
+  reloaded, and advanced both XML entry points one zero-control step;
+- no result claims a ROS/Gazebo launch, Isaac Sim/Isaac Lab import, controller quality, contact
+  tuning, long-horizon stability, task behavior, performance, or reinforcement-learning validation.
