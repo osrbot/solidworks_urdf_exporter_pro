@@ -229,6 +229,7 @@ namespace SW2URDF.UI
             TabPage basicsPage = CreateModernTabPage(
                 "modernJointBasicsPage",
                 ChineseUiText.Translate("Basics", "基本"));
+            ConfigureCompactJointTabPage(basicsPage);
             TableLayoutPanel basicsStack = CreateModernStack();
 
             label69.Text = ChineseUiText.Translate(
@@ -241,6 +242,7 @@ namespace SW2URDF.UI
             TabPage constraintsPage = CreateModernTabPage(
                 "modernJointConstraintsPage",
                 ChineseUiText.Translate("Constraints", "约束与安全"));
+            ConfigureCompactJointTabPage(constraintsPage);
             TableLayoutPanel constraintsStack = CreateModernStack();
             constraintsStack.Controls.Add(CreateModernAdvancedJointGrid());
             constraintsPage.Controls.Add(constraintsStack);
@@ -284,6 +286,14 @@ namespace SW2URDF.UI
             };
             stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             return stack;
+        }
+
+        private static void ConfigureCompactJointTabPage(TabPage page)
+        {
+            // The joint pages contain several dense field cards. Keep their
+            // normal small-window scrolling fallback, but avoid a scrollbar at
+            // the exporter's standard size by reclaiming unused bottom inset.
+            page.Padding = new Padding(6, 6, 6, 0);
         }
 
         private void BuildModernLinkPage()
@@ -669,9 +679,9 @@ namespace SW2URDF.UI
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             Control identity = CreateModernJointIdentityCard();
-            identity.Margin = new Padding(0, 0, 0, 6);
+            identity.Margin = new Padding(0, 0, 0, 4);
             Control reference = CreateModernReferenceGeometryCard();
-            reference.Margin = new Padding(0, 0, 0, 6);
+            reference.Margin = new Padding(0, 0, 0, 4);
             grid.Controls.Add(identity, 0, 0);
             grid.Controls.Add(reference, 0, 1);
             return grid;
@@ -680,7 +690,7 @@ namespace SW2URDF.UI
         private Control CreateModernJointIdentityCard()
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernJointIdentityCard");
-            card.Padding = new Padding(16, 10, 16, 10);
+            card.Padding = new Padding(16, 8, 16, 8);
             card.Controls.Add(CreateModernCardTitle(
                 ChineseUiText.Translate("Joint identity", "Joint 基本信息"),
                 null));
@@ -692,7 +702,7 @@ namespace SW2URDF.UI
                 BackColor = ModernWinFormsTheme.Surface,
                 ColumnCount = 3,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 4, 0, 2),
+                Margin = new Padding(0, 2, 0, 2),
                 RowCount = 2
             };
             relationship.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
@@ -754,7 +764,7 @@ namespace SW2URDF.UI
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernReferenceGeometryCard");
             card.Margin = new Padding(0);
-            card.Padding = new Padding(16, 10, 16, 10);
+            card.Padding = new Padding(16, 8, 16, 8);
             Control title = CreateModernCardTitle(
                 ChineseUiText.Translate("Reference geometry", "参考几何"),
                 null);
@@ -775,7 +785,7 @@ namespace SW2URDF.UI
                 AutoSize = true,
                 ColumnCount = 2,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 6, 0, 0),
+                Margin = new Padding(0, 4, 0, 0),
                 RowCount = 2
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
@@ -879,9 +889,9 @@ namespace SW2URDF.UI
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             Control originCard = CreateModernOriginCard();
-            originCard.Margin = new Padding(0, 0, 6, 12);
+            originCard.Margin = new Padding(0, 0, 6, 0);
             Control axisCard = CreateModernAxisCard();
-            axisCard.Margin = new Padding(6, 0, 0, 12);
+            axisCard.Margin = new Padding(6, 0, 0, 0);
             grid.Controls.Add(originCard, 0, 0);
             grid.Controls.Add(axisCard, 1, 0);
             return grid;
@@ -891,6 +901,7 @@ namespace SW2URDF.UI
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernOriginCard");
             card.Margin = new Padding(0);
+            card.Padding = new Padding(16, 10, 16, 12);
             card.Controls.Add(CreateModernCardTitle(label54, label1));
 
             TableLayoutPanel grid = new TableLayoutPanel
@@ -898,7 +909,7 @@ namespace SW2URDF.UI
                 AutoSize = true,
                 ColumnCount = 4,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 12, 0, 0),
+                Margin = new Padding(0, 8, 0, 0),
                 RowCount = 4
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24F));
@@ -925,6 +936,7 @@ namespace SW2URDF.UI
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernAxisCard");
             card.Margin = new Padding(0);
+            card.Padding = new Padding(16, 10, 16, 12);
             card.Controls.Add(CreateModernCardTitle(label60, AxisRequiredLabel));
 
             TableLayoutPanel grid = new TableLayoutPanel
@@ -932,7 +944,7 @@ namespace SW2URDF.UI
                 AutoSize = true,
                 ColumnCount = 2,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 12, 0, 0),
+                Margin = new Padding(0, 8, 0, 0),
                 RowCount = 3
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28F));
@@ -972,7 +984,7 @@ namespace SW2URDF.UI
                 new Label[] { labelLowerLimit, labelLimitUpper, labelEffort, labelVelocity },
                 new Control[] { textBoxLimitLower, textBoxLimitUpper, textBoxLimitEffort, textBoxLimitVelocity },
                 152F);
-            limits.Margin = new Padding(0, 0, 6, 12);
+            limits.Margin = new Padding(0, 0, 6, 6);
             Control calibration = CreateModernTwoColumnFieldCard(
                 "modernCalibrationCard",
                 label74,
@@ -980,7 +992,7 @@ namespace SW2URDF.UI
                 new Label[] { label7CalibrationRising, label73 },
                 new Control[] { textBoxCalibrationRising, textBoxCalibrationFalling },
                 112F);
-            calibration.Margin = new Padding(6, 0, 0, 12);
+            calibration.Margin = new Padding(6, 0, 0, 6);
             Control dynamics = CreateModernTwoColumnFieldCard(
                 "modernDynamicsCard",
                 label76,
@@ -988,7 +1000,7 @@ namespace SW2URDF.UI
                 new Label[] { labelFriction, labelDamping },
                 new Control[] { textBoxFriction, textBoxDamping },
                 168F);
-            dynamics.Margin = new Padding(0, 0, 6, 12);
+            dynamics.Margin = new Padding(0, 0, 6, 0);
             Control safety = CreateModernTwoColumnFieldCard(
                 "modernSafetyCard",
                 label80,
@@ -996,7 +1008,7 @@ namespace SW2URDF.UI
                 new Label[] { labelSoftLower, labelSoftUpper, labelKPosition, labelKVelocity },
                 new Control[] { textBoxSoftLower, textBoxSoftUpper, textBoxKPosition, textBoxKVelocity },
                 152F);
-            safety.Margin = new Padding(6, 0, 0, 12);
+            safety.Margin = new Padding(6, 0, 0, 0);
 
             grid.Controls.Add(limits, 0, 0);
             grid.Controls.Add(calibration, 1, 0);
@@ -2073,6 +2085,7 @@ namespace SW2URDF.UI
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard(name);
             card.Margin = new Padding(0);
+            card.Padding = new Padding(16, 10, 16, 12);
             card.Controls.Add(CreateModernCardTitle(title, required));
 
             TableLayoutPanel grid = new TableLayoutPanel
@@ -2080,7 +2093,7 @@ namespace SW2URDF.UI
                 AutoSize = true,
                 ColumnCount = 2,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 12, 0, 2),
+                Margin = new Padding(0, 8, 0, 2),
                 RowCount = labels.Length
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, labelWidth));

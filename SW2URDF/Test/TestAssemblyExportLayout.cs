@@ -731,6 +731,53 @@ namespace SW2URDF.Test
             }
         }
 
+        [Theory]
+        [InlineData(0, "modernJointBasicsPage")]
+        [InlineData(1, "modernJointConstraintsPage")]
+        public void TestPrimaryJointTabsFitWithoutVerticalScrollingAtDefaultSize(
+            int selectedIndex,
+            string pageName)
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                form.ClientSize = new Size(1120, 700);
+                ShowModernAssemblyPage(form, "Joint");
+                TabControl sections = GetControl<TabControl>(
+                    form,
+                    "modernJointSections");
+                TabPage page = GetControl<TabPage>(form, pageName);
+                sections.SelectedIndex = selectedIndex;
+                form.CreateControl();
+                form.PerformLayout();
+                sections.PerformLayout();
+                page.PerformLayout();
+
+                Control content = page.Controls[0];
+                int availableHeight = page.ClientSize.Height - page.Padding.Vertical;
+                Size preferred = content.GetPreferredSize(new Size(
+                    Math.Max(1, page.ClientSize.Width - page.Padding.Horizontal),
+                    0));
+
+                Assert.True(
+                    preferred.Height <= availableHeight,
+                    String.Format(
+                        CultureInfo.InvariantCulture,
+                        "{0} requires {1}px but only {2}px is available.",
+                        pageName,
+                        preferred.Height,
+                        availableHeight));
+                Assert.False(page.VerticalScroll.Visible);
+                Assert.False(page.HorizontalScroll.Visible);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
         [Fact]
         public void TestJointIdentityAndReferenceGeometryUseStableFullWidthRows()
         {

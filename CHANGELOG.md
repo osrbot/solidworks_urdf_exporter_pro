@@ -70,6 +70,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Fixed
 
+- Removed unnecessary vertical scrollbars from the Joint Basics and Constraints pages at the
+  standard exporter window size while retaining scrolling as a fallback for smaller windows.
 - Reflowed the Joint identity and reference-geometry cards into separate full-width rows. Coordinate
   system and axis selectors now keep long deep-component paths readable through full-row controls,
   bounded drop-down expansion, and exact-value tooltips without rebuilding tab contents.
