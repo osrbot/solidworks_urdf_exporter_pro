@@ -789,6 +789,57 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestRepeatedPageSwitchesDoNotInvalidateUnrelatedPageTrees()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                form.CreateControl();
+                InvokePrivate(form, "PrimeModernPageLayouts");
+
+                Panel modelRoot = GetControl<Panel>(form, "modernModelRoot");
+                modelRoot.CreateControl();
+                int modelInvalidations = 0;
+                modelRoot.Invalidated += delegate { modelInvalidations++; };
+
+                for (int iteration = 0; iteration < 12; iteration++)
+                {
+                    ShowModernAssemblyPage(
+                        form,
+                        iteration % 2 == 0 ? "Link" : "Joint");
+                }
+
+                Assert.Equal(0, modelInvalidations);
+
+                TabControl jointSections = GetControl<TabControl>(
+                    form,
+                    "modernJointSections");
+                TabPage unrelatedJointPage = jointSections.TabPages[2];
+                unrelatedJointPage.CreateControl();
+                int unrelatedTabInvalidations = 0;
+                unrelatedJointPage.Invalidated += delegate
+                {
+                    unrelatedTabInvalidations++;
+                };
+
+                jointSections.SelectedIndex = 0;
+                for (int iteration = 0; iteration < 12; iteration++)
+                {
+                    jointSections.SelectedIndex = iteration % 2;
+                }
+
+                Assert.Equal(0, unrelatedTabInvalidations);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
         public void TestModernThemeUsesWindowsHostDialogFont()
         {
             AssemblyExportForm form = (AssemblyExportForm)
@@ -1561,6 +1612,75 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestFunctionalInputSectionsKeepBottomBordersInsideTheirContainers()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                form.PerformLayout();
+
+                ShowModernAssemblyPage(form, "Joint");
+                TabControl jointSections = GetControl<TabControl>(
+                    form,
+                    "modernJointSections");
+                for (int index = 0; index < jointSections.TabPages.Count; index++)
+                {
+                    jointSections.SelectedIndex = index;
+                    jointSections.PerformLayout();
+                }
+                GetControl<CheckBox>(form, "MimicCheckBox").Checked = true;
+                form.PerformLayout();
+
+                ShowModernAssemblyPage(form, "Link");
+                TabControl linkSections = GetControl<TabControl>(
+                    form,
+                    "modernLinkSections");
+                for (int index = 0; index < linkSections.TabPages.Count; index++)
+                {
+                    linkSections.SelectedIndex = index;
+                    linkSections.PerformLayout();
+                }
+
+                ShowModernAssemblyPage(form, "Model");
+                form.PerformLayout();
+
+                string[] inputContainers = new string[]
+                {
+                    "modernJointIdentityCard",
+                    "modernReferenceGeometryCard",
+                    "modernOriginCard",
+                    "modernAxisCard",
+                    "modernLimitsCard",
+                    "modernCalibrationCard",
+                    "modernDynamicsCard",
+                    "modernSafetyCard",
+                    "modernMimicCard",
+                    "modernInertialOriginSection",
+                    "modernInertiaMatrixSection",
+                    "groupBox5",
+                    "modernVisualOriginSection",
+                    "modernCollisionStrategySection",
+                    "groupBox4",
+                    "modernAppearanceMaterialSection",
+                    "modernAppearanceColorSection",
+                    "modernPackageCard"
+                };
+
+                foreach (string containerName in inputContainers)
+                {
+                    AssertInputBordersStayInside(
+                        GetControl<Control>(form, containerName));
+                }
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
         public void TestMovingJointDefaultsApplyOnceAndClearedValuesRemainInvalid()
         {
             UrdfJoint joint = new UrdfJoint
@@ -1821,6 +1941,48 @@ namespace SW2URDF.Test
                 count += CountDescendants(child);
             }
             return count;
+        }
+
+        private static void AssertInputBordersStayInside(Control container)
+        {
+            Control[] inputs = Descendants(container)
+                .Where(control =>
+                    control is TextBoxBase ||
+                    control is UpDownBase ||
+                    control is ComboBox)
+                .ToArray();
+            Assert.NotEmpty(inputs);
+
+            int contentBottom = container.ClientSize.Height -
+                Math.Max(1, container.Padding.Bottom);
+            foreach (Control input in inputs)
+            {
+                Rectangle bounds = BoundsRelativeTo(input, container);
+                Assert.True(
+                    bounds.Bottom < contentBottom,
+                    String.Format(
+                        CultureInfo.InvariantCulture,
+                        "{0} bottom border is clipped by {1}: " +
+                        "inputBottom={2}, contentBottom={3}, container={4}.",
+                        input.Name,
+                        container.Name,
+                        bounds.Bottom,
+                        contentBottom,
+                        container.ClientRectangle));
+            }
+        }
+
+        private static System.Collections.Generic.IEnumerable<Control> Descendants(
+            Control root)
+        {
+            foreach (Control child in root.Controls)
+            {
+                yield return child;
+                foreach (Control descendant in Descendants(child))
+                {
+                    yield return descendant;
+                }
+            }
         }
 
         private static T GetControl<T>(AssemblyExportForm form, string fieldName)

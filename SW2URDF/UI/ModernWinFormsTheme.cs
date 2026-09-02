@@ -33,6 +33,7 @@ namespace SW2URDF.UI
     internal sealed class ModernCardPanel : TableLayoutPanel
     {
         internal const int CornerRadius = 6;
+        private const int PaintedBorderClearance = 2;
 
         public ModernCardPanel()
         {
@@ -72,11 +73,16 @@ namespace SW2URDF.UI
             base.OnPaint(e);
             ModernWinFormsTheme.DrawRoundedBorder(this, e.Graphics, CornerRadius);
         }
+
+        public override Size GetPreferredSize(Size proposedSize)
+        {
+            Size preferred = base.GetPreferredSize(proposedSize);
+            return new Size(preferred.Width, preferred.Height + PaintedBorderClearance);
+        }
     }
 
     internal sealed class ModernTabControl : TabControl
     {
-        private IDisposable selectionRedrawScope;
         private readonly Dictionary<TabPage, List<TableLayoutPanel>> cachedLayouts =
             new Dictionary<TabPage, List<TableLayoutPanel>>();
         private bool restoringCachedLayouts;
@@ -96,28 +102,13 @@ namespace SW2URDF.UI
             if (!e.Cancel)
             {
                 CachePageLayout(SelectedTab);
-                ReleaseSelectionRedraw();
-                selectionRedrawScope = ModernWinFormsTheme.SuspendRedraw(this);
             }
         }
 
         protected override void OnSelected(TabControlEventArgs e)
         {
-            try
-            {
-                base.OnSelected(e);
-                CachePageLayout(e.TabPage);
-            }
-            finally
-            {
-                ReleaseSelectionRedraw();
-            }
-        }
-
-        protected override void OnHandleDestroyed(EventArgs e)
-        {
-            ReleaseSelectionRedraw();
-            base.OnHandleDestroyed(e);
+            base.OnSelected(e);
+            CachePageLayout(e.TabPage);
         }
 
         protected override void OnSizeChanged(EventArgs e)
@@ -296,15 +287,6 @@ namespace SW2URDF.UI
             }
         }
 
-        private void ReleaseSelectionRedraw()
-        {
-            if (selectionRedrawScope == null)
-            {
-                return;
-            }
-            selectionRedrawScope.Dispose();
-            selectionRedrawScope = null;
-        }
     }
 
     internal sealed class ModernTabPage : TabPage

@@ -1547,7 +1547,7 @@ namespace SW2URDF.UI
             title.Margin = new Padding(0, 0, 0, 6);
             ModernWinFormsTheme.SetFont(title, 9F, FontStyle.Bold);
             content.Dock = DockStyle.Top;
-            content.Margin = new Padding(0);
+            content.Margin = new Padding(0, 0, 0, 2);
             section.Controls.Add(title, 0, 0);
             section.Controls.Add(content, 0, 1);
             return section;
@@ -2302,52 +2302,49 @@ namespace SW2URDF.UI
                 return;
             }
 
-            using (ModernWinFormsTheme.SuspendRedraw(this))
+            SuspendLayout();
+            try
             {
-                SuspendLayout();
-                try
+                if (!modernPageShown)
                 {
-                    if (!modernPageShown)
+                    modernJointRoot.Visible = false;
+                    panelLinkProperties.Visible = false;
+                    modernModelRoot.Visible = false;
+                }
+                else
+                {
+                    Control previousPage;
+                    switch (modernActivePage)
                     {
-                        modernJointRoot.Visible = false;
-                        panelLinkProperties.Visible = false;
-                        modernModelRoot.Visible = false;
+                        case ModernAssemblyPage.Joint:
+                            previousPage = modernJointRoot;
+                            break;
+                        case ModernAssemblyPage.Link:
+                            previousPage = panelLinkProperties;
+                            break;
+                        case ModernAssemblyPage.Model:
+                            previousPage = modernModelRoot;
+                            break;
+                        default:
+                            previousPage = null;
+                            break;
                     }
-                    else
+                    if (previousPage != null && previousPage != activePage)
                     {
-                        Control previousPage;
-                        switch (modernActivePage)
-                        {
-                            case ModernAssemblyPage.Joint:
-                                previousPage = modernJointRoot;
-                                break;
-                            case ModernAssemblyPage.Link:
-                                previousPage = panelLinkProperties;
-                                break;
-                            case ModernAssemblyPage.Model:
-                                previousPage = modernModelRoot;
-                                break;
-                            default:
-                                previousPage = null;
-                                break;
-                        }
-                        if (previousPage != null && previousPage != activePage)
-                        {
-                            previousPage.Visible = false;
-                        }
+                        previousPage.Visible = false;
                     }
+                }
 
-                    activePage.Visible = true;
-                    activePage.BringToFront();
-                    modernActivePage = page;
-                    modernPageShown = true;
-                }
-                finally
-                {
-                    ResumeLayout(false);
-                }
-                EnsureModernPageLayout(page, activePage);
+                activePage.Visible = true;
+                activePage.BringToFront();
+                modernActivePage = page;
+                modernPageShown = true;
             }
+            finally
+            {
+                ResumeLayout(false);
+            }
+            EnsureModernPageLayout(page, activePage);
 
             if (page == ModernAssemblyPage.Joint)
             {
