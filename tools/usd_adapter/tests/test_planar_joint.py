@@ -34,7 +34,7 @@ class PlanarJointTests(unittest.TestCase):
         output = root / "usd"
         adapter.export_bundle(FIXTURE_PATH, output, overwrite=True)
         name_map = json.loads((output / "name_map.json").read_text(encoding="utf-8"))
-        joint_path = "/World/Robot/Joints/" + name_map["joints"]["planar joint"]
+        joint_path = "/Robot/Joints/" + name_map["joints"]["planar joint"]
         report = json.loads((output / "export_report.json").read_text(encoding="utf-8"))
         return output, joint_path, report
 

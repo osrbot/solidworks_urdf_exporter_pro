@@ -409,6 +409,33 @@
         { "if": { "properties": { "enabled": { "const": true } } }, "then": { "required": ["isaacLabVersion"] } }
       ]
     },
+    "usdJointDriveProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["joint", "mode"],
+      "properties": {
+        "joint": { "$ref": "#/$defs/nonEmptyString" },
+        "mode": { "enum": ["passive", "position", "velocity", "effort"] },
+        "stiffness": { "type": "number", "minimum": 0 },
+        "damping": { "type": "number", "minimum": 0 }
+      }
+    },
+    "usdSimulationProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseMode", "robotType", "allowSelfCollision", "jointDrives"],
+      "properties": {
+        "baseMode": { "enum": ["source", "fixed", "floating"] },
+        "robotType": {
+          "enum": ["default", "end_effector", "manipulator", "humanoid", "wheeled", "holonomic", "quadruped", "mobile_manipulator", "aerial"]
+        },
+        "allowSelfCollision": { "type": "boolean" },
+        "jointDrives": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/usdJointDriveProfile" }
+        }
+      }
+    },
     "profiles": {
       "type": "object",
       "additionalProperties": false,
@@ -418,7 +445,8 @@
         "ros2": { "$ref": "#/$defs/ros2Profile" },
         "ros1": { "$ref": "#/$defs/ros1Profile" },
         "isaac": { "$ref": "#/$defs/isaacProfile" },
-        "isaacLab": { "$ref": "#/$defs/isaacLabProfile" }
+        "isaacLab": { "$ref": "#/$defs/isaacLabProfile" },
+        "usdSimulation": { "$ref": "#/$defs/usdSimulationProfile" }
       }
     }
   }

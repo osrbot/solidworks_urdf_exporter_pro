@@ -65,6 +65,11 @@ SolidWorks、复杂装配体、物理参数校验和长期发布维护中暴露�
 | OpenUSD 机器人资产 | `USD/<package>/robot.usd`、几何依赖、源网格证据、名称映射和 JSON 报告 | 使用安装包固定的 OpenUSD 运行时生成并重新打开 stage | 已导入或运行于 Isaac Sim/Isaac Lab |
 | MuJoCo MJCF 模型 | `MuJoCo/<robot>/robot.xml`、`scene.xml`、资产、名称映射和 JSON 报告 | 使用安装包固定的 MuJoCo 官方工具对两个 XML 入口完成编译、规范保存、重载及一步零控制推进 | 已生成执行器、PID、控制器、任务、接触调参或强化学习工程 |
 
+OpenUSD 在主页面仍是一个目标，旁边的**设置...**对话框只在用户主动打开时加载，用于保存可移植
+仿真意图：源语义/固定/浮动基座、官方机器人分类、自碰撞，以及逐个单自由度 Joint 的被动/位置/
+速度/effort 意图。默认值保守且与 Isaac 版本无关。位置/速度模式可按显式参数写入 `DriveAPI`；
+effort 只记录下游意图，不创建主动驱动。
+
 文档严格区分三层证据：
 
 1. **生成能力**：证明导出器由已校验模型写出了约定文件。
@@ -81,6 +86,8 @@ SolidWorks、复杂装配体、物理参数校验和长期发布维护中暴露�
   MJCF 模型。私有规范暂存模型保证各导出器使用同一份已校验数据，但不会成为用户交付物。
 - 使用固定的内置 OpenUSD 运行时生成 USD 并验证 stage 可重新打开；使用固定的 MuJoCo 官方
   工具生成 MJCF，并要求编译、规范保存、重载和一步零控制验证通过后才交付本地结果。
+- 生成可引用的 `/Robot` OpenUSD articulation，包含 Isaac robot/link/joint 分类、明确的基座与
+  自碰撞语义、Collision purpose 元数据及用户可选 Joint drive，不要求本机 Isaac 或版本字段。
 - 为 Link/Joint 保存稳定 ID 与来源证据。SolidWorks Mate 识别只对原生可动装配提供需人工确认的
   建议，不作为 STEP 几何的兜底推断。
 - 在装配体特征 `URDF Export Configuration (v2)` 中保存 Link/Joint 配置。显式根文档参考使用
@@ -156,7 +163,8 @@ SolidWorks、复杂装配体、物理参数校验和长期发布维护中暴露�
    使用 SolidWorks 碰撞预览检查覆盖关系，以导出 manifest 作为最终策略记录。
 7. 至少选择一种明确目标：ROS 1 功能包、ROS 2 功能包、OpenUSD 机器人资产或 MuJoCo MJCF
    模型。USD 与 MJCF 要求 STL 几何；插件不要求填写 Isaac 版本、actuator profile，也不要求
-   用户管理中间 Bundle。
+   用户管理中间 Bundle。只有需要覆盖“保持源语义、关闭自碰撞、Joint 被动”这些保守默认值时，
+   才打开 OpenUSD 旁边的**设置...**。
 8. 导出后先检查公共 `export_report.md` 和目标目录内的报告。ROS 包检查
    `config/export_report.md`、`config/inertial_validation.csv` 和 `config/mesh_manifest.csv`；USD/MJCF 检查各自的
    `export_report.json` 与 `name_map.json`。然后在实际应用和任务环境中运行验证。

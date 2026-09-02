@@ -20,6 +20,13 @@ All notable OSRBot-maintained changes to this fork are documented here.
   zero-control step.
 - Added bilingual output documentation that separates generation capability, automated validation,
   and application-level runtime validation.
+- Added an on-demand OpenUSD simulation-intent dialog beside the target checkbox. It configures
+  source/fixed/floating base behavior, official robot classification, articulation self-collision,
+  and passive/position/velocity/effort intent for supported single-DOF Joints without adding an
+  always-visible profile page or an Isaac version dependency.
+- Added a referenceable `/Robot` default Prim with Isaac robot/link/joint schema metadata,
+  root-first Link relationships, collision `guide` purpose, mesh `convexHull` approximation, and
+  structural evidence for base resolution, Joint intents, active Drive APIs, and composed meshes.
 
 #### Changed
 
@@ -37,6 +44,9 @@ All notable OSRBot-maintained changes to this fork are documented here.
   being silently restored; position limits remain an engineering decision and are not guessed.
 - Improved the themed WinForms layout, footer spacing, field borders, tab switching, bilingual
   diagnostics, and immediate Joint validation without changing canonical URDF Joint values.
+- Cached and froze stable WinForms layout trees after initial sizing, while invalidating them on
+  window-size changes and keeping the dynamic Mimic editor live. Repeated page/tab switches no
+  longer recursively remeasure the same static controls.
 - Validate inertia triangle inequalities in the principal frame using scale-aware eigenvalue
   checks, including rotated and very small tensors.
 - Each export atomically replaces only the selected independent target directories. Existing
@@ -87,6 +97,12 @@ All notable OSRBot-maintained changes to this fork are documented here.
 - 为两种资产目标增加固定运行时验证。OpenUSD 必须使用安装包内置运行时重新打开生成的 stage；
   MJCF 必须使用内置 MuJoCo 官方工具对两个 XML 入口完成编译、规范保存、重载和一步零控制推进。
 - 增加双语输出文档，分别说明生成能力、自动化验证和实际应用运行验证。
+- 在 OpenUSD 目标勾选项旁增加按需打开的仿真意图设置，不新增常驻 profile 页面，也不依赖 Isaac
+  版本。用户可配置源语义/固定/浮动基座、官方机器人分类、articulation 自碰撞，以及受支持
+  单自由度 Joint 的被动/位置/速度/effort 意图。
+- 增加可引用的 `/Robot` 默认 Prim、Isaac robot/link/joint schema 元数据、根 Link 优先关系、
+  Collision `guide` purpose、网格 `convexHull` 近似，以及基座解析、Joint 意图、主动 DriveAPI 和
+  组合网格的结构证据。
 
 #### 变更
 
@@ -101,6 +117,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
   不做猜测。
 - 改进 WinForms 主题布局、页脚间距、输入边框、Tab 切换、双语诊断和 Joint 即时校验，同时保持
   规范 URDF Joint 值不变。
+- 在首次定型后缓存并冻结静态 WinForms 布局树；窗口尺寸变化时使缓存失效，动态 Mimic 编辑器
+  保持实时布局。重复切换页面或标签不再递归测量同一批静态控件。
 - 使用尺度感知的特征值检查，在主轴系校验惯性三角不等式，包括旋转张量和极小张量。
 - 每次导出只原子替换本次选中的独立目标目录；未选目标的既有目录会保留，顶层报告明确记录
   本次实际生成和验证的目标。

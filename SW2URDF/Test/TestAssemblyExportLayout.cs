@@ -1,5 +1,6 @@
 using SW2URDF.UI;
 using SW2URDF.URDFExport;
+using OSURDF.Core.Model;
 using System;
 using System.Drawing;
 using System.Globalization;
@@ -55,6 +56,7 @@ namespace SW2URDF.Test
                 CheckBox ros2 = GetControl<CheckBox>(form, "modernRos2CheckBox");
                 CheckBox usd = GetControl<CheckBox>(form, "modernUsdAssetCheckBox");
                 CheckBox mjcf = GetControl<CheckBox>(form, "modernMjcfAssetCheckBox");
+                Button usdSettings = GetControl<Button>(form, "modernUsdSettingsButton");
                 Assert.Equal(
                     ChineseUiText.Translate("ROS 1 package", "ROS 1 功能包"),
                     ros1.Text);
@@ -72,11 +74,14 @@ namespace SW2URDF.Test
                 Assert.Null(FindDescendant(form, "modernRos2PairComboBox"));
                 Assert.Null(FindDescendant(form, "modernRos2ControlProfileButton"));
                 Assert.Null(FindDescendant(form, "modernIsaacLabProfileButton"));
+                Assert.Null(FindDescendant(form, "modernUsdProfilePage"));
+                Assert.False(usdSettings.Enabled);
 
                 ros1.Checked = false;
                 ros2.Checked = true;
                 usd.Checked = true;
                 mjcf.Checked = true;
+                Assert.True(usdSettings.Enabled);
                 MethodInfo capture = typeof(AssemblyExportForm).GetMethod(
                     "CaptureExportTargetOptions",
                     BindingFlags.Instance | BindingFlags.NonPublic);
@@ -91,6 +96,7 @@ namespace SW2URDF.Test
 
                 usd.Checked = false;
                 mjcf.Checked = false;
+                Assert.False(usdSettings.Enabled);
                 Assert.True(GetControl<RadioButton>(form, "radioButton3dxml").Enabled);
             }
             finally
@@ -948,6 +954,120 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestOpenUsdSettingsAreVersionIndependentAndPreserveExplicitIntent()
+        {
+            using (OpenUsdSettingsDialog dialog = new OpenUsdSettingsDialog())
+            {
+                UsdSimulationProfile profile = new UsdSimulationProfile
+                {
+                    BaseMode = "fixed",
+                    RobotType = "wheeled",
+                    AllowSelfCollision = true
+                };
+                profile.JointDrives.Add(new UsdJointDriveProfile
+                {
+                    Joint = "wheel_joint",
+                    Mode = "position",
+                    Stiffness = 80.0,
+                    Damping = 4.0
+                });
+                dialog.LoadSettings(
+                    profile,
+                    new[]
+                    {
+                        new OpenUsdJointDescriptor
+                        {
+                            Name = "wheel_joint",
+                            Type = "continuous",
+                            EffortLimit = 3.0,
+                            VelocityLimit = 2.0
+                        }
+                    });
+
+                Assert.Null(FindDescendant(dialog, "openUsdIsaacSimVersionTextBox"));
+                Assert.Null(FindDescendant(dialog, "openUsdIsaacLabVersionTextBox"));
+                DataGridView grid = Assert.IsType<DataGridView>(
+                    FindDescendant(dialog, "openUsdJointDriveGrid"));
+                Assert.Single(grid.Rows.Cast<DataGridViewRow>());
+                Assert.True(grid.Rows[0].Cells["effortLimitColumn"].ReadOnly);
+                Assert.True(grid.Rows[0].Cells["velocityLimitColumn"].ReadOnly);
+
+                UsdSimulationProfile captured;
+                Assert.True(dialog.TryCaptureSettings(out captured));
+                Assert.Equal("fixed", captured.BaseMode);
+                Assert.Equal("wheeled", captured.RobotType);
+                Assert.True(captured.AllowSelfCollision);
+                UsdJointDriveProfile drive = Assert.Single(captured.JointDrives);
+                Assert.Equal("wheel_joint", drive.Joint);
+                Assert.Equal("position", drive.Mode);
+                Assert.Equal(80.0, drive.Stiffness);
+                Assert.Equal(4.0, drive.Damping);
+            }
+        }
+
+        [Fact]
+        public void TestOpenUsdSettingsFitAndPreserveInactiveGainDrafts()
+        {
+            using (OpenUsdSettingsDialog dialog = new OpenUsdSettingsDialog())
+            {
+                UsdSimulationProfile profile = new UsdSimulationProfile();
+                profile.JointDrives.Add(new UsdJointDriveProfile
+                {
+                    Joint = "wheel_joint",
+                    Mode = "position",
+                    Stiffness = 80.0,
+                    Damping = 4.0
+                });
+                dialog.LoadSettings(
+                    profile,
+                    new[]
+                    {
+                        new OpenUsdJointDescriptor
+                        {
+                            Name = "wheel_joint",
+                            Type = "continuous",
+                            EffortLimit = 3.0,
+                            VelocityLimit = 2.0
+                        }
+                    });
+                dialog.ClientSize = new Size(900, 560);
+                dialog.PerformLayout();
+
+                DataGridView grid = Assert.IsType<DataGridView>(
+                    FindDescendant(dialog, "openUsdJointDriveGrid"));
+                Assert.All(
+                    grid.Columns.Cast<DataGridViewColumn>(),
+                    column => Assert.Equal(
+                        DataGridViewAutoSizeColumnMode.Fill,
+                        column.AutoSizeMode));
+
+                DataGridViewRow row = Assert.Single(grid.Rows.Cast<DataGridViewRow>());
+                DataGridViewComboBoxCell modeCell =
+                    Assert.IsType<DataGridViewComboBoxCell>(
+                        row.Cells["driveModeColumn"]);
+                object effort = modeCell.Items.Cast<object>().Single(
+                    item => item.ToString().StartsWith("effort", StringComparison.Ordinal));
+                modeCell.Value = effort;
+
+                Assert.Equal("80", Convert.ToString(
+                    row.Cells["stiffnessColumn"].Value,
+                    CultureInfo.InvariantCulture));
+                Assert.Equal("4", Convert.ToString(
+                    row.Cells["dampingColumn"].Value,
+                    CultureInfo.InvariantCulture));
+                Assert.True(row.Cells["stiffnessColumn"].ReadOnly);
+                Assert.True(row.Cells["dampingColumn"].ReadOnly);
+
+                UsdSimulationProfile captured;
+                Assert.True(dialog.TryCaptureSettings(out captured));
+                UsdJointDriveProfile drive = Assert.Single(captured.JointDrives);
+                Assert.Equal("effort", drive.Mode);
+                Assert.Null(drive.Stiffness);
+                Assert.Null(drive.Damping);
+            }
+        }
+
+        [Fact]
         public void TestModernCardsTabsAndUsageGuideShareResponsiveTheme()
         {
             AssemblyExportForm exportForm = (AssemblyExportForm)
@@ -986,7 +1106,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestFirstModelPageSwitchLaysOutItsBody()
+        public void TestFirstModelPageSwitchReusesPrimedLayout()
         {
             AssemblyExportForm form = (AssemblyExportForm)
                 Activator.CreateInstance(typeof(AssemblyExportForm), true);
@@ -994,11 +1114,13 @@ namespace SW2URDF.Test
             try
             {
                 form.ClientSize = new Size(1344, 812);
+                InvokePrivate(form, "PrimeModernPageLayouts");
                 Control modelRoot = GetControl<Control>(form, "modernModelRoot");
                 Control modelBody = GetControl<Control>(form, "modernModelBody");
                 Control modelContent = GetControl<Control>(form, "modernModelContentPanel");
-                int layoutCount = 0;
-                modelRoot.Layout += delegate { layoutCount++; };
+                int primedLayoutCount = (int)GetPrivateField<object>(
+                    form,
+                    "modernModelExplicitLayoutCount");
 
                 ShowModernAssemblyPage(form, "Model");
 
@@ -1006,7 +1128,13 @@ namespace SW2URDF.Test
                 Assert.Equal(
                     "Model",
                     GetPrivateField<object>(form, "modernActivePage").ToString());
-                Assert.True(layoutCount > 0);
+                Assert.True(primedLayoutCount > 0);
+                Assert.Equal(
+                    primedLayoutCount,
+                    (int)GetPrivateField<object>(
+                        form,
+                        "modernModelExplicitLayoutCount"));
+                Assert.Equal(form.DisplayRectangle, modelRoot.Bounds);
                 Assert.True(modelBody.ClientSize.Width > 0);
                 Assert.True(modelBody.ClientSize.Height > 0);
                 Assert.True(modelContent.ClientSize.Width > 0);
@@ -1019,7 +1147,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void TestReturningToModelPagePerformsLayoutAgain()
+        public void TestReturningToModelPageReusesTheCachedLayout()
         {
             AssemblyExportForm form = (AssemblyExportForm)
                 Activator.CreateInstance(typeof(AssemblyExportForm), true);
@@ -1027,17 +1155,55 @@ namespace SW2URDF.Test
             try
             {
                 form.ClientSize = new Size(1344, 812);
-                Control modelRoot = GetControl<Control>(form, "modernModelRoot");
-                int layoutCount = 0;
-                modelRoot.Layout += delegate { layoutCount++; };
-
                 ShowModernAssemblyPage(form, "Model");
-                int firstSwitchLayoutCount = layoutCount;
+                int firstLayoutCount = (int)GetPrivateField<object>(
+                    form,
+                    "modernModelExplicitLayoutCount");
+                ShowModernAssemblyPage(form, "Link");
+                ShowModernAssemblyPage(form, "Model");
+                int returnedLayoutCount = (int)GetPrivateField<object>(
+                    form,
+                    "modernModelExplicitLayoutCount");
+
+                Assert.True(firstLayoutCount > 0);
+                Assert.Equal(firstLayoutCount, returnedLayoutCount);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestModelPageResizeInvalidatesCachedLayoutOnce()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                form.ClientSize = new Size(1200, 720);
+                InvokePrivate(form, "PrimeModernPageLayouts");
+                ShowModernAssemblyPage(form, "Model");
+                int primedLayoutCount = (int)GetPrivateField<object>(
+                    form,
+                    "modernModelExplicitLayoutCount");
+
+                form.ClientSize = new Size(1344, 812);
+                ShowModernAssemblyPage(form, "Link");
+                ShowModernAssemblyPage(form, "Model");
+                int resizedLayoutCount = (int)GetPrivateField<object>(
+                    form,
+                    "modernModelExplicitLayoutCount");
                 ShowModernAssemblyPage(form, "Link");
                 ShowModernAssemblyPage(form, "Model");
 
-                Assert.True(firstSwitchLayoutCount > 0);
-                Assert.True(layoutCount > firstSwitchLayoutCount);
+                Assert.Equal(primedLayoutCount + 1, resizedLayoutCount);
+                Assert.Equal(
+                    resizedLayoutCount,
+                    (int)GetPrivateField<object>(
+                        form,
+                        "modernModelExplicitLayoutCount"));
             }
             finally
             {

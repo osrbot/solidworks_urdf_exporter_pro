@@ -1337,6 +1337,8 @@ namespace SW2URDF.URDFExport
             }
             robot.Profiles.Isaac.Enabled = false;
             robot.Profiles.IsaacLab.Enabled = false;
+            robot.Profiles.UsdSimulation =
+                ExportTargetOptions.CloneUsdSimulation(options.UsdSimulation);
 
             Dictionary<string, string> packageMappings = new Dictionary<string, string>(StringComparer.Ordinal)
             {

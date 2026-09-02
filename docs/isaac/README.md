@@ -14,9 +14,15 @@ The exporter does not:
 - require or detect Isaac Sim or Isaac Lab on the Windows CAD workstation;
 - ask for an Isaac Sim or Isaac Lab version;
 - call Isaac-specific importer APIs or extensions;
-- generate actuator groups, PID gains, controller configuration, task environments, sensors,
+- infer gains or generate actuator groups, PID/controller files, task environments, sensors,
   observations, rewards, resets, domain randomization, or reinforcement-learning code;
 - claim that the asset has been imported, rendered, or simulated in Isaac Sim or Isaac Lab.
+
+The optional OpenUSD settings dialog records only portable asset intent: source/fixed/floating base,
+official robot classification, articulation self-collision, and passive/position/velocity/effort
+intent for supported single-DOF Joints. Position and velocity may author `DriveAPI` with explicitly
+entered stiffness/damping. Effort remains metadata for downstream runtime setup and does not create
+an active drive.
 
 To use the asset downstream, copy the complete `USD/<package>` directory to the target machine and
 import `robot.usd` through the target Isaac version's documented workflow. Validate articulation

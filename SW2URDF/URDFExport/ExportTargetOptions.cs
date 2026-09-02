@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using OSURDF.Core.Model;
 
 namespace SW2URDF.URDFExport
 {
@@ -46,6 +47,7 @@ namespace SW2URDF.URDFExport
         public string Ros2Distribution { get; set; }
         public string GazeboDistribution { get; set; }
         public string Ros2ControlProfileFile { get; set; }
+        public UsdSimulationProfile UsdSimulation { get; set; }
 
         public ExportTargetOptions()
         {
@@ -58,6 +60,7 @@ namespace SW2URDF.URDFExport
             MaintainerEmail = string.Empty;
             ModelLicense = string.Empty;
             ModelAuthor = string.Empty;
+            UsdSimulation = new UsdSimulationProfile();
         }
 
         public static ExportTargetOptions LegacyCompatibilityDefaults()
@@ -154,6 +157,36 @@ namespace SW2URDF.URDFExport
                     "A ros2_control profile must be an existing JSON file and requires ROS 2 output.");
             }
             return errors;
+        }
+
+        public static UsdSimulationProfile CloneUsdSimulation(
+            UsdSimulationProfile source)
+        {
+            UsdSimulationProfile clone = new UsdSimulationProfile();
+            if (source == null)
+            {
+                return clone;
+            }
+            clone.BaseMode = source.BaseMode;
+            clone.RobotType = source.RobotType;
+            clone.AllowSelfCollision = source.AllowSelfCollision;
+            clone.JointDrives.Clear();
+            foreach (UsdJointDriveProfile drive in
+                source.JointDrives ?? new List<UsdJointDriveProfile>())
+            {
+                if (drive == null)
+                {
+                    continue;
+                }
+                clone.JointDrives.Add(new UsdJointDriveProfile
+                {
+                    Joint = drive.Joint,
+                    Mode = drive.Mode,
+                    Stiffness = drive.Stiffness,
+                    Damping = drive.Damping
+                });
+            }
+            return clone;
         }
 
         private static void Require(

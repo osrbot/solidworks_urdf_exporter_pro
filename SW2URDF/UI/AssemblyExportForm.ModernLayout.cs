@@ -21,8 +21,10 @@ THE SOFTWARE.
 */
 
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
+using OSURDF.Core.Model;
 using SW2URDF.URDF;
 
 namespace SW2URDF.UI
@@ -46,8 +48,8 @@ namespace SW2URDF.UI
         private Panel modernLinkContentPanel;
         private Panel modernAppearancePanel;
         private Panel modernModelRoot;
-        private TabControl modernJointSections;
-        private TabControl modernLinkSections;
+        private ModernTabControl modernJointSections;
+        private ModernTabControl modernLinkSections;
         private TableLayoutPanel modernMimicDetails;
         private Button modernLinkUsageGuideButton;
         private Button modernModelUsageGuideButton;
@@ -60,6 +62,10 @@ namespace SW2URDF.UI
         private CheckBox modernRos1CheckBox;
         private CheckBox modernUsdAssetCheckBox;
         private CheckBox modernMjcfAssetCheckBox;
+        private Button modernUsdSettingsButton;
+        private OpenUsdSettingsDialog openUsdSettingsDialog;
+        private UsdSimulationProfile modernUsdSimulationProfile =
+            new UsdSimulationProfile();
         private TextBox modernMaterialIdTextBox;
         private TextBox modernPackageVersionTextBox;
         private TextBox modernPackageDescriptionTextBox;
@@ -69,6 +75,12 @@ namespace SW2URDF.UI
         private TextBox modernModelAuthorTextBox;
         private bool modernJointTreeExpandedOnce;
         private bool modernLinkTreeExpandedOnce;
+        private Size modernJointExplicitLayoutSize;
+        private Size modernLinkExplicitLayoutSize;
+        private Size modernModelExplicitLayoutSize;
+        private int modernModelExplicitLayoutCount;
+        private readonly List<TableLayoutPanel> modernModelFrozenLayouts =
+            new List<TableLayoutPanel>();
 
         internal void InitializeModernUi()
         {
@@ -131,6 +143,7 @@ namespace SW2URDF.UI
             ClientSize = ConstrainModernSize(
                 modernClientSizeAfterInitialScale,
                 maximumClientSize);
+            PrimeModernPageLayouts();
         }
 
         internal static Size ConstrainModernSize(Size desired, Size maximum)
@@ -231,6 +244,7 @@ namespace SW2URDF.UI
             TabPage mimicPage = CreateModernTabPage(
                 "modernJointMimicPage",
                 "Mimic");
+            ((ModernTabPage)mimicPage).CacheAutoSizeLayout = false;
             TableLayoutPanel mimicStack = CreateModernStack();
             mimicStack.AutoSize = false;
             mimicStack.Dock = DockStyle.Fill;
@@ -461,9 +475,9 @@ namespace SW2URDF.UI
             Controls.Add(modernModelRoot);
         }
 
-        private static TabControl CreateModernSectionTabs(string name)
+        private static ModernTabControl CreateModernSectionTabs(string name)
         {
-            TabControl tabs = new ModernTabControl
+            ModernTabControl tabs = new ModernTabControl
             {
                 Name = name,
                 Dock = DockStyle.Fill,
@@ -476,7 +490,7 @@ namespace SW2URDF.UI
 
         private static TabPage CreateModernTabPage(string name, string text)
         {
-            return new TabPage
+            return new ModernTabPage
             {
                 Name = name,
                 Text = text,
@@ -1570,6 +1584,15 @@ namespace SW2URDF.UI
                 "OpenUSD 机器人资产",
                 false);
             modernUsdAssetCheckBox.Name = "modernUsdAssetCheckBox";
+            modernUsdSettingsButton = new Button
+            {
+                Name = "modernUsdSettingsButton",
+                Enabled = false,
+                Margin = new Padding(4, 0, 14, 4),
+                Size = new Size(78, 26),
+                Text = ChineseUiText.Translate("Settings...", "设置...")
+            };
+            modernUsdSettingsButton.Click += ModernUsdSettingsButtonClick;
             modernMjcfAssetCheckBox = CreateTargetCheckBox(
                 "MuJoCo MJCF asset",
                 "MuJoCo MJCF 资产",
@@ -1581,7 +1604,7 @@ namespace SW2URDF.UI
             modernMjcfAssetCheckBox.CheckedChanged += ModernTargetSelectionChanged;
             targets.Controls.Add(modernRos1CheckBox);
             targets.Controls.Add(modernRos2CheckBox);
-            targets.Controls.Add(modernUsdAssetCheckBox);
+            targets.Controls.Add(CreateUsdTargetControls());
             targets.Controls.Add(modernMjcfAssetCheckBox);
             card.Controls.Add(targets);
 
@@ -1653,6 +1676,23 @@ namespace SW2URDF.UI
             };
         }
 
+        private Control CreateUsdTargetControls()
+        {
+            modernUsdAssetCheckBox.Margin = new Padding(0, 4, 2, 4);
+            FlowLayoutPanel target = new FlowLayoutPanel
+            {
+                Name = "modernUsdTargetControls",
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlowDirection = FlowDirection.LeftToRight,
+                Margin = new Padding(0),
+                WrapContents = false
+            };
+            target.Controls.Add(modernUsdAssetCheckBox);
+            target.Controls.Add(modernUsdSettingsButton);
+            return target;
+        }
+
         private static TextBox CreateTargetTextBox(string value)
         {
             return new TextBox
@@ -1677,6 +1717,10 @@ namespace SW2URDF.UI
 
         private void ModernTargetSelectionChanged(object sender, EventArgs e)
         {
+            if (modernUsdSettingsButton != null)
+            {
+                modernUsdSettingsButton.Enabled = modernUsdAssetCheckBox.Checked;
+            }
             SynchronizeAssetMeshFormatControls();
             UpdateRosPackageNameHint();
         }
@@ -2076,6 +2120,39 @@ namespace SW2URDF.UI
             {
                 EnsureModernMimicHandler();
             };
+            ClientSizeChanged += ModernClientSizeChanged;
+        }
+
+        private void ModernClientSizeChanged(object sender, EventArgs e)
+        {
+            if (modernModelExplicitLayoutSize != Size.Empty &&
+                modernModelExplicitLayoutSize != DisplayRectangle.Size)
+            {
+                RestoreModernModelAutoSizeLayouts();
+                modernModelExplicitLayoutSize = Size.Empty;
+            }
+        }
+
+        private void PrimeModernTabLayoutCaches()
+        {
+            if (modernJointSections == null)
+            {
+                return;
+            }
+            using (ModernWinFormsTheme.SuspendRedraw(modernJointSections))
+            {
+                PrimeModernPageLayouts();
+            }
+        }
+
+        private void PrimeModernPageLayouts()
+        {
+            using (ModernWinFormsTheme.SuspendRedraw(this))
+            {
+                EnsureModernPageLayout(ModernAssemblyPage.Joint, modernJointRoot);
+                EnsureModernPageLayout(ModernAssemblyPage.Link, panelLinkProperties);
+                EnsureModernPageLayout(ModernAssemblyPage.Model, modernModelRoot);
+            }
         }
 
         private void ModernLinkNextClick(object sender, EventArgs e)
@@ -2217,60 +2294,152 @@ namespace SW2URDF.UI
                 return;
             }
 
-            SuspendLayout();
-            try
+            using (ModernWinFormsTheme.SuspendRedraw(this))
             {
-                if (!modernPageShown)
+                SuspendLayout();
+                try
                 {
-                    modernJointRoot.Visible = false;
-                    panelLinkProperties.Visible = false;
-                    modernModelRoot.Visible = false;
+                    if (!modernPageShown)
+                    {
+                        modernJointRoot.Visible = false;
+                        panelLinkProperties.Visible = false;
+                        modernModelRoot.Visible = false;
+                    }
+                    else
+                    {
+                        Control previousPage;
+                        switch (modernActivePage)
+                        {
+                            case ModernAssemblyPage.Joint:
+                                previousPage = modernJointRoot;
+                                break;
+                            case ModernAssemblyPage.Link:
+                                previousPage = panelLinkProperties;
+                                break;
+                            case ModernAssemblyPage.Model:
+                                previousPage = modernModelRoot;
+                                break;
+                            default:
+                                previousPage = null;
+                                break;
+                        }
+                        if (previousPage != null && previousPage != activePage)
+                        {
+                            previousPage.Visible = false;
+                        }
+                    }
+
+                    activePage.Visible = true;
+                    activePage.BringToFront();
+                    modernActivePage = page;
+                    modernPageShown = true;
                 }
-                else
+                finally
                 {
-                    Control previousPage;
-                    switch (modernActivePage)
-                    {
-                        case ModernAssemblyPage.Joint:
-                            previousPage = modernJointRoot;
-                            break;
-                        case ModernAssemblyPage.Link:
-                            previousPage = panelLinkProperties;
-                            break;
-                        case ModernAssemblyPage.Model:
-                            previousPage = modernModelRoot;
-                            break;
-                        default:
-                            previousPage = null;
-                            break;
-                    }
-                    if (previousPage != null && previousPage != activePage)
-                    {
-                        previousPage.Visible = false;
-                    }
+                    ResumeLayout(false);
                 }
-
-                activePage.Visible = true;
-                activePage.BringToFront();
-                modernActivePage = page;
-                modernPageShown = true;
+                EnsureModernPageLayout(page, activePage);
             }
-            finally
-            {
-                ResumeLayout(false);
-            }
-
-            // A hidden Dock=Fill page can retain the WinForms default 200x100
-            // bounds until its parent lays it out after becoming visible.
-            // Layout only the activated page path; repainting the whole form is
-            // both unnecessary and noticeably slow for large link trees.
-            PerformLayout(activePage, "Visible");
-            activePage.PerformLayout();
 
             if (page == ModernAssemblyPage.Joint)
             {
                 EnsureModernMimicHandler();
             }
+        }
+
+        private void EnsureModernPageLayout(
+            ModernAssemblyPage page,
+            Control activePage)
+        {
+            Rectangle targetBounds = DisplayRectangle;
+            if (targetBounds.Width <= 0 || targetBounds.Height <= 0)
+            {
+                return;
+            }
+
+            Size cachedSize;
+            switch (page)
+            {
+                case ModernAssemblyPage.Joint:
+                    cachedSize = modernJointExplicitLayoutSize;
+                    break;
+                case ModernAssemblyPage.Link:
+                    cachedSize = modernLinkExplicitLayoutSize;
+                    break;
+                case ModernAssemblyPage.Model:
+                    cachedSize = modernModelExplicitLayoutSize;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException("page");
+            }
+
+            if (cachedSize == targetBounds.Size && activePage.Bounds == targetBounds)
+            {
+                return;
+            }
+
+            if (page == ModernAssemblyPage.Model)
+            {
+                RestoreModernModelAutoSizeLayouts();
+            }
+
+            activePage.Bounds = targetBounds;
+            activePage.PerformLayout();
+            switch (page)
+            {
+                case ModernAssemblyPage.Joint:
+                    modernJointExplicitLayoutSize = targetBounds.Size;
+                    break;
+                case ModernAssemblyPage.Link:
+                    modernLinkExplicitLayoutSize = targetBounds.Size;
+                    break;
+                case ModernAssemblyPage.Model:
+                    modernModelExplicitLayoutSize = targetBounds.Size;
+                    modernModelExplicitLayoutCount++;
+                    FreezeModernModelAutoSizeLayouts(modernModelRoot);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException("page");
+            }
+
+            if (page == ModernAssemblyPage.Joint)
+            {
+                modernJointSections.CacheAllPageLayouts();
+            }
+            else if (page == ModernAssemblyPage.Link)
+            {
+                modernLinkSections.CacheAllPageLayouts();
+            }
+        }
+
+        private void FreezeModernModelAutoSizeLayouts(Control root)
+        {
+            foreach (Control child in root.Controls)
+            {
+                FreezeModernModelAutoSizeLayouts(child);
+            }
+            TableLayoutPanel layout = root as TableLayoutPanel;
+            if (layout == null || !layout.AutoSize)
+            {
+                return;
+            }
+            Size size = layout.Size;
+            layout.AutoSize = false;
+            layout.Size = size;
+            modernModelFrozenLayouts.Add(layout);
+        }
+
+        private void RestoreModernModelAutoSizeLayouts()
+        {
+            for (int index = modernModelFrozenLayouts.Count - 1; index >= 0; index--)
+            {
+                TableLayoutPanel layout = modernModelFrozenLayouts[index];
+                if (!layout.IsDisposed)
+                {
+                    layout.AutoSize = true;
+                }
+            }
+            modernModelFrozenLayouts.Clear();
         }
     }
 }

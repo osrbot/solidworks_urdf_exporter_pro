@@ -66,6 +66,19 @@ namespace OSURDF.Core.Validation
         private static readonly HashSet<string> IsaacCollisionTypes = new HashSet<string>(
             new[] { "convex_hull", "convex_decomposition", "bounding_sphere", "bounding_cube" },
             StringComparer.Ordinal);
+        private static readonly HashSet<string> UsdBaseModes = new HashSet<string>(
+            new[] { "source", "fixed", "floating" },
+            StringComparer.Ordinal);
+        private static readonly HashSet<string> UsdRobotTypes = new HashSet<string>(
+            new[]
+            {
+                "default", "end_effector", "manipulator", "humanoid", "wheeled",
+                "holonomic", "quadruped", "mobile_manipulator", "aerial"
+            },
+            StringComparer.Ordinal);
+        private static readonly HashSet<string> UsdDriveModes = new HashSet<string>(
+            new[] { "passive", "position", "velocity", "effort" },
+            StringComparer.Ordinal);
 
         public ValidationReport Validate(RobotDocument robot)
         {
@@ -414,6 +427,107 @@ namespace OSURDF.Core.Validation
             }
             ValidateIsaacProfile(robot, robot.Profiles.Isaac, report);
             ValidateIsaacLabProfile(robot, report);
+            ValidateUsdSimulationProfile(robot, report);
+        }
+
+        private static void ValidateUsdSimulationProfile(RobotDocument robot, ValidationReport report)
+        {
+            UsdSimulationProfile profile = robot.Profiles.UsdSimulation;
+            if (profile == null)
+            {
+                report.Add(
+                    ValidationSeverity.Error,
+                    "USD_PROFILE_NULL",
+                    "$.profiles.usdSimulation",
+                    "OpenUSD simulation settings must be an object.");
+                return;
+            }
+
+            if (!UsdBaseModes.Contains(profile.BaseMode ?? string.Empty))
+            {
+                report.Add(
+                    ValidationSeverity.Error,
+                    "USD_BASE_MODE",
+                    "$.profiles.usdSimulation.baseMode",
+                    "OpenUSD base mode must be source, fixed, or floating.");
+            }
+            if (!UsdRobotTypes.Contains(profile.RobotType ?? string.Empty))
+            {
+                report.Add(
+                    ValidationSeverity.Error,
+                    "USD_ROBOT_TYPE",
+                    "$.profiles.usdSimulation.robotType",
+                    "OpenUSD robot type is not one of the supported stable categories.");
+            }
+
+            HashSet<string> seenJoints = new HashSet<string>(StringComparer.Ordinal);
+            List<JointDocument> joints = robot.Joints ?? new List<JointDocument>();
+            List<UsdJointDriveProfile> drives = profile.JointDrives ?? new List<UsdJointDriveProfile>();
+            for (int index = 0; index < drives.Count; index++)
+            {
+                UsdJointDriveProfile drive = drives[index];
+                string path = "$.profiles.usdSimulation.jointDrives[" + index + "]";
+                if (drive == null)
+                {
+                    report.Add(ValidationSeverity.Error, "USD_DRIVE_NULL", path, "OpenUSD joint drive entry must be an object.");
+                    continue;
+                }
+
+                JointDocument joint = joints.FirstOrDefault(candidate =>
+                    candidate != null && string.Equals(candidate.Name, drive.Joint, StringComparison.Ordinal));
+                if (joint == null || !new[] { "continuous", "revolute", "prismatic" }.Contains(joint.Type, StringComparer.Ordinal))
+                {
+                    report.Add(
+                        ValidationSeverity.Error,
+                        "USD_DRIVE_JOINT",
+                        path + ".joint",
+                        "OpenUSD drives may reference only existing one-DOF revolute, continuous, or prismatic Joints.");
+                }
+                if (string.IsNullOrWhiteSpace(drive.Joint) || !seenJoints.Add(drive.Joint ?? string.Empty))
+                {
+                    report.Add(
+                        ValidationSeverity.Error,
+                        "USD_DRIVE_DUPLICATE",
+                        path + ".joint",
+                        "Each OpenUSD Joint may have at most one drive intent.");
+                }
+                if (!UsdDriveModes.Contains(drive.Mode ?? string.Empty))
+                {
+                    report.Add(
+                        ValidationSeverity.Error,
+                        "USD_DRIVE_MODE",
+                        path + ".mode",
+                        "OpenUSD drive mode must be passive, position, velocity, or effort.");
+                }
+                bool acceptsGains =
+                    string.Equals(drive.Mode, "position", StringComparison.Ordinal) ||
+                    string.Equals(drive.Mode, "velocity", StringComparison.Ordinal);
+                if (!acceptsGains &&
+                    (drive.Stiffness.HasValue || drive.Damping.HasValue))
+                {
+                    report.Add(
+                        ValidationSeverity.Error,
+                        "USD_DRIVE_GAIN_MODE",
+                        path,
+                        "OpenUSD stiffness and damping are valid only for position or velocity drives.");
+                }
+                if (drive.Stiffness.HasValue && (!IsFinite(drive.Stiffness.Value) || drive.Stiffness.Value < 0.0))
+                {
+                    report.Add(
+                        ValidationSeverity.Error,
+                        "USD_DRIVE_STIFFNESS",
+                        path + ".stiffness",
+                        "OpenUSD drive stiffness must be finite and non-negative when configured.");
+                }
+                if (drive.Damping.HasValue && (!IsFinite(drive.Damping.Value) || drive.Damping.Value < 0.0))
+                {
+                    report.Add(
+                        ValidationSeverity.Error,
+                        "USD_DRIVE_DAMPING",
+                        path + ".damping",
+                        "OpenUSD drive damping must be finite and non-negative when configured.");
+                }
+            }
         }
 
         private static void ValidateRosProfile(RobotDocument robot, Ros2ExportProfile profile, ValidationReport report)

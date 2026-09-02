@@ -34,6 +34,36 @@ as non-exact mappings.
 USD and MJCF targets require STL mesh input. The adapter rejects 3DXML instead of silently dropping
 geometry.
 
+## Optional Simulation Intent
+
+The main wizard keeps OpenUSD as one checkbox. Its adjacent **Settings...** button opens a cached,
+on-demand dialog; it does not add another wizard page or run any USD work while pages are switched.
+The conservative defaults are **keep source semantics**, **Default** robot type, self-collision off,
+and every supported single-DOF Joint passive.
+
+| Setting | USD result |
+| --- | --- |
+| Keep source semantics | Preserves the source root behavior and injects no world Joint |
+| Fixed base | Adds a generated fixed Joint from the world to the source root Link |
+| Floating base | Records an explicitly mobile base and injects no world Joint |
+| Robot type | Writes the corresponding official `isaac:robotType` token; it is classification metadata, not a kinematic rewrite |
+| Allow self-collision | Writes `physxArticulation:enabledSelfCollisions`; off remains the safe default |
+| Passive Joint | Authors no active `DriveAPI` |
+| Position or velocity Joint | Authors an angular or linear `DriveAPI`; optional non-negative stiffness/damping are used only when explicitly entered |
+| Effort Joint | Records `osurdf:driveIntent=effort` for downstream runtime configuration and deliberately authors no active `DriveAPI` |
+
+The Joint effort and velocity limits shown in this dialog are read-only values from the validated
+CAD/URDF model. The exporter does not infer controller gains from geometry and does not require every
+movable Joint to have an active drive.
+
+## Stage Contract
+
+`/Robot` is the default Prim and articulation root. The stage applies `IsaacRobotAPI` to the robot,
+`IsaacLinkAPI` to Links, and `IsaacJointAPI` to Joints, while retaining standard USD Physics schemas
+as the executable physics contract. The root Link is first in `isaac:physics:robotLinks`. Collision
+Prims use `guide` purpose; mesh Collisions use `convexHull` approximation. Converted STL geometry is
+kept as relative USD dependencies, so `robot.usd` must travel with the complete output directory.
+
 ## Automated Validation
 
 The exporter succeeds only when the pinned bundled OpenUSD runtime:
@@ -42,7 +72,8 @@ The exporter succeeds only when the pinned bundled OpenUSD runtime:
 2. reopens `robot.usd`;
 3. confirms expected Link, Joint, and rigid-body counts, resolves local assets, verifies every
    planar Joint's three locked and three free degrees of freedom, and records mass-property and
-   Collision counts;
+   Collision counts, base resolution, configured Joint intents, active Drive APIs, and composed mesh
+   topology;
 4. writes the OpenUSD version and validation result to `export_report.json`.
 
 This proves generation and OpenUSD structural readability. It does **not** prove import, rendering,
@@ -56,8 +87,8 @@ including articulation mapping, collision/contact behavior, units, materials, co
 and task behavior.
 
 The exporter intentionally does not generate Isaac versions, extension settings, actuator groups,
-PID gains, sensors, environments, rewards, observations, reset logic, or reinforcement-learning
-code.
+controller/PID files, inferred gains, sensors, environments, rewards, observations, reset logic, or
+reinforcement-learning code. Only explicitly entered USD drive stiffness/damping are authored.
 
 ## Evidence Vocabulary
 

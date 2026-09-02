@@ -28,6 +28,7 @@ namespace OSURDF.Core.Serialization
             SortObjectProperty(profiles?["isaac"] as JObject, "packageMappings");
             SortObjectProperty(profiles?["isaacLab"] as JObject, "jointPositions");
             SortObjectProperty(profiles?["isaacLab"] as JObject, "jointVelocities");
+            SortObjectArrayProperty(profiles?["usdSimulation"] as JObject, "jointDrives", "joint");
             return root.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n";
         }
 
@@ -260,6 +261,20 @@ namespace OSURDF.Core.Serialization
                 source.Properties()
                     .OrderBy(property => property.Name, StringComparer.Ordinal)
                     .Select(property => new JProperty(property.Name, property.Value.DeepClone())));
+        }
+
+        private static void SortObjectArrayProperty(JObject parent, string propertyName, string keyProperty)
+        {
+            JArray source = parent?[propertyName] as JArray;
+            if (source == null)
+            {
+                return;
+            }
+            parent[propertyName] = new JArray(
+                source
+                    .OfType<JObject>()
+                    .OrderBy(item => (string)item[keyProperty] ?? string.Empty, StringComparer.Ordinal)
+                    .Select(item => item.DeepClone()));
         }
 
         private static void ValidateTokenTypes(JToken source, JToken canonical, string path)
@@ -557,6 +572,17 @@ namespace OSURDF.Core.Serialization
             RequireProperties(physics, "$.profiles.isaacLab.physics",
                 "enabledSelfCollisions", "solverPositionIterationCount", "solverVelocityIterationCount",
                 "enableGyroscopicForces", "maxDepenetrationVelocity");
+
+            if (profiles["usdSimulation"] != null && profiles["usdSimulation"].Type != JTokenType.Null)
+            {
+                JObject usdSimulation = RequireObject(profiles["usdSimulation"], "$.profiles.usdSimulation");
+                RequireProperties(usdSimulation, "$.profiles.usdSimulation",
+                    "baseMode", "robotType", "allowSelfCollision", "jointDrives");
+                ValidateProfileObjectArray(
+                    usdSimulation["jointDrives"],
+                    "$.profiles.usdSimulation.jointDrives",
+                    "joint", "mode");
+            }
         }
 
         private static void ValidateProfileObjectArray(JToken token, string path, params string[] required)

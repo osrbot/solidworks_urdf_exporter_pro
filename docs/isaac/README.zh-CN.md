@@ -13,9 +13,13 @@ SolidWorks 导出器可以生成 `USD/<package>/robot.usd` 及其几何依赖、
 - 要求或检测 Windows CAD 工作站上的 Isaac Sim/Isaac Lab；
 - 要求填写 Isaac Sim/Isaac Lab 版本；
 - 调用 Isaac 专用 importer API 或扩展；
-- 生成 actuator group、PID 增益、控制器配置、任务环境、传感器、观测、奖励、重置、域随机化
+- 猜测增益，或生成 actuator group、PID/控制器文件、任务环境、传感器、观测、奖励、重置、域随机化
   或强化学习代码；
 - 声称资产已经在 Isaac Sim/Isaac Lab 中完成导入、渲染或仿真。
+
+可选 OpenUSD 设置对话框只记录可移植的资产意图：源语义/固定/浮动基座、官方机器人分类、
+articulation 自碰撞，以及受支持单自由度 Joint 的被动/位置/速度/effort 意图。位置和速度模式可将
+用户显式输入的刚度/阻尼写入 `DriveAPI`；effort 只作为下游运行时配置元数据，不创建主动驱动。
 
 下游使用时，应将完整 `USD/<package>` 目录复制到目标机器，按目标 Isaac 版本的官方流程导入
 `robot.usd`，并在该实际环境中检查 articulation 映射、单位、材质、Collision 行为、质量属性、

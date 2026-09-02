@@ -82,6 +82,10 @@ namespace SW2URDF.Test
             Assert.Equal("NOASSERTION", options.ModelLicense);
             Assert.Equal(PackageXML.DefaultMaintainerName, options.MaintainerName);
             Assert.Equal(PackageXML.DefaultMaintainerEmail, options.MaintainerEmail);
+            Assert.Equal("source", options.UsdSimulation.BaseMode);
+            Assert.Equal("default", options.UsdSimulation.RobotType);
+            Assert.False(options.UsdSimulation.AllowSelfCollision);
+            Assert.Empty(options.UsdSimulation.JointDrives);
             Assert.Empty(options.ValidateFindings());
         }
 

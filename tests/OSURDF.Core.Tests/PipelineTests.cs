@@ -280,6 +280,78 @@ public sealed class PipelineTests : IDisposable
     }
 
     [Fact]
+    public void UsdSimulationSettingsAreConservativeAndRoundTripWithoutVersionPins()
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        UsdSimulationProfile defaults = robot.Profiles.UsdSimulation;
+
+        Assert.Equal("source", defaults.BaseMode);
+        Assert.Equal("default", defaults.RobotType);
+        Assert.False(defaults.AllowSelfCollision);
+        Assert.Empty(defaults.JointDrives);
+
+        defaults.BaseMode = "fixed";
+        defaults.RobotType = "wheeled";
+        defaults.AllowSelfCollision = true;
+        defaults.JointDrives.Add(new UsdJointDriveProfile
+        {
+            Joint = "shoulder_joint",
+            Mode = "position",
+            Stiffness = 120.0,
+            Damping = 8.0
+        });
+
+        RobotDocument roundTrip = RobotJson.Deserialize(RobotJson.Serialize(robot));
+        UsdSimulationProfile actual = roundTrip.Profiles.UsdSimulation;
+        Assert.Equal("fixed", actual.BaseMode);
+        Assert.Equal("wheeled", actual.RobotType);
+        Assert.True(actual.AllowSelfCollision);
+        UsdJointDriveProfile drive = Assert.Single(actual.JointDrives);
+        Assert.Equal("shoulder_joint", drive.Joint);
+        Assert.Equal("position", drive.Mode);
+        Assert.Equal(120.0, drive.Stiffness);
+        Assert.Equal(8.0, drive.Damping);
+        JObject serialized = JObject.Parse(RobotJson.Serialize(robot));
+        JObject usdSimulation = Assert.IsType<JObject>(serialized["profiles"]?["usdSimulation"]);
+        Assert.Null(usdSimulation["isaacSimVersion"]);
+        Assert.Null(usdSimulation["isaacLabVersion"]);
+    }
+
+    [Fact]
+    public void ValidatorRejectsInvalidUsdSimulationIntentWithoutRequiringDriveCoverage()
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        robot.Profiles.UsdSimulation.BaseMode = "anchored_by_guess";
+        robot.Profiles.UsdSimulation.RobotType = "marketing_category";
+        robot.Profiles.UsdSimulation.JointDrives.Add(new UsdJointDriveProfile
+        {
+            Joint = "missing_joint",
+            Mode = "position",
+            Stiffness = -1.0,
+            Damping = double.NaN
+        });
+        robot.Profiles.UsdSimulation.JointDrives.Add(new UsdJointDriveProfile
+        {
+            Joint = "shoulder_joint",
+            Mode = "effort",
+            Stiffness = 10.0
+        });
+
+        ValidationReport report = new RobotValidator().Validate(robot);
+        Assert.Contains(report.Findings, finding => finding.Code == "USD_BASE_MODE");
+        Assert.Contains(report.Findings, finding => finding.Code == "USD_ROBOT_TYPE");
+        Assert.Contains(report.Findings, finding => finding.Code == "USD_DRIVE_JOINT");
+        Assert.Contains(report.Findings, finding => finding.Code == "USD_DRIVE_STIFFNESS");
+        Assert.Contains(report.Findings, finding => finding.Code == "USD_DRIVE_DAMPING");
+        Assert.Contains(report.Findings, finding => finding.Code == "USD_DRIVE_GAIN_MODE");
+
+        robot.Profiles.UsdSimulation = new UsdSimulationProfile();
+        Assert.DoesNotContain(
+            new RobotValidator().Validate(robot).Findings,
+            finding => finding.Code.StartsWith("USD_", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ValidatorRequiresExplicitConfirmedJointConfiguration()
     {
         RobotDocument robot = LoadFixtureRobot();

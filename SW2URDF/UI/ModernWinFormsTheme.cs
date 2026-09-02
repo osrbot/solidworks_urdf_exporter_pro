@@ -21,6 +21,7 @@ THE SOFTWARE.
 */
 
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.CompilerServices;
@@ -75,6 +76,11 @@ namespace SW2URDF.UI
 
     internal sealed class ModernTabControl : TabControl
     {
+        private IDisposable selectionRedrawScope;
+        private readonly Dictionary<TabPage, List<TableLayoutPanel>> cachedLayouts =
+            new Dictionary<TabPage, List<TableLayoutPanel>>();
+        private bool restoringCachedLayouts;
+
         public ModernTabControl()
         {
             SetStyle(
@@ -83,6 +89,153 @@ namespace SW2URDF.UI
                 ControlStyles.ResizeRedraw,
                 true);
         }
+
+        protected override void OnSelecting(TabControlCancelEventArgs e)
+        {
+            base.OnSelecting(e);
+            if (!e.Cancel)
+            {
+                CachePageLayout(SelectedTab);
+                ReleaseSelectionRedraw();
+                selectionRedrawScope = ModernWinFormsTheme.SuspendRedraw(this);
+            }
+        }
+
+        protected override void OnSelected(TabControlEventArgs e)
+        {
+            try
+            {
+                base.OnSelected(e);
+                CachePageLayout(e.TabPage);
+            }
+            finally
+            {
+                ReleaseSelectionRedraw();
+            }
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            ReleaseSelectionRedraw();
+            base.OnHandleDestroyed(e);
+        }
+
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            RestoreCachedLayouts();
+            base.OnSizeChanged(e);
+        }
+
+        internal void CacheSelectedPageLayout()
+        {
+            CachePageLayout(SelectedTab);
+        }
+
+        internal void CacheAllPageLayouts()
+        {
+            Rectangle pageBounds = DisplayRectangle;
+            if (pageBounds.Width <= 0 || pageBounds.Height <= 0)
+            {
+                return;
+            }
+            foreach (TabPage page in TabPages)
+            {
+                ModernTabPage modernPage = page as ModernTabPage;
+                if (modernPage != null && !modernPage.CacheAutoSizeLayout)
+                {
+                    continue;
+                }
+                if (page.Bounds != pageBounds)
+                {
+                    page.Bounds = pageBounds;
+                }
+                CachePageLayout(page);
+            }
+        }
+
+        private void CachePageLayout(TabPage page)
+        {
+            ModernTabPage modernPage = page as ModernTabPage;
+            if (page == null || cachedLayouts.ContainsKey(page) ||
+                (modernPage != null && !modernPage.CacheAutoSizeLayout))
+            {
+                return;
+            }
+
+            page.PerformLayout();
+            List<TableLayoutPanel> layouts = new List<TableLayoutPanel>();
+            FreezeAutoSizeLayouts(page, layouts);
+            cachedLayouts.Add(page, layouts);
+        }
+
+        private static void FreezeAutoSizeLayouts(
+            Control root,
+            IList<TableLayoutPanel> layouts)
+        {
+            foreach (Control child in root.Controls)
+            {
+                FreezeAutoSizeLayouts(child, layouts);
+            }
+
+            TableLayoutPanel layout = root as TableLayoutPanel;
+            if (layout == null || !layout.AutoSize)
+            {
+                return;
+            }
+            Size size = layout.Size;
+            layout.AutoSize = false;
+            layout.Size = size;
+            layouts.Add(layout);
+        }
+
+        private void RestoreCachedLayouts()
+        {
+            if (restoringCachedLayouts || cachedLayouts.Count == 0)
+            {
+                return;
+            }
+
+            restoringCachedLayouts = true;
+            try
+            {
+                foreach (List<TableLayoutPanel> layouts in cachedLayouts.Values)
+                {
+                    for (int index = layouts.Count - 1; index >= 0; index--)
+                    {
+                        TableLayoutPanel layout = layouts[index];
+                        if (!layout.IsDisposed)
+                        {
+                            layout.AutoSize = true;
+                        }
+                    }
+                }
+                cachedLayouts.Clear();
+            }
+            finally
+            {
+                restoringCachedLayouts = false;
+            }
+        }
+
+        private void ReleaseSelectionRedraw()
+        {
+            if (selectionRedrawScope == null)
+            {
+                return;
+            }
+            selectionRedrawScope.Dispose();
+            selectionRedrawScope = null;
+        }
+    }
+
+    internal sealed class ModernTabPage : TabPage
+    {
+        internal ModernTabPage()
+        {
+            CacheAutoSizeLayout = true;
+        }
+
+        internal bool CacheAutoSizeLayout { get; set; }
     }
 
     internal static class UiFontResources

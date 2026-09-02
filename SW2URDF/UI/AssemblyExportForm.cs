@@ -22,6 +22,7 @@ THE SOFTWARE.
 
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
+using OSURDF.Core.Model;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using SW2URDF.Utilities;
@@ -543,6 +544,7 @@ namespace SW2URDF.UI
             FillJointTree();
             ApplyMissingRequiredJointLimitDefaultsToTree();
             SelectFirstJointNodeForEditing();
+            PrimeModernTabLayoutCaches();
         }
 
         private void ButtonJointNextClick(object sender, EventArgs e)
@@ -1262,6 +1264,17 @@ namespace SW2URDF.UI
             modernRos2CheckBox.Checked = options.ExportRos2;
             modernUsdAssetCheckBox.Checked = options.ExportUsdAsset;
             modernMjcfAssetCheckBox.Checked = options.ExportMjcfAsset;
+            modernUsdSimulationProfile =
+                ExportTargetOptions.CloneUsdSimulation(options.UsdSimulation);
+            if (modernUsdSettingsButton != null)
+            {
+                modernUsdSettingsButton.Enabled = options.ExportUsdAsset;
+                packagePathToolTip.SetToolTip(
+                    modernUsdSettingsButton,
+                    ChineseUiText.Translate(
+                        "Configure base semantics, self-collision, robot type, and explicit one-DOF Joint drive intent. No Isaac Sim version is required.",
+                        "配置基座语义、自碰撞、机器人类型及单自由度 Joint 的显式驱动意图；无需填写 Isaac Sim 版本。"));
+            }
             modernPackageVersionTextBox.Text = options.PackageVersion;
             modernPackageDescriptionTextBox.Text = options.Description;
             modernMaintainerNameTextBox.Text = options.MaintainerName;
@@ -1290,9 +1303,85 @@ namespace SW2URDF.UI
                 MaintainerName = modernMaintainerNameTextBox.Text.Trim(),
                 MaintainerEmail = modernMaintainerEmailTextBox.Text.Trim(),
                 ModelLicense = modernModelLicenseTextBox.Text.Trim(),
-                ModelAuthor = modernModelAuthorTextBox.Text.Trim()
+                ModelAuthor = modernModelAuthorTextBox.Text.Trim(),
+                UsdSimulation = ExportTargetOptions.CloneUsdSimulation(
+                    modernUsdSimulationProfile)
             };
             return options;
+        }
+
+        private void ModernUsdSettingsButtonClick(object sender, EventArgs e)
+        {
+            if (openUsdSettingsDialog == null || openUsdSettingsDialog.IsDisposed)
+            {
+                openUsdSettingsDialog = new OpenUsdSettingsDialog();
+            }
+            openUsdSettingsDialog.LoadSettings(
+                modernUsdSimulationProfile,
+                BuildOpenUsdJointDescriptors(BaseNode));
+            if (openUsdSettingsDialog.ShowDialog(this) == DialogResult.OK)
+            {
+                modernUsdSimulationProfile = ExportTargetOptions.CloneUsdSimulation(
+                    openUsdSettingsDialog.Settings);
+            }
+        }
+
+        internal static IList<OpenUsdJointDescriptor> BuildOpenUsdJointDescriptors(
+            LinkNode root)
+        {
+            List<OpenUsdJointDescriptor> result =
+                new List<OpenUsdJointDescriptor>();
+            if (root == null)
+            {
+                return result;
+            }
+
+            Queue<LinkNode> pending = new Queue<LinkNode>();
+            pending.Enqueue(root);
+            while (pending.Count > 0)
+            {
+                LinkNode node = pending.Dequeue();
+                foreach (LinkNode child in node.Nodes)
+                {
+                    pending.Enqueue(child);
+                }
+                if (node.IsBaseNode || node.Link == null || node.Link.Joint == null)
+                {
+                    continue;
+                }
+                Joint joint = node.Link.Joint;
+                if (!(String.Equals(joint.Type, "continuous", StringComparison.Ordinal) ||
+                      String.Equals(joint.Type, "revolute", StringComparison.Ordinal) ||
+                      String.Equals(joint.Type, "prismatic", StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+                result.Add(new OpenUsdJointDescriptor
+                {
+                    Name = joint.Name,
+                    Type = joint.Type,
+                    EffortLimit = ReadPositiveJointLimit(
+                        delegate { return joint.Limit.Effort; }),
+                    VelocityLimit = ReadPositiveJointLimit(
+                        delegate { return joint.Limit.Velocity; })
+                });
+            }
+            return result;
+        }
+
+        private static double? ReadPositiveJointLimit(Func<double> readValue)
+        {
+            try
+            {
+                double value = readValue();
+                return !Double.IsNaN(value) && !Double.IsInfinity(value) && value > 0.0
+                    ? (double?)value
+                    : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         private void LinkCoordinateSystemSelectionChangeCommitted(object sender, EventArgs e)
@@ -2073,6 +2162,11 @@ namespace SW2URDF.UI
             if (collisionPreview != null)
             {
                 collisionPreview.Dispose();
+            }
+            if (openUsdSettingsDialog != null)
+            {
+                openUsdSettingsDialog.Dispose();
+                openUsdSettingsDialog = null;
             }
             if (packagePathToolTip != null)
             {

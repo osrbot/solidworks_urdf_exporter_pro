@@ -19,6 +19,9 @@ namespace OSURDF.Core.Model
 
         [JsonProperty("isaacLab", Order = 4)]
         public IsaacLabProfile IsaacLab { get; set; } = new IsaacLabProfile();
+
+        [JsonProperty("usdSimulation", Order = 5)]
+        public UsdSimulationProfile UsdSimulation { get; set; } = new UsdSimulationProfile();
     }
 
     public sealed class PackageMetadataProfile
@@ -109,6 +112,22 @@ namespace OSURDF.Core.Model
         [JsonProperty("physics", Order = 10)] public IsaacPhysicsProfile Physics { get; set; } = new IsaacPhysicsProfile();
         [JsonProperty("smokeEnvironmentCount", Order = 11)] public int SmokeEnvironmentCount { get; set; } = 64;
         [JsonProperty("smokeStepCount", Order = 12)] public int SmokeStepCount { get; set; } = 1000;
+    }
+
+    public sealed class UsdSimulationProfile
+    {
+        [JsonProperty("baseMode", Order = 0)] public string BaseMode { get; set; } = "source";
+        [JsonProperty("robotType", Order = 1)] public string RobotType { get; set; } = "default";
+        [JsonProperty("allowSelfCollision", Order = 2)] public bool AllowSelfCollision { get; set; }
+        [JsonProperty("jointDrives", Order = 3)] public List<UsdJointDriveProfile> JointDrives { get; set; } = new List<UsdJointDriveProfile>();
+    }
+
+    public sealed class UsdJointDriveProfile
+    {
+        [JsonProperty("joint", Order = 0)] public string Joint { get; set; } = string.Empty;
+        [JsonProperty("mode", Order = 1)] public string Mode { get; set; } = "passive";
+        [JsonProperty("stiffness", Order = 2)] public double? Stiffness { get; set; }
+        [JsonProperty("damping", Order = 3)] public double? Damping { get; set; }
     }
 
     public sealed class IsaacPhysicsProfile

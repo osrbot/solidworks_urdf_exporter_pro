@@ -70,6 +70,12 @@ journal before the next export starts.
 | OpenUSD robot asset | `USD/<package>/robot.usd`, geometry dependencies, source mesh evidence, name map, and JSON report | Generated and reopened with the pinned OpenUSD runtime bundled by the installer | Import or execution in Isaac Sim/Isaac Lab |
 | MuJoCo MJCF model | `MuJoCo/<robot>/robot.xml`, `scene.xml`, assets, name map, and JSON report | Both XML entry points are compiled, canonically saved, reloaded, and advanced one zero-control step with pinned official MuJoCo tools | Actuators, PID gains, controllers, tasks, contact tuning, or RL code |
 
+OpenUSD remains a single target on the main page. Its adjacent **Settings...** dialog is loaded only
+when requested and stores portable simulation intent: source/fixed/floating base, official robot
+classification, self-collision, and per single-DOF Joint passive/position/velocity/effort intent.
+Defaults are conservative and version-independent. Position/velocity may author `DriveAPI` from
+explicit values; effort is recorded as downstream intent without creating an active drive.
+
 These are three different evidence levels:
 
 1. **Generation capability** proves that the exporter wrote the documented files from a validated
@@ -90,6 +96,9 @@ records exactly which targets were generated and validated by the current run.
 - Generates USD with a pinned bundled OpenUSD runtime and verifies that the stage reopens. Generates
   MJCF with pinned official MuJoCo tools and requires compile/save/reload/one-zero-control-step
   validation before publishing the local result.
+- Authors a referenceable `/Robot` OpenUSD articulation with Isaac robot/link/joint classification,
+  explicit base and self-collision semantics, collision-purpose metadata, and optional user-selected
+  Joint drives without requiring an Isaac installation or version field.
 - Records stable Link/Joint IDs and source evidence. SolidWorks Mate detection is an optional,
   user-confirmed suggestion for native movable assemblies, never a fallback for STEP geometry.
 - Stores Link/Joint configuration in `URDF Export Configuration (v2)`. Explicit root-document
@@ -182,7 +191,8 @@ Historical upstream installers remain available from
    coverage in SolidWorks, but treat the exported manifest as the final strategy record.
 7. Select at least one concrete target: ROS 1 package, ROS 2 package, OpenUSD robot asset, or MuJoCo
    MJCF model. USD and MJCF require STL geometry. The exporter does not ask for Isaac versions,
-   actuator profiles, or a user-managed staging Bundle.
+   actuator profiles, or a user-managed staging Bundle. Open **Settings...** beside OpenUSD only
+   when you need to override the conservative source-base, self-collision-off, passive-Joint defaults.
 8. Review the common `export_report.md` and target-local reports before simulation. For ROS, inspect
    `config/export_report.md`, `config/inertial_validation.csv`, and `config/mesh_manifest.csv`. For USD or MJCF, inspect the
    target's `export_report.json` and `name_map.json`. Then run the asset in the actual application
