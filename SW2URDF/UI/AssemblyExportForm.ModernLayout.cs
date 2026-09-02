@@ -2260,7 +2260,12 @@ namespace SW2URDF.UI
                 ResumeLayout(false);
             }
 
-            activePage.Invalidate();
+            // A hidden Dock=Fill page can retain the WinForms default 200x100
+            // bounds until its parent lays it out after becoming visible.
+            // Layout only the activated page path; repainting the whole form is
+            // both unnecessary and noticeably slow for large link trees.
+            PerformLayout(activePage, "Visible");
+            activePage.PerformLayout();
 
             if (page == ModernAssemblyPage.Joint)
             {

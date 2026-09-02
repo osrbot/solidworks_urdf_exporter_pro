@@ -986,6 +986,66 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestFirstModelPageSwitchLaysOutItsBody()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                Control modelRoot = GetControl<Control>(form, "modernModelRoot");
+                Control modelBody = GetControl<Control>(form, "modernModelBody");
+                Control modelContent = GetControl<Control>(form, "modernModelContentPanel");
+                int layoutCount = 0;
+                modelRoot.Layout += delegate { layoutCount++; };
+
+                ShowModernAssemblyPage(form, "Model");
+
+                Assert.True((bool)GetPrivateField<object>(form, "modernPageShown"));
+                Assert.Equal(
+                    "Model",
+                    GetPrivateField<object>(form, "modernActivePage").ToString());
+                Assert.True(layoutCount > 0);
+                Assert.True(modelBody.ClientSize.Width > 0);
+                Assert.True(modelBody.ClientSize.Height > 0);
+                Assert.True(modelContent.ClientSize.Width > 0);
+                Assert.True(modelContent.ClientSize.Height > 0);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestReturningToModelPagePerformsLayoutAgain()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                Control modelRoot = GetControl<Control>(form, "modernModelRoot");
+                int layoutCount = 0;
+                modelRoot.Layout += delegate { layoutCount++; };
+
+                ShowModernAssemblyPage(form, "Model");
+                int firstSwitchLayoutCount = layoutCount;
+                ShowModernAssemblyPage(form, "Link");
+                ShowModernAssemblyPage(form, "Model");
+
+                Assert.True(firstSwitchLayoutCount > 0);
+                Assert.True(layoutCount > firstSwitchLayoutCount);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
         public void TestJointTabsReuseControlsAndFooterButtonsShareGeometry()
         {
             AssemblyExportForm form = (AssemblyExportForm)
@@ -1249,6 +1309,18 @@ namespace SW2URDF.Test
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(method);
             return method.Invoke(form, null);
+        }
+
+        private static void ShowModernAssemblyPage(
+            AssemblyExportForm form,
+            string pageName)
+        {
+            MethodInfo method = typeof(AssemblyExportForm).GetMethod(
+                "ShowModernAssemblyPage",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+            Type pageType = method.GetParameters()[0].ParameterType;
+            method.Invoke(form, new object[] { Enum.Parse(pageType, pageName) });
         }
 
         private static T GetPrivateField<T>(
