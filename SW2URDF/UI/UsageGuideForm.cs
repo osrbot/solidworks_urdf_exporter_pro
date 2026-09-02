@@ -10,7 +10,6 @@ namespace SW2URDF.UI
     {
         internal const string ProjectUrl =
             "https://github.com/osrbot/solidworks_urdf_exporter_pro";
-        internal const string VersionMaintainer = "kitso666 <kitso@osrbot.com>";
 
         internal static readonly string[] CommonMaterialNames = new string[]
         {
@@ -31,7 +30,7 @@ namespace SW2URDF.UI
             "transparent_blue"
         };
 
-        private readonly TextBox guideTextBox;
+        private readonly RichTextBox guideTextBox;
         private readonly LinkLabel projectLinkLabel;
         private readonly Button closeButton;
 
@@ -61,7 +60,7 @@ namespace SW2URDF.UI
             shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 82F));
             shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 76F));
+            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));
 
             TableLayoutPanel header = new TableLayoutPanel
             {
@@ -91,16 +90,16 @@ namespace SW2URDF.UI
             header.Controls.Add(titleLabel, 0, 0);
             header.Controls.Add(subtitleLabel, 0, 1);
 
-            guideTextBox = new TextBox
+            guideTextBox = new RichTextBox
             {
                 Name = "usageGuideTextBox",
                 BackColor = ModernWinFormsTheme.Surface,
                 BorderStyle = BorderStyle.None,
+                DetectUrls = false,
                 Dock = DockStyle.Fill,
-                Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
-                Text = BuildGuideText(chinese),
+                ScrollBars = RichTextBoxScrollBars.Vertical,
+                TabStop = false,
                 WordWrap = true
             };
 
@@ -125,16 +124,6 @@ namespace SW2URDF.UI
             };
             projectLinkLabel.LinkClicked += ProjectLinkLabelLinkClicked;
 
-            Label maintainerLabel = new Label
-            {
-                AutoEllipsis = true,
-                Dock = DockStyle.Fill,
-                Margin = new Padding(0),
-                Text = (chinese ? "此版本维护作者: " : "Maintainer for this version: ") +
-                    VersionMaintainer,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
             closeButton = new Button
             {
                 Name = "usageGuideCloseButton",
@@ -155,17 +144,14 @@ namespace SW2URDF.UI
                 Dock = DockStyle.Fill,
                 Margin = new Padding(0),
                 Padding = new Padding(24, 10, 24, 10),
-                RowCount = 2
+                RowCount = 1
             };
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112F));
-            footer.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-            footer.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            footer.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             footer.Paint += ModernWinFormsTheme.DrawTopBorder;
             footer.Controls.Add(projectLinkLabel, 0, 0);
-            footer.Controls.Add(maintainerLabel, 0, 1);
             footer.Controls.Add(closeButton, 1, 0);
-            footer.SetRowSpan(closeButton, 2);
 
             shell.Controls.Add(header, 0, 0);
             shell.Controls.Add(guideCard, 0, 1);
@@ -175,6 +161,117 @@ namespace SW2URDF.UI
             ModernWinFormsTheme.Apply(this);
             ModernWinFormsTheme.StyleSecondaryButton(closeButton);
             guideTextBox.BorderStyle = BorderStyle.None;
+            ApplyGuideFormatting(chinese);
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            guideTextBox.Select(0, 0);
+            ActiveControl = closeButton;
+            closeButton.Select();
+        }
+
+        private void ApplyGuideFormatting(bool chinese)
+        {
+            string text = BuildGuideText(chinese);
+            guideTextBox.Text = text;
+            ModernWinFormsTheme.SetFont(guideTextBox, 9.5F, FontStyle.Regular);
+            guideTextBox.ForeColor = ModernWinFormsTheme.Text;
+
+            using (Font headingFont = new Font(
+                guideTextBox.Font.FontFamily,
+                11F,
+                FontStyle.Bold,
+                GraphicsUnit.Point))
+            using (Font leadFont = new Font(
+                guideTextBox.Font.FontFamily,
+                9.5F,
+                FontStyle.Bold,
+                GraphicsUnit.Point))
+            {
+                int lineStart = 0;
+                while (lineStart < text.Length)
+                {
+                    int newline = text.IndexOf('\n', lineStart);
+                    int lineEnd = newline < 0 ? text.Length : newline;
+                    int lineLength = lineEnd - lineStart;
+                    if (lineLength > 0 && text[lineEnd - 1] == '\r')
+                    {
+                        lineLength--;
+                    }
+                    string line = text.Substring(lineStart, lineLength);
+
+                    if (IsGuideHeading(line, chinese))
+                    {
+                        guideTextBox.Select(lineStart, lineLength);
+                        guideTextBox.SelectionFont = headingFont;
+                        guideTextBox.SelectionColor = ModernWinFormsTheme.Accent;
+                        guideTextBox.SelectionIndent = 0;
+                        guideTextBox.SelectionHangingIndent = 0;
+                    }
+                    else if (line.StartsWith("- ", StringComparison.Ordinal))
+                    {
+                        guideTextBox.Select(lineStart, lineLength);
+                        guideTextBox.SelectionIndent = 16;
+                        guideTextBox.SelectionHangingIndent = -12;
+                        int colon = line.IndexOf(':');
+                        if (colon < 0)
+                        {
+                            colon = line.IndexOf('\uff1a');
+                        }
+                        if (colon > 2)
+                        {
+                            guideTextBox.Select(lineStart + 2, colon - 1);
+                            guideTextBox.SelectionFont = leadFont;
+                        }
+                    }
+                    else if (IsNumberedGuideLine(line))
+                    {
+                        guideTextBox.Select(lineStart, lineLength);
+                        guideTextBox.SelectionIndent = 18;
+                        guideTextBox.SelectionHangingIndent = -18;
+                    }
+
+                    if (newline < 0)
+                    {
+                        break;
+                    }
+                    lineStart = newline + 1;
+                }
+            }
+
+            guideTextBox.Select(0, 0);
+        }
+
+        private static bool IsNumberedGuideLine(string line)
+        {
+            return line.Length > 2 && Char.IsDigit(line[0]) &&
+                line[1] == '.' && line[2] == ' ';
+        }
+
+        private static bool IsGuideHeading(string line, bool chinese)
+        {
+            string[] headings = chinese
+                ? new string[]
+                {
+                    "开始之前",
+                    "快速功能索引",
+                    "推荐使用流程",
+                    "碰撞策略怎么选",
+                    "当前实现限制",
+                    "常用材质名称"
+                }
+                : new string[]
+                {
+                    "Before you start",
+                    "Quick feature index",
+                    "Recommended workflow",
+                    "Choosing a collision strategy",
+                    "Current implementation limits",
+                    "Common material names"
+                };
+            return Array.IndexOf(headings, line) >= 0;
         }
 
         internal static string BuildGuideText(bool chinese)
@@ -185,6 +282,8 @@ namespace SW2URDF.UI
         private static string BuildChineseGuideText()
         {
             StringBuilder builder = new StringBuilder();
+            builder.AppendLine("开始之前");
+            builder.AppendLine();
             builder.AppendLine("\u6bcf\u4e2a Link \u5fc5\u987b\u5728 SolidWorks \u4e2d\u624b\u52a8\u521b\u5efa\u5e76\u9009\u62e9\u81ea\u8eab\u5750\u6807\u7cfb\uff1b\u975e\u6839 Link \u4f7f\u7528\u5176\u5b50 Joint \u5750\u6807\u7cfb\uff0c\u6839 Link \u4f7f\u7528 Origin_global \u6216\u660e\u786e\u9009\u62e9\u7684\u6839\u5750\u6807\u7cfb\u3002\u4fee\u6539 Link \u5750\u6807\u7cfb\u540e\uff0c\u63d2\u4ef6\u4f1a\u91cd\u7b97 COM\u3001\u8d28\u5fc3\u60ef\u6027\u5f20\u91cf\u548c\u76f8\u90bb Joint \u539f\u70b9\u3002");
             builder.AppendLine();
             builder.AppendLine("首次导出时可启动 8 步完整导出教程；教程会伴随真实导出界面，覆盖装配体准备、坐标系、Link 树、Joint、惯性、碰撞网格、ROS1/ROS2 输出和结果校验。之后可从 SolidWorks 的 工具 > URDF 导出教程 随时重开。");
@@ -235,6 +334,8 @@ namespace SW2URDF.UI
         private static string BuildEnglishGuideText()
         {
             StringBuilder builder = new StringBuilder();
+            builder.AppendLine("Before you start");
+            builder.AppendLine();
             builder.AppendLine("The first assembly export can open an eight-step companion tutorial covering assembly preparation, frames, the Link tree, Joints, inertia, collision meshes, ROS1/ROS2 output, and final validation. Reopen it at any time from Tools > URDF Export Tutorial.");
             builder.AppendLine();
             builder.AppendLine("Quick feature index");

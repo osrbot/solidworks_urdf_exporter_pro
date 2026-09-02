@@ -58,7 +58,13 @@ namespace SW2URDF.Test
                 CheckBox mjcf = GetControl<CheckBox>(form, "modernMjcfAssetCheckBox");
                 Button usdSettings = GetControl<Button>(form, "modernUsdSettingsButton");
                 Control targetRow = GetControl<Control>(form, "modernExportTargetRow");
-                Control targetActions = GetControl<Control>(form, "modernExportTargetActions");
+                Control modelFooter = GetControl<Control>(form, "modernModelFooter");
+                TableLayoutPanel footerLayout = GetControl<TableLayoutPanel>(
+                    form,
+                    "modernModelFooterLayout");
+                Button previous = GetControl<Button>(form, "modernModelPreviousButton");
+                Button urdfOnly = GetControl<Button>(form, "buttonLinksExportUrdfOnly");
+                Button finish = GetControl<Button>(form, "buttonLinksFinish");
                 Assert.Equal(
                     ChineseUiText.Translate("ROS 1 package", "ROS 1 功能包"),
                     ros1.Text);
@@ -80,7 +86,8 @@ namespace SW2URDF.Test
                 Assert.Same(targetRow, ros2.Parent);
                 Assert.Same(targetRow, usd.Parent);
                 Assert.Same(targetRow, mjcf.Parent);
-                Assert.Same(targetActions, usdSettings.Parent);
+                Assert.Same(footerLayout, usdSettings.Parent);
+                Assert.True(IsDescendantOf(usdSettings, modelFooter));
                 Assert.Equal(ros1.Margin.Top, ros2.Margin.Top);
                 Assert.Equal(ros1.Margin.Top, usd.Margin.Top);
                 Assert.Equal(ros1.Margin.Top, mjcf.Margin.Top);
@@ -89,7 +96,11 @@ namespace SW2URDF.Test
                 Assert.Equal(ros1.Top, ros2.Top);
                 Assert.Equal(ros1.Top, usd.Top);
                 Assert.Equal(ros1.Top, mjcf.Top);
-                Assert.True(targetActions.Top >= targetRow.Bottom);
+                Assert.Equal(2, footerLayout.GetPositionFromControl(previous).Column);
+                Assert.Equal(3, footerLayout.GetPositionFromControl(usdSettings).Column);
+                Assert.Equal(4, footerLayout.GetPositionFromControl(urdfOnly).Column);
+                Assert.Equal(5, footerLayout.GetPositionFromControl(finish).Column);
+                Assert.Null(FindDescendant(form, "modernExportTargetActions"));
                 Assert.Null(FindDescendant(form, "modernRos2PairComboBox"));
                 Assert.Null(FindDescendant(form, "modernRos2ControlProfileButton"));
                 Assert.Null(FindDescendant(form, "modernIsaacLabProfileButton"));
@@ -1029,7 +1040,7 @@ namespace SW2URDF.Test
             Assert.Equal(
                 "https://github.com/osrbot/solidworks_urdf_exporter_pro",
                 UsageGuideForm.ProjectUrl);
-            Assert.Equal("kitso666 <kitso@osrbot.com>", UsageGuideForm.VersionMaintainer);
+            Assert.DoesNotContain("Maintainer for this version", guide);
         }
 
         [Fact]
@@ -1347,7 +1358,7 @@ namespace SW2URDF.Test
 
                     guide.ClientSize = new Size(760, 560);
                     guide.PerformLayout();
-                    TextBox guideText = Assert.IsType<TextBox>(
+                    RichTextBox guideText = Assert.IsType<RichTextBox>(
                         FindDescendant(guide, "usageGuideTextBox"));
                     TableLayoutPanel guideCard = Assert.IsType<ModernCardPanel>(
                         FindDescendant(guide, "usageGuideCard"));
@@ -1357,9 +1368,31 @@ namespace SW2URDF.Test
                         FindDescendant(guide, "usageGuideCloseButton"));
 
                     Assert.True(guideText.ReadOnly);
+                    Assert.False(guideText.TabStop);
                     Assert.Equal(DockStyle.Fill, guideCard.Dock);
                     Assert.False(guideCard.Bounds.IntersectsWith(footer.Bounds));
                     AssertContainedIn(close, footer);
+                    Assert.Equal(1, footer.RowCount);
+                    Assert.DoesNotContain(
+                        Descendants(footer).OfType<Label>(),
+                        label => label.Text.IndexOf(
+                            "maintainer",
+                            StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            label.Text.Contains("维护作者"));
+
+                    guideText.SelectAll();
+                    MethodInfo onShown = typeof(UsageGuideForm).GetMethod(
+                        "OnShown",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                    Assert.NotNull(onShown);
+                    onShown.Invoke(guide, new object[] { EventArgs.Empty });
+                    Assert.Equal(0, guideText.SelectionLength);
+                    Assert.Same(close, guide.ActiveControl);
+
+                    int firstLineLength = guideText.Text.IndexOf('\n');
+                    guideText.Select(0, firstLineLength);
+                    Assert.True(guideText.SelectionFont.Bold);
+                    Assert.Equal(ModernWinFormsTheme.Accent, guideText.SelectionColor);
                 }
                 finally
                 {
@@ -1614,6 +1647,7 @@ namespace SW2URDF.Test
                     GetControl<Button>(form, "modernLinkNextButton"),
                     GetControl<Button>(form, "modernModelCancelButton"),
                     GetControl<Button>(form, "modernModelPreviousButton"),
+                    GetControl<Button>(form, "modernUsdSettingsButton"),
                     GetControl<Button>(form, "buttonLinksExportUrdfOnly"),
                     GetControl<Button>(form, "buttonLinksFinish")
                 };
@@ -1706,6 +1740,49 @@ namespace SW2URDF.Test
                     AssertInputBordersStayInside(
                         GetControl<Control>(form, containerName));
                 }
+
+                string[] lastInputs = new string[]
+                {
+                    "textBoxJointYaw",
+                    "textBoxAxisZ",
+                    "textBoxLimitVelocity",
+                    "textBoxCalibrationFalling",
+                    "textBoxDamping",
+                    "textBoxKVelocity",
+                    "textBoxMimicOffset",
+                    "textBoxInertialOriginYaw",
+                    "textBoxIzz",
+                    "modernModelAuthorTextBox"
+                };
+                foreach (string inputName in lastInputs)
+                {
+                    Control input = GetControl<Control>(form, inputName);
+                    Assert.IsType<TableLayoutPanel>(input.Parent);
+                    AssertControlBottomBorderStaysInside(input, input.Parent);
+                }
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestInertiaSymmetryLabelsIdentifyBothTensorTerms()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+            try
+            {
+                Assert.Equal(
+                    "iyx = ixy",
+                    GetControl<Label>(form, "labelInertiaIyx").Text);
+                Assert.Equal(
+                    "izx = ixz",
+                    GetControl<Label>(form, "labelInertiaIzx").Text);
+                Assert.Equal(
+                    "izy = iyz",
+                    GetControl<Label>(form, "labelInertiaIzy").Text);
             }
             finally
             {
@@ -2337,6 +2414,7 @@ namespace SW2URDF.Test
                 GetControl<Button>(form, "modernLinkNextButton"),
                 GetControl<Button>(form, "modernModelCancelButton"),
                 GetControl<Button>(form, "modernModelPreviousButton"),
+                GetControl<Button>(form, "modernUsdSettingsButton"),
                 GetControl<Button>(form, "buttonLinksExportUrdfOnly"),
                 GetControl<Button>(form, "buttonLinksFinish")
             };
@@ -2364,8 +2442,9 @@ namespace SW2URDF.Test
             Assert.Equal(2, GetControl<Button>(form, "modernLinkNextButton").TabIndex);
             Assert.Equal(0, GetControl<Button>(form, "modernModelCancelButton").TabIndex);
             Assert.Equal(1, GetControl<Button>(form, "modernModelPreviousButton").TabIndex);
-            Assert.Equal(2, GetControl<Button>(form, "buttonLinksExportUrdfOnly").TabIndex);
-            Assert.Equal(3, GetControl<Button>(form, "buttonLinksFinish").TabIndex);
+            Assert.Equal(2, GetControl<Button>(form, "modernUsdSettingsButton").TabIndex);
+            Assert.Equal(3, GetControl<Button>(form, "buttonLinksExportUrdfOnly").TabIndex);
+            Assert.Equal(4, GetControl<Button>(form, "buttonLinksFinish").TabIndex);
         }
 
         private static void AssertEditorTabOrder(AssemblyExportForm form)

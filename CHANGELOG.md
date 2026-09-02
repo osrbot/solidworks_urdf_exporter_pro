@@ -55,6 +55,11 @@ All notable OSRBot-maintained changes to this fork are documented here.
   longer recursively remeasure the same static controls.
 - Removed full-window and full-tab descendant invalidation from normal page switches; cached pages
   now repaint only the regions WinForms marks dirty instead of recursively redrawing unrelated UI.
+- Moved the conditional OpenUSD settings command into the model-page footer between Previous and
+  the export commands, keeping all four output-target checkboxes on one aligned row.
+- Reworked the bilingual usage guide into a non-tab-stop, read-only rich-text view with visible
+  section hierarchy and list indentation. Its footer now exposes only the project URL, and initial
+  focus moves to Close instead of selecting the entire guide body.
 - Documented the independent version domains for PID-backed SolidWorks configuration v2 and the
   canonical robot schema v3, including the historical robot schema v2 reader migration.
 - Validate inertia triangle inequalities in the principal frame using scale-aware eigenvalue
@@ -68,6 +73,11 @@ All notable OSRBot-maintained changes to this fork are documented here.
 - Resolved deep or hidden Link preview display through a root-assembly-safe temporary-body host and
   the complete component transform, without adding persistent tree objects. Equivalent-inertia and
   Collision previews still require live validation in the maintainer's target SolidWorks versions.
+- Fixed clipped bottom borders in the last input row of nested Joint, Link, and model grids by
+  aligning single-line TextBox sizing with TableLayoutPanel measurement and restoring cached
+  AutoSize layouts from children to parents.
+- Expanded the inertia-tensor mirror labels to `iyx = ixy`, `izx = ixz`, and `izy = iyz`, making
+  the symmetric terms explicit without changing their read-only value bindings.
 - Kept private staging cleanup on both successful and failed export paths so internal Bundle files
   are not left in the user's delivery directory.
 - Made the pinned MuJoCo integration test a hard-failing dedicated category. Hosted portable jobs
@@ -135,6 +145,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
   保持实时布局。重复切换页面或标签不再递归测量同一批静态控件。
 - 从正常页面切换路径移除整窗和整棵 Tab 子树失效；缓存页面只重绘 WinForms 标记为脏的区域，
   不再递归重绘无关页面。
+- 将按需启用的 OpenUSD 设置按钮移到模型页底部，位于“上一步”和导出按钮之间，使四个输出目标
+  勾选项继续保持在同一行对齐。
+- 将中英文使用说明改为不可通过 Tab 聚焦的只读富文本视图，增加明确的章节层级和列表缩进；底部
+  只保留项目地址，打开窗口时焦点落在“关闭”按钮，不再默认全选正文。
 - 说明 PID 持久化的 SolidWorks configuration v2 与规范 robot schema v3 是独立版本域，并记录
   历史 robot schema v2 的 reader 迁移规则。
 - 使用尺度感知的特征值检查，在主轴系校验惯性三角不等式，包括旋转张量和极小张量。
@@ -145,6 +159,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 - 使用根装配安全的临时体宿主与完整组件变换，修复深层或隐藏 Link 的预览显示，且不增加持久化
   树节点。等效惯性与 Collision 预览仍须在维护者目标 SolidWorks 版本中完成 Live 验证。
+- 修复 Joint、Link 和模型页嵌套网格中最后一行输入框底边被裁切的问题：单行 TextBox 的高度与
+  TableLayoutPanel 测量保持一致，并按“子布局先于父布局”的顺序恢复 AutoSize 缓存。
+- 将惯性张量镜像标签明确为 `iyx = ixy`、`izx = ixz` 和 `izy = iyz`，只改善含义表达，不改变
+  只读镜像值绑定。
 - 成功和失败路径都会清理私有暂存，内部 Bundle 文件不会留在用户交付目录。
 - 固定 MuJoCo 集成测试改为硬失败的专用类别。普通可移植作业显式排除；运行时 CI 与安装包构建
   必须由 TRX 证明恰好 1 项被执行并通过，禁止缺少运行时的跳过或零测试伪绿。

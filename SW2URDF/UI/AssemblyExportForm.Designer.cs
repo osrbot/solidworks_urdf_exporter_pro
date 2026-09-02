@@ -600,7 +600,7 @@
             this.labelInertiaIyx.Name = "labelInertiaIyx";
             this.labelInertiaIyx.Size = new System.Drawing.Size(28, 13);
             this.labelInertiaIyx.TabIndex = 36;
-            this.labelInertiaIyx.Text = "= ixy";
+            this.labelInertiaIyx.Text = "iyx = ixy";
             //
             // textBoxIyxMirror
             //
@@ -619,7 +619,7 @@
             this.labelInertiaIzx.Name = "labelInertiaIzx";
             this.labelInertiaIzx.Size = new System.Drawing.Size(28, 13);
             this.labelInertiaIzx.TabIndex = 38;
-            this.labelInertiaIzx.Text = "= ixz";
+            this.labelInertiaIzx.Text = "izx = ixz";
             //
             // textBoxIzxMirror
             //
@@ -638,7 +638,7 @@
             this.labelInertiaIzy.Name = "labelInertiaIzy";
             this.labelInertiaIzy.Size = new System.Drawing.Size(28, 13);
             this.labelInertiaIzy.TabIndex = 40;
-            this.labelInertiaIzy.Text = "= iyz";
+            this.labelInertiaIzy.Text = "izy = iyz";
             //
             // textBoxIzyMirror
             //

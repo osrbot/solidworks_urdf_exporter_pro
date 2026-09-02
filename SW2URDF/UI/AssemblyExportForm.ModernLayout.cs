@@ -121,6 +121,12 @@ namespace SW2URDF.UI
             {
                 ResumeLayout(true);
             }
+
+            // Page construction happens while the form is suspended. Any cache
+            // captured during that phase contains pre-layout child heights.
+            // Release it now; the load-time priming pass will cache settled grids.
+            modernJointSections.ReleaseCachedPageLayouts();
+            modernLinkSections.ReleaseCachedPageLayouts();
         }
 
         private void ApplyModernInitialScaleBounds()
@@ -1077,7 +1083,7 @@ namespace SW2URDF.UI
                 };
                 for (int pair = 0; pair < 3; pair++)
                 {
-                    matrixGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44F));
+                    matrixGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64F));
                     matrixGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
                 }
                 for (int row = 0; row < 3; row++)
@@ -1586,18 +1592,6 @@ namespace SW2URDF.UI
                 "OpenUSD 机器人资产",
                 false);
             modernUsdAssetCheckBox.Name = "modernUsdAssetCheckBox";
-            modernUsdSettingsButton = new Button
-            {
-                Name = "modernUsdSettingsButton",
-                Enabled = false,
-                AutoSize = true,
-                Margin = new Padding(0),
-                MinimumSize = new Size(112, 28),
-                Text = ChineseUiText.Translate(
-                    "OpenUSD settings...",
-                    "OpenUSD 设置...")
-            };
-            modernUsdSettingsButton.Click += ModernUsdSettingsButtonClick;
             modernMjcfAssetCheckBox = CreateTargetCheckBox(
                 "MuJoCo MJCF asset",
                 "MuJoCo MJCF 资产",
@@ -1612,19 +1606,6 @@ namespace SW2URDF.UI
             targets.Controls.Add(modernUsdAssetCheckBox);
             targets.Controls.Add(modernMjcfAssetCheckBox);
             card.Controls.Add(targets);
-
-            FlowLayoutPanel targetActions = new FlowLayoutPanel
-            {
-                Name = "modernExportTargetActions",
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Dock = DockStyle.Top,
-                FlowDirection = FlowDirection.LeftToRight,
-                Margin = new Padding(0, 0, 0, 8),
-                WrapContents = false
-            };
-            targetActions.Controls.Add(modernUsdSettingsButton);
-            card.Controls.Add(targetActions);
 
             TableLayoutPanel grid = new TableLayoutPanel
             {
@@ -1908,15 +1889,17 @@ namespace SW2URDF.UI
 
             TableLayoutPanel layout = new TableLayoutPanel
             {
+                Name = "modernModelFooterLayout",
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                ColumnCount = 5,
+                ColumnCount = 6,
                 Dock = DockStyle.Fill,
                 Margin = new Padding(0),
                 RowCount = 1
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -1944,22 +1927,37 @@ namespace SW2URDF.UI
                 1,
                 new Padding(0, 0, 8, 0));
             modernModelPreviousButton.Click += ModernModelPreviousClick;
+            modernUsdSettingsButton = new Button
+            {
+                Name = "modernUsdSettingsButton",
+                Enabled = false,
+                Text = ChineseUiText.Translate(
+                    "OpenUSD settings...",
+                    "OpenUSD 设置...")
+            };
+            ConfigureModernFooterButton(
+                modernUsdSettingsButton,
+                140,
+                2,
+                new Padding(0, 0, 8, 0));
+            modernUsdSettingsButton.Click += ModernUsdSettingsButtonClick;
             ConfigureModernFooterButton(
                 buttonLinksExportUrdfOnly,
                 150,
-                2,
+                3,
                 new Padding(0, 0, 8, 0));
             ConfigureModernFooterButton(
                 buttonLinksFinish,
                 176,
-                3,
+                4,
                 new Padding(0));
 
             layout.Controls.Add(modernModelCancelButton, 0, 0);
             layout.Controls.Add(new Panel { Dock = DockStyle.Fill }, 1, 0);
             layout.Controls.Add(modernModelPreviousButton, 2, 0);
-            layout.Controls.Add(buttonLinksExportUrdfOnly, 3, 0);
-            layout.Controls.Add(buttonLinksFinish, 4, 0);
+            layout.Controls.Add(modernUsdSettingsButton, 3, 0);
+            layout.Controls.Add(buttonLinksExportUrdfOnly, 4, 0);
+            layout.Controls.Add(buttonLinksFinish, 5, 0);
             footer.Controls.Add(layout);
             return footer;
         }
@@ -2060,6 +2058,15 @@ namespace SW2URDF.UI
             ModernWinFormsTheme.StyleFieldLabel(label);
             ModernWinFormsTheme.StyleInput(control);
             control.MinimumSize = new Size(control.MinimumSize.Width, 28);
+            TextBox textBox = control as TextBox;
+            if (textBox != null && !textBox.Multiline)
+            {
+                // A single-line TextBox otherwise keeps its font-derived auto
+                // height while TableLayoutPanel measures the requested 28 px.
+                // That mismatch is what lets the last row paint past the grid.
+                textBox.AutoSize = false;
+                textBox.Height = Math.Max(textBox.Height, 28);
+            }
             control.Dock = DockStyle.Fill;
             // Reparented designer controls retain their legacy absolute-page
             // TabIndex values. Derive the order from the new grid so keyboard
@@ -2103,6 +2110,7 @@ namespace SW2URDF.UI
             ModernWinFormsTheme.StylePrimaryButton(modernLinkNextButton);
             ModernWinFormsTheme.StyleSecondaryButton(modernModelCancelButton);
             ModernWinFormsTheme.StyleSecondaryButton(modernModelPreviousButton);
+            ModernWinFormsTheme.StyleSecondaryButton(modernUsdSettingsButton);
             ModernWinFormsTheme.StyleSecondaryButton(buttonLinksExportUrdfOnly);
             ModernWinFormsTheme.StylePrimaryButton(buttonLinksFinish);
             ResizeButtonToText(buttonJointCancel);
@@ -2112,6 +2120,7 @@ namespace SW2URDF.UI
             ResizeButtonToText(modernLinkNextButton);
             ResizeButtonToText(modernModelCancelButton);
             ResizeButtonToText(modernModelPreviousButton);
+            ResizeButtonToText(modernUsdSettingsButton);
             ResizeButtonToText(buttonLinksExportUrdfOnly);
             ResizeButtonToText(buttonLinksFinish);
 
@@ -2473,7 +2482,7 @@ namespace SW2URDF.UI
             {
                 return;
             }
-            Size size = layout.Size;
+            Size size = ModernWinFormsTheme.GetStableAutoSizeLayoutSize(layout);
             layout.AutoSize = false;
             layout.Size = size;
             modernModelFrozenLayouts.Add(layout);
@@ -2481,7 +2490,7 @@ namespace SW2URDF.UI
 
         private void RestoreModernModelAutoSizeLayouts()
         {
-            for (int index = modernModelFrozenLayouts.Count - 1; index >= 0; index--)
+            for (int index = 0; index < modernModelFrozenLayouts.Count; index++)
             {
                 TableLayoutPanel layout = modernModelFrozenLayouts[index];
                 if (!layout.IsDisposed)

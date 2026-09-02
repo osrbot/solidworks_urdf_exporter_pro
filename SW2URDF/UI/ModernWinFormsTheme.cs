@@ -144,6 +144,11 @@ namespace SW2URDF.UI
             }
         }
 
+        internal void ReleaseCachedPageLayouts()
+        {
+            RestoreCachedLayouts();
+        }
+
         internal void InvalidatePageLayout(Control descendant)
         {
             TabPage page = FindOwningPage(descendant);
@@ -221,7 +226,7 @@ namespace SW2URDF.UI
             {
                 return;
             }
-            Size size = layout.Size;
+            Size size = ModernWinFormsTheme.GetStableAutoSizeLayoutSize(layout);
             layout.AutoSize = false;
             layout.Size = size;
             layouts.Add(layout);
@@ -277,7 +282,9 @@ namespace SW2URDF.UI
         private static void RestoreAutoSizeLayouts(
             IList<TableLayoutPanel> layouts)
         {
-            for (int index = layouts.Count - 1; index >= 0; index--)
+            // FreezeAutoSizeLayouts records children before parents. Restore in
+            // that same order so each parent measures already-restored children.
+            for (int index = 0; index < layouts.Count; index++)
             {
                 TableLayoutPanel layout = layouts[index];
                 if (!layout.IsDisposed)
@@ -468,6 +475,33 @@ namespace SW2URDF.UI
             };
             card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             return card;
+        }
+
+        internal static Size GetStableAutoSizeLayoutSize(TableLayoutPanel layout)
+        {
+            if (layout == null)
+            {
+                throw new ArgumentNullException(nameof(layout));
+            }
+
+            // Nested AutoSize grids can still be one layout pass behind their
+            // children. Stabilize the content before caching a fixed height.
+            layout.PerformLayout();
+            Size preferred = layout.GetPreferredSize(new Size(layout.Width, 0));
+            int requiredHeight = layout.Padding.Vertical;
+            foreach (Control child in layout.Controls)
+            {
+                if (child.Visible)
+                {
+                    requiredHeight = Math.Max(
+                        requiredHeight,
+                        child.Bottom + child.Margin.Bottom + layout.Padding.Bottom);
+                }
+            }
+
+            return new Size(
+                layout.Width,
+                Math.Max(layout.Height, Math.Max(preferred.Height, requiredHeight)));
         }
 
         internal static IDisposable SuspendRedraw(Control control)
