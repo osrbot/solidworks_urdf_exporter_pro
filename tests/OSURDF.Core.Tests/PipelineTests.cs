@@ -529,7 +529,7 @@ public sealed class PipelineTests : IDisposable
     }
 
     [Fact]
-    public void BundleManifestSchemaTracksTheCurrentRobotSchema()
+    public void BundleManifestSchemaReferencesRobotSchemaWithoutCouplingItsVersion()
     {
         JObject manifestSchema = JObject.Parse(File.ReadAllText(
             Path.Combine(
@@ -537,9 +537,30 @@ public sealed class PipelineTests : IDisposable
                 "schemas",
                 "robot-bundle-manifest.schema.v1.json")));
 
-        Assert.Equal(
-            RobotSchema.CurrentVersion,
-            (int)manifestSchema["properties"]!["robotSchemaVersion"]!["const"]!);
+        JObject robotSchemaVersion = (JObject)manifestSchema["properties"]!["robotSchemaVersion"]!;
+        Assert.Equal("integer", (string?)robotSchemaVersion["type"]);
+        Assert.Equal(1, (int)robotSchemaVersion["minimum"]!);
+        Assert.Null(robotSchemaVersion["const"]);
+    }
+
+    [Fact]
+    public void BundleVerifierRejectsManifestRobotSchemaThatDisagreesWithRobotJson()
+    {
+        string bundle = BuildBundle(LoadFixtureRobot(), "manifest-robot-schema-mismatch");
+        string manifestPath = Path.Combine(bundle, "manifest.json");
+        JObject manifest = JObject.Parse(File.ReadAllText(manifestPath));
+        manifest["robotSchemaVersion"] = RobotSchema.CurrentVersion + 1;
+        File.WriteAllText(manifestPath, manifest.ToString());
+
+        BundleVerificationResult result = new RobotBundleVerifier().Verify(bundle);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error => error.Contains("Unsupported robot schema version", StringComparison.Ordinal));
+        Assert.Contains(
+            result.Errors,
+            error => error.Contains("does not match robot.json", StringComparison.Ordinal));
     }
 
     [Fact]
