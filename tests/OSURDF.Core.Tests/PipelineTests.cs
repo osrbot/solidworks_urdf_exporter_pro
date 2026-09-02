@@ -529,6 +529,20 @@ public sealed class PipelineTests : IDisposable
     }
 
     [Fact]
+    public void BundleManifestSchemaTracksTheCurrentRobotSchema()
+    {
+        JObject manifestSchema = JObject.Parse(File.ReadAllText(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "schemas",
+                "robot-bundle-manifest.schema.v1.json")));
+
+        Assert.Equal(
+            RobotSchema.CurrentVersion,
+            (int)manifestSchema["properties"]!["robotSchemaVersion"]!["const"]!);
+    }
+
+    [Fact]
     public void BundleBuildsVerifiesAndDetectsTampering()
     {
         RobotDocument robot = LoadFixtureRobot();

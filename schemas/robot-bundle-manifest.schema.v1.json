@@ -8,7 +8,7 @@
   "properties": {
     "schemaVersion": { "const": 1 },
     "bundleFormat": { "const": "osurdf-robot-bundle" },
-    "robotSchemaVersion": { "const": 2 },
+    "robotSchemaVersion": { "const": 3 },
     "robotName": { "type": "string", "minLength": 1 },
     "createdUtc": { "type": "string", "format": "date-time" },
     "reproducibleTimestamp": { "type": "boolean" },

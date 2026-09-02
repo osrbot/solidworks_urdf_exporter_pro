@@ -23,6 +23,7 @@
     <None Include="../fixtures/**/*" Link="fixtures/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../schemas/robot.schema.v2.json" Link="schemas/robot.schema.v2.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../schemas/robot.schema.v3.json" Link="schemas/robot.schema.v3.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../schemas/robot-bundle-manifest.schema.v1.json" Link="schemas/robot-bundle-manifest.schema.v1.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
