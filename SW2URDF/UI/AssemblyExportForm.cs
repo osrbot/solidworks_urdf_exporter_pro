@@ -585,8 +585,8 @@ namespace SW2URDF.UI
                 return;
             }
 
+            ClearPreviousTreeNodeSelection();
             MoveJointTreeNodesToBaseNode();
-            ChangeAllNodeFont(BaseNode, GetTreeNodeFont(false));
 
             using (treeSelectionUpdateGuard.Suppress())
             {
@@ -1017,8 +1017,7 @@ namespace SW2URDF.UI
             {
                 SaveLinkDataFromPropertyBoxes(node.Link);
             }
-            previouslySelectedNode = null;
-            ChangeAllNodeFont(BaseNode, GetTreeNodeFont(false));
+            ClearPreviousTreeNodeSelection();
             FillJointTree();
             ShowModernAssemblyPage(ModernAssemblyPage.Joint);
             SelectFirstJointNodeForEditing();
@@ -2293,6 +2292,15 @@ namespace SW2URDF.UI
                 treeNodeRegularFont = new Font(treeViewJointTree.Font, FontStyle.Regular);
             }
             return treeNodeRegularFont;
+        }
+
+        private void ClearPreviousTreeNodeSelection()
+        {
+            if (previouslySelectedNode != null)
+            {
+                previouslySelectedNode.NodeFont = GetTreeNodeFont(false);
+                previouslySelectedNode = null;
+            }
         }
 
         private void SelectFirstJointNodeForEditing()

@@ -44,6 +44,7 @@ namespace SW2URDF.UI
         private Panel modernJointRoot;
         private Panel modernJointContentPanel;
         private Panel modernLinkContentPanel;
+        private Panel modernAppearancePanel;
         private Panel modernModelRoot;
         private TabControl modernJointSections;
         private TabControl modernLinkSections;
@@ -66,6 +67,8 @@ namespace SW2URDF.UI
         private TextBox modernMaintainerEmailTextBox;
         private TextBox modernModelLicenseTextBox;
         private TextBox modernModelAuthorTextBox;
+        private bool modernJointTreeExpandedOnce;
+        private bool modernLinkTreeExpandedOnce;
 
         internal void InitializeModernUi()
         {
@@ -336,6 +339,7 @@ namespace SW2URDF.UI
                     "Visual and collision geometry",
                     "可视与碰撞几何");
                 RebuildModernVisualCollisionLayout();
+                RebuildModernAppearanceLayout();
 
                 modernLinkSections = CreateModernSectionTabs("modernLinkSections");
                 TabPage inertiaPage = CreateModernTabPage(
@@ -347,13 +351,21 @@ namespace SW2URDF.UI
 
                 TabPage geometryPage = CreateModernTabPage(
                     "modernLinkGeometryPage",
-                    ChineseUiText.Translate("Visual / Collision", "外观 / 碰撞"));
+                    ChineseUiText.Translate("Visual / Collision", "可视 / 碰撞"));
                 groupBox4.Dock = DockStyle.Fill;
                 groupBox4.Margin = new Padding(0);
                 geometryPage.Controls.Add(groupBox4);
 
+                TabPage appearancePage = CreateModernTabPage(
+                    "modernLinkAppearancePage",
+                    ChineseUiText.Translate("Appearance", "外观"));
+                modernAppearancePanel.Dock = DockStyle.Fill;
+                modernAppearancePanel.Margin = new Padding(0);
+                appearancePage.Controls.Add(modernAppearancePanel);
+
                 modernLinkSections.TabPages.Add(inertiaPage);
                 modernLinkSections.TabPages.Add(geometryPage);
+                modernLinkSections.TabPages.Add(appearancePage);
                 modernLinkContentPanel.Controls.Add(modernLinkSections);
                 body.Controls.Add(modernLinkContentPanel, 1, 0);
 
@@ -459,35 +471,7 @@ namespace SW2URDF.UI
                 Padding = new Point(16, 6),
                 SizeMode = TabSizeMode.Normal
             };
-            tabs.SelectedIndexChanged += SynchronizeModernSelectedTabPage;
-            tabs.SizeChanged += SynchronizeModernSelectedTabPage;
             return tabs;
-        }
-
-        private static void SynchronizeModernSelectedTabPage(
-            object sender,
-            EventArgs e)
-        {
-            TabControl tabs = sender as TabControl;
-            TabPage page = tabs == null ? null : tabs.SelectedTab;
-            if (page == null || tabs.DisplayRectangle.Width <= 0 ||
-                tabs.DisplayRectangle.Height <= 0)
-            {
-                return;
-            }
-
-            Rectangle pageBounds = tabs.DisplayRectangle;
-            int borderInset = Math.Max(4, pageBounds.Left);
-            pageBounds.Width = Math.Max(
-                pageBounds.Width,
-                tabs.ClientSize.Width - pageBounds.Left - borderInset);
-            pageBounds.Height = Math.Max(
-                pageBounds.Height,
-                tabs.ClientSize.Height - pageBounds.Top - borderInset);
-            if (page.Bounds != pageBounds)
-            {
-                page.Bounds = pageBounds;
-            }
         }
 
         private static TabPage CreateModernTabPage(string name, string text)
@@ -1176,10 +1160,9 @@ namespace SW2URDF.UI
                     ColumnCount = 1,
                     Dock = DockStyle.Top,
                     Margin = new Padding(0, 0, 6, 0),
-                    RowCount = 3
+                    RowCount = 2
                 };
                 left.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-                left.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 left.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 left.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
@@ -1226,36 +1209,6 @@ namespace SW2URDF.UI
                     visualOriginGrid);
                 visualOrigin.Margin = new Padding(0, 0, 0, 8);
                 left.Controls.Add(visualOrigin, 0, 0);
-
-                TableLayoutPanel material = new TableLayoutPanel
-                {
-                    AutoSize = true,
-                    ColumnCount = 1,
-                    Dock = DockStyle.Top,
-                    Margin = new Padding(0, 0, 0, 8),
-                    RowCount = 2
-                };
-                material.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-                material.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                material.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                ModernWinFormsTheme.StyleFieldLabel(label28);
-                label28.AutoSize = true;
-                label28.Dock = DockStyle.Fill;
-                label28.Margin = new Padding(0, 2, 0, 2);
-                modernMaterialIdTextBox = new TextBox
-                {
-                    Name = "modernMaterialIdTextBox",
-                    ReadOnly = true,
-                    Dock = DockStyle.Fill,
-                    Margin = new Padding(0, 0, 0, 4),
-                    TabStop = false
-                };
-                ModernWinFormsTheme.StyleInput(modernMaterialIdTextBox);
-                modernMaterialIdTextBox.Margin = new Padding(0, 0, 0, 4);
-                material.Controls.Add(label28, 0, 0);
-                material.Controls.Add(modernMaterialIdTextBox, 0, 1);
-                SynchronizeMaterialIdFromRgba();
-                left.Controls.Add(material, 0, 1);
 
                 TableLayoutPanel meshOptions = new TableLayoutPanel
                 {
@@ -1313,7 +1266,7 @@ namespace SW2URDF.UI
 
                 meshOptions.Controls.Add(detail, 0, 0);
                 meshOptions.Controls.Add(groupBox1, 1, 0);
-                left.Controls.Add(meshOptions, 0, 2);
+                left.Controls.Add(meshOptions, 0, 1);
 
                 TableLayoutPanel right = new TableLayoutPanel
                 {
@@ -1321,11 +1274,10 @@ namespace SW2URDF.UI
                     ColumnCount = 1,
                     Dock = DockStyle.Fill,
                     Margin = new Padding(6, 0, 0, 0),
-                    RowCount = 3
+                    RowCount = 2
                 };
                 right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
                 right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                right.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
                 right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
                 TableLayoutPanel collisionGrid = new TableLayoutPanel
@@ -1373,75 +1325,6 @@ namespace SW2URDF.UI
                 collision.Margin = new Padding(0, 0, 0, 8);
                 right.Controls.Add(collision, 0, 0);
 
-                TableLayoutPanel rgbaGrid = new TableLayoutPanel
-                {
-                    AutoSize = true,
-                    ColumnCount = 4,
-                    Dock = DockStyle.Top,
-                    Margin = new Padding(0),
-                    RowCount = 2
-                };
-                rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48F));
-                rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-                rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48F));
-                rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-                for (int row = 0; row < 2; row++)
-                {
-                    rgbaGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                }
-                AddModernField(rgbaGrid, label30, domainUpDownRed, 0, 0, 1);
-                AddModernField(rgbaGrid, label31, domainUpDownGreen, 0, 2, 3);
-                AddModernField(rgbaGrid, label32, domainUpDownBlue, 1, 0, 1);
-                AddModernField(rgbaGrid, label33, domainUpDownAlpha, 1, 2, 3);
-
-                TableLayoutPanel colorActions = new TableLayoutPanel
-                {
-                    AutoSize = true,
-                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                    ColumnCount = 1,
-                    Dock = DockStyle.Top,
-                    Margin = new Padding(8, 0, 0, 0),
-                    RowCount = 3
-                };
-                colorActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-                colorActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 48F));
-                colorActions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                colorActions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                panelMaterialColorPreview.Dock = DockStyle.Fill;
-                panelMaterialColorPreview.Margin = new Padding(0, 0, 0, 4);
-                panelMaterialColorPreview.MinimumSize = new Size(70, 40);
-                buttonMaterialColorPick.Dock = DockStyle.Fill;
-                buttonMaterialColorPick.Margin = new Padding(0, 0, 0, 4);
-                buttonMaterialColorPick.MinimumSize = new Size(0, 28);
-                buttonAutomaticLinkColors.Dock = DockStyle.Fill;
-                buttonAutomaticLinkColors.Margin = new Padding(0);
-                ResizeButtonToText(buttonAutomaticLinkColors);
-                buttonAutomaticLinkColors.MinimumSize = new Size(
-                    buttonAutomaticLinkColors.Width,
-                    Math.Max(28, buttonAutomaticLinkColors.Height));
-                colorActions.Controls.Add(panelMaterialColorPreview, 0, 0);
-                colorActions.Controls.Add(buttonMaterialColorPick, 0, 1);
-                colorActions.Controls.Add(buttonAutomaticLinkColors, 0, 2);
-
-                TableLayoutPanel colorGrid = new TableLayoutPanel
-                {
-                    AutoSize = true,
-                    ColumnCount = 2,
-                    Dock = DockStyle.Top,
-                    Margin = new Padding(0),
-                    RowCount = 1
-                };
-                colorGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-                colorGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-                colorGrid.Controls.Add(rgbaGrid, 0, 0);
-                colorGrid.Controls.Add(colorActions, 1, 0);
-                Control color = CreateModernSubsection(
-                    "modernAppearanceColorSection",
-                    label29,
-                    colorGrid);
-                color.Margin = new Padding(0, 0, 0, 8);
-                right.Controls.Add(color, 0, 1);
-
                 TableLayoutPanel reduction = new TableLayoutPanel
                 {
                     AutoSize = true,
@@ -1479,7 +1362,7 @@ namespace SW2URDF.UI
                     "modernMeshReductionSection",
                     ChineseUiText.Translate("Mesh export", "网格导出"),
                     reduction);
-                right.Controls.Add(reductionSection, 0, 2);
+                right.Controls.Add(reductionSection, 0, 1);
 
                 root.Controls.Add(left, 0, 0);
                 root.Controls.Add(right, 1, 0);
@@ -1491,6 +1374,123 @@ namespace SW2URDF.UI
             {
                 groupBox4.ResumeLayout(true);
             }
+        }
+
+        private void RebuildModernAppearanceLayout()
+        {
+            modernAppearancePanel = new Panel
+            {
+                Name = "modernAppearancePanel",
+                AutoScroll = true,
+                BackColor = ModernWinFormsTheme.Surface,
+                Padding = new Padding(12)
+            };
+
+            TableLayoutPanel root = new TableLayoutPanel
+            {
+                Name = "modernAppearanceLayout",
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = ModernWinFormsTheme.Surface,
+                ColumnCount = 1,
+                Dock = DockStyle.Top,
+                Margin = new Padding(0),
+                Padding = new Padding(0),
+                RowCount = 2
+            };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            modernMaterialIdTextBox = new TextBox
+            {
+                Name = "modernMaterialIdTextBox",
+                ReadOnly = true,
+                Dock = DockStyle.Top,
+                Margin = new Padding(0),
+                TabStop = false
+            };
+            ModernWinFormsTheme.StyleInput(modernMaterialIdTextBox);
+            label28.AutoSize = true;
+            label28.AutoEllipsis = false;
+            Control material = CreateModernSubsection(
+                "modernAppearanceMaterialSection",
+                label28,
+                modernMaterialIdTextBox);
+            material.Margin = new Padding(0, 0, 0, 10);
+            root.Controls.Add(material, 0, 0);
+
+            TableLayoutPanel rgbaGrid = new TableLayoutPanel
+            {
+                AutoSize = true,
+                ColumnCount = 4,
+                Dock = DockStyle.Top,
+                Margin = new Padding(0),
+                RowCount = 2
+            };
+            rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48F));
+            rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 48F));
+            rgbaGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            rgbaGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rgbaGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            AddModernField(rgbaGrid, label30, domainUpDownRed, 0, 0, 1);
+            AddModernField(rgbaGrid, label31, domainUpDownGreen, 0, 2, 3);
+            AddModernField(rgbaGrid, label32, domainUpDownBlue, 1, 0, 1);
+            AddModernField(rgbaGrid, label33, domainUpDownAlpha, 1, 2, 3);
+
+            TableLayoutPanel colorActions = new TableLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                Dock = DockStyle.Top,
+                Margin = new Padding(12, 0, 0, 0),
+                MinimumSize = new Size(150, 0),
+                RowCount = 3
+            };
+            colorActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            colorActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
+            colorActions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            colorActions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            panelMaterialColorPreview.Dock = DockStyle.Fill;
+            panelMaterialColorPreview.Margin = new Padding(0, 0, 0, 6);
+            panelMaterialColorPreview.MinimumSize = new Size(150, 48);
+            buttonMaterialColorPick.Dock = DockStyle.Fill;
+            buttonMaterialColorPick.Margin = new Padding(0, 0, 0, 6);
+            buttonMaterialColorPick.MinimumSize = new Size(150, 30);
+            buttonAutomaticLinkColors.Dock = DockStyle.Fill;
+            buttonAutomaticLinkColors.Margin = new Padding(0);
+            ResizeButtonToText(buttonAutomaticLinkColors);
+            buttonAutomaticLinkColors.MinimumSize = new Size(
+                Math.Max(150, buttonAutomaticLinkColors.Width),
+                Math.Max(30, buttonAutomaticLinkColors.Height));
+            colorActions.Controls.Add(panelMaterialColorPreview, 0, 0);
+            colorActions.Controls.Add(buttonMaterialColorPick, 0, 1);
+            colorActions.Controls.Add(buttonAutomaticLinkColors, 0, 2);
+
+            TableLayoutPanel colorGrid = new TableLayoutPanel
+            {
+                AutoSize = true,
+                ColumnCount = 2,
+                Dock = DockStyle.Top,
+                Margin = new Padding(0),
+                RowCount = 1
+            };
+            colorGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            colorGrid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            colorGrid.Controls.Add(rgbaGrid, 0, 0);
+            colorGrid.Controls.Add(colorActions, 1, 0);
+            label29.AutoSize = true;
+            label29.AutoEllipsis = false;
+            Control color = CreateModernSubsection(
+                "modernAppearanceColorSection",
+                label29,
+                colorGrid);
+            root.Controls.Add(color, 0, 1);
+
+            modernAppearancePanel.Controls.Add(root);
+            SynchronizeMaterialIdFromRgba();
         }
 
         private static Control CreateModernSubsection(
@@ -2217,25 +2217,50 @@ namespace SW2URDF.UI
                 return;
             }
 
-            using (ModernWinFormsTheme.SuspendRedraw(this))
+            SuspendLayout();
+            try
             {
-                SuspendLayout();
-                try
+                if (!modernPageShown)
                 {
                     modernJointRoot.Visible = false;
                     panelLinkProperties.Visible = false;
                     modernModelRoot.Visible = false;
-                    activePage.Visible = true;
-                    activePage.BringToFront();
-                    modernActivePage = page;
-                    modernPageShown = true;
                 }
-                finally
+                else
                 {
-                    ResumeLayout(false);
+                    Control previousPage;
+                    switch (modernActivePage)
+                    {
+                        case ModernAssemblyPage.Joint:
+                            previousPage = modernJointRoot;
+                            break;
+                        case ModernAssemblyPage.Link:
+                            previousPage = panelLinkProperties;
+                            break;
+                        case ModernAssemblyPage.Model:
+                            previousPage = modernModelRoot;
+                            break;
+                        default:
+                            previousPage = null;
+                            break;
+                    }
+                    if (previousPage != null && previousPage != activePage)
+                    {
+                        previousPage.Visible = false;
+                    }
                 }
-                activePage.PerformLayout();
+
+                activePage.Visible = true;
+                activePage.BringToFront();
+                modernActivePage = page;
+                modernPageShown = true;
             }
+            finally
+            {
+                ResumeLayout(false);
+            }
+
+            activePage.Invalidate();
 
             if (page == ModernAssemblyPage.Joint)
             {

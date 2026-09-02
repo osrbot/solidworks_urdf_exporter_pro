@@ -25,7 +25,6 @@ using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
 
@@ -701,7 +700,11 @@ namespace SW2URDF.UI
                         treeViewJointTree.Nodes.Add(node);
                         UpdateNodeText(node, true);
                     }
-                    treeViewJointTree.ExpandAll();
+                    if (!modernJointTreeExpandedOnce)
+                    {
+                        treeViewJointTree.ExpandAll();
+                        modernJointTreeExpandedOnce = true;
+                    }
                     previouslySelectedNode = null;
                 }
             }
@@ -721,7 +724,11 @@ namespace SW2URDF.UI
                     treeViewLinkProperties.Nodes.Clear();
                     treeViewLinkProperties.Nodes.Add(BaseNode);
                     UpdateNodeText(BaseNode, false);
-                    treeViewLinkProperties.ExpandAll();
+                    if (!modernLinkTreeExpandedOnce)
+                    {
+                        treeViewLinkProperties.ExpandAll();
+                        modernLinkTreeExpandedOnce = true;
+                    }
                 }
             }
             finally
@@ -732,17 +739,18 @@ namespace SW2URDF.UI
 
         public void UpdateNodeText(LinkNode node, bool useJointName)
         {
-            if (useJointName)
+            Stack<LinkNode> pending = new Stack<LinkNode>();
+            pending.Push(node);
+            while (pending.Count > 0)
             {
-                node.Text = node.Link.Joint.Name;
-            }
-            else
-            {
-                node.Text = node.Link.Name;
-            }
-            foreach (LinkNode child in node.Nodes)
-            {
-                UpdateNodeText(child, useJointName);
+                LinkNode current = pending.Pop();
+                current.Text = useJointName
+                    ? current.Link.Joint.Name
+                    : current.Link.Name;
+                for (int index = current.Nodes.Count - 1; index >= 0; index--)
+                {
+                    pending.Push((LinkNode)current.Nodes[index]);
+                }
             }
         }
 
@@ -826,13 +834,5 @@ namespace SW2URDF.UI
             return saved;
         }
 
-        public void ChangeAllNodeFont(LinkNode node, Font font)
-        {
-            node.NodeFont = font;
-            foreach (LinkNode child in node.Nodes)
-            {
-                ChangeAllNodeFont(child, font);
-            }
-        }
     }
 }

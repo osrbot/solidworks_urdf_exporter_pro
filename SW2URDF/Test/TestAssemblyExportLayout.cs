@@ -225,10 +225,10 @@ namespace SW2URDF.Test
             try
             {
                 TabControl sections = GetControl<TabControl>(form, "modernLinkSections");
-                sections.SelectedIndex = 1;
+                sections.SelectedIndex = 2;
                 sections.PerformLayout();
-                GroupBox meshGroup = GetControl<GroupBox>(form, "groupBox4");
-                meshGroup.PerformLayout();
+                Panel appearance = GetControl<Panel>(form, "modernAppearancePanel");
+                appearance.PerformLayout();
                 Button automaticColors = GetControl<Button>(
                     form,
                     "buttonAutomaticLinkColors");
@@ -236,17 +236,16 @@ namespace SW2URDF.Test
                 DomainUpDown alpha = GetControl<DomainUpDown>(form, "domainUpDownAlpha");
                 Label meshReduction = GetControl<Label>(form, "labelMeshReduction");
 
-                Assert.True(IsDescendantOf(automaticColors, meshGroup));
+                Assert.True(IsDescendantOf(automaticColors, appearance));
                 Assert.True(automaticColors.Enabled);
-                Assert.False(BoundsRelativeTo(automaticColors, meshGroup).IntersectsWith(
-                    BoundsRelativeTo(pickColor, meshGroup)));
-                Assert.False(BoundsRelativeTo(automaticColors, meshGroup).IntersectsWith(
-                    BoundsRelativeTo(alpha, meshGroup)));
-                Assert.False(BoundsRelativeTo(automaticColors, meshGroup).IntersectsWith(
-                    BoundsRelativeTo(meshReduction, meshGroup)));
+                Assert.False(BoundsRelativeTo(automaticColors, appearance).IntersectsWith(
+                    BoundsRelativeTo(pickColor, appearance)));
+                Assert.False(BoundsRelativeTo(automaticColors, appearance).IntersectsWith(
+                    BoundsRelativeTo(alpha, appearance)));
+                Assert.False(IsDescendantOf(meshReduction, appearance));
                 Assert.True(BoundsRelativeTo(
                     automaticColors,
-                    meshGroup).Right <= meshGroup.ClientSize.Width);
+                    appearance).Right <= appearance.ClientSize.Width);
                 Assert.False(String.IsNullOrWhiteSpace(automaticColors.Text));
                 Assert.True(automaticColors.Width >= TextRenderer.MeasureText(
                     automaticColors.Text,
@@ -412,7 +411,7 @@ namespace SW2URDF.Test
                 Assert.True(IsDescendantOf(footer, outerPanel));
                 Assert.False(IsDescendantOf(footer, linkContent));
                 Assert.Equal(3, jointSections.TabPages.Count);
-                Assert.Equal(2, linkSections.TabPages.Count);
+                Assert.Equal(3, linkSections.TabPages.Count);
             }
             finally
             {
@@ -561,6 +560,9 @@ namespace SW2URDF.Test
                 Label reusedLinkSubtitle = GetControl<Label>(form, "label2");
                 GroupBox inertiaGroup = GetControl<GroupBox>(form, "groupBox5");
                 GroupBox meshGroup = GetControl<GroupBox>(form, "groupBox4");
+                Panel appearancePanel = GetControl<Panel>(
+                    form,
+                    "modernAppearancePanel");
                 ComboBox linkFrame = GetControl<ComboBox>(
                     form,
                     "comboBoxLinkCoordinateSystem");
@@ -587,7 +589,7 @@ namespace SW2URDF.Test
                 Assert.Equal("modernLinkSubtitle", reusedLinkSubtitle.Name);
                 Assert.True(IsDescendantOf(linkFrame, inertiaGroup));
                 Assert.True(IsDescendantOf(inertiaPreview, inertiaGroup));
-                Assert.True(IsDescendantOf(automaticColors, meshGroup));
+                Assert.True(IsDescendantOf(automaticColors, appearancePanel));
                 Assert.True(IsDescendantOf(collisionPreview, meshGroup));
                 Assert.Null(FindDescendant(linkRoot, "modernPackageCard"));
                 Assert.NotNull(FindDescendant(modelRoot, "modernPackageCard"));
@@ -1432,31 +1434,35 @@ namespace SW2URDF.Test
             sections.PerformLayout();
             Button previewButton = GetControl<Button>(form, "buttonShowCollisionPreview");
             Label previewStatus = GetControl<Label>(form, "labelCollisionPreviewStatus");
-            DomainUpDown red = GetControl<DomainUpDown>(form, "domainUpDownRed");
-            DomainUpDown blue = GetControl<DomainUpDown>(form, "domainUpDownBlue");
-            DomainUpDown alpha = GetControl<DomainUpDown>(form, "domainUpDownAlpha");
-            GroupBox geometry = GetControl<GroupBox>(form, "groupBox4");
-            Panel colorPreview = GetControl<Panel>(form, "panelMaterialColorPreview");
-            Button pickColor = GetControl<Button>(form, "buttonMaterialColorPick");
-            Button automaticColors = GetControl<Button>(form, "buttonAutomaticLinkColors");
             TrackBar reduction = GetControl<TrackBar>(form, "trackBarMeshReduction");
             Label estimate = GetControl<Label>(form, "labelEstimatedMeshSize");
+            GroupBox geometry = GetControl<GroupBox>(form, "groupBox4");
             geometry.PerformLayout();
 
             Assert.False(BoundsRelativeTo(previewButton, geometry).IntersectsWith(
-                BoundsRelativeTo(red, geometry)));
-            Assert.False(BoundsRelativeTo(previewStatus, geometry).IntersectsWith(
-                BoundsRelativeTo(blue, geometry)));
-            Assert.False(BoundsRelativeTo(previewStatus, geometry).IntersectsWith(
-                BoundsRelativeTo(alpha, geometry)));
-            Assert.False(BoundsRelativeTo(previewButton, geometry).IntersectsWith(
                 BoundsRelativeTo(previewStatus, geometry)));
-            Assert.False(BoundsRelativeTo(colorPreview, geometry).IntersectsWith(
-                BoundsRelativeTo(pickColor, geometry)));
-            Assert.False(BoundsRelativeTo(pickColor, geometry).IntersectsWith(
-                BoundsRelativeTo(automaticColors, geometry)));
             Assert.False(BoundsRelativeTo(reduction, geometry).IntersectsWith(
                 BoundsRelativeTo(estimate, geometry)));
+
+            sections.SelectedIndex = 2;
+            sections.PerformLayout();
+            DomainUpDown red = GetControl<DomainUpDown>(form, "domainUpDownRed");
+            DomainUpDown blue = GetControl<DomainUpDown>(form, "domainUpDownBlue");
+            DomainUpDown alpha = GetControl<DomainUpDown>(form, "domainUpDownAlpha");
+            Panel appearance = GetControl<Panel>(form, "modernAppearancePanel");
+            Panel colorPreview = GetControl<Panel>(form, "panelMaterialColorPreview");
+            Button pickColor = GetControl<Button>(form, "buttonMaterialColorPick");
+            Button automaticColors = GetControl<Button>(form, "buttonAutomaticLinkColors");
+            appearance.PerformLayout();
+
+            Assert.True(IsDescendantOf(red, appearance));
+            Assert.True(IsDescendantOf(blue, appearance));
+            Assert.True(IsDescendantOf(alpha, appearance));
+            Assert.False(IsDescendantOf(previewButton, appearance));
+            Assert.False(BoundsRelativeTo(colorPreview, appearance).IntersectsWith(
+                BoundsRelativeTo(pickColor, appearance)));
+            Assert.False(BoundsRelativeTo(pickColor, appearance).IntersectsWith(
+                BoundsRelativeTo(automaticColors, appearance)));
         }
 
         private static void AssertJointFooterGeometry(AssemblyExportForm form)
