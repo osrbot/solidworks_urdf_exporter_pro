@@ -25,8 +25,14 @@ All notable OSRBot-maintained changes to this fork are documented here.
   and passive/position/velocity/effort intent for supported single-DOF Joints without adding an
   always-visible profile page or an Isaac version dependency.
 - Added a referenceable `/Robot` default Prim with Isaac robot/link/joint schema metadata,
-  root-first Link relationships, collision `guide` purpose, mesh `convexHull` approximation, and
-  structural evidence for base resolution, Joint intents, active Drive APIs, and composed meshes.
+  root-first Link relationships, collision `guide` purpose, and structural evidence for base
+  resolution, Joint intents, active Drive APIs, and composed meshes. Preprocessed collision STL
+  topology is preserved with mesh approximation `none`; the USD adapter does not replace the
+  user's selected collision strategy with another convex hull.
+- Added OSURDF robot schema v3 for explicit OpenUSD simulation intent. Joint gains remain SI at the
+  UI/JSON boundary; angular gains are converted from per-radian SI values to USD per-degree values.
+  Velocity drives enforce zero stiffness, while effort intent preserves its force/torque limit as
+  metadata without creating a misleading active DriveAPI.
 
 #### Changed
 
@@ -101,8 +107,12 @@ All notable OSRBot-maintained changes to this fork are documented here.
   版本。用户可配置源语义/固定/浮动基座、官方机器人分类、articulation 自碰撞，以及受支持
   单自由度 Joint 的被动/位置/速度/effort 意图。
 - 增加可引用的 `/Robot` 默认 Prim、Isaac robot/link/joint schema 元数据、根 Link 优先关系、
-  Collision `guide` purpose、网格 `convexHull` 近似，以及基座解析、Joint 意图、主动 DriveAPI 和
-  组合网格的结构证据。
+  Collision `guide` purpose，以及基座解析、Joint 意图、主动 DriveAPI 和组合网格的结构证据。
+  已预处理的 collision STL 以网格近似 `none` 保留原拓扑；USD 适配器不会再把用户选择的碰撞
+  策略替换成另一层凸包。
+- 增加 OSURDF robot schema v3，用于显式记录 OpenUSD 仿真意图。UI/JSON 边界保持 SI 增益；角
+  关节增益从“每弧度”的 SI 值换算为 USD 的“每度”值。速度驱动强制刚度为 0；effort 意图只
+  保留力/力矩限值元数据，不伪造成主动 DriveAPI。
 
 #### 变更
 

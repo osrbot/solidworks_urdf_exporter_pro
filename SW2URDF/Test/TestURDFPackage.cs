@@ -1,3 +1,4 @@
+using OSURDF.Core.Model;
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
@@ -85,8 +86,22 @@ namespace SW2URDF.Test
             Assert.Equal("source", options.UsdSimulation.BaseMode);
             Assert.Equal("default", options.UsdSimulation.RobotType);
             Assert.False(options.UsdSimulation.AllowSelfCollision);
+            Assert.Equal("SI", options.UsdSimulation.GainUnits);
             Assert.Empty(options.UsdSimulation.JointDrives);
             Assert.Empty(options.ValidateFindings());
+        }
+
+        [Fact]
+        public void CloneUsdSimulationPreservesGainUnitsForFailClosedValidation()
+        {
+            UsdSimulationProfile source = new UsdSimulationProfile
+            {
+                GainUnits = "unexpected"
+            };
+
+            UsdSimulationProfile clone = ExportTargetOptions.CloneUsdSimulation(source);
+
+            Assert.Equal("unexpected", clone.GainUnits);
         }
 
         [Fact]

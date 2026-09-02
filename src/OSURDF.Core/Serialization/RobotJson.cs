@@ -66,16 +66,21 @@ namespace OSURDF.Core.Serialization
             ValidateFiniteNumbers(root);
 
             int sourceVersion = ReadSourceVersion(root);
+            bool strictContract = sourceVersion >= 2;
             if (sourceVersion == RobotSchema.CurrentVersion)
             {
                 ValidateCurrentEnvelope(root);
             }
             root = RobotSchemaMigrator.Migrate(root);
+            if (strictContract && sourceVersion != RobotSchema.CurrentVersion)
+            {
+                ValidateCurrentEnvelope(root);
+            }
             RobotDocument robot;
             try
             {
                 robot = root.ToObject<RobotDocument>(JsonSerializer.Create(
-                    sourceVersion == RobotSchema.CurrentVersion ? StrictSettings : Settings));
+                    strictContract ? StrictSettings : Settings));
             }
             catch (JsonException exception)
             {
@@ -85,7 +90,7 @@ namespace OSURDF.Core.Serialization
             {
                 throw new InvalidDataException("Robot JSON did not contain a robot document.");
             }
-            if (sourceVersion == RobotSchema.CurrentVersion)
+            if (strictContract)
             {
                 JObject canonical = JObject.FromObject(robot, JsonSerializer.Create(Settings));
                 ValidateTokenTypes(root, canonical, "$");
@@ -265,14 +270,39 @@ namespace OSURDF.Core.Serialization
 
         private static void SortObjectArrayProperty(JObject parent, string propertyName, string keyProperty)
         {
-            JArray source = parent?[propertyName] as JArray;
-            if (source == null)
+            if (parent == null)
             {
                 return;
             }
+            JProperty property = parent.Property(propertyName);
+            if (property == null)
+            {
+                throw new InvalidDataException(
+                    "Robot schema v" + RobotSchema.CurrentVersion + " requires property '$." +
+                    parent.Path + "." + propertyName + "'.");
+            }
+            JToken value = property.Value;
+            JArray source = value as JArray;
+            if (source == null)
+            {
+                throw new InvalidDataException(
+                    "Robot schema v" + RobotSchema.CurrentVersion + " property '$." +
+                    parent.Path + "." + propertyName + "' must be an array.");
+            }
+            JObject[] items = new JObject[source.Count];
+            for (int index = 0; index < source.Count; index++)
+            {
+                JObject item = source[index] as JObject;
+                if (item == null)
+                {
+                    throw new InvalidDataException(
+                        "Robot schema v" + RobotSchema.CurrentVersion + " array '$." +
+                        parent.Path + "." + propertyName + "' contains a non-object entry at index " + index + ".");
+                }
+                items[index] = item;
+            }
             parent[propertyName] = new JArray(
-                source
-                    .OfType<JObject>()
+                items
                     .OrderBy(item => (string)item[keyProperty] ?? string.Empty, StringComparer.Ordinal)
                     .Select(item => item.DeepClone()));
         }
@@ -282,12 +312,12 @@ namespace OSURDF.Core.Serialization
             if (source == null || canonical == null)
             {
                 throw new InvalidDataException(
-                    "Robot schema v2 property '" + path + "' has a null or non-canonical value.");
+                    "Robot schema v" + RobotSchema.CurrentVersion + " property '" + path + "' has a null or non-canonical value.");
             }
             if (source.Type == JTokenType.Null)
             {
                 throw new InvalidDataException(
-                    "Robot schema v2 property '" + path + "' must not be null; omit optional properties instead.");
+                    "Robot schema v" + RobotSchema.CurrentVersion + " property '" + path + "' must not be null; omit optional properties instead.");
             }
 
             JObject sourceObject = source as JObject;
@@ -316,7 +346,7 @@ namespace OSURDF.Core.Serialization
                 if (canonicalArray == null || sourceArray.Count != canonicalArray.Count)
                 {
                     throw new InvalidDataException(
-                        "Robot schema v2 array '" + path + "' changed shape during deserialization.");
+                        "Robot schema v" + RobotSchema.CurrentVersion + " array '" + path + "' changed shape during deserialization.");
                 }
                 for (int index = 0; index < sourceArray.Count; index++)
                 {
@@ -359,14 +389,19 @@ namespace OSURDF.Core.Serialization
             JTokenType expected)
         {
             return new InvalidDataException(
-                "Robot schema v2 property '" + path + "' must use JSON type " +
+                "Robot schema v" + RobotSchema.CurrentVersion + " property '" + path + "' must use JSON type " +
                 expected.ToString().ToLowerInvariant() + "; found " +
                 source.ToString().ToLowerInvariant() + ".");
         }
 
         private static int ReadSourceVersion(JObject root)
         {
-            JToken token = root["schemaVersion"] ?? root["schema_version"] ?? root["version"];
+            JToken declared = root["schemaVersion"];
+            if (declared != null && declared.Type != JTokenType.Integer)
+            {
+                throw new InvalidDataException("Robot JSON schemaVersion must be an integer.");
+            }
+            JToken token = declared ?? root["schema_version"] ?? root["version"];
             int version;
             return token != null && int.TryParse(token.ToString(), out version) ? version : 0;
         }
@@ -394,12 +429,12 @@ namespace OSURDF.Core.Serialization
             if (value == null)
             {
                 throw new InvalidDataException(
-                    "Robot schema v2 requires top-level property '" + name + "'.");
+                    "Robot schema v" + RobotSchema.CurrentVersion + " requires top-level property '" + name + "'.");
             }
             if (value.Type != type)
             {
                 throw new InvalidDataException(
-                    "Robot schema v2 property '" + name + "' must be " +
+                    "Robot schema v" + RobotSchema.CurrentVersion + " property '" + name + "' must be " +
                     type.ToString().ToLowerInvariant() + ".");
             }
         }
@@ -522,7 +557,7 @@ namespace OSURDF.Core.Serialization
 
         private static void ValidateProfilesShape(JObject profiles)
         {
-            RequireProperties(profiles, "$.profiles", "package", "ros2", "ros1", "isaac", "isaacLab");
+            RequireProperties(profiles, "$.profiles", "package", "ros2", "ros1", "isaac", "isaacLab", "usdSimulation");
             JObject package = RequireObject(profiles["package"], "$.profiles.package");
             RequireProperties(package, "$.profiles.package", "version");
 
@@ -573,16 +608,13 @@ namespace OSURDF.Core.Serialization
                 "enabledSelfCollisions", "solverPositionIterationCount", "solverVelocityIterationCount",
                 "enableGyroscopicForces", "maxDepenetrationVelocity");
 
-            if (profiles["usdSimulation"] != null && profiles["usdSimulation"].Type != JTokenType.Null)
-            {
-                JObject usdSimulation = RequireObject(profiles["usdSimulation"], "$.profiles.usdSimulation");
-                RequireProperties(usdSimulation, "$.profiles.usdSimulation",
-                    "baseMode", "robotType", "allowSelfCollision", "jointDrives");
-                ValidateProfileObjectArray(
-                    usdSimulation["jointDrives"],
-                    "$.profiles.usdSimulation.jointDrives",
-                    "joint", "mode");
-            }
+            JObject usdSimulation = RequireObject(profiles["usdSimulation"], "$.profiles.usdSimulation");
+            RequireProperties(usdSimulation, "$.profiles.usdSimulation",
+                "baseMode", "robotType", "allowSelfCollision", "gainUnits", "jointDrives");
+            ValidateProfileObjectArray(
+                usdSimulation["jointDrives"],
+                "$.profiles.usdSimulation.jointDrives",
+                "joint", "mode");
         }
 
         private static void ValidateProfileObjectArray(JToken token, string path, params string[] required)
@@ -600,7 +632,7 @@ namespace OSURDF.Core.Serialization
             JObject value = token as JObject;
             if (value == null)
             {
-                throw new InvalidDataException("Robot schema v2 property '" + path + "' must be an object.");
+                throw new InvalidDataException("Robot schema v" + RobotSchema.CurrentVersion + " property '" + path + "' must be an object.");
             }
             return value;
         }
@@ -610,7 +642,7 @@ namespace OSURDF.Core.Serialization
             JArray value = token as JArray;
             if (value == null)
             {
-                throw new InvalidDataException("Robot schema v2 property '" + path + "' must be an array.");
+                throw new InvalidDataException("Robot schema v" + RobotSchema.CurrentVersion + " property '" + path + "' must be an array.");
             }
             return value;
         }
@@ -622,7 +654,7 @@ namespace OSURDF.Core.Serialization
                 if (value.Property(name, StringComparison.Ordinal) == null)
                 {
                     throw new InvalidDataException(
-                        "Robot schema v2 requires property '" + path + "." + name + "'.");
+                        "Robot schema v" + RobotSchema.CurrentVersion + " requires property '" + path + "." + name + "'.");
                 }
             }
         }
@@ -681,13 +713,23 @@ namespace OSURDF.Core.Serialization
                 MigrateV1ToV2(result);
                 version = 2;
             }
+            if (version == 2)
+            {
+                MigrateV2ToV3(result);
+                version = 3;
+            }
             result["schemaVersion"] = version;
             return result;
         }
 
         private static int ReadVersion(JObject root)
         {
-            JToken token = root["schemaVersion"] ?? root["schema_version"] ?? root["version"];
+            JToken declared = root["schemaVersion"];
+            if (declared != null && declared.Type != JTokenType.Integer)
+            {
+                throw new InvalidDataException("Robot JSON schemaVersion must be an integer.");
+            }
+            JToken token = declared ?? root["schema_version"] ?? root["version"];
             int version;
             return token != null && int.TryParse(token.ToString(), out version) ? version : 0;
         }
@@ -717,13 +759,37 @@ namespace OSURDF.Core.Serialization
             }
             if (root["profiles"] == null)
             {
-                root["profiles"] = JObject.FromObject(new RobotProfiles());
+                JObject v2Profiles = JObject.FromObject(new RobotProfiles());
+                v2Profiles.Remove("usdSimulation");
+                root["profiles"] = v2Profiles;
             }
 
             AddStableIds(root["links"] as JArray, "link");
             AddStableIds(root["joints"] as JArray, "joint");
             AddDefaultSources(root["links"] as JArray, "migrated_config");
             AddDefaultSources(root["joints"] as JArray, "migrated_config");
+        }
+
+        private static void MigrateV2ToV3(JObject root)
+        {
+            JObject profiles = root["profiles"] as JObject;
+            if (profiles == null)
+            {
+                return;
+            }
+
+            JToken simulationToken = profiles["usdSimulation"];
+            if (simulationToken == null)
+            {
+                profiles["usdSimulation"] = JObject.FromObject(new UsdSimulationProfile());
+                return;
+            }
+
+            JObject simulation = simulationToken as JObject;
+            if (simulation != null && simulation["gainUnits"] == null)
+            {
+                simulation["gainUnits"] = RobotSchema.UnitSystem;
+            }
         }
 
         private static void AddStableIds(JArray items, string kind)

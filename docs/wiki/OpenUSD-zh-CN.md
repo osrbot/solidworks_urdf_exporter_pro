@@ -54,9 +54,14 @@ USD 与 MJCF 目标要求 STL 网格输入。适配器会拒绝 3DXML，而不�
 
 `/Robot` 是默认 Prim 与 articulation root。机器人、Link、Joint 分别应用 `IsaacRobotAPI`、
 `IsaacLinkAPI`、`IsaacJointAPI`，同时保留标准 USD Physics schema 作为可执行物理合同。根 Link
-在 `isaac:physics:robotLinks` 中排第一。Collision Prim 使用 `guide` purpose，网格 Collision
-使用 `convexHull` 近似。STL 转换后的几何以相对 USD 依赖保存，因此必须整体移动完整输出目录，
-不能只拿走 `robot.usd`。
+在 `isaac:physics:robotLinks` 中排第一。Collision Prim 使用 `guide` purpose。collision STL 已经
+由用户在 SolidWorks 中选择的碰撞策略生成，因此网格 Collision 使用近似 `none` 保留其拓扑，
+不会再被转换成另一层凸包。STL 转换后的几何以相对 USD 依赖保存，因此必须整体移动完整输出
+目录，不能只拿走 `robot.usd`。
+
+OpenUSD 设置记录在 robot schema v3 中。用户填写的刚度和阻尼为 SI 值；适配器会把角关节增益
+从“每弧度”的 SI 值换算为 USD 的“每度”值，线性关节增益保持不变，并强制速度驱动刚度为 0。
+effort 意图会连同力/力矩限值一起保留，但刻意不创建 `DriveAPI`。
 
 ## 自动化验证
 
@@ -65,8 +70,8 @@ USD 与 MJCF 目标要求 STL 网格输入。适配器会拒绝 3DXML，而不�
 1. 创建 stage 和几何依赖；
 2. 重新打开 `robot.usd`；
 3. 检查预期 Link、Joint 和刚体数量、本地资产解析，验证每个 planar Joint 的三个锁定与三个
-   自由 DOF，并记录质量属性、Collision 数量、基座解析结果、Joint 意图、主动 DriveAPI 和组合后
-   的网格拓扑；
+   自由 DOF，并记录质量属性、Collision 数量、基座解析结果、Joint 意图、主动 DriveAPI、保留的
+   effort 限值、网格近似和组合后的网格拓扑；
 4. 在 `export_report.json` 记录 OpenUSD 版本和校验结果。
 
 这证明生成能力和 OpenUSD 结构可读性，但**不证明**已在 Isaac Sim 或 Isaac Lab 中完成导入、

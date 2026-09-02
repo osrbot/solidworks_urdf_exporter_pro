@@ -666,6 +666,7 @@ try {
     $InstallerSchemaFiles = @(
         "README.md",
         "robot.schema.v2.json",
+        "robot.schema.v3.json",
         "robot-bundle-manifest.schema.v1.json",
         "ros2-control-profile.schema.v1.json",
         "ros2-control-profile.example.json"
@@ -706,6 +707,7 @@ try {
         "openusd_runtime.lock.json",
         "mujoco_runtime.lock.json",
         "robot.schema.v2.json",
+        "robot.schema.v3.json",
         "solidworkstools.dll"
     )
     foreach ($RequiredPayloadFile in $RequiredPayloadFiles) {

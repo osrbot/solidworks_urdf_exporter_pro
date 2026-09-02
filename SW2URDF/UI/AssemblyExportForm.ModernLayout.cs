@@ -81,6 +81,7 @@ namespace SW2URDF.UI
         private int modernModelExplicitLayoutCount;
         private readonly List<TableLayoutPanel> modernModelFrozenLayouts =
             new List<TableLayoutPanel>();
+        private bool loadingModernExportTargets;
 
         internal void InitializeModernUi()
         {
@@ -1610,10 +1611,12 @@ namespace SW2URDF.UI
 
             TableLayoutPanel grid = new TableLayoutPanel
             {
+                Name = "modernPackageMetadataGrid",
                 AutoSize = true,
                 ColumnCount = 4,
                 Dock = DockStyle.Top,
                 Margin = new Padding(0, 4, 0, 0),
+                Padding = new Padding(0, 0, 0, 2),
                 RowCount = 5
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
@@ -1627,8 +1630,10 @@ namespace SW2URDF.UI
             AddModernField(grid, labelRosPackageName, textBoxRosPackageName, 0, 0, 1);
             modernPackageVersionTextBox = CreateTargetTextBox("0.1.0");
             AddModernField(grid, CreateTargetLabel("Package version", "功能包版本"), modernPackageVersionTextBox, 0, 2, 3);
-            labelRosPackageNameHint.AutoSize = true;
+            labelRosPackageNameHint.AutoSize = false;
+            labelRosPackageNameHint.AutoEllipsis = true;
             labelRosPackageNameHint.Dock = DockStyle.Fill;
+            labelRosPackageNameHint.MinimumSize = new Size(0, 20);
             ModernWinFormsTheme.SetFont(labelRosPackageNameHint, 8.5F, FontStyle.Regular);
             labelRosPackageNameHint.ForeColor = ModernWinFormsTheme.MutedText;
             labelRosPackageNameHint.Margin = new Padding(0, 2, 0, 0);
@@ -1722,7 +1727,10 @@ namespace SW2URDF.UI
                 modernUsdSettingsButton.Enabled = modernUsdAssetCheckBox.Checked;
             }
             SynchronizeAssetMeshFormatControls();
-            UpdateRosPackageNameHint();
+            if (!loadingModernExportTargets)
+            {
+                UpdateRosPackageNameHintForTargetChange();
+            }
         }
 
         private void SynchronizeAssetMeshFormatControls()
@@ -2410,6 +2418,51 @@ namespace SW2URDF.UI
             {
                 modernLinkSections.CacheAllPageLayouts();
             }
+        }
+
+        private void SetModernLinkStatusText(Label label, string text)
+        {
+            if (label == null)
+            {
+                return;
+            }
+
+            string value = text ?? String.Empty;
+            if (String.Equals(label.Text, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (modernLinkSections != null)
+            {
+                modernLinkSections.InvalidatePageLayout(label);
+            }
+            label.Text = value;
+            if (modernLinkSections != null)
+            {
+                modernLinkSections.RebuildPageLayout(label);
+            }
+        }
+
+        private void InvalidateModernModelPageLayout()
+        {
+            if (modernModelRoot == null)
+            {
+                return;
+            }
+
+            RestoreModernModelAutoSizeLayouts();
+            modernModelExplicitLayoutSize = Size.Empty;
+        }
+
+        private void RebuildModernModelPageLayout()
+        {
+            if (modernModelRoot == null)
+            {
+                return;
+            }
+
+            EnsureModernPageLayout(ModernAssemblyPage.Model, modernModelRoot);
         }
 
         private void FreezeModernModelAutoSizeLayouts(Control root)

@@ -9,7 +9,7 @@ namespace OSURDF.Core.Model
 {
     public static class RobotSchema
     {
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
         public const string UnitSystem = "SI";
 
         public static readonly ISet<string> JointTypes = new HashSet<string>(

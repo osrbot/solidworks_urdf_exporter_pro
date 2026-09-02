@@ -57,7 +57,14 @@ class PublishTransactionTests(unittest.TestCase):
         bundle = root / "bundle"
         bundle.mkdir()
         (bundle / "robot.json").write_text(
-            json.dumps({"links": [], "joints": []}),
+            json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "links": [],
+                    "joints": [],
+                    "profiles": {},
+                }
+            ),
             encoding="utf-8",
         )
         return bundle
@@ -74,6 +81,13 @@ class PublishTransactionTests(unittest.TestCase):
             "meshDependencies": [],
             "planarJointPaths": [],
             "unsupportedPhysicsJointTypes": [],
+            "simulationSettings": {
+                "baseMode": "source",
+                "robotType": "default",
+                "allowSelfCollision": False,
+                "gainUnits": "SI",
+                "jointDrives": [],
+            },
         }
 
     @staticmethod

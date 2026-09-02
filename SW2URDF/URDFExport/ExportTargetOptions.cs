@@ -170,6 +170,7 @@ namespace SW2URDF.URDFExport
             clone.BaseMode = source.BaseMode;
             clone.RobotType = source.RobotType;
             clone.AllowSelfCollision = source.AllowSelfCollision;
+            clone.GainUnits = source.GainUnits;
             clone.JointDrives.Clear();
             foreach (UsdJointDriveProfile drive in
                 source.JointDrives ?? new List<UsdJointDriveProfile>())

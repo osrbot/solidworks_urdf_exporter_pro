@@ -52,9 +52,13 @@ class SimulationAssetTests(unittest.TestCase):
             robot = stage.GetDefaultPrim()
             self.assertEqual("/Robot", str(robot.GetPath()))
             self.assertIn("IsaacRobotAPI", _authored_api_schemas(robot))
+            self.assertIn("PhysxArticulationAPI", _authored_api_schemas(robot))
+            self.assertIn("NewtonArticulationRootAPI", _authored_api_schemas(robot))
             self.assertEqual("source", robot.GetAttribute("osurdf:baseMode").Get())
             self.assertEqual("Default", robot.GetAttribute("isaac:robotType").Get())
             self.assertFalse(robot.GetAttribute("physxArticulation:enabledSelfCollisions").Get())
+            self.assertFalse(robot.GetAttribute("newton:selfCollisionEnabled").Get())
+            self.assertFalse(robot.GetAttribute("osurdf:selfCollisionIntent").Get())
             self.assertFalse(stage.GetPrimAtPath("/Robot/Joints/fixed_base_joint"))
 
             name_map = json.loads((output / "name_map.json").read_text(encoding="utf-8"))
@@ -69,6 +73,7 @@ class SimulationAssetTests(unittest.TestCase):
             bundle = self._copy_fixture(root)
             robot_json_path = bundle / "robot.json"
             document = json.loads(robot_json_path.read_text(encoding="utf-8"))
+            document["schemaVersion"] = 3
             document["links"][0]["collisions"][0]["geometry"] = {
                 "type": "mesh",
                 "uri": "meshes/base.stl",
@@ -83,6 +88,7 @@ class SimulationAssetTests(unittest.TestCase):
                 "baseMode": "fixed",
                 "robotType": "wheeled",
                 "allowSelfCollision": True,
+                "gainUnits": "SI",
                 "jointDrives": [
                     {
                         "joint": "arm joint",
@@ -105,9 +111,12 @@ class SimulationAssetTests(unittest.TestCase):
             self.assertEqual("/Robot", str(robot.GetPath()))
             self.assertIn("IsaacRobotAPI", _authored_api_schemas(robot))
             self.assertIn("PhysxArticulationAPI", _authored_api_schemas(robot))
+            self.assertIn("NewtonArticulationRootAPI", _authored_api_schemas(robot))
             self.assertEqual("fixed", robot.GetAttribute("osurdf:baseMode").Get())
             self.assertEqual("Wheeled", robot.GetAttribute("isaac:robotType").Get())
             self.assertTrue(robot.GetAttribute("physxArticulation:enabledSelfCollisions").Get())
+            self.assertTrue(robot.GetAttribute("newton:selfCollisionEnabled").Get())
+            self.assertTrue(robot.GetAttribute("osurdf:selfCollisionIntent").Get())
 
             link_targets = robot.GetRelationship("isaac:physics:robotLinks").GetTargets()
             joint_targets = robot.GetRelationship("isaac:physics:robotJoints").GetTargets()
@@ -138,7 +147,7 @@ class SimulationAssetTests(unittest.TestCase):
             self.assertTrue(base_collision.HasAPI(UsdPhysics.CollisionAPI))
             self.assertTrue(base_collision.HasAPI(UsdPhysics.MeshCollisionAPI))
             self.assertEqual(
-                UsdPhysics.Tokens.convexHull,
+                UsdPhysics.Tokens.none,
                 UsdPhysics.MeshCollisionAPI(base_collision).GetApproximationAttr().Get(),
             )
             self.assertTrue(base_collision.IsA(UsdGeom.Mesh))
@@ -154,8 +163,12 @@ class SimulationAssetTests(unittest.TestCase):
             )
             drive = UsdPhysics.DriveAPI(arm_joint, UsdPhysics.Tokens.angular)
             self.assertTrue(arm_joint.HasAPI(UsdPhysics.DriveAPI, UsdPhysics.Tokens.angular))
-            self.assertEqual(120.0, drive.GetStiffnessAttr().Get())
-            self.assertEqual(8.0, drive.GetDampingAttr().Get())
+            self.assertAlmostEqual(
+                120.0 * math.pi / 180.0, drive.GetStiffnessAttr().Get(), places=6
+            )
+            self.assertAlmostEqual(
+                8.0 * math.pi / 180.0, drive.GetDampingAttr().Get(), places=6
+            )
             self.assertEqual(1.0, drive.GetMaxForceAttr().Get())
             self.assertEqual(0.0, drive.GetTargetPositionAttr().Get())
             self.assertAlmostEqual(
@@ -166,11 +179,21 @@ class SimulationAssetTests(unittest.TestCase):
             self.assertEqual("position", arm_joint.GetAttribute("osurdf:driveIntent").Get())
 
             report = json.loads((output / "export_report.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                1.0, report["simulationSettings"]["jointDrives"][0]["maxForce"]
+            )
             self.assertEqual("fixed", report["simulationSettings"]["baseMode"])
             self.assertEqual("generated-world-fixed-joint", report["baseResolution"])
             self.assertEqual(1, report["validation"]["configuredJointIntents"])
             self.assertEqual(1, report["validation"]["configuredDrives"])
-            self.assertEqual(1, report["validation"]["meshCollisionApproximations"])
+            self.assertEqual(0, report["validation"]["meshCollisionApproximations"])
+            self.assertEqual(1, report["validation"]["preprocessedMeshCollisions"])
+            self.assertEqual("SI", report["simulationSettings"]["gainUnits"])
+            self.assertEqual(
+                "authored, downstream validation not run",
+                report["schemaAuthoring"]["status"],
+            )
+            self.assertFalse(report["schemaAuthoring"]["downstreamValidationRun"])
 
     def test_self_collision_requires_a_json_boolean(self):
         with tempfile.TemporaryDirectory(prefix="osurdf-usd-invalid-bool-") as temp:
@@ -192,6 +215,35 @@ class SimulationAssetTests(unittest.TestCase):
             ):
                 adapter.export_bundle(bundle, root / "usd", overwrite=True)
 
+    def test_v3_requires_explicit_si_gain_units(self):
+        with tempfile.TemporaryDirectory(prefix="osurdf-usd-v3-gain-units-") as temp:
+            root = Path(temp)
+            bundle = self._copy_fixture(root)
+            robot_json_path = bundle / "robot.json"
+            document = json.loads(robot_json_path.read_text(encoding="utf-8"))
+            document["schemaVersion"] = 3
+            document.setdefault("profiles", {})["usdSimulation"] = {
+                "baseMode": "source",
+                "robotType": "default",
+                "allowSelfCollision": False,
+                "jointDrives": [],
+            }
+            robot_json_path.write_text(
+                json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(adapter.AdapterError, "requires.*gainUnits"):
+                adapter.export_bundle(bundle, root / "missing", overwrite=True)
+
+            document["profiles"]["usdSimulation"]["gainUnits"] = "degrees"
+            robot_json_path.write_text(
+                json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(adapter.AdapterError, "gainUnits must be SI"):
+                adapter.export_bundle(bundle, root / "wrong", overwrite=True)
+
     def test_effort_is_intent_only_while_velocity_authors_an_active_drive(self):
         for mode, active in (("effort", False), ("velocity", True)):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory(
@@ -208,7 +260,7 @@ class SimulationAssetTests(unittest.TestCase):
                             "joint": "arm joint",
                             "mode": mode,
                             **(
-                                {"stiffness": 10.0, "damping": 2.0}
+                                {"stiffness": 0.0, "damping": 2.0}
                                 if mode == "velocity"
                                 else {}
                             ),
@@ -234,12 +286,32 @@ class SimulationAssetTests(unittest.TestCase):
                     active,
                     joint.HasAPI(UsdPhysics.DriveAPI, UsdPhysics.Tokens.angular),
                 )
+                if mode == "effort":
+                    metadata = joint.GetCustomDataByKey("osurdf")
+                    self.assertEqual("effort", metadata["driveIntent"])
+                    self.assertEqual(1.0, metadata["effortLimit"])
+                    self.assertEqual("N*m", metadata["effortLimitUnits"])
+                else:
+                    drive = UsdPhysics.DriveAPI(joint, UsdPhysics.Tokens.angular)
+                    self.assertEqual(0.0, drive.GetStiffnessAttr().Get())
+                    self.assertAlmostEqual(
+                        2.0 * math.pi / 180.0, drive.GetDampingAttr().Get()
+                    )
+                    self.assertEqual(1.0, drive.GetMaxForceAttr().Get())
                 report = json.loads(
                     (output / "export_report.json").read_text(encoding="utf-8")
                 )
                 self.assertEqual("mobile-no-world-joint", report["baseResolution"])
                 self.assertEqual(1, report["validation"]["configuredJointIntents"])
                 self.assertEqual(1 if active else 0, report["validation"]["activeDrives"])
+                self.assertEqual(
+                    1 if mode == "effort" else 0,
+                    report["validation"]["effortLimitsPreserved"],
+                )
+                if mode == "effort":
+                    configured = report["simulationSettings"]["jointDrives"][0]
+                    self.assertEqual(1.0, configured["effortLimit"])
+                    self.assertEqual("N*m", configured["effortLimitUnits"])
 
     def test_passive_and_effort_intents_reject_inactive_gains(self):
         for mode in ("passive", "effort"):
@@ -268,6 +340,104 @@ class SimulationAssetTests(unittest.TestCase):
                     adapter.AdapterError,
                     "may use stiffness/damping only with position or velocity",
                 ):
+                    adapter.export_bundle(bundle, root / "usd", overwrite=True)
+
+    def test_velocity_drive_rejects_nonzero_stiffness(self):
+        with tempfile.TemporaryDirectory(prefix="osurdf-usd-velocity-stiffness-") as temp:
+            root = Path(temp)
+            bundle = self._copy_fixture(root)
+            robot_json_path = bundle / "robot.json"
+            document = json.loads(robot_json_path.read_text(encoding="utf-8"))
+            document.setdefault("profiles", {})["usdSimulation"] = {
+                "jointDrives": [
+                    {
+                        "joint": "arm joint",
+                        "mode": "velocity",
+                        "stiffness": 0.01,
+                    }
+                ]
+            }
+            robot_json_path.write_text(
+                json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(adapter.AdapterError, "stiffness must be zero"):
+                adapter.export_bundle(bundle, root / "usd", overwrite=True)
+
+    def test_linear_drive_gains_remain_in_si_without_angular_conversion(self):
+        with tempfile.TemporaryDirectory(prefix="osurdf-usd-linear-gains-") as temp:
+            root = Path(temp)
+            bundle = self._copy_fixture(root)
+            robot_json_path = bundle / "robot.json"
+            document = json.loads(robot_json_path.read_text(encoding="utf-8"))
+            arm_joint = next(
+                joint for joint in document["joints"] if joint["name"] == "arm joint"
+            )
+            arm_joint["type"] = "prismatic"
+            document.setdefault("profiles", {})["usdSimulation"] = {
+                "jointDrives": [
+                    {
+                        "joint": "arm joint",
+                        "mode": "position",
+                        "stiffness": 5.0,
+                        "damping": 2.0,
+                    }
+                ]
+            }
+            robot_json_path.write_text(
+                json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            output = root / "usd"
+            adapter.export_bundle(bundle, output, overwrite=True)
+            stage = Usd.Stage.Open(str(output / "robot.usd"))
+            name_map = json.loads((output / "name_map.json").read_text(encoding="utf-8"))
+            joint = stage.GetPrimAtPath(
+                "/Robot/Joints/" + name_map["joints"]["arm joint"]
+            )
+            drive = UsdPhysics.DriveAPI(joint, UsdPhysics.Tokens.linear)
+            self.assertEqual(5.0, drive.GetStiffnessAttr().Get())
+            self.assertEqual(2.0, drive.GetDampingAttr().Get())
+            self.assertEqual(1.0, drive.GetMaxForceAttr().Get())
+
+    def test_joint_drive_container_and_entries_fail_closed(self):
+        invalid_containers = (False, 0, "drive", None)
+        for value in invalid_containers:
+            with self.subTest(container=value), tempfile.TemporaryDirectory(
+                prefix="osurdf-usd-invalid-drive-container-"
+            ) as temp:
+                root = Path(temp)
+                bundle = self._copy_fixture(root)
+                robot_json_path = bundle / "robot.json"
+                document = json.loads(robot_json_path.read_text(encoding="utf-8"))
+                document.setdefault("profiles", {})["usdSimulation"] = {
+                    "jointDrives": value
+                }
+                robot_json_path.write_text(
+                    json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(adapter.AdapterError, "must be an array"):
+                    adapter.export_bundle(bundle, root / "usd", overwrite=True)
+
+        for value in (False, 0, "drive", None):
+            with self.subTest(entry=value), tempfile.TemporaryDirectory(
+                prefix="osurdf-usd-invalid-drive-entry-"
+            ) as temp:
+                root = Path(temp)
+                bundle = self._copy_fixture(root)
+                robot_json_path = bundle / "robot.json"
+                document = json.loads(robot_json_path.read_text(encoding="utf-8"))
+                document.setdefault("profiles", {})["usdSimulation"] = {
+                    "jointDrives": [value]
+                }
+                robot_json_path.write_text(
+                    json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(adapter.AdapterError, "must be an object"):
                     adapter.export_bundle(bundle, root / "usd", overwrite=True)
 
 

@@ -32,6 +32,7 @@ namespace SW2URDF.Test
             Assert.Contains("\\images\\*.png\"}; DestDir: {app}\\images", installerScript);
             Assert.Contains("\\schemas\\README.md\"}; DestDir: {app}\\schemas", installerScript);
             Assert.Contains("\\schemas\\robot.schema.v2.json\"}; DestDir: {app}\\schemas", installerScript);
+            Assert.Contains("\\schemas\\robot.schema.v3.json\"}; DestDir: {app}\\schemas", installerScript);
             Assert.Contains("\\schemas\\robot-bundle-manifest.schema.v1.json\"}; DestDir: {app}\\schemas", installerScript);
             Assert.Contains("\\schemas\\ros2-control-profile.schema.v1.json\"}; DestDir: {app}\\schemas", installerScript);
             Assert.Contains("\\schemas\\ros2-control-profile.example.json\"}; DestDir: {app}\\schemas", installerScript);
@@ -148,6 +149,7 @@ namespace SW2URDF.Test
             Assert.Contains("bundledMuJoCoIntegration = \"passed\"", buildScript);
             Assert.Contains("assetRuntimeInputs = $AssetRuntimeInputs", buildScript);
             Assert.Contains("\"robot.schema.v2.json\"", buildScript);
+            Assert.Contains("\"robot.schema.v3.json\"", buildScript);
             Assert.Contains("RestoreLockedMode=true", buildScript);
             Assert.Contains("SW2URDFBaseIntermediateOutputPath", buildScript);
             Assert.Contains("sdkPackageLocks = $SdkPackageLocks", buildScript);

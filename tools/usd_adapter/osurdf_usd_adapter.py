@@ -14,7 +14,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 
@@ -59,6 +59,17 @@ _USD_BASE_RESOLUTIONS = {
     "floating": "mobile-no-world-joint",
 }
 _USD_DRIVE_MODES = {"passive", "position", "velocity", "effort"}
+_SI_GAIN_UNITS = "SI"
+_ANGULAR_SI_GAIN_TO_USD = math.pi / 180.0
+_DOWNSTREAM_SCHEMA_STATUS = "authored, downstream validation not run"
+_DOWNSTREAM_SCHEMA_TOKENS = (
+    "IsaacRobotAPI",
+    "IsaacLinkAPI",
+    "IsaacJointAPI",
+    "PhysxArticulationAPI",
+    "PhysxJointAPI",
+    "NewtonArticulationRootAPI",
+)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -235,28 +246,62 @@ def _root_link_name(
 def _simulation_settings(
     robot: dict[str, Any], joints: Sequence[dict[str, Any]]
 ) -> dict[str, Any]:
+    schema_version = robot.get("schemaVersion")
+    if (
+        not isinstance(schema_version, int)
+        or isinstance(schema_version, bool)
+        or schema_version not in (2, 3)
+    ):
+        raise AdapterError("OpenUSD adapter accepts OSURDF robot schema v2 or v3 only.")
+
     profiles = robot.get("profiles")
-    profile = profiles.get("usdSimulation") if isinstance(profiles, dict) else None
-    if profile is None:
+    if not isinstance(profiles, dict):
+        raise AdapterError("profiles must be an object.")
+    if "usdSimulation" not in profiles:
+        if schema_version == 3:
+            raise AdapterError("Robot schema v3 requires profiles.usdSimulation.")
         profile = {}
+    else:
+        profile = profiles["usdSimulation"]
     if not isinstance(profile, dict):
         raise AdapterError("profiles.usdSimulation must be an object.")
 
-    base_mode = str(profile.get("baseMode") or "source")
-    robot_type = str(profile.get("robotType") or "default")
+    def profile_value(name: str, legacy_default: Any) -> Any:
+        if name in profile:
+            return profile[name]
+        if schema_version == 2:
+            return legacy_default
+        raise AdapterError(f"Robot schema v3 requires profiles.usdSimulation.{name}.")
+
+    base_mode = profile_value("baseMode", "source")
+    robot_type = profile_value("robotType", "default")
+    gain_units = profile_value("gainUnits", _SI_GAIN_UNITS)
+    if not isinstance(base_mode, str):
+        raise AdapterError("profiles.usdSimulation.baseMode must be a string.")
+    if not isinstance(robot_type, str):
+        raise AdapterError("profiles.usdSimulation.robotType must be a string.")
     if base_mode not in _USD_BASE_MODES:
         raise AdapterError(
             "profiles.usdSimulation.baseMode must be source, fixed, or floating."
         )
     if robot_type not in _USD_ROBOT_TYPES:
         raise AdapterError("profiles.usdSimulation.robotType is not supported.")
+    if gain_units != _SI_GAIN_UNITS:
+        raise AdapterError(
+            "profiles.usdSimulation.gainUnits must be SI; angular gains are per radian."
+        )
 
     joint_types = {
         str(joint.get("name") or ""): str(joint.get("type") or "").lower()
         for joint in joints
         if isinstance(joint, dict)
     }
-    raw_drives = profile.get("jointDrives") or []
+    joints_by_name = {
+        str(joint.get("name") or ""): joint
+        for joint in joints
+        if isinstance(joint, dict)
+    }
+    raw_drives = profile_value("jointDrives", [])
     if not isinstance(raw_drives, list):
         raise AdapterError("profiles.usdSimulation.jointDrives must be an array.")
     drives: list[dict[str, Any]] = []
@@ -264,8 +309,12 @@ def _simulation_settings(
     for index, raw_drive in enumerate(raw_drives):
         if not isinstance(raw_drive, dict):
             raise AdapterError(f"USD joint drive {index} must be an object.")
-        joint_name = str(raw_drive.get("joint") or "")
-        mode = str(raw_drive.get("mode") or "passive")
+        joint_name = raw_drive.get("joint")
+        mode = raw_drive.get("mode")
+        if not isinstance(joint_name, str) or not joint_name:
+            raise AdapterError(f"USD joint drive {index}.joint must be a non-empty string.")
+        if not isinstance(mode, str):
+            raise AdapterError(f"USD joint drive {index}.mode must be a string.")
         if joint_name in seen:
             raise AdapterError(f"USD joint drive is duplicated: {joint_name!r}.")
         seen.add(joint_name)
@@ -276,7 +325,7 @@ def _simulation_settings(
         if mode not in _USD_DRIVE_MODES:
             raise AdapterError(f"Unsupported USD joint drive mode: {mode!r}.")
         if mode not in {"position", "velocity"} and any(
-            raw_drive.get(key) is not None for key in ("stiffness", "damping")
+            key in raw_drive for key in ("stiffness", "damping")
         ):
             raise AdapterError(
                 f"USD joint drive {joint_name!r} may use stiffness/damping only "
@@ -284,16 +333,49 @@ def _simulation_settings(
             )
         drive: dict[str, Any] = {"joint": joint_name, "mode": mode}
         for key in ("stiffness", "damping"):
-            if raw_drive.get(key) is None:
+            if key not in raw_drive:
                 continue
-            value = float(raw_drive[key])
+            raw_value = raw_drive[key]
+            if not isinstance(raw_value, (int, float)) or isinstance(raw_value, bool):
+                raise AdapterError(
+                    f"USD joint drive {joint_name!r} has non-numeric {key}."
+                )
+            value = float(raw_value)
             if not math.isfinite(value) or value < 0.0:
                 raise AdapterError(
                     f"USD joint drive {joint_name!r} has invalid {key}: {value}."
                 )
             drive[key] = value
+        if mode == "velocity":
+            stiffness = drive.get("stiffness", 0.0)
+            if stiffness != 0.0:
+                raise AdapterError(
+                    f"USD velocity drive {joint_name!r} stiffness must be zero."
+                )
+            drive["stiffness"] = 0.0
+        if mode in {"position", "velocity", "effort"}:
+            limit = joints_by_name[joint_name].get("limit")
+            effort = limit.get("effort") if isinstance(limit, dict) else None
+            if (
+                not isinstance(effort, (int, float))
+                or isinstance(effort, bool)
+                or not math.isfinite(float(effort))
+                or float(effort) <= 0.0
+            ):
+                raise AdapterError(
+                    f"USD {mode} intent {joint_name!r} requires a positive finite Joint effort limit."
+                )
+            force_units = (
+                "N*m" if joint_types[joint_name] in {"continuous", "revolute"} else "N"
+            )
+            if mode == "effort":
+                drive["effortLimit"] = float(effort)
+                drive["effortLimitUnits"] = force_units
+            else:
+                drive["maxForce"] = float(effort)
+                drive["maxForceUnits"] = force_units
         drives.append(drive)
-    allow_self_collision = profile.get("allowSelfCollision", False)
+    allow_self_collision = profile_value("allowSelfCollision", False)
     if not isinstance(allow_self_collision, bool):
         raise AdapterError(
             "profiles.usdSimulation.allowSelfCollision must be a boolean."
@@ -302,6 +384,7 @@ def _simulation_settings(
         "baseMode": base_mode,
         "robotType": robot_type,
         "allowSelfCollision": allow_self_collision,
+        "gainUnits": gain_units,
         "jointDrives": drives,
     }
 
@@ -651,7 +734,9 @@ def _geometry_prim(
             mesh_collision = UsdPhysics.MeshCollisionAPI.Apply(prim)
             if not mesh_collision:
                 raise AdapterError(f"OpenUSD rejected MeshCollisionAPI at {path}")
-            mesh_collision.CreateApproximationAttr().Set(UsdPhysics.Tokens.convexHull)
+            # The collision STL already embodies the user's preprocessing strategy.
+            # Keep its topology instead of asking a downstream runtime to hull it again.
+            mesh_collision.CreateApproximationAttr().Set(UsdPhysics.Tokens.none)
     return prim
 
 
@@ -793,27 +878,37 @@ def _apply_joint_simulation_data(
 
     if drive_settings is None:
         return False
-    mode = str(drive_settings.get("mode") or "passive")
+    mode = drive_settings["mode"]
     prim.CreateAttribute("osurdf:driveIntent", Sdf.ValueTypeNames.Token).Set(mode)
+    if mode == "effort":
+        prim.SetCustomDataByKey(
+            "osurdf",
+            {
+                "driveIntent": "effort",
+                "effortLimit": drive_settings["effortLimit"],
+                "effortLimitUnits": drive_settings["effortLimitUnits"],
+            },
+        )
+        return False
     if mode not in ("position", "velocity"):
         return False
 
-    dof = (
-        UsdPhysics.Tokens.angular
-        if joint_type in ("continuous", "revolute")
-        else UsdPhysics.Tokens.linear
-    )
+    angular = joint_type in ("continuous", "revolute")
+    dof = UsdPhysics.Tokens.angular if angular else UsdPhysics.Tokens.linear
+    gain_scale = _ANGULAR_SI_GAIN_TO_USD if angular else 1.0
     drive = UsdPhysics.DriveAPI.Apply(prim, dof)
     if not drive or not prim.HasAPI(UsdPhysics.DriveAPI, dof):
         raise AdapterError(f"OpenUSD rejected {mode} drive at {prim.GetPath()}.")
     drive.CreateTypeAttr().Set(UsdPhysics.Tokens.force)
-    if drive_settings.get("stiffness") is not None:
-        drive.CreateStiffnessAttr().Set(float(drive_settings["stiffness"]))
+    if mode == "velocity":
+        drive.CreateStiffnessAttr().Set(0.0)
+    elif drive_settings.get("stiffness") is not None:
+        drive.CreateStiffnessAttr().Set(
+            float(drive_settings["stiffness"]) * gain_scale
+        )
     if drive_settings.get("damping") is not None:
-        drive.CreateDampingAttr().Set(float(drive_settings["damping"]))
-    effort = limit.get("effort")
-    if effort is not None and math.isfinite(float(effort)) and float(effort) > 0.0:
-        drive.CreateMaxForceAttr().Set(float(effort))
+        drive.CreateDampingAttr().Set(float(drive_settings["damping"]) * gain_scale)
+    drive.CreateMaxForceAttr().Set(drive_settings["maxForce"])
     if mode == "position":
         target = 0.0
         if limit.get("lower") is not None:
@@ -847,6 +942,7 @@ def _build_stage(bundle: Path, output: Path, robot: dict[str, Any]) -> dict[str,
     UsdPhysics.ArticulationRootAPI.Apply(robot_prim)
     _apply_named_schema(robot_prim, "IsaacRobotAPI")
     _apply_named_schema(robot_prim, "PhysxArticulationAPI")
+    _apply_named_schema(robot_prim, "NewtonArticulationRootAPI")
     robot_name = str(robot.get("name") or "Robot")
     _set_isaac_name_override(robot_prim, robot_name)
     robot_prim.CreateAttribute("isaac:namespace", Sdf.ValueTypeNames.String).Set(
@@ -860,6 +956,12 @@ def _build_stage(bundle: Path, output: Path, robot: dict[str, Any]) -> dict[str,
     )
     robot_prim.CreateAttribute(
         "physxArticulation:enabledSelfCollisions", Sdf.ValueTypeNames.Bool
+    ).Set(settings["allowSelfCollision"])
+    robot_prim.CreateAttribute(
+        "newton:selfCollisionEnabled", Sdf.ValueTypeNames.Bool
+    ).Set(settings["allowSelfCollision"])
+    robot_prim.CreateAttribute(
+        "osurdf:selfCollisionIntent", Sdf.ValueTypeNames.Bool, custom=True
     ).Set(settings["allowSelfCollision"])
     metadata = robot.get("metadata") or {}
     profiles = robot.get("profiles") or {}
@@ -894,6 +996,7 @@ def _build_stage(bundle: Path, output: Path, robot: dict[str, Any]) -> dict[str,
     mesh_collision_paths: list[str] = []
     mesh_geometry_paths: list[str] = []
     active_drive_paths: list[str] = []
+    effort_limit_paths: dict[str, tuple[float, str]] = {}
     world_poses = _world_link_poses(links, joints)
     for link_index, link in enumerate(links):
         name = str(link.get("name") or f"link_{link_index}")
@@ -1011,10 +1114,15 @@ def _build_stage(bundle: Path, output: Path, robot: dict[str, Any]) -> dict[str,
             unsupported_joint_types.append(name + ":" + joint_type)
         joint.GetPrim().CreateAttribute("osurdf:jointType", Sdf.ValueTypeNames.String).Set(joint_type)
         joint.GetPrim().CreateAttribute("osurdf:sourceName", Sdf.ValueTypeNames.String).Set(name)
-        if joint_type in ("continuous", "revolute", "prismatic") and _apply_joint_simulation_data(
-            joint, joint_data, drive_settings.get(name)
-        ):
-            active_drive_paths.append(str(joint.GetPath()))
+        if joint_type in ("continuous", "revolute", "prismatic"):
+            joint_drive = drive_settings.get(name)
+            if _apply_joint_simulation_data(joint, joint_data, joint_drive):
+                active_drive_paths.append(str(joint.GetPath()))
+            if joint_drive is not None and joint_drive["mode"] == "effort":
+                effort_limit_paths[str(joint.GetPath())] = (
+                    joint_drive["effortLimit"],
+                    joint_drive["effortLimitUnits"],
+                )
 
     fixed_base_joint_path: str | None = None
     if settings["baseMode"] == "fixed":
@@ -1074,6 +1182,7 @@ def _build_stage(bundle: Path, output: Path, robot: dict[str, Any]) -> dict[str,
             if item["mode"] in ("position", "velocity")
         ),
         "activeDrivePaths": active_drive_paths,
+        "effortLimitPaths": effort_limit_paths,
         "meshCollisionPaths": mesh_collision_paths,
         "meshGeometryPaths": mesh_geometry_paths,
     }
@@ -1089,6 +1198,7 @@ def _validate_stage(
     expected_mesh_geometry_paths: Sequence[str] = (),
     configured_joint_intents: int = 0,
     configured_drive_apis: int = 0,
+    expected_effort_limits: Mapping[str, tuple[float, str]] | None = None,
 ) -> dict[str, Any]:
     stage = Usd.Stage.Open(str(stage_path))
     if stage is None:
@@ -1099,7 +1209,8 @@ def _validate_stage(
     masses = 0
     collisions = 0
     active_drives = 0
-    mesh_collision_approximations = 0
+    preprocessed_mesh_collisions = 0
+    effort_limits_preserved = 0
     resolved_mesh_geometries = 0
     unresolved_assets: list[str] = []
     actual_planar_joint_paths: list[str] = []
@@ -1127,8 +1238,8 @@ def _validate_stage(
             active_drives += 1
         if prim.HasAPI(UsdPhysics.MeshCollisionAPI):
             approximation = UsdPhysics.MeshCollisionAPI(prim).GetApproximationAttr().Get()
-            if approximation == UsdPhysics.Tokens.convexHull:
-                mesh_collision_approximations += 1
+            if approximation == UsdPhysics.Tokens.none:
+                preprocessed_mesh_collisions += 1
         joint_type = prim.GetAttribute("osurdf:jointType")
         if joint_type and joint_type.Get() == "planar":
             actual_planar_joint_paths.append(path)
@@ -1153,16 +1264,30 @@ def _validate_stage(
         schemas = _applied_schema_names(stage.GetPrimAtPath(path))
         if not any(schema.startswith("PhysicsDriveAPI:") for schema in schemas):
             raise AdapterError(f"OpenUSD active drive is missing at {path}.")
+    for path, (expected_limit, expected_units) in (expected_effort_limits or {}).items():
+        prim = stage.GetPrimAtPath(path)
+        metadata = prim.GetCustomDataByKey("osurdf") if prim else None
+        if (
+            not isinstance(metadata, dict)
+            or metadata.get("driveIntent") != "effort"
+            or not math.isclose(float(metadata.get("effortLimit", -1.0)), expected_limit)
+            or metadata.get("effortLimitUnits") != expected_units
+        ):
+            raise AdapterError(f"OpenUSD effort limit metadata is missing or invalid at {path}.")
+        schemas = _applied_schema_names(prim)
+        if any(schema.startswith("PhysicsDriveAPI:") for schema in schemas):
+            raise AdapterError(f"OpenUSD effort intent must not author DriveAPI at {path}.")
+        effort_limits_preserved += 1
     for path in expected_mesh_collision_paths:
         prim = stage.GetPrimAtPath(path)
         if (
             not prim
             or not prim.HasAPI(UsdPhysics.MeshCollisionAPI)
             or UsdPhysics.MeshCollisionAPI(prim).GetApproximationAttr().Get()
-            != UsdPhysics.Tokens.convexHull
+            != UsdPhysics.Tokens.none
         ):
             raise AdapterError(
-                f"OpenUSD mesh collision must use convexHull approximation at {path}."
+                f"OpenUSD preprocessed mesh collision must use approximation=none at {path}."
             )
     for path in expected_mesh_geometry_paths:
         prim = stage.GetPrimAtPath(path)
@@ -1193,9 +1318,9 @@ def _validate_stage(
             f"OpenUSD validation expected {len(expected_active_drive_paths)} active drives, "
             f"found {active_drives}."
         )
-    if mesh_collision_approximations != len(expected_mesh_collision_paths):
+    if preprocessed_mesh_collisions != len(expected_mesh_collision_paths):
         raise AdapterError(
-            "OpenUSD validation found an unexpected number of mesh collision approximations."
+            "OpenUSD validation found an unexpected number of preprocessed mesh collisions."
         )
     if unresolved_assets:
         raise AdapterError("OpenUSD stage has unresolved local assets: " + ", ".join(sorted(set(unresolved_assets))))
@@ -1211,10 +1336,14 @@ def _validate_stage(
         "configuredDriveApis": configured_drive_apis,
         "configuredDrives": configured_drive_apis,
         "activeDrives": active_drives,
+        "effortLimitsPreserved": effort_limits_preserved,
         "resolvedMeshGeometries": resolved_mesh_geometries,
-        "meshCollisionApproximations": mesh_collision_approximations,
+        "meshCollisionApproximations": 0,
+        "preprocessedMeshCollisions": preprocessed_mesh_collisions,
         "planarJointsValidated": len(expected_planar_joint_paths),
         "openUsdVersion": ".".join(str(value) for value in Usd.GetVersion()),
+        "scope": "bundled OpenUSD structural validation only",
+        "downstreamSchemaStatus": _DOWNSTREAM_SCHEMA_STATUS,
     }
 
 
@@ -1243,6 +1372,7 @@ def export_bundle(bundle: Path, output: Path, overwrite: bool) -> dict[str, Any]
             built.get("meshGeometryPaths", []),
             built.get("configuredJointIntents", 0),
             built.get("configuredDriveApis", 0),
+            built.get("effortLimitPaths", {}),
         )
         name_map = {
             "schemaVersion": 1,
@@ -1271,9 +1401,14 @@ def export_bundle(bundle: Path, output: Path, overwrite: bool) -> dict[str, Any]
                 _USD_BASE_RESOLUTIONS["source"],
             ),
             "validation": validation,
+            "schemaAuthoring": {
+                "status": _DOWNSTREAM_SCHEMA_STATUS,
+                "downstreamValidationRun": False,
+                "tokens": list(_DOWNSTREAM_SCHEMA_TOKENS),
+            },
             "validationScope": {
-                "en": "Generated and reopened with the bundled OpenUSD runtime. Isaac Sim and Isaac Lab were not executed.",
-                "zh-CN": "已使用安装包内置 OpenUSD 运行时生成并重新打开校验；未运行 Isaac Sim 或 Isaac Lab。",
+                "en": "Generated and structurally reopened with the bundled OpenUSD runtime; Isaac schema tokens were authored, downstream validation not run.",
+                "zh-CN": "已使用内置 OpenUSD 运行时生成并完成结构性重开检查；Isaac schema token 已作者化，未运行下游验证。",
             },
             "physicsMappingNotes": {
                 "unsupportedJointTypes": built["unsupportedPhysicsJointTypes"],

@@ -1067,6 +1067,185 @@ namespace SW2URDF.Test
             }
         }
 
+        [Theory]
+        [InlineData("en-US", 1.5F, 1600, 900)]
+        [InlineData("zh-CN", 1.5F, 1600, 900)]
+        [InlineData("en-US", 2F, 1920, 1040)]
+        [InlineData("zh-CN", 2F, 1920, 1040)]
+        public void TestOpenUsdSettingsRemainReachableAtHighDpi(
+            string cultureName,
+            float scaleFactor,
+            int workingWidth,
+            int workingHeight)
+        {
+            CultureInfo originalCulture = CultureInfo.CurrentCulture;
+            CultureInfo originalUiCulture = CultureInfo.CurrentUICulture;
+            try
+            {
+                CultureInfo culture = new CultureInfo(cultureName);
+                CultureInfo.CurrentCulture = culture;
+                CultureInfo.CurrentUICulture = culture;
+                using (OpenUsdSettingsDialog dialog = new OpenUsdSettingsDialog())
+                {
+                    dialog.Scale(new SizeF(scaleFactor, scaleFactor));
+                    Rectangle workingArea = new Rectangle(
+                        120,
+                        80,
+                        workingWidth,
+                        workingHeight);
+                    dialog.ConstrainToWorkingArea(workingArea);
+                    dialog.PerformLayout();
+
+                    Control root = FindDescendant(dialog, "openUsdRoot");
+                    Control footer = FindDescendant(dialog, "openUsdFooter");
+                    Button apply = Assert.IsType<Button>(
+                        FindDescendant(dialog, "openUsdConfirmButton"));
+                    Button cancel = Assert.IsType<Button>(
+                        FindDescendant(dialog, "openUsdCancelButton"));
+
+                    Assert.NotNull(root);
+                    Assert.NotNull(footer);
+                    Assert.True(((ScrollableControl)root).AutoScroll);
+                    Assert.True(dialog.Width <= workingArea.Width);
+                    Assert.True(dialog.Height <= workingArea.Height);
+                    Assert.True(dialog.Left >= workingArea.Left);
+                    Assert.True(dialog.Top >= workingArea.Top);
+                    Assert.True(dialog.Right <= workingArea.Right);
+                    Assert.True(dialog.Bottom <= workingArea.Bottom);
+                    AssertContainedIn(footer, root);
+                    AssertContainedIn(apply, footer);
+                    AssertContainedIn(cancel, footer);
+                    Assert.False(String.IsNullOrWhiteSpace(dialog.Text));
+                    Assert.False(String.IsNullOrWhiteSpace(apply.Text));
+                    Assert.False(String.IsNullOrWhiteSpace(cancel.Text));
+                }
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = originalCulture;
+                CultureInfo.CurrentUICulture = originalUiCulture;
+            }
+        }
+
+        [Theory]
+        [InlineData("en-US")]
+        [InlineData("zh-CN")]
+        public void TestOpenUsdGainValidationReportsAllErrorsAndEnforcesModes(
+            string cultureName)
+        {
+            CultureInfo originalCulture = CultureInfo.CurrentCulture;
+            CultureInfo originalUiCulture = CultureInfo.CurrentUICulture;
+            try
+            {
+                CultureInfo culture = new CultureInfo(cultureName);
+                CultureInfo.CurrentCulture = culture;
+                CultureInfo.CurrentUICulture = culture;
+                using (OpenUsdSettingsDialog dialog = new OpenUsdSettingsDialog())
+                {
+                    string[] jointNames = new[] { "effort_joint", "passive_joint", "velocity_joint" };
+                    UsdSimulationProfile profile = new UsdSimulationProfile();
+                    foreach (string jointName in jointNames)
+                    {
+                        profile.JointDrives.Add(new UsdJointDriveProfile
+                        {
+                            Joint = jointName,
+                            Mode = "position",
+                            Stiffness = 10.0,
+                            Damping = 1.0
+                        });
+                    }
+                    dialog.LoadSettings(
+                        profile,
+                        jointNames.Select(name => new OpenUsdJointDescriptor
+                        {
+                            Name = name,
+                            Type = "continuous",
+                            EffortLimit = 3.0,
+                            VelocityLimit = 2.0
+                        }));
+
+                    DataGridView grid = Assert.IsType<DataGridView>(
+                        FindDescendant(dialog, "openUsdJointDriveGrid"));
+                    Assert.Equal(3, grid.Rows.Count);
+                    foreach (DataGridViewRow row in grid.Rows)
+                    {
+                        Assert.False(row.Cells["stiffnessColumn"].ReadOnly);
+                        Assert.False(row.Cells["dampingColumn"].ReadOnly);
+                        row.Cells["stiffnessColumn"].Value = "-1";
+                        row.Cells["dampingColumn"].Value = "not-a-number";
+                    }
+
+                    UsdSimulationProfile ignored;
+                    Assert.False(dialog.TryCaptureSettings(out ignored));
+                    foreach (DataGridViewRow row in grid.Rows)
+                    {
+                        Assert.False(String.IsNullOrWhiteSpace(
+                            row.Cells["stiffnessColumn"].ErrorText));
+                        Assert.False(String.IsNullOrWhiteSpace(
+                            row.Cells["dampingColumn"].ErrorText));
+                    }
+
+                    DataGridViewComboBoxCell effortMode =
+                        Assert.IsType<DataGridViewComboBoxCell>(
+                            grid.Rows[0].Cells["driveModeColumn"]);
+                    effortMode.Value = effortMode.Items.Cast<object>().Single(
+                        item => item.ToString().StartsWith(
+                            "effort",
+                            StringComparison.Ordinal));
+                    Assert.True(grid.Rows[0].Cells["stiffnessColumn"].ReadOnly);
+                    Assert.True(grid.Rows[0].Cells["dampingColumn"].ReadOnly);
+                    Assert.Equal(String.Empty, grid.Rows[0].Cells["stiffnessColumn"].ErrorText);
+                    Assert.Equal(String.Empty, grid.Rows[0].Cells["dampingColumn"].ErrorText);
+
+                    DataGridViewComboBoxCell passiveMode =
+                        Assert.IsType<DataGridViewComboBoxCell>(
+                            grid.Rows[1].Cells["driveModeColumn"]);
+                    passiveMode.Value = passiveMode.Items.Cast<object>().Single(
+                        item => item.ToString().StartsWith(
+                            "passive",
+                            StringComparison.Ordinal));
+                    Assert.True(grid.Rows[1].Cells["stiffnessColumn"].ReadOnly);
+                    Assert.True(grid.Rows[1].Cells["dampingColumn"].ReadOnly);
+                    Assert.Equal(String.Empty, grid.Rows[1].Cells["stiffnessColumn"].ErrorText);
+                    Assert.Equal(String.Empty, grid.Rows[1].Cells["dampingColumn"].ErrorText);
+
+                    DataGridViewComboBoxCell velocityMode =
+                        Assert.IsType<DataGridViewComboBoxCell>(
+                            grid.Rows[2].Cells["driveModeColumn"]);
+                    velocityMode.Value = velocityMode.Items.Cast<object>().Single(
+                        item => item.ToString().StartsWith(
+                            "velocity",
+                            StringComparison.Ordinal));
+                    Assert.True(grid.Rows[2].Cells["stiffnessColumn"].ReadOnly);
+                    Assert.False(grid.Rows[2].Cells["dampingColumn"].ReadOnly);
+                    Assert.Equal(
+                        "0",
+                        Convert.ToString(
+                            grid.Rows[2].Cells["stiffnessColumn"].Value,
+                            CultureInfo.InvariantCulture));
+                    Assert.Equal(String.Empty, grid.Rows[2].Cells["stiffnessColumn"].ErrorText);
+                    grid.Rows[2].Cells["dampingColumn"].Value = "2.5";
+
+                    UsdSimulationProfile captured;
+                    Assert.True(dialog.TryCaptureSettings(out captured));
+                    Assert.Equal(2, captured.JointDrives.Count);
+                    UsdJointDriveProfile effortDrive = captured.JointDrives.Single(
+                        drive => drive.Mode == "effort");
+                    UsdJointDriveProfile velocityDrive = captured.JointDrives.Single(
+                        drive => drive.Mode == "velocity");
+                    Assert.Null(effortDrive.Stiffness);
+                    Assert.Null(effortDrive.Damping);
+                    Assert.Equal(0.0, velocityDrive.Stiffness);
+                    Assert.Equal(2.5, velocityDrive.Damping);
+                }
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = originalCulture;
+                CultureInfo.CurrentUICulture = originalUiCulture;
+            }
+        }
+
         [Fact]
         public void TestModernCardsTabsAndUsageGuideShareResponsiveTheme()
         {
@@ -1204,6 +1383,114 @@ namespace SW2URDF.Test
                     (int)GetPrivateField<object>(
                         form,
                         "modernModelExplicitLayoutCount"));
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestDynamicLinkStatusInvalidatesOnlyItsOwningTabPage()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                InvokePrivate(form, "PrimeModernPageLayouts");
+                ModernTabControl sections = Assert.IsType<ModernTabControl>(
+                    GetControl<TabControl>(form, "modernLinkSections"));
+                TableLayoutPanel inertiaSection = Assert.IsType<TableLayoutPanel>(
+                    FindDescendant(sections, "modernInertiaMatrixSection"));
+                TableLayoutPanel collisionSection = Assert.IsType<TableLayoutPanel>(
+                    FindDescendant(sections, "modernCollisionStrategySection"));
+                TableLayoutPanel appearanceSection = Assert.IsType<TableLayoutPanel>(
+                    FindDescendant(sections, "modernAppearanceColorSection"));
+                Label collisionStatus = GetControl<Label>(
+                    form,
+                    "labelCollisionPreviewStatus");
+
+                Assert.False(inertiaSection.AutoSize);
+                Assert.False(collisionSection.AutoSize);
+                Assert.False(appearanceSection.AutoSize);
+
+                sections.InvalidatePageLayout(collisionStatus);
+
+                Assert.False(inertiaSection.AutoSize);
+                Assert.True(collisionSection.AutoSize);
+                Assert.False(appearanceSection.AutoSize);
+
+                collisionStatus.Text =
+                    "Collision preview status with a deliberately long localized detail " +
+                    "that must grow only the collision page layout.";
+                sections.RebuildPageLayout(collisionStatus);
+
+                Assert.False(inertiaSection.AutoSize);
+                Assert.False(collisionSection.AutoSize);
+                Assert.False(appearanceSection.AutoSize);
+                Size measured = TextRenderer.MeasureText(
+                    collisionStatus.Text,
+                    collisionStatus.Font,
+                    new Size(collisionStatus.Width, Int32.MaxValue),
+                    TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+                Assert.True(measured.Height <= collisionStatus.Height);
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestModelPathChangeRebuildsThenReusesCachedLayout()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                InvokePrivate(form, "PrimeModernPageLayouts");
+                int initialLayoutCount = (int)GetPrivateField<object>(
+                    form,
+                    "modernModelExplicitLayoutCount");
+                TextBox packageName = GetControl<TextBox>(
+                    form,
+                    "textBoxRosPackageName");
+                Label pathHint = GetControl<Label>(
+                    form,
+                    "labelRosPackageNameHint");
+                TableLayoutPanel metadataGrid = Assert.IsType<TableLayoutPanel>(
+                    FindDescendant(form, "modernPackageMetadataGrid"));
+                Control packageCard = GetControl<Control>(form, "modernPackageCard");
+
+                packageName.Text = new String('a', 96);
+                int changedLayoutCount = (int)GetPrivateField<object>(
+                    form,
+                    "modernModelExplicitLayoutCount");
+                InvokePrivate(form, "UpdateRosPackageNameHint");
+                int repeatedUpdateCount = (int)GetPrivateField<object>(
+                    form,
+                    "modernModelExplicitLayoutCount");
+                ShowModernAssemblyPage(form, "Model");
+                ShowModernAssemblyPage(form, "Link");
+                ShowModernAssemblyPage(form, "Model");
+
+                Assert.Equal(initialLayoutCount + 1, changedLayoutCount);
+                Assert.Equal(changedLayoutCount, repeatedUpdateCount);
+                Assert.Equal(
+                    repeatedUpdateCount,
+                    (int)GetPrivateField<object>(
+                        form,
+                        "modernModelExplicitLayoutCount"));
+                Assert.False(pathHint.AutoSize);
+                Assert.True(pathHint.AutoEllipsis);
+                AssertContainedIn(pathHint, metadataGrid);
+                AssertContainedIn(packageName, metadataGrid);
+                AssertContainedIn(
+                    GetControl<TextBox>(form, "modernModelAuthorTextBox"),
+                    metadataGrid);
+                AssertContainedIn(metadataGrid, packageCard);
             }
             finally
             {

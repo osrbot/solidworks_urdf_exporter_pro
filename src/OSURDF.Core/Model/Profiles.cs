@@ -119,7 +119,8 @@ namespace OSURDF.Core.Model
         [JsonProperty("baseMode", Order = 0)] public string BaseMode { get; set; } = "source";
         [JsonProperty("robotType", Order = 1)] public string RobotType { get; set; } = "default";
         [JsonProperty("allowSelfCollision", Order = 2)] public bool AllowSelfCollision { get; set; }
-        [JsonProperty("jointDrives", Order = 3)] public List<UsdJointDriveProfile> JointDrives { get; set; } = new List<UsdJointDriveProfile>();
+        [JsonProperty("gainUnits", Order = 3)] public string GainUnits { get; set; } = "SI";
+        [JsonProperty("jointDrives", Order = 4)] public List<UsdJointDriveProfile> JointDrives { get; set; } = new List<UsdJointDriveProfile>();
     }
 
     public sealed class UsdJointDriveProfile

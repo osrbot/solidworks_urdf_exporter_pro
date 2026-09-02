@@ -95,6 +95,7 @@ Source: {#BuildPlatform + "\" + BuildConfiguration + "\THIRD_PARTY_LICENSES\*"};
 ; historical document parsing, but are internal legacy contracts and are not UI-loaded payloads.
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\README.md"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\robot.schema.v2.json"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\robot.schema.v3.json"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\robot-bundle-manifest.schema.v1.json"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\ros2-control-profile.schema.v1.json"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\ros2-control-profile.example.json"}; DestDir: {app}\schemas; Flags: ignoreversion; Check: IsWin64;

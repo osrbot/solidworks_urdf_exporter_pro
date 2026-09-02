@@ -182,21 +182,21 @@ public sealed class PipelineTests : IDisposable
     }
 
     [Fact]
-    public void RobotJsonV2RejectsUnknownAndDuplicateProperties()
+    public void RobotJsonV3RejectsUnknownAndDuplicateProperties()
     {
-        const string unknown = "{\"schemaVersion\":2,\"name\":\"robot\",\"units\":\"SI\",\"links\":[],\"joints\":[],\"profiles\":{},\"typo\":true}";
+        const string unknown = "{\"schemaVersion\":3,\"name\":\"robot\",\"units\":\"SI\",\"links\":[],\"joints\":[],\"profiles\":{},\"typo\":true}";
         Assert.Throws<InvalidDataException>(() => RobotJson.Deserialize(unknown));
 
-        const string duplicate = "{\"schemaVersion\":2,\"name\":\"one\",\"name\":\"two\",\"units\":\"SI\",\"links\":[],\"joints\":[],\"profiles\":{}}";
+        const string duplicate = "{\"schemaVersion\":3,\"name\":\"one\",\"name\":\"two\",\"units\":\"SI\",\"links\":[],\"joints\":[],\"profiles\":{}}";
         Assert.Throws<InvalidDataException>(() => RobotJson.Deserialize(duplicate));
 
-        const string wrongVersionType = "{\"schemaVersion\":\"2\",\"name\":\"robot\",\"units\":\"SI\",\"metadata\":{},\"links\":[],\"joints\":[],\"profiles\":{}}";
+        const string wrongVersionType = "{\"schemaVersion\":\"3\",\"name\":\"robot\",\"units\":\"SI\",\"metadata\":{},\"links\":[],\"joints\":[],\"profiles\":{}}";
         Assert.Throws<InvalidDataException>(() => RobotJson.Deserialize(wrongVersionType));
 
-        const string missingMetadata = "{\"schemaVersion\":2,\"name\":\"robot\",\"units\":\"SI\",\"links\":[],\"joints\":[],\"profiles\":{}}";
+        const string missingMetadata = "{\"schemaVersion\":3,\"name\":\"robot\",\"units\":\"SI\",\"links\":[],\"joints\":[],\"profiles\":{}}";
         Assert.Throws<InvalidDataException>(() => RobotJson.Deserialize(missingMetadata));
 
-        const string trailing = "{\"schemaVersion\":2,\"name\":\"robot\",\"units\":\"SI\",\"metadata\":{},\"links\":[],\"joints\":[],\"profiles\":{}} true";
+        const string trailing = "{\"schemaVersion\":3,\"name\":\"robot\",\"units\":\"SI\",\"metadata\":{},\"links\":[],\"joints\":[],\"profiles\":{}} true";
         Assert.Throws<InvalidDataException>(() => RobotJson.Deserialize(trailing));
 
         JObject missingNested = JObject.Parse(RobotJson.Serialize(LoadFixtureRobot()));
@@ -209,7 +209,7 @@ public sealed class PipelineTests : IDisposable
     }
 
     [Fact]
-    public void RobotJsonV2RejectsImplicitScalarTypeCoercion()
+    public void RobotJsonV3RejectsImplicitScalarTypeCoercion()
     {
         JObject stringMass = JObject.Parse(RobotJson.Serialize(LoadFixtureRobot()));
         stringMass["links"]![0]!["inertial"]!["mass"] = "1.0";
@@ -237,10 +237,47 @@ public sealed class PipelineTests : IDisposable
         RobotDocument programmaticNonfinite = LoadFixtureRobot();
         programmaticNonfinite.Links[0].Inertial!.Mass = double.NaN;
         Assert.Throws<InvalidDataException>(() => RobotJson.Serialize(programmaticNonfinite));
+
+        RobotDocument nullDrive = LoadFixtureRobot();
+        nullDrive.Profiles.UsdSimulation.JointDrives.Add(null!);
+        Assert.Throws<InvalidDataException>(() => RobotJson.Serialize(nullDrive));
+
+        RobotDocument nullDriveList = LoadFixtureRobot();
+        nullDriveList.Profiles.UsdSimulation.JointDrives = null!;
+        Assert.Throws<InvalidDataException>(() => RobotJson.Serialize(nullDriveList));
+        Assert.Contains(
+            new RobotValidator().Validate(nullDriveList).Findings,
+            finding => finding.Code == "USD_DRIVES_NULL");
+
+        foreach (JToken invalidEntry in new JToken[]
+        {
+            new JValue(false),
+            new JValue(0),
+            new JValue("drive"),
+            JValue.CreateNull()
+        })
+        {
+            JObject malformedDrive = JObject.Parse(RobotJson.Serialize(LoadFixtureRobot()));
+            malformedDrive["profiles"]!["usdSimulation"]!["jointDrives"] = new JArray(invalidEntry);
+            Assert.Throws<InvalidDataException>(() => RobotJson.Deserialize(malformedDrive.ToString()));
+        }
+
+        foreach (JToken invalidContainer in new JToken[]
+        {
+            new JValue(false),
+            new JValue(0),
+            new JValue("drives"),
+            JValue.CreateNull()
+        })
+        {
+            JObject malformedDrives = JObject.Parse(RobotJson.Serialize(LoadFixtureRobot()));
+            malformedDrives["profiles"]!["usdSimulation"]!["jointDrives"] = invalidContainer;
+            Assert.Throws<InvalidDataException>(() => RobotJson.Deserialize(malformedDrives.ToString()));
+        }
     }
 
     [Fact]
-    public void StandaloneProfilesUseTheSameStrictV2JsonContract()
+    public void StandaloneProfilesUseTheSameStrictV3JsonContract()
     {
         JObject control = JObject.Parse(File.ReadAllText(Fixture("minimal_ros2_control_profile.json")));
         Assert.Equal(
@@ -288,6 +325,7 @@ public sealed class PipelineTests : IDisposable
         Assert.Equal("source", defaults.BaseMode);
         Assert.Equal("default", defaults.RobotType);
         Assert.False(defaults.AllowSelfCollision);
+        Assert.Equal("SI", defaults.GainUnits);
         Assert.Empty(defaults.JointDrives);
 
         defaults.BaseMode = "fixed";
@@ -306,6 +344,7 @@ public sealed class PipelineTests : IDisposable
         Assert.Equal("fixed", actual.BaseMode);
         Assert.Equal("wheeled", actual.RobotType);
         Assert.True(actual.AllowSelfCollision);
+        Assert.Equal("SI", actual.GainUnits);
         UsdJointDriveProfile drive = Assert.Single(actual.JointDrives);
         Assert.Equal("shoulder_joint", drive.Joint);
         Assert.Equal("position", drive.Mode);
@@ -313,6 +352,7 @@ public sealed class PipelineTests : IDisposable
         Assert.Equal(8.0, drive.Damping);
         JObject serialized = JObject.Parse(RobotJson.Serialize(robot));
         JObject usdSimulation = Assert.IsType<JObject>(serialized["profiles"]?["usdSimulation"]);
+        Assert.Equal("SI", (string)usdSimulation["gainUnits"]!);
         Assert.Null(usdSimulation["isaacSimVersion"]);
         Assert.Null(usdSimulation["isaacLabVersion"]);
     }
@@ -323,6 +363,7 @@ public sealed class PipelineTests : IDisposable
         RobotDocument robot = LoadFixtureRobot();
         robot.Profiles.UsdSimulation.BaseMode = "anchored_by_guess";
         robot.Profiles.UsdSimulation.RobotType = "marketing_category";
+        robot.Profiles.UsdSimulation.GainUnits = "degrees";
         robot.Profiles.UsdSimulation.JointDrives.Add(new UsdJointDriveProfile
         {
             Joint = "missing_joint",
@@ -336,19 +377,53 @@ public sealed class PipelineTests : IDisposable
             Mode = "effort",
             Stiffness = 10.0
         });
+        robot.Profiles.UsdSimulation.JointDrives.Add(new UsdJointDriveProfile
+        {
+            Joint = "missing_velocity_joint",
+            Mode = "velocity",
+            Stiffness = 10.0,
+            Damping = 2.0
+        });
 
         ValidationReport report = new RobotValidator().Validate(robot);
         Assert.Contains(report.Findings, finding => finding.Code == "USD_BASE_MODE");
         Assert.Contains(report.Findings, finding => finding.Code == "USD_ROBOT_TYPE");
+        Assert.Contains(report.Findings, finding => finding.Code == "USD_GAIN_UNITS");
         Assert.Contains(report.Findings, finding => finding.Code == "USD_DRIVE_JOINT");
         Assert.Contains(report.Findings, finding => finding.Code == "USD_DRIVE_STIFFNESS");
         Assert.Contains(report.Findings, finding => finding.Code == "USD_DRIVE_DAMPING");
         Assert.Contains(report.Findings, finding => finding.Code == "USD_DRIVE_GAIN_MODE");
+        Assert.Contains(report.Findings, finding => finding.Code == "USD_DRIVE_VELOCITY_STIFFNESS");
 
         robot.Profiles.UsdSimulation = new UsdSimulationProfile();
         Assert.DoesNotContain(
             new RobotValidator().Validate(robot).Findings,
             finding => finding.Code.StartsWith("USD_", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void VelocityDriveAllowsOnlyEffectiveZeroStiffness()
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        robot.Profiles.UsdSimulation.JointDrives.Add(new UsdJointDriveProfile
+        {
+            Joint = "shoulder_joint",
+            Mode = "velocity",
+            Damping = 2.0
+        });
+        Assert.DoesNotContain(
+            new RobotValidator().Validate(robot).Findings,
+            finding => finding.Code == "USD_DRIVE_VELOCITY_STIFFNESS");
+
+        robot.Profiles.UsdSimulation.JointDrives[0].Stiffness = 0.0;
+        Assert.DoesNotContain(
+            new RobotValidator().Validate(robot).Findings,
+            finding => finding.Code == "USD_DRIVE_VELOCITY_STIFFNESS");
+
+        robot.Profiles.UsdSimulation.JointDrives[0].Stiffness = 0.01;
+        Assert.Contains(
+            new RobotValidator().Validate(robot).Findings,
+            finding => finding.Code == "USD_DRIVE_VELOCITY_STIFFNESS");
     }
 
     [Fact]
@@ -393,14 +468,64 @@ public sealed class PipelineTests : IDisposable
     {
         const string legacy = "{\"schemaVersion\":1,\"robotName\":\"legacy\",\"links\":[{\"name\":\"base\"}],\"joints\":[]}";
         JObject migrated = RobotSchemaMigrator.Migrate(JObject.Parse(legacy));
-        Assert.Equal(2, (int)migrated["schemaVersion"]!);
+        Assert.Equal(3, (int)migrated["schemaVersion"]!);
         Assert.Equal("legacy", (string)migrated["name"]!);
         Assert.NotNull(migrated["profiles"]);
         Assert.StartsWith("link-", (string)migrated["links"]![0]!["id"]!);
         Assert.Equal("migrated_config", (string)migrated["links"]![0]!["source"]!["kind"]!);
+        Assert.Equal("SI", (string)migrated["profiles"]!["usdSimulation"]!["gainUnits"]!);
 
         const string malformed = "{\"schemaVersion\":1,\"robotName\":\"legacy\",\"links\":[null],\"joints\":[]}";
         Assert.Throws<InvalidDataException>(() => RobotSchemaMigrator.Migrate(JObject.Parse(malformed)));
+    }
+
+    [Fact]
+    public void RobotJsonMigratesHistoricalAndExtendedV2DocumentsToV3()
+    {
+        JObject historical = JObject.Parse(RobotJson.Serialize(LoadFixtureRobot()));
+        historical["schemaVersion"] = 2;
+        ((JObject)historical["profiles"]!).Remove("usdSimulation");
+
+        RobotDocument historicalResult = RobotJson.Deserialize(historical.ToString());
+        Assert.Equal(3, historicalResult.SchemaVersion);
+        Assert.Equal("SI", historicalResult.Profiles.UsdSimulation.GainUnits);
+        Assert.Empty(historicalResult.Profiles.UsdSimulation.JointDrives);
+
+        JObject extended = JObject.Parse(RobotJson.Serialize(LoadFixtureRobot()));
+        extended["schemaVersion"] = 2;
+        JObject simulation = (JObject)extended["profiles"]!["usdSimulation"]!;
+        simulation.Remove("gainUnits");
+        simulation["baseMode"] = "fixed";
+        simulation["allowSelfCollision"] = true;
+
+        RobotDocument extendedResult = RobotJson.Deserialize(extended.ToString());
+        Assert.Equal(3, extendedResult.SchemaVersion);
+        Assert.Equal("fixed", extendedResult.Profiles.UsdSimulation.BaseMode);
+        Assert.True(extendedResult.Profiles.UsdSimulation.AllowSelfCollision);
+        Assert.Equal("SI", extendedResult.Profiles.UsdSimulation.GainUnits);
+    }
+
+    [Fact]
+    public void RobotSchemaFilesKeepV2StrictAndDeclareV3SimulationContract()
+    {
+        JObject v2 = JObject.Parse(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "schemas", "robot.schema.v2.json")));
+        JObject v3 = JObject.Parse(File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "schemas", "robot.schema.v3.json")));
+
+        Assert.Equal(2, (int)v2["properties"]!["schemaVersion"]!["const"]!);
+        Assert.Null(v2["$defs"]!["usdSimulationProfile"]);
+        Assert.Null(v2["$defs"]!["profiles"]!["properties"]!["usdSimulation"]);
+
+        Assert.Equal(3, (int)v3["properties"]!["schemaVersion"]!["const"]!);
+        JArray requiredProfiles = (JArray)v3["$defs"]!["profiles"]!["required"]!;
+        Assert.Contains("usdSimulation", requiredProfiles.Values<string>());
+        Assert.Equal(
+            "SI",
+            (string)v3["$defs"]!["usdSimulationProfile"]!["properties"]!["gainUnits"]!["const"]!);
+        Assert.Equal(
+            0.0,
+            (double)v3["$defs"]!["usdJointDriveProfile"]!["allOf"]![1]!["then"]!["properties"]!["stiffness"]!["const"]!);
     }
 
     [Fact]

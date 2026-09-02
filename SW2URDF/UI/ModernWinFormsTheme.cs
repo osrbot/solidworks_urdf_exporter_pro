@@ -153,6 +153,54 @@ namespace SW2URDF.UI
             }
         }
 
+        internal void InvalidatePageLayout(Control descendant)
+        {
+            TabPage page = FindOwningPage(descendant);
+            if (page == null)
+            {
+                return;
+            }
+
+            RestoreCachedPageLayout(page);
+        }
+
+        internal void RebuildPageLayout(Control descendant)
+        {
+            TabPage page = FindOwningPage(descendant);
+            if (page == null)
+            {
+                return;
+            }
+
+            RestoreCachedPageLayout(page);
+            Rectangle pageBounds = DisplayRectangle;
+            if (pageBounds.Width <= 0 || pageBounds.Height <= 0)
+            {
+                return;
+            }
+            if (page.Bounds != pageBounds)
+            {
+                page.Bounds = pageBounds;
+            }
+            page.PerformLayout();
+            CachePageLayout(page);
+        }
+
+        private TabPage FindOwningPage(Control descendant)
+        {
+            for (Control current = descendant;
+                current != null;
+                current = current.Parent)
+            {
+                TabPage page = current as TabPage;
+                if (page != null && TabPages.Contains(page))
+                {
+                    return page;
+                }
+            }
+            return null;
+        }
+
         private void CachePageLayout(TabPage page)
         {
             ModernTabPage modernPage = page as ModernTabPage;
@@ -200,20 +248,51 @@ namespace SW2URDF.UI
             {
                 foreach (List<TableLayoutPanel> layouts in cachedLayouts.Values)
                 {
-                    for (int index = layouts.Count - 1; index >= 0; index--)
-                    {
-                        TableLayoutPanel layout = layouts[index];
-                        if (!layout.IsDisposed)
-                        {
-                            layout.AutoSize = true;
-                        }
-                    }
+                    RestoreAutoSizeLayouts(layouts);
                 }
                 cachedLayouts.Clear();
             }
             finally
             {
                 restoringCachedLayouts = false;
+            }
+        }
+
+        private void RestoreCachedPageLayout(TabPage page)
+        {
+            if (page == null || restoringCachedLayouts)
+            {
+                return;
+            }
+
+            List<TableLayoutPanel> layouts;
+            if (!cachedLayouts.TryGetValue(page, out layouts))
+            {
+                return;
+            }
+
+            restoringCachedLayouts = true;
+            try
+            {
+                RestoreAutoSizeLayouts(layouts);
+                cachedLayouts.Remove(page);
+            }
+            finally
+            {
+                restoringCachedLayouts = false;
+            }
+        }
+
+        private static void RestoreAutoSizeLayouts(
+            IList<TableLayoutPanel> layouts)
+        {
+            for (int index = layouts.Count - 1; index >= 0; index--)
+            {
+                TableLayoutPanel layout = layouts[index];
+                if (!layout.IsDisposed)
+                {
+                    layout.AutoSize = true;
+                }
             }
         }
 

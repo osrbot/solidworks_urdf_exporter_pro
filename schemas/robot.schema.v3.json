@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://osrbot.com/schemas/osurdf/robot.schema.v2.json",
-  "title": "OSURDF Robot Document v2",
+  "$id": "https://osrbot.com/schemas/osurdf/robot.schema.v3.json",
+  "title": "OSURDF Robot Document v3",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "name", "units", "metadata", "links", "joints", "profiles"],
   "properties": {
-    "schemaVersion": { "const": 2 },
+    "schemaVersion": { "const": 3 },
     "name": { "$ref": "#/$defs/nonEmptyString" },
     "units": { "const": "SI" },
     "metadata": { "$ref": "#/$defs/metadata" },
@@ -409,16 +409,81 @@
         { "if": { "properties": { "enabled": { "const": true } } }, "then": { "required": ["isaacLabVersion"] } }
       ]
     },
+    "usdJointDriveProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["joint", "mode"],
+      "properties": {
+        "joint": { "$ref": "#/$defs/nonEmptyString" },
+        "mode": { "enum": ["passive", "position", "velocity", "effort"] },
+        "stiffness": {
+          "type": "number",
+          "minimum": 0,
+          "description": "SI gain. Angular joints use torque per radian; velocity mode permits only zero and omission is treated as zero."
+        },
+        "damping": {
+          "type": "number",
+          "minimum": 0,
+          "description": "SI gain. Angular joints use torque per radian per second."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "mode": { "enum": ["passive", "effort"] } },
+            "required": ["mode"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["stiffness"] },
+                { "required": ["damping"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "mode": { "const": "velocity" } },
+            "required": ["mode"]
+          },
+          "then": {
+            "properties": { "stiffness": { "const": 0 } }
+          }
+        }
+      ]
+    },
+    "usdSimulationProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseMode", "robotType", "allowSelfCollision", "gainUnits", "jointDrives"],
+      "properties": {
+        "baseMode": { "enum": ["source", "fixed", "floating"] },
+        "robotType": {
+          "enum": ["default", "end_effector", "manipulator", "humanoid", "wheeled", "holonomic", "quadruped", "mobile_manipulator", "aerial"]
+        },
+        "allowSelfCollision": { "type": "boolean" },
+        "gainUnits": {
+          "const": "SI",
+          "description": "All configured gains use SI units; angular joint gains are expressed per radian."
+        },
+        "jointDrives": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/usdJointDriveProfile" }
+        }
+      }
+    },
     "profiles": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["package", "ros2", "ros1", "isaac", "isaacLab"],
+      "required": ["package", "ros2", "ros1", "isaac", "isaacLab", "usdSimulation"],
       "properties": {
         "package": { "$ref": "#/$defs/packageProfile" },
         "ros2": { "$ref": "#/$defs/ros2Profile" },
         "ros1": { "$ref": "#/$defs/ros1Profile" },
         "isaac": { "$ref": "#/$defs/isaacProfile" },
-        "isaacLab": { "$ref": "#/$defs/isaacLabProfile" }
+        "isaacLab": { "$ref": "#/$defs/isaacLabProfile" },
+        "usdSimulation": { "$ref": "#/$defs/usdSimulationProfile" }
       }
     }
   }

@@ -459,9 +459,25 @@ namespace OSURDF.Core.Validation
                     "$.profiles.usdSimulation.robotType",
                     "OpenUSD robot type is not one of the supported stable categories.");
             }
+            if (!string.Equals(profile.GainUnits, RobotSchema.UnitSystem, StringComparison.Ordinal))
+            {
+                report.Add(
+                    ValidationSeverity.Error,
+                    "USD_GAIN_UNITS",
+                    "$.profiles.usdSimulation.gainUnits",
+                    "OpenUSD joint-drive gains must use SI units; angular gains are expressed per radian.");
+            }
 
             HashSet<string> seenJoints = new HashSet<string>(StringComparer.Ordinal);
             List<JointDocument> joints = robot.Joints ?? new List<JointDocument>();
+            if (profile.JointDrives == null)
+            {
+                report.Add(
+                    ValidationSeverity.Error,
+                    "USD_DRIVES_NULL",
+                    "$.profiles.usdSimulation.jointDrives",
+                    "OpenUSD jointDrives must be an array.");
+            }
             List<UsdJointDriveProfile> drives = profile.JointDrives ?? new List<UsdJointDriveProfile>();
             for (int index = 0; index < drives.Count; index++)
             {
@@ -518,6 +534,16 @@ namespace OSURDF.Core.Validation
                         "USD_DRIVE_STIFFNESS",
                         path + ".stiffness",
                         "OpenUSD drive stiffness must be finite and non-negative when configured.");
+                }
+                if (string.Equals(drive.Mode, "velocity", StringComparison.Ordinal) &&
+                    drive.Stiffness.HasValue && IsFinite(drive.Stiffness.Value) &&
+                    drive.Stiffness.Value != 0.0)
+                {
+                    report.Add(
+                        ValidationSeverity.Error,
+                        "USD_DRIVE_VELOCITY_STIFFNESS",
+                        path + ".stiffness",
+                        "OpenUSD velocity drive stiffness must be zero; omit it or set it to 0.");
                 }
                 if (drive.Damping.HasValue && (!IsFinite(drive.Damping.Value) || drive.Damping.Value < 0.0))
                 {

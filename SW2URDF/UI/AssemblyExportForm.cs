@@ -1212,6 +1212,16 @@ namespace SW2URDF.UI
 
         private void UpdateRosPackageNameHint()
         {
+            UpdateRosPackageNameHintCore(false);
+        }
+
+        private void UpdateRosPackageNameHintForTargetChange()
+        {
+            UpdateRosPackageNameHintCore(true);
+        }
+
+        private void UpdateRosPackageNameHintCore(bool forceLayoutRebuild)
+        {
             string sanitized = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
             string robotName = Exporter == null
                 ? sanitized
@@ -1237,16 +1247,34 @@ namespace SW2URDF.UI
             {
                 paths.Add("MuJoCo/" + robotName);
             }
-            labelRosPackageNameHint.Text = paths.Count == 0
+            string hint = paths.Count == 0
                 ? ChineseUiText.Translate("No target selected", "未选择输出目标")
                 : string.Join(" | ", paths);
-            packagePathToolTip.SetToolTip(
-                labelRosPackageNameHint,
-                paths.Count == 0
-                    ? ChineseUiText.Translate(
-                        "Select an output target to see its destination.",
-                        "请选择输出目标以查看对应目录。")
-                    : string.Join(" | ", paths));
+            string toolTip = paths.Count == 0
+                ? ChineseUiText.Translate(
+                    "Select an output target to see its destination.",
+                    "请选择输出目标以查看对应目录。")
+                : string.Join(" | ", paths);
+            bool rebuildLayout = forceLayoutRebuild || !String.Equals(
+                labelRosPackageNameHint.Text,
+                hint,
+                StringComparison.Ordinal);
+            if (rebuildLayout)
+            {
+                InvalidateModernModelPageLayout();
+            }
+            try
+            {
+                labelRosPackageNameHint.Text = hint;
+                packagePathToolTip.SetToolTip(labelRosPackageNameHint, toolTip);
+            }
+            finally
+            {
+                if (rebuildLayout)
+                {
+                    RebuildModernModelPageLayout();
+                }
+            }
         }
 
         private void InitializeExportTargetControls()
@@ -1260,33 +1288,45 @@ namespace SW2URDF.UI
             ExportTargetOptions options = restore
                 ? existing
                 : ExportTargetOptions.RecommendedDefaults(Exporter.RosPackageName);
-            modernRos1CheckBox.Checked = options.ExportRos1Legacy;
-            modernRos2CheckBox.Checked = options.ExportRos2;
-            modernUsdAssetCheckBox.Checked = options.ExportUsdAsset;
-            modernMjcfAssetCheckBox.Checked = options.ExportMjcfAsset;
-            modernUsdSimulationProfile =
-                ExportTargetOptions.CloneUsdSimulation(options.UsdSimulation);
+            loadingModernExportTargets = true;
+            try
+            {
+                modernRos1CheckBox.Checked = options.ExportRos1Legacy;
+                modernRos2CheckBox.Checked = options.ExportRos2;
+                modernUsdAssetCheckBox.Checked = options.ExportUsdAsset;
+                modernMjcfAssetCheckBox.Checked = options.ExportMjcfAsset;
+                modernUsdSimulationProfile =
+                    ExportTargetOptions.CloneUsdSimulation(options.UsdSimulation);
+                if (modernUsdSettingsButton != null)
+                {
+                    modernUsdSettingsButton.Enabled = options.ExportUsdAsset;
+                }
+                modernPackageVersionTextBox.Text = options.PackageVersion;
+                modernPackageDescriptionTextBox.Text = options.Description;
+                modernMaintainerNameTextBox.Text = options.MaintainerName;
+                modernMaintainerEmailTextBox.Text = options.MaintainerEmail;
+                modernModelLicenseTextBox.Text = options.ModelLicense;
+                modernModelAuthorTextBox.Text = options.ModelAuthor;
+            }
+            finally
+            {
+                loadingModernExportTargets = false;
+            }
             if (modernUsdSettingsButton != null)
             {
-                modernUsdSettingsButton.Enabled = options.ExportUsdAsset;
                 packagePathToolTip.SetToolTip(
                     modernUsdSettingsButton,
                     ChineseUiText.Translate(
                         "Configure base semantics, self-collision, robot type, and explicit one-DOF Joint drive intent. No Isaac Sim version is required.",
                         "配置基座语义、自碰撞、机器人类型及单自由度 Joint 的显式驱动意图；无需填写 Isaac Sim 版本。"));
             }
-            modernPackageVersionTextBox.Text = options.PackageVersion;
-            modernPackageDescriptionTextBox.Text = options.Description;
-            modernMaintainerNameTextBox.Text = options.MaintainerName;
-            modernMaintainerEmailTextBox.Text = options.MaintainerEmail;
-            modernModelLicenseTextBox.Text = options.ModelLicense;
-            modernModelAuthorTextBox.Text = options.ModelAuthor;
             packagePathToolTip.SetToolTip(
                 modernModelLicenseTextBox,
                 ChineseUiText.Translate(
                     "NOASSERTION means the model license has not been confirmed. Review it before publishing.",
                     "NOASSERTION 表示模型许可证尚未确认；公开发布前必须审核。"));
             SynchronizeAssetMeshFormatControls();
+            UpdateRosPackageNameHintForTargetChange();
         }
 
         private ExportTargetOptions CaptureExportTargetOptions()
@@ -1319,6 +1359,7 @@ namespace SW2URDF.UI
             openUsdSettingsDialog.LoadSettings(
                 modernUsdSimulationProfile,
                 BuildOpenUsdJointDescriptors(BaseNode));
+            openUsdSettingsDialog.PrepareForOwner(this);
             if (openUsdSettingsDialog.ShowDialog(this) == DialogResult.OK)
             {
                 modernUsdSimulationProfile = ExportTargetOptions.CloneUsdSimulation(
@@ -1977,13 +2018,15 @@ namespace SW2URDF.UI
                     buttonShowInertiaPreview.Text = ChineseUiText.Translate(
                         "Hide equivalent inertia cuboid",
                         "隐藏惯性等效长方体");
-                    labelInertiaPreviewStatus.Text = String.Format(
-                        ChineseUiText.Translate(
-                            "Equivalent cuboid X / Y / Z: {0:0.#}/{1:0.#}/{2:0.#} mm",
-                            "等效长方体 X / Y / Z：{0:0.#}/{1:0.#}/{2:0.#} mm"),
-                        ellipsoid.EquivalentBoxDimensions[0] * 1000.0,
-                        ellipsoid.EquivalentBoxDimensions[1] * 1000.0,
-                        ellipsoid.EquivalentBoxDimensions[2] * 1000.0);
+                    SetModernLinkStatusText(
+                        labelInertiaPreviewStatus,
+                        String.Format(
+                            ChineseUiText.Translate(
+                                "Equivalent cuboid X / Y / Z: {0:0.#}/{1:0.#}/{2:0.#} mm",
+                                "等效长方体 X / Y / Z：{0:0.#}/{1:0.#}/{2:0.#} mm"),
+                            ellipsoid.EquivalentBoxDimensions[0] * 1000.0,
+                            ellipsoid.EquivalentBoxDimensions[1] * 1000.0,
+                            ellipsoid.EquivalentBoxDimensions[2] * 1000.0));
                     logger.Info(String.Format(
                         "Displayed equivalent inertia cuboid for link {0}: dimensions {1:G6}, {2:G6}, {3:G6} m",
                         node.Link.Name,
@@ -1997,13 +2040,15 @@ namespace SW2URDF.UI
                         node.Link.Name + " [" + failureKind + "]: " + error);
                     bool physicalInertiaInvalid =
                         failureKind == InertiaPreviewFailureKind.InvalidPhysicalInertia;
-                    labelInertiaPreviewStatus.Text = physicalInertiaInvalid
-                        ? ChineseUiText.Translate(
-                            "Invalid physical inertia",
-                            "\u7269\u7406\u60ef\u6027\u975e\u6cd5")
-                        : ChineseUiText.Translate(
-                            "Inertia overlay display failed",
-                            "\u60ef\u6027\u53e0\u52a0\u5c42\u663e\u793a\u5931\u8d25");
+                    SetModernLinkStatusText(
+                        labelInertiaPreviewStatus,
+                        physicalInertiaInvalid
+                            ? ChineseUiText.Translate(
+                                "Invalid physical inertia",
+                                "\u7269\u7406\u60ef\u6027\u975e\u6cd5")
+                            : ChineseUiText.Translate(
+                                "Inertia overlay display failed",
+                                "\u60ef\u6027\u53e0\u52a0\u5c42\u663e\u793a\u5931\u8d25"));
                     MessageBox.Show(
                         (physicalInertiaInvalid
                             ? ChineseUiText.Translate(
@@ -2081,16 +2126,13 @@ namespace SW2URDF.UI
                     out string status,
                     out string error))
                 {
-                    labelCollisionPreviewStatus.Text = status;
                     buttonShowCollisionPreview.Text = collisionPreview.IsVisible
                         ? ChineseUiText.Translate("Hide collision overlay", "隐藏碰撞体")
                         : ChineseUiText.Translate("Refresh collision", "刷新碰撞体");
+                    SetModernLinkStatusText(labelCollisionPreviewStatus, status);
                     return;
                 }
 
-                labelCollisionPreviewStatus.Text = String.IsNullOrWhiteSpace(error)
-                    ? status
-                    : error;
                 if (!String.IsNullOrWhiteSpace(error))
                 {
                     logger.Warn("Collision preview failed for link " + node.Link.Name + ": " + error);
@@ -2098,13 +2140,18 @@ namespace SW2URDF.UI
                 buttonShowCollisionPreview.Text = ChineseUiText.Translate(
                     "Refresh collision",
                     "刷新碰撞体");
+                SetModernLinkStatusText(
+                    labelCollisionPreviewStatus,
+                    String.IsNullOrWhiteSpace(error) ? status : error);
             }
             catch (Exception exception)
             {
                 collisionPreview.Hide();
-                labelCollisionPreviewStatus.Text = ChineseUiText.Translate(
-                    "Collision preview failed",
-                    "碰撞体预览失败");
+                SetModernLinkStatusText(
+                    labelCollisionPreviewStatus,
+                    ChineseUiText.Translate(
+                        "Collision preview failed",
+                        "碰撞体预览失败"));
                 logger.Warn("Could not refresh collision preview for link " + node.Link.Name, exception);
             }
         }
@@ -2124,9 +2171,11 @@ namespace SW2URDF.UI
             }
             if (labelCollisionPreviewStatus != null)
             {
-                labelCollisionPreviewStatus.Text = ChineseUiText.Translate(
-                    "Overlay is not displayed",
-                    "未显示碰撞体叠加层");
+                SetModernLinkStatusText(
+                    labelCollisionPreviewStatus,
+                    ChineseUiText.Translate(
+                        "Overlay is not displayed",
+                        "未显示碰撞体叠加层"));
             }
         }
 
@@ -2136,9 +2185,11 @@ namespace SW2URDF.UI
             buttonShowInertiaPreview.Text = ChineseUiText.Translate(
                 "Show equivalent inertia cuboid",
                 "显示惯性等效长方体");
-            labelInertiaPreviewStatus.Text = ChineseUiText.Translate(
-                "Equivalent cuboid X / Y / Z dimensions (mm)",
-                "惯性等效长方体 X / Y / Z 尺寸 (mm)");
+            SetModernLinkStatusText(
+                labelInertiaPreviewStatus,
+                ChineseUiText.Translate(
+                    "Equivalent cuboid X / Y / Z dimensions (mm)",
+                    "惯性等效长方体 X / Y / Z 尺寸 (mm)"));
         }
 
         private void AssemblyExportFormClosed(object sender, FormClosedEventArgs e)
@@ -2283,9 +2334,11 @@ namespace SW2URDF.UI
         {
             double ratio = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
             labelMeshReductionValue.Text = ratio.ToString("0.00", URDFAttribute.URDFNumberFormat);
-            labelEstimatedMeshSize.Text = ChineseUiText.Translate(
-                "Rough STL estimate: logged on export",
-                "\u7c97\u7565 STL \u4f30\u7b97\uff1a\u5bfc\u51fa\u65f6\u5199\u5165\u65e5\u5fd7");
+            SetModernLinkStatusText(
+                labelEstimatedMeshSize,
+                ChineseUiText.Translate(
+                    "Rough STL estimate: logged on export",
+                    "\u7c97\u7565 STL \u4f30\u7b97\uff1a\u5bfc\u51fa\u65f6\u5199\u5165\u65e5\u5fd7"));
         }
 
         private static int MeshReductionRatioToTrackBarValue(double ratio)

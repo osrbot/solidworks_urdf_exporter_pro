@@ -60,6 +60,8 @@ namespace SW2URDF.UI
 
             TableLayoutPanel root = new TableLayoutPanel
             {
+                Name = "openUsdRoot",
+                AutoScroll = true,
                 Dock = DockStyle.Fill,
                 BackColor = ModernWinFormsTheme.Background,
                 ColumnCount = 1,
@@ -171,6 +173,7 @@ namespace SW2URDF.UI
 
             FlowLayoutPanel footer = new FlowLayoutPanel
             {
+                Name = "openUsdFooter",
                 AutoSize = true,
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.RightToLeft,
@@ -207,6 +210,58 @@ namespace SW2URDF.UI
         }
 
         internal UsdSimulationProfile Settings { get; private set; }
+
+        internal void PrepareForOwner(Control owner)
+        {
+            Screen screen = owner == null
+                ? Screen.FromControl(this)
+                : Screen.FromControl(owner);
+            ConstrainToWorkingArea(screen.WorkingArea);
+        }
+
+        internal void ConstrainToWorkingArea(Rectangle workingArea)
+        {
+            if (workingArea.Width <= 0 || workingArea.Height <= 0)
+            {
+                return;
+            }
+
+            Size requestedMinimum = MinimumSize;
+            int nonClientWidth = Math.Max(0, Width - ClientSize.Width);
+            int nonClientHeight = Math.Max(0, Height - ClientSize.Height);
+            Size maximumClient = new Size(
+                Math.Max(1, workingArea.Width - nonClientWidth),
+                Math.Max(1, workingArea.Height - nonClientHeight));
+
+            MinimumSize = Size.Empty;
+            ClientSize = new Size(
+                Math.Min(ClientSize.Width, maximumClient.Width),
+                Math.Min(ClientSize.Height, maximumClient.Height));
+            MinimumSize = new Size(
+                Math.Min(requestedMinimum.Width, workingArea.Width),
+                Math.Min(requestedMinimum.Height, workingArea.Height));
+
+            int left = Math.Max(
+                workingArea.Left,
+                Math.Min(Left, workingArea.Right - Width));
+            int top = Math.Max(
+                workingArea.Top,
+                Math.Min(Top, workingArea.Bottom - Height));
+            Location = new Point(left, top);
+            PerformLayout();
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            if (Visible)
+            {
+                Screen screen = Owner == null
+                    ? Screen.FromControl(this)
+                    : Screen.FromControl(Owner);
+                ConstrainToWorkingArea(screen.WorkingArea);
+            }
+            base.OnVisibleChanged(e);
+        }
 
         internal void LoadSettings(
             UsdSimulationProfile settings,
@@ -270,6 +325,7 @@ namespace SW2URDF.UI
                 RobotType = SelectedValue(robotTypeComboBox, "default"),
                 AllowSelfCollision = selfCollisionCheckBox.Checked
             };
+            bool valid = true;
             foreach (DataGridViewRow row in jointDriveGrid.Rows)
             {
                 string mode = DriveModeValue(Convert.ToString(
@@ -277,16 +333,43 @@ namespace SW2URDF.UI
                     CultureInfo.CurrentCulture));
                 if (mode == "passive")
                 {
+                    ClearGainErrors(row);
                     continue;
                 }
                 double? stiffness = null;
                 double? damping = null;
-                bool hasActiveDrive = mode == "position" || mode == "velocity";
-                if (hasActiveDrive &&
-                    (!TryReadGain(row, "stiffnessColumn", out stiffness) ||
-                     !TryReadGain(row, "dampingColumn", out damping)))
+                bool rowValid = true;
+                if (mode == "position")
                 {
-                    return false;
+                    bool stiffnessValid = TryReadGain(
+                        row,
+                        "stiffnessColumn",
+                        out stiffness);
+                    bool dampingValid = TryReadGain(
+                        row,
+                        "dampingColumn",
+                        out damping);
+                    rowValid = stiffnessValid && dampingValid;
+                }
+                else if (mode == "velocity")
+                {
+                    DataGridViewCell stiffnessCell = row.Cells["stiffnessColumn"];
+                    stiffnessCell.Value = "0";
+                    stiffnessCell.ErrorText = String.Empty;
+                    stiffness = 0.0;
+                    rowValid = TryReadGain(
+                        row,
+                        "dampingColumn",
+                        out damping);
+                }
+                else
+                {
+                    ClearGainErrors(row);
+                }
+                valid &= rowValid;
+                if (!rowValid)
+                {
+                    continue;
                 }
                 settings.JointDrives.Add(new UsdJointDriveProfile
                 {
@@ -298,7 +381,7 @@ namespace SW2URDF.UI
                     Damping = damping
                 });
             }
-            return true;
+            return valid;
         }
 
         private void ConfirmButtonClick(object sender, EventArgs e)
@@ -468,17 +551,34 @@ namespace SW2URDF.UI
             string mode = DriveModeValue(Convert.ToString(
                 row.Cells["driveModeColumn"].Value,
                 CultureInfo.CurrentCulture));
-            bool editable = mode == "position" || mode == "velocity";
-            SetCellEditable(row.Cells["stiffnessColumn"], editable);
-            SetCellEditable(row.Cells["dampingColumn"], editable);
+            bool position = mode == "position";
+            bool velocity = mode == "velocity";
+            DataGridViewCell stiffness = row.Cells["stiffnessColumn"];
+            DataGridViewCell damping = row.Cells["dampingColumn"];
+            if (velocity)
+            {
+                stiffness.Value = "0";
+            }
+            SetCellEditable(stiffness, position);
+            SetCellEditable(damping, position || velocity);
         }
 
         private static void SetCellEditable(DataGridViewCell cell, bool editable)
         {
             cell.ReadOnly = !editable;
+            if (!editable)
+            {
+                cell.ErrorText = String.Empty;
+            }
             cell.Style.BackColor = editable
                 ? ModernWinFormsTheme.Surface
                 : ModernWinFormsTheme.SurfaceAlt;
+        }
+
+        private static void ClearGainErrors(DataGridViewRow row)
+        {
+            row.Cells["stiffnessColumn"].ErrorText = String.Empty;
+            row.Cells["dampingColumn"].ErrorText = String.Empty;
         }
 
         private static string[] DriveModeDisplays()

@@ -225,6 +225,7 @@ jobs:
               (any(.payloadInputs[]; .path == "THIRD_PARTY_LICENSES/APACHE-2.0.txt")) and
               (any(.payloadInputs[]; .path == "THIRD_PARTY_LICENSES/MIT.txt")) and
               (any(.payloadInputs[]; .path == "schemas/robot.schema.v2.json")) and
+              (any(.payloadInputs[]; .path == "schemas/robot.schema.v3.json")) and
               (all(.payloadInputs[];
                 (.path | test("^schemas/(isaac-profile|isaaclab-profile|isaaclab-actuator-profile)")) | not)) and
               (any(.payloadInputs[]; .path == "tools/usd_adapter/osurdf_usd_adapter.py")) and
