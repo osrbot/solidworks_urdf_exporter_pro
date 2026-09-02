@@ -324,6 +324,16 @@ namespace SW2URDF.Test
                     Control jointHeader = GetControl<Control>(form, "modernJointHeader");
                     Button next = GetControl<Button>(form, "buttonJointNext");
                     Button finish = GetControl<Button>(form, "buttonLinksFinish");
+                    TableLayoutPanel jointIdentityAndReference =
+                        GetControl<TableLayoutPanel>(
+                            form,
+                            "modernJointIdentityAndReferenceGrid");
+                    Control jointIdentity = GetControl<Control>(
+                        form,
+                        "modernJointIdentityCard");
+                    Control referenceGeometry = GetControl<Control>(
+                        form,
+                        "modernReferenceGeometryCard");
                     int originalBodyPadding = jointBody.Padding.Left;
                     int originalHeaderPadding = jointHeader.Padding.Left;
                     float originalTreeColumnWidth = jointBody.ColumnStyles[0].Width;
@@ -367,6 +377,17 @@ namespace SW2URDF.Test
                     AssertContainedIn(
                         GetControl<Button>(form, "buttonUsageGuide"),
                         jointHeader);
+                    AssertContainedIn(jointIdentity, jointIdentityAndReference);
+                    AssertContainedIn(referenceGeometry, jointIdentityAndReference);
+                    Assert.Equal(
+                        BoundsRelativeTo(jointIdentity, jointIdentityAndReference).Width,
+                        BoundsRelativeTo(referenceGeometry, jointIdentityAndReference).Width);
+                    AssertContainedIn(
+                        GetControl<ComboBox>(form, "comboBoxOrigin"),
+                        referenceGeometry);
+                    AssertContainedIn(
+                        GetControl<ComboBox>(form, "comboBoxAxis"),
+                        referenceGeometry);
                     AssertFooterButtonsFitText(form);
                 }
                 finally
@@ -703,6 +724,90 @@ namespace SW2URDF.Test
                 Assert.True(parentBounds.Right <= arrowBounds.Left);
                 Assert.True(arrowBounds.Right <= childBounds.Left);
                 Assert.False(parentBounds.IntersectsWith(childBounds));
+            }
+            finally
+            {
+                form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestJointIdentityAndReferenceGeometryUseStableFullWidthRows()
+        {
+            AssemblyExportForm form = (AssemblyExportForm)
+                Activator.CreateInstance(typeof(AssemblyExportForm), true);
+
+            try
+            {
+                form.ClientSize = new Size(1344, 812);
+                ShowModernAssemblyPage(form, "Joint");
+                TabControl sections = GetControl<TabControl>(
+                    form,
+                    "modernJointSections");
+                sections.SelectedIndex = 0;
+                form.PerformLayout();
+
+                TableLayoutPanel stack = GetControl<TableLayoutPanel>(
+                    form,
+                    "modernJointIdentityAndReferenceGrid");
+                Control identity = GetControl<Control>(form, "modernJointIdentityCard");
+                Control reference = GetControl<Control>(form, "modernReferenceGeometryCard");
+                TableLayoutPanel referenceFields = GetControl<TableLayoutPanel>(
+                    form,
+                    "modernReferenceGeometryFields");
+                Control originAndAxis = GetControl<Control>(form, "modernOriginAndAxisGrid");
+                ComboBox origin = GetControl<ComboBox>(form, "comboBoxOrigin");
+                ComboBox axis = GetControl<ComboBox>(form, "comboBoxAxis");
+
+                Assert.Equal(1, stack.ColumnCount);
+                Assert.Equal(2, stack.RowCount);
+                Assert.Equal(0, stack.GetPositionFromControl(identity).Column);
+                Assert.Equal(0, stack.GetPositionFromControl(identity).Row);
+                Assert.Equal(0, stack.GetPositionFromControl(reference).Column);
+                Assert.Equal(1, stack.GetPositionFromControl(reference).Row);
+
+                Rectangle identityBounds = BoundsRelativeTo(identity, stack);
+                Rectangle referenceBounds = BoundsRelativeTo(reference, stack);
+                Assert.Equal(identityBounds.Left, referenceBounds.Left);
+                Assert.Equal(identityBounds.Width, referenceBounds.Width);
+                Assert.True(identityBounds.Bottom <= referenceBounds.Top);
+
+                Assert.Equal(0, referenceFields.GetPositionFromControl(origin).Row);
+                Assert.Equal(1, referenceFields.GetPositionFromControl(axis).Row);
+                Rectangle originBounds = BoundsRelativeTo(origin, reference);
+                Rectangle axisBounds = BoundsRelativeTo(axis, reference);
+                Assert.Equal(originBounds.Left, axisBounds.Left);
+                Assert.Equal(originBounds.Width, axisBounds.Width);
+                Assert.True(originBounds.Width >= reference.ClientSize.Width / 2);
+                Assert.False(BoundsRelativeTo(reference, stack.Parent).IntersectsWith(
+                    BoundsRelativeTo(originAndAxis, stack.Parent)));
+
+                string longReferenceName =
+                    "Origin_dist_joint - level_4-1/level_5-2/level_6-3/" +
+                    "unicode_deep_reference_link/drive_module/actuator/" +
+                    "output_shaft/reference_geometry/coordinate_system_for_export";
+                origin.Items.Add(longReferenceName);
+                origin.SelectedItem = longReferenceName;
+                ToolTip toolTip = GetPrivateField<ToolTip>(form, "packagePathToolTip");
+                Assert.Equal(longReferenceName, toolTip.GetToolTip(origin));
+                int maximumWidth = origin.Width + 240;
+                int dropDownWidth = AssemblyExportForm.CalculateReferenceGeometryDropDownWidth(
+                    origin,
+                    maximumWidth);
+                Assert.True(dropDownWidth > origin.Width);
+                Assert.True(dropDownWidth <= maximumWidth);
+
+                Rectangle initialIdentityBounds = BoundsRelativeTo(identity, stack);
+                Rectangle initialReferenceBounds = BoundsRelativeTo(reference, stack);
+                for (int iteration = 0; iteration < 6; iteration++)
+                {
+                    sections.SelectedIndex = 1;
+                    sections.SelectedIndex = 2;
+                    sections.SelectedIndex = 0;
+                    form.PerformLayout();
+                }
+                Assert.Equal(initialIdentityBounds, BoundsRelativeTo(identity, stack));
+                Assert.Equal(initialReferenceBounds, BoundsRelativeTo(reference, stack));
             }
             finally
             {

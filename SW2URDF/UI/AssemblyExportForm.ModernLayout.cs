@@ -234,9 +234,6 @@ namespace SW2URDF.UI
             label69.Text = ChineseUiText.Translate(
                 "Coordinate systems and axes come from SolidWorks reference geometry. Edit the model to change them.",
                 "坐标系与轴来自 SolidWorks 参考几何；如需调整，请返回模型中修改。");
-            Control infoBanner = CreateModernInfoBanner(label69);
-            infoBanner.Margin = new Padding(0, 0, 0, 8);
-            basicsStack.Controls.Add(infoBanner);
             basicsStack.Controls.Add(CreateModernJointIdentityAndReferenceGrid());
             basicsStack.Controls.Add(CreateModernOriginAndAxisGrid());
             basicsPage.Controls.Add(basicsStack);
@@ -658,41 +655,44 @@ namespace SW2URDF.UI
         {
             TableLayoutPanel grid = new TableLayoutPanel
             {
+                Name = "modernJointIdentityAndReferenceGrid",
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 BackColor = ModernWinFormsTheme.Background,
-                ColumnCount = 2,
+                ColumnCount = 1,
                 Dock = DockStyle.Top,
                 Margin = new Padding(0),
-                RowCount = 1
+                RowCount = 2
             };
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58F));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42F));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             Control identity = CreateModernJointIdentityCard();
-            identity.Margin = new Padding(0, 0, 4, 8);
+            identity.Margin = new Padding(0, 0, 0, 6);
             Control reference = CreateModernReferenceGeometryCard();
-            reference.Margin = new Padding(4, 0, 0, 8);
+            reference.Margin = new Padding(0, 0, 0, 6);
             grid.Controls.Add(identity, 0, 0);
-            grid.Controls.Add(reference, 1, 0);
+            grid.Controls.Add(reference, 0, 1);
             return grid;
         }
 
         private Control CreateModernJointIdentityCard()
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernJointIdentityCard");
+            card.Padding = new Padding(16, 10, 16, 10);
             card.Controls.Add(CreateModernCardTitle(
                 ChineseUiText.Translate("Joint identity", "Joint 基本信息"),
                 null));
 
             TableLayoutPanel relationship = new TableLayoutPanel
             {
+                Name = "modernJointRelationshipGrid",
                 AutoSize = true,
                 BackColor = ModernWinFormsTheme.Surface,
                 ColumnCount = 3,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 8, 0, 4),
+                Margin = new Padding(0, 4, 0, 2),
                 RowCount = 2
             };
             relationship.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
@@ -732,10 +732,11 @@ namespace SW2URDF.UI
 
             TableLayoutPanel fields = new TableLayoutPanel
             {
+                Name = "modernJointIdentityFields",
                 AutoSize = true,
                 ColumnCount = 4,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 4, 0, 0),
+                Margin = new Padding(0, 2, 0, 0),
                 RowCount = 1
             };
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 76F));
@@ -753,16 +754,28 @@ namespace SW2URDF.UI
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernReferenceGeometryCard");
             card.Margin = new Padding(0);
-            card.Controls.Add(CreateModernCardTitle(
+            card.Padding = new Padding(16, 10, 16, 10);
+            Control title = CreateModernCardTitle(
                 ChineseUiText.Translate("Reference geometry", "参考几何"),
-                null));
+                null);
+            title.Name = "modernReferenceGeometryTitle";
+            card.Controls.Add(title);
+            packagePathToolTip.SetToolTip(title, label69.Text);
+
+            label69.AutoSize = true;
+            label69.Dock = DockStyle.Top;
+            label69.ForeColor = ModernWinFormsTheme.MutedText;
+            label69.Margin = new Padding(0, 2, 0, 0);
+            ModernWinFormsTheme.SetFont(label69, 8.5F, FontStyle.Regular);
+            card.Controls.Add(label69);
 
             TableLayoutPanel grid = new TableLayoutPanel
             {
+                Name = "modernReferenceGeometryFields",
                 AutoSize = true,
                 ColumnCount = 2,
                 Dock = DockStyle.Top,
-                Margin = new Padding(0, 12, 0, 0),
+                Margin = new Padding(0, 6, 0, 0),
                 RowCount = 2
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F));
@@ -771,14 +784,88 @@ namespace SW2URDF.UI
             grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             AddModernField(grid, label66, comboBoxOrigin, 0, 0, 1);
             AddModernField(grid, label67, comboBoxAxis, 1, 0, 1);
+            ConfigureModernReferenceGeometrySelector(comboBoxOrigin);
+            ConfigureModernReferenceGeometrySelector(comboBoxAxis);
             card.Controls.Add(grid);
             return card;
+        }
+
+        private void ConfigureModernReferenceGeometrySelector(ComboBox selector)
+        {
+            selector.DropDown -= ModernReferenceGeometrySelectorDropDown;
+            selector.DropDown += ModernReferenceGeometrySelectorDropDown;
+            selector.SelectedIndexChanged -= ModernReferenceGeometrySelectorSelectedIndexChanged;
+            selector.SelectedIndexChanged += ModernReferenceGeometrySelectorSelectedIndexChanged;
+            UpdateModernReferenceGeometrySelectorToolTip(selector);
+        }
+
+        private void ModernReferenceGeometrySelectorDropDown(object sender, EventArgs e)
+        {
+            ComboBox selector = sender as ComboBox;
+            UpdateModernReferenceGeometrySelectorDropDownWidth(selector);
+            UpdateModernReferenceGeometrySelectorToolTip(selector);
+        }
+
+        private void ModernReferenceGeometrySelectorSelectedIndexChanged(
+            object sender,
+            EventArgs e)
+        {
+            UpdateModernReferenceGeometrySelectorToolTip(sender as ComboBox);
+        }
+
+        private void UpdateModernReferenceGeometrySelectorDropDownWidth(ComboBox selector)
+        {
+            if (selector == null)
+            {
+                return;
+            }
+
+            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+            selector.DropDownWidth = CalculateReferenceGeometryDropDownWidth(
+                selector,
+                Math.Max(selector.Width, workingArea.Width - 48));
+        }
+
+        private void UpdateModernReferenceGeometrySelectorToolTip(ComboBox selector)
+        {
+            if (selector != null && packagePathToolTip != null)
+            {
+                string selectedText = selector.SelectedItem == null
+                    ? selector.Text
+                    : selector.GetItemText(selector.SelectedItem);
+                packagePathToolTip.SetToolTip(selector, selectedText ?? String.Empty);
+            }
+        }
+
+        internal static int CalculateReferenceGeometryDropDownWidth(
+            ComboBox selector,
+            int maximumWidth)
+        {
+            if (selector == null)
+            {
+                throw new ArgumentNullException(nameof(selector));
+            }
+
+            int width = selector.Width;
+            foreach (object item in selector.Items)
+            {
+                string text = selector.GetItemText(item);
+                int itemWidth = TextRenderer.MeasureText(
+                    text ?? String.Empty,
+                    selector.Font).Width +
+                    SystemInformation.VerticalScrollBarWidth + 24;
+                width = Math.Max(width, itemWidth);
+            }
+
+            int effectiveMaximum = Math.Max(selector.Width, maximumWidth);
+            return Math.Min(width, effectiveMaximum);
         }
 
         private Control CreateModernOriginAndAxisGrid()
         {
             TableLayoutPanel grid = new TableLayoutPanel
             {
+                Name = "modernOriginAndAxisGrid",
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 BackColor = ModernWinFormsTheme.Background,

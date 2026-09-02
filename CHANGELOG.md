@@ -70,6 +70,9 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Fixed
 
+- Reflowed the Joint identity and reference-geometry cards into separate full-width rows. Coordinate
+  system and axis selectors now keep long deep-component paths readable through full-row controls,
+  bounded drop-down expansion, and exact-value tooltips without rebuilding tab contents.
 - Resolved deep or hidden Link preview display through a root-assembly-safe temporary-body host and
   the complete component transform, without adding persistent tree objects. Equivalent-inertia and
   Collision previews still require live validation in the maintainer's target SolidWorks versions.
@@ -157,6 +160,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### 修复
 
+- 将 Joint 基本信息与参考几何改为上下两个全宽功能区；坐标系和轴选择器各占整行，并通过有上限
+  的下拉宽度扩展与精确值提示完整呈现深层组件路径，Tab 切换时不重建内容控件。
 - 使用根装配安全的临时体宿主与完整组件变换，修复深层或隐藏 Link 的预览显示，且不增加持久化
   树节点。等效惯性与 Collision 预览仍须在维护者目标 SolidWorks 版本中完成 Live 验证。
 - 修复 Joint、Link 和模型页嵌套网格中最后一行输入框底边被裁切的问题：单行 TextBox 的高度与
