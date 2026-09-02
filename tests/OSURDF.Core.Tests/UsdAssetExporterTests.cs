@@ -90,6 +90,33 @@ public sealed class UsdAssetExporterTests : IDisposable
         Assert.Equal(Path.GetFullPath(retained), result.RetainedPreviousDirectory);
     }
 
+    [Fact]
+    public void ExportUsesFixedArtifactsWhenReportedPathsAreEncodingDamaged()
+    {
+        string bundle = BuildBundle();
+        string output = Path.Combine(root, "中文 输出目录", "usd");
+        FakeRunner runner = new FakeRunner(
+            reopened: true,
+            damageReportedPaths: true);
+
+        UsdAssetExportResult result = new UsdAssetExporter(runner).Export(
+            new UsdAssetExportOptions
+            {
+                BundleDirectory = bundle,
+                OutputDirectory = output,
+                PythonExecutable = Touch("unicode-python.exe"),
+                AdapterScript = Touch("unicode-adapter.py"),
+                Overwrite = true
+            });
+
+        Assert.Equal(Path.Combine(output, "robot.usd"), result.UsdFile);
+        Assert.Equal(Path.Combine(output, "name_map.json"), result.NameMapFile);
+        Assert.Equal(Path.Combine(output, "export_report.json"), result.ReportFile);
+        Assert.All(
+            new[] { result.UsdFile, result.NameMapFile, result.ReportFile },
+            path => Assert.True(File.Exists(path), path));
+    }
+
     private string BuildBundle()
     {
         string fixture = Path.Combine(AppContext.BaseDirectory, "fixtures", "minimal_robot.urdf");
@@ -121,11 +148,16 @@ public sealed class UsdAssetExporterTests : IDisposable
     {
         private readonly bool reopened;
         private readonly string? retainedPreviousDirectory;
+        private readonly bool damageReportedPaths;
 
-        public FakeRunner(bool reopened, string? retainedPreviousDirectory = null)
+        public FakeRunner(
+            bool reopened,
+            string? retainedPreviousDirectory = null,
+            bool damageReportedPaths = false)
         {
             this.reopened = reopened;
             this.retainedPreviousDirectory = retainedPreviousDirectory;
+            this.damageReportedPaths = damageReportedPaths;
         }
 
         public UsdAdapterInvocation? Invocation { get; private set; }
@@ -153,6 +185,15 @@ public sealed class UsdAssetExporterTests : IDisposable
                     }
                 }),
                 new UTF8Encoding(false));
+            string reportedUsd = damageReportedPaths
+                ? Path.Combine(invocation.OutputDirectory, "损坏", "robot.usd")
+                : usd;
+            string reportedNameMap = damageReportedPaths
+                ? Path.Combine(invocation.OutputDirectory, "损坏", "name_map.json")
+                : nameMap;
+            string reportedReport = damageReportedPaths
+                ? Path.Combine(invocation.OutputDirectory, "损坏", "export_report.json")
+                : report;
             return new UsdAdapterRunResult
             {
                 ExitCode = 0,
@@ -160,9 +201,9 @@ public sealed class UsdAssetExporterTests : IDisposable
                 {
                     ok = true,
                     outputDirectory = invocation.OutputDirectory,
-                    usd,
-                    nameMap,
-                    report,
+                    usd = reportedUsd,
+                    nameMap = reportedNameMap,
+                    report = reportedReport,
                     retainedPreviousDirectory
                 }),
                 StandardError = string.Empty

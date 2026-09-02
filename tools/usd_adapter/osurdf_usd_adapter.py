@@ -889,10 +889,13 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = _parser().parse_args(list(argv) if argv is not None else None)
     try:
         result = export_bundle(args.bundle, args.output, args.overwrite)
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        # stdout/stderr form a machine protocol with the .NET host. Keep that
+        # protocol ASCII-only so redirected pipes are independent of the
+        # active Windows code page; JSON decoding restores Unicode paths.
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         return 0
     except (AdapterError, OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=True), file=sys.stderr)
         return 2
 
 

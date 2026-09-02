@@ -224,15 +224,20 @@ namespace OSURDF.Core.Export
 
         private static string RequireOutputFile(string root, string reported, string fallback)
         {
-            string path = string.IsNullOrWhiteSpace(reported)
-                ? Path.Combine(root, fallback)
-                : Path.GetFullPath(reported);
+            // The adapter contract owns fixed artifact names. Validate those
+            // files directly instead of trusting an absolute path echoed over
+            // a redirected process pipe, which may be damaged by a Windows
+            // console code-page mismatch.
+            string path = Path.GetFullPath(Path.Combine(root, fallback));
             string normalizedRoot = WithSeparator(root);
             if (!path.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
                 !File.Exists(path))
             {
                 throw new InvalidDataException(
-                    "OpenUSD adapter output is missing or outside the requested directory: " + path);
+                    "OpenUSD adapter output is missing from the requested directory: " + path +
+                    (string.IsNullOrWhiteSpace(reported)
+                        ? string.Empty
+                        : ". Adapter reported: " + reported));
             }
             return path;
         }
@@ -262,6 +267,8 @@ namespace OSURDF.Core.Export
                     StandardOutputEncoding = Encoding.UTF8,
                     StandardErrorEncoding = Encoding.UTF8
                 };
+                start.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
+                start.EnvironmentVariables["PYTHONUTF8"] = "1";
                 using (Process process = new Process { StartInfo = start })
                 {
                     if (!process.Start())

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import sys
 import tempfile
 import types
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -29,6 +31,27 @@ adapter = _load_adapter()
 
 
 class PublishTransactionTests(unittest.TestCase):
+    def test_cli_protocol_escapes_unicode_paths_as_ascii_json(self):
+        result = {
+            "ok": True,
+            "usd": r"E:\桌面\机器人\robot.usd",
+            "nameMap": r"E:\桌面\机器人\name_map.json",
+            "report": r"E:\桌面\机器人\export_report.json",
+        }
+        output = io.StringIO()
+
+        with mock.patch.object(adapter, "export_bundle", return_value=result), redirect_stdout(
+            output
+        ):
+            exit_code = adapter.main(
+                ["export", "--bundle", "bundle", "--output", "output"]
+            )
+
+        protocol_line = output.getvalue().strip()
+        self.assertEqual(0, exit_code)
+        self.assertTrue(protocol_line.isascii())
+        self.assertEqual(result, json.loads(protocol_line))
+
     @staticmethod
     def _make_bundle(root: Path) -> Path:
         bundle = root / "bundle"
