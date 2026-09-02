@@ -140,6 +140,22 @@ records exactly which targets were generated and validated by the current run.
 See the [Wiki](https://github.com/osrbot/solidworks_urdf_exporter_pro/wiki) for detailed behavior and
 limitations.
 
+## Version Boundaries
+
+Two independent version domains are intentionally visible in this repository:
+
+- `URDF Export Configuration (v2)` is the PID-backed SolidWorks feature that persists Link and
+  Joint selections in the assembly. Legacy name-based configuration v1.x is not migrated
+  automatically because doing so could bind the wrong component occurrence.
+- `robot.schema.v3` is the current canonical, temporary robot document used inside the export
+  pipeline. Readers migrate historical robot schema v2 input to v3 with conservative OpenUSD
+  defaults; writers emit v3 only. Compared with v2, v3 adds `profiles.usdSimulation` for base mode,
+  robot classification, self-collision, SI gain units, and explicit per-Joint drive intent.
+
+Saving SolidWorks configuration v2 and exporting through robot schema v3 is therefore the expected
+combination, not a partial upgrade. The schema migration does not change the configured Link tree,
+URDF Joint type, or CAD reference identity.
+
 ## Supported Environment
 
 | Item | Supported or verified state |

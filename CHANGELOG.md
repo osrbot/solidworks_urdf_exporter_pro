@@ -53,6 +53,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 - Cached and froze stable WinForms layout trees after initial sizing, while invalidating them on
   window-size changes and keeping the dynamic Mimic editor live. Repeated page/tab switches no
   longer recursively remeasure the same static controls.
+- Removed full-window and full-tab descendant invalidation from normal page switches; cached pages
+  now repaint only the regions WinForms marks dirty instead of recursively redrawing unrelated UI.
+- Documented the independent version domains for PID-backed SolidWorks configuration v2 and the
+  canonical robot schema v3, including the historical robot schema v2 reader migration.
 - Validate inertia triangle inequalities in the principal frame using scale-aware eigenvalue
   checks, including rotated and very small tensors.
 - Each export atomically replaces only the selected independent target directories. Existing
@@ -129,6 +133,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
   规范 URDF Joint 值不变。
 - 在首次定型后缓存并冻结静态 WinForms 布局树；窗口尺寸变化时使缓存失效，动态 Mimic 编辑器
   保持实时布局。重复切换页面或标签不再递归测量同一批静态控件。
+- 从正常页面切换路径移除整窗和整棵 Tab 子树失效；缓存页面只重绘 WinForms 标记为脏的区域，
+  不再递归重绘无关页面。
+- 说明 PID 持久化的 SolidWorks configuration v2 与规范 robot schema v3 是独立版本域，并记录
+  历史 robot schema v2 的 reader 迁移规则。
 - 使用尺度感知的特征值检查，在主轴系校验惯性三角不等式，包括旋转张量和极小张量。
 - 每次导出只原子替换本次选中的独立目标目录；未选目标的既有目录会保留，顶层报告明确记录
   本次实际生成和验证的目标。

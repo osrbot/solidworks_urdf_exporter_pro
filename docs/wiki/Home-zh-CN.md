@@ -43,6 +43,14 @@ Collision 策略不会重算或替换 Inertial。SolidWorks 中的临时碰撞�
 `Robot Bundle` 只是私有规范暂存表示。插件在系统临时目录中创建它，供所选目标导出器使用，
 随后清理；它不是用户可选目标，也不会作为目录树交付。
 
+## 版本边界
+
+`URDF Export Configuration (v2)` 与 `robot.schema.v3` 不是同一份数据的两个版本。前者是持久化
+在 SolidWorks 装配体中的 PID 配置特征；后者是各导出器使用的当前规范临时机器人文档。名称型
+SolidWorks configuration v1.x 不自动迁移，而历史 robot schema v2 会在内存中迁移为 v3，当前
+writer 只生成 v3。robot schema v3 新增 `profiles.usdSimulation`，明确记录基座模式、机器人分类、
+自碰撞、SI 增益单位和逐 Joint drive 意图。项目 README 也给出了相同边界说明。
+
 ## 文档导航
 
 - [Installation](Installation)：安装、升级与版本边界

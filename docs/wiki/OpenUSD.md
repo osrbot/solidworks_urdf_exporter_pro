@@ -66,10 +66,12 @@ selected in SolidWorks, so mesh Collisions use approximation `none` and retain t
 of being converted into another convex hull. Converted STL geometry is kept as relative USD
 dependencies, so `robot.usd` must travel with the complete output directory.
 
-OpenUSD settings are stored in robot schema v3. Stiffness and damping values entered by the user are
-SI values. The adapter converts angular gains from per-radian SI values to USD per-degree values,
-keeps linear gains unchanged, and enforces zero stiffness for velocity drives. Effort intent is
-recorded with its force/torque limit but deliberately does not create `DriveAPI`.
+OpenUSD settings pass through the temporary robot schema v3 document; they are not a replacement for
+the PID-backed SolidWorks `URDF Export Configuration (v2)` feature. Stiffness and damping values
+entered by the user are SI values. The adapter converts angular gains from per-radian SI values to
+USD per-degree values, keeps linear gains unchanged, and enforces zero stiffness for velocity
+drives. Effort intent is recorded with its force/torque limit but deliberately does not create
+`DriveAPI`.
 
 ## Automated Validation
 

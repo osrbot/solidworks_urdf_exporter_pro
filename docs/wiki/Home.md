@@ -51,6 +51,16 @@ equivalent-inertia bodies in SolidWorks are inspection aids. The exported URDF,
 directory, consumed by the selected target exporters, and cleaned after export. It is not a
 user-selectable target or a delivered file tree.
 
+## Version Boundaries
+
+`URDF Export Configuration (v2)` and `robot.schema.v3` do not describe the same data. The former is
+the PID-backed SolidWorks feature persisted in the assembly; the latter is the current canonical
+temporary robot document used by the exporters. Name-based SolidWorks configuration v1.x is not
+auto-migrated, while historical robot schema v2 documents are migrated in memory to v3 and all
+current writers emit v3. Robot schema v3 adds `profiles.usdSimulation` for base mode, robot
+classification, self-collision, SI gain units, and explicit per-Joint drive intent. This
+distinction is also summarized in the project README.
+
 ## Documentation
 
 - [Installation](Installation): installation, upgrade, and version boundaries

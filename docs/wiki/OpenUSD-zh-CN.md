@@ -59,9 +59,10 @@ USD 与 MJCF 目标要求 STL 网格输入。适配器会拒绝 3DXML，而不�
 不会再被转换成另一层凸包。STL 转换后的几何以相对 USD 依赖保存，因此必须整体移动完整输出
 目录，不能只拿走 `robot.usd`。
 
-OpenUSD 设置记录在 robot schema v3 中。用户填写的刚度和阻尼为 SI 值；适配器会把角关节增益
-从“每弧度”的 SI 值换算为 USD 的“每度”值，线性关节增益保持不变，并强制速度驱动刚度为 0。
-effort 意图会连同力/力矩限值一起保留，但刻意不创建 `DriveAPI`。
+OpenUSD 设置通过临时 robot schema v3 文档进入导出器；它不会替代 SolidWorks 装配体中 PID
+持久化的 `URDF Export Configuration (v2)` 配置特征。用户填写的刚度和阻尼为 SI 值；适配器会把
+角关节增益从“每弧度”的 SI 值换算为 USD 的“每度”值，线性关节增益保持不变，并强制速度驱动
+刚度为 0。effort 意图会连同力/力矩限值一起保留，但刻意不创建 `DriveAPI`。
 
 ## 自动化验证
 

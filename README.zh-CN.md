@@ -119,6 +119,19 @@ effort 只记录下游意图，不创建主动驱动。
 
 详细行为和限制见[项目 Wiki](https://github.com/osrbot/solidworks_urdf_exporter_pro/wiki)。
 
+## 版本边界
+
+仓库中存在两个彼此独立的版本域：
+
+- `URDF Export Configuration (v2)` 是保存在 SolidWorks 装配体中的 PID 配置特征，用于持久化
+  Link/Joint 选择。旧的名称型 configuration v1.x 不自动迁移，避免误绑定同名组件实例。
+- `robot.schema.v3` 是导出管线内部使用的当前规范临时机器人文档。reader 会把历史 robot schema
+  v2 以保守 OpenUSD 默认值迁移到 v3；writer 只生成 v3。相较 v2，v3 新增
+  `profiles.usdSimulation`，明确记录基座模式、机器人分类、自碰撞、SI 增益单位和逐 Joint drive 意图。
+
+因此，“SolidWorks 配置 v2 + robot schema v3”是正常组合，不是升级不完整。robot schema 迁移
+不会改变已配置的 Link 树、URDF Joint 类型或 CAD 参考身份。
+
 ## 支持环境
 
 | 项目 | 支持或验证状态 |

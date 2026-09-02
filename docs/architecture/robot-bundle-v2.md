@@ -1,10 +1,14 @@
-# Robot Bundle v2 架构
+# Robot Bundle 规范暂存架构
 
 > **当前状态（2026-09-01）**：本文记录内部规范模型的架构。Robot Bundle 已收敛为插件私有、
 > 短生命周期的暂存表示，不再是 UI 可选目标，也不交付到用户输出目录。现行用户目标和验证边界以
 > [README](../../README.zh-CN.md) 与 [Wiki 首页](../wiki/Home-zh-CN.md) 为准。
 
-Robot Bundle 是 OSURDF v2 导出器之间共享的内部规范表示。ROS 1、ROS 2、OpenUSD 和 MJCF
+本文文件名中的历史 `v2` 不表示当前 `robot.json` schema 版本。SolidWorks 持久化配置使用
+`URDF Export Configuration (v2)`，而 Bundle 中当前规范 `robot.json` 使用 `robot.schema.v3`；
+两者是独立版本域。
+
+Robot Bundle 是各目标导出器之间共享的内部规范表示。ROS 1、ROS 2、OpenUSD 和 MJCF
 导出器从同一份已验证模型派生，避免每个目标各自解释 CAD 数据后产生漂移；暂存目录在成功或失败
 后都应清理。
 
@@ -39,14 +43,15 @@ Robot Bundle 是 OSURDF v2 导出器之间共享的内部规范表示。ROS 1、
 
 Bundle 构建执行以下顺序：
 
-1. 迁移输入到 `robot.schema.v2`，但不替用户补全 Joint 类型、许可证、控制器或 actuator 参数；
+1. 将历史 `robot.schema.v2` 输入以保守默认值迁移到 `robot.schema.v3`；v3 输入保持 v3，writer
+   只生成 v3，且不会替用户补全 Joint 类型、许可证、控制器或 actuator 参数；
 2. 校验 Link/Joint 图、数值、来源、目标版本和目标配置；
 3. 解析 `package://` 和相对资源，复制到规范目录并重写为可移植路径；
 4. 写入临时目录，生成清单和 SHA-256；
 5. 验证临时 Bundle，通过后原子替换目标目录。
 
 验证器拒绝路径穿越、绝对路径、符号链接、大小写冲突、保留文件覆盖、未列入清单的载荷、
-校验和不一致、旧 schema 假冒 v2，以及清单和实际 profile 不一致。设置合法的
+校验和不一致、内容与声明 schema 不一致，以及清单和实际 profile 不一致。设置合法的
 `SOURCE_DATE_EPOCH` 后，时间戳和文件排序可复现；非法值会直接失败。
 
 ## CLI
