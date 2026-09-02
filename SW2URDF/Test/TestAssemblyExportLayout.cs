@@ -215,6 +215,15 @@ namespace SW2URDF.Test
                         "Collision bottom {0} must remain above finish top {1}.",
                         collision.Bottom,
                         finish.Top));
+
+                AssertInputBordersStayInside(GetPrivateControl<GroupBox>(
+                    form, typeof(PartExportForm), "groupBox1"));
+                AssertInputBordersStayInside(visual);
+                AssertInputBordersStayInside(collision);
+
+                TextBox saveAs = GetPrivateControl<TextBox>(
+                    form, typeof(PartExportForm), "textBox_save_as");
+                AssertControlBottomBorderStaysInside(saveAs, form);
             }
             finally
             {
@@ -1053,6 +1062,11 @@ namespace SW2URDF.Test
                 Assert.Equal("position", drive.Mode);
                 Assert.Equal(80.0, drive.Stiffness);
                 Assert.Equal(4.0, drive.Damping);
+
+                AssertInputBordersStayInside(
+                    FindDescendant(dialog, "openUsdGeneralSettings"));
+                AssertInputBordersStayInside(
+                    FindDescendant(dialog, "openUsdJointDriveSettings"));
             }
         }
 
@@ -1949,27 +1963,35 @@ namespace SW2URDF.Test
                 .Where(control =>
                     control is TextBoxBase ||
                     control is UpDownBase ||
-                    control is ComboBox)
+                    control is ComboBox ||
+                    control is DataGridView)
                 .ToArray();
             Assert.NotEmpty(inputs);
 
-            int contentBottom = container.ClientSize.Height -
-                Math.Max(1, container.Padding.Bottom);
             foreach (Control input in inputs)
             {
-                Rectangle bounds = BoundsRelativeTo(input, container);
-                Assert.True(
-                    bounds.Bottom < contentBottom,
-                    String.Format(
-                        CultureInfo.InvariantCulture,
-                        "{0} bottom border is clipped by {1}: " +
-                        "inputBottom={2}, contentBottom={3}, container={4}.",
-                        input.Name,
-                        container.Name,
-                        bounds.Bottom,
-                        contentBottom,
-                        container.ClientRectangle));
+                AssertControlBottomBorderStaysInside(input, container);
             }
+        }
+
+        private static void AssertControlBottomBorderStaysInside(
+            Control input,
+            Control container)
+        {
+            int contentBottom = container.ClientSize.Height -
+                Math.Max(1, container.Padding.Bottom);
+            Rectangle bounds = BoundsRelativeTo(input, container);
+            Assert.True(
+                bounds.Bottom < contentBottom,
+                String.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0} bottom border is clipped by {1}: " +
+                    "inputBottom={2}, contentBottom={3}, container={4}.",
+                    input.Name,
+                    container.Name,
+                    bounds.Bottom,
+                    contentBottom,
+                    container.ClientRectangle));
         }
 
         private static System.Collections.Generic.IEnumerable<Control> Descendants(
