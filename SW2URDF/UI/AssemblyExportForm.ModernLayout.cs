@@ -1564,6 +1564,7 @@ namespace SW2URDF.UI
 
             FlowLayoutPanel targets = new FlowLayoutPanel
             {
+                Name = "modernExportTargetRow",
                 AutoSize = true,
                 Dock = DockStyle.Top,
                 FlowDirection = FlowDirection.LeftToRight,
@@ -1589,9 +1590,12 @@ namespace SW2URDF.UI
             {
                 Name = "modernUsdSettingsButton",
                 Enabled = false,
-                Margin = new Padding(4, 0, 14, 4),
-                Size = new Size(78, 26),
-                Text = ChineseUiText.Translate("Settings...", "设置...")
+                AutoSize = true,
+                Margin = new Padding(0),
+                MinimumSize = new Size(112, 28),
+                Text = ChineseUiText.Translate(
+                    "OpenUSD settings...",
+                    "OpenUSD 设置...")
             };
             modernUsdSettingsButton.Click += ModernUsdSettingsButtonClick;
             modernMjcfAssetCheckBox = CreateTargetCheckBox(
@@ -1605,9 +1609,22 @@ namespace SW2URDF.UI
             modernMjcfAssetCheckBox.CheckedChanged += ModernTargetSelectionChanged;
             targets.Controls.Add(modernRos1CheckBox);
             targets.Controls.Add(modernRos2CheckBox);
-            targets.Controls.Add(CreateUsdTargetControls());
+            targets.Controls.Add(modernUsdAssetCheckBox);
             targets.Controls.Add(modernMjcfAssetCheckBox);
             card.Controls.Add(targets);
+
+            FlowLayoutPanel targetActions = new FlowLayoutPanel
+            {
+                Name = "modernExportTargetActions",
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Dock = DockStyle.Top,
+                FlowDirection = FlowDirection.LeftToRight,
+                Margin = new Padding(0, 0, 0, 8),
+                WrapContents = false
+            };
+            targetActions.Controls.Add(modernUsdSettingsButton);
+            card.Controls.Add(targetActions);
 
             TableLayoutPanel grid = new TableLayoutPanel
             {
@@ -1679,23 +1696,6 @@ namespace SW2URDF.UI
                 Text = ChineseUiText.Translate(english, chinese),
                 UseVisualStyleBackColor = true
             };
-        }
-
-        private Control CreateUsdTargetControls()
-        {
-            modernUsdAssetCheckBox.Margin = new Padding(0, 4, 2, 4);
-            FlowLayoutPanel target = new FlowLayoutPanel
-            {
-                Name = "modernUsdTargetControls",
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                FlowDirection = FlowDirection.LeftToRight,
-                Margin = new Padding(0),
-                WrapContents = false
-            };
-            target.Controls.Add(modernUsdAssetCheckBox);
-            target.Controls.Add(modernUsdSettingsButton);
-            return target;
         }
 
         private static TextBox CreateTargetTextBox(string value)

@@ -57,6 +57,8 @@ namespace SW2URDF.Test
                 CheckBox usd = GetControl<CheckBox>(form, "modernUsdAssetCheckBox");
                 CheckBox mjcf = GetControl<CheckBox>(form, "modernMjcfAssetCheckBox");
                 Button usdSettings = GetControl<Button>(form, "modernUsdSettingsButton");
+                Control targetRow = GetControl<Control>(form, "modernExportTargetRow");
+                Control targetActions = GetControl<Control>(form, "modernExportTargetActions");
                 Assert.Equal(
                     ChineseUiText.Translate("ROS 1 package", "ROS 1 功能包"),
                     ros1.Text);
@@ -71,6 +73,23 @@ namespace SW2URDF.Test
                 Assert.Equal(
                     ChineseUiText.Translate("MuJoCo MJCF asset", "MuJoCo MJCF 资产"),
                     mjcf.Text);
+                Assert.Equal(
+                    ChineseUiText.Translate("OpenUSD settings...", "OpenUSD 设置..."),
+                    usdSettings.Text);
+                Assert.Same(targetRow, ros1.Parent);
+                Assert.Same(targetRow, ros2.Parent);
+                Assert.Same(targetRow, usd.Parent);
+                Assert.Same(targetRow, mjcf.Parent);
+                Assert.Same(targetActions, usdSettings.Parent);
+                Assert.Equal(ros1.Margin.Top, ros2.Margin.Top);
+                Assert.Equal(ros1.Margin.Top, usd.Margin.Top);
+                Assert.Equal(ros1.Margin.Top, mjcf.Margin.Top);
+                form.PerformLayout();
+                targetRow.PerformLayout();
+                Assert.Equal(ros1.Top, ros2.Top);
+                Assert.Equal(ros1.Top, usd.Top);
+                Assert.Equal(ros1.Top, mjcf.Top);
+                Assert.True(targetActions.Top >= targetRow.Bottom);
                 Assert.Null(FindDescendant(form, "modernRos2PairComboBox"));
                 Assert.Null(FindDescendant(form, "modernRos2ControlProfileButton"));
                 Assert.Null(FindDescendant(form, "modernIsaacLabProfileButton"));
