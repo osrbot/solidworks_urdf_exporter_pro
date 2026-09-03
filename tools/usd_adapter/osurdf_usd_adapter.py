@@ -656,6 +656,16 @@ def _write_mesh_asset(source: Path, destination: Path) -> None:
     stage.GetRootLayer().Save()
 
 
+def _create_text_stage(destination: Path) -> Usd.Stage:
+    layer = Sdf.Layer.CreateNew(str(destination), {"format": "usda"})
+    if layer is None:
+        raise AdapterError(f"Could not create UTF-8 USDA layer: {destination}")
+    stage = Usd.Stage.Open(layer)
+    if stage is None:
+        raise AdapterError(f"Could not open UTF-8 USDA layer: {destination}")
+    return stage
+
+
 def _copy_canonical_meshes(bundle: Path, output: Path) -> None:
     source = bundle / "meshes"
     if source.is_dir():
@@ -934,7 +944,7 @@ def _build_stage(bundle: Path, output: Path, robot: dict[str, Any]) -> dict[str,
         str(item["joint"]): item for item in settings["jointDrives"]
     }
     stage_path = output / "robot.usd"
-    stage = Usd.Stage.CreateNew(str(stage_path))
+    stage = _create_text_stage(stage_path)
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
     UsdGeom.SetStageMetersPerUnit(stage, 1.0)
     robot_prim = UsdGeom.Xform.Define(stage, "/Robot").GetPrim()
@@ -1384,6 +1394,7 @@ def export_bundle(bundle: Path, output: Path, overwrite: bool) -> dict[str, Any]
             "ok": True,
             "assetType": "OpenUSD robot asset",
             "entrypoint": "robot.usd",
+            "entrypointFormat": "UTF-8 USDA text",
             "geometryDependencies": built["meshDependencies"],
             "simulationSettings": built.get(
                 "simulationSettings",

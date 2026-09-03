@@ -47,8 +47,14 @@ class SimulationAssetTests(unittest.TestCase):
             output = root / "usd"
             adapter.export_bundle(FIXTURE_PATH, output, overwrite=True)
 
+            entrypoint = output / "robot.usd"
+            entrypoint_text = entrypoint.read_text(encoding="utf-8")
+            self.assertTrue(entrypoint_text.startswith("#usda 1.0"))
+            self.assertIn("@./geometry/", entrypoint_text)
+            self.assertNotIn(str(output).replace("\\", "/"), entrypoint_text)
             stage = Usd.Stage.Open(str(output / "robot.usd"))
             self.assertIsNotNone(stage)
+            prim_count = sum(1 for _ in stage.Traverse())
             robot = stage.GetDefaultPrim()
             self.assertEqual("/Robot", str(robot.GetPath()))
             self.assertIn("IsaacRobotAPI", _authored_api_schemas(robot))
@@ -61,6 +67,14 @@ class SimulationAssetTests(unittest.TestCase):
             self.assertFalse(robot.GetAttribute("osurdf:selfCollisionIntent").Get())
             self.assertFalse(stage.GetPrimAtPath("/Robot/Joints/fixed_base_joint"))
 
+            relocated = root / "relocated"
+            shutil.copytree(output, relocated)
+            relocated_stage = Usd.Stage.Open(str(relocated / "robot.usd"))
+            self.assertIsNotNone(relocated_stage)
+            self.assertEqual(prim_count, sum(1 for _ in relocated_stage.Traverse()))
+
+            report = json.loads((output / "export_report.json").read_text(encoding="utf-8"))
+            self.assertEqual("UTF-8 USDA text", report["entrypointFormat"])
             name_map = json.loads((output / "name_map.json").read_text(encoding="utf-8"))
             arm_joint = stage.GetPrimAtPath(
                 "/Robot/Joints/" + name_map["joints"]["arm joint"]

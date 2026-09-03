@@ -9,8 +9,8 @@ Isaac Sim and Isaac Lab are not required and are not reported as tested.
 
 Output / 输出：
 
-- `robot.usd`: robot hierarchy, physics Joints, collision shapes, mass, COM and inertia.
-- `geometry/*.usd`: OpenUSD mesh dependencies converted from STL.
+- `robot.usd`: UTF-8 USDA text root layer containing the robot hierarchy, physics Joints, collision shapes, mass, COM and inertia.
+- `geometry/*.usd`: binary USDC mesh dependencies converted from STL for compact loading.
 - `meshes/**`: canonical source mesh evidence retained with original relative paths.
 - `name_map.json`: original names to USD identifiers.
 - `export_report.json`: OpenUSD reopen/structure validation and its explicit evidence boundary.
