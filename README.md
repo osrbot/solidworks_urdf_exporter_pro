@@ -61,7 +61,7 @@ Those values must come from the real robot or a validated simulation model.
 4. Restart SolidWorks.
 5. Open `Tools > Export as URDF`.
 
-See the [installation guide](docs/guide/installation.md) for details.
+See the [installation guide](docs/en/guide/installation.md) for details.
 
 ## Quick workflow
 
@@ -74,19 +74,19 @@ See the [installation guide](docs/guide/installation.md) for details.
 7. Read the `export_report` and target-specific reports.
 8. Verify the result in the actual ROS, Isaac Sim, USD Viewer, or MuJoCo environment.
 
-See [Quick Start](docs/guide/getting-started.md).
+See [Quick Start](docs/en/guide/getting-started.md).
 
 ## Feature pages
 
-- [Link Tree](docs/features/link-tree.md)
-- [Joint properties](docs/features/joint.md)
-- [Inertia](docs/features/inertia.md)
-- [Visual and Collision](docs/features/collision.md)
-- [Appearance](docs/features/appearance.md)
-- [Model and Export](docs/features/export-page.md)
+- [Link Tree](docs/en/features/link-tree.md)
+- [Joint properties](docs/en/features/joint.md)
+- [Inertia](docs/en/features/inertia.md)
+- [Visual and Collision](docs/en/features/collision.md)
+- [Appearance](docs/en/features/appearance.md)
+- [Model and Export](docs/en/features/export-page.md)
 
-Output guides: [ROS](docs/exports/ros.md) · [OpenUSD](docs/exports/openusd.md) ·
-[MuJoCo MJCF](docs/exports/mujoco.md)
+Output guides: [ROS](docs/en/exports/ros.md) · [OpenUSD](docs/en/exports/openusd.md) ·
+[MuJoCo MJCF](docs/en/exports/mujoco.md)
 
 ## Supported environment
 
@@ -104,7 +104,7 @@ Project: <https://github.com/osrbot/solidworks_urdf_exporter_pro>
 
 Open a [GitHub Issue](https://github.com/osrbot/solidworks_urdf_exporter_pro/issues) with the
 SolidWorks version, exporter version, reproduction steps, complete error text, log, and export
-reports. See [Questions and contributions](docs/support/help-and-contribute.md).
+reports. See [Questions and contributions](docs/en/support/help-and-contribute.md).
 
 ## Contributing
 

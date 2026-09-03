@@ -3,6 +3,7 @@
 `docs/` 同时保存普通用户手册和项目维护资料：
 
 - `index.md`、`guide/`、`features/`、`exports/`、`support/`：VitePress 用户站点；
+- `en/`：与中文页面路径一一对应的英文站点；
 - `wiki/`：GitHub Wiki 的版本化内容，不参与 VitePress 构建；
 - `architecture/`、`development/`：架构、兼容性和维护资料，不进入用户站点；
 - `planning/`、`reviews/`：历史设计记录，不进入用户站点。
@@ -35,3 +36,4 @@ VitePress 输出目录是 `docs/.vitepress/dist/`，该目录是生成物，不�
 - 只有在影响用户判断时，才说明自动检查与目标应用验收的区别。
 - 截图必须来自当前 UI，不包含本机绝对路径、个人信息或失败弹窗。
 - 修改用户可见功能时同步 README、Wiki 首页、对应功能页和 Changelog。
+- 中英文页面必须保持相同层级；新增或删除页面时同时更新两种语言的导航。

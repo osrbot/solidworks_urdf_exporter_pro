@@ -6,8 +6,17 @@
   --vp-c-tip-1: #18745b;
   --vp-c-tip-2: #125c48;
   --vp-c-warning-1: #9a5a00;
-  --vp-c-bg-soft: #f4f7f8;
-  --vp-c-bg-alt: #eef3f5;
+}
+
+.VPSidebar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.VPSidebar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .VPDoc h1,
