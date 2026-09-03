@@ -123,6 +123,12 @@ Assert-Contains $PublishWorkflow '--draft' `
     "GitHub Release creation must remain Draft-only."
 Assert-True ($PublishWorkflow -notmatch 'gh release edit|--draft[= ]false') `
     "Release workflow must never publish or convert a Draft to public."
+Assert-Contains $PublishWorkflow "unsafe_payload_path_pattern='(^|/)\.\.(/|$)'" `
+    "Release workflow must keep the unsafe payload path regex in a Bash variable."
+Assert-Contains $PublishWorkflow '"$relative_path" =~ $unsafe_payload_path_pattern' `
+    "Release workflow must use the Bash-compatible unsafe payload path check."
+Assert-True ($PublishWorkflow -notmatch '(?m)(?:==|!=|=~)\s*\r?$') `
+    "Release workflow must not split a Bash conditional operator from its operand."
 
 $InstallScript = [System.IO.File]::ReadAllText($InstallScriptPath)
 $SchemaSources = @($InstallScript -split '\r?\n' | Where-Object {

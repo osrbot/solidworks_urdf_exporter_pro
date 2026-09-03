@@ -263,12 +263,14 @@ jobs:
           legacy_packages_config="$(mktemp)"
           git show "${source_sha}:scripts/legacy-test-packages.lock.json" > "$legacy_lock"
           git show "${source_sha}:SW2URDF/packages.config" > "$legacy_packages_config"
-          if [[ "$(canonical_text_sha256 "$legacy_lock")" !=
-                "$(jq -r '.legacyTestPackageLock.sha256' "$provenance_path")" ||
-                "$(canonical_text_sha256 "$legacy_packages_config")" !=
-                "$(jq -r '.legacyTestPackageLock.packagesConfigSha256' "$provenance_path")" ||
-                "$(jq -r '.packagesConfig.sha256' "$legacy_lock")" !=
-                "$(jq -r '.legacyTestPackageLock.packagesConfigSha256' "$provenance_path")" ]]; then
+          legacy_lock_hash="$(canonical_text_sha256 "$legacy_lock")"
+          legacy_config_hash="$(canonical_text_sha256 "$legacy_packages_config")"
+          provenance_legacy_lock_hash="$(jq -r '.legacyTestPackageLock.sha256' "$provenance_path")"
+          provenance_legacy_config_hash="$(jq -r '.legacyTestPackageLock.packagesConfigSha256' "$provenance_path")"
+          locked_config_hash="$(jq -r '.packagesConfig.sha256' "$legacy_lock")"
+          if [[ "$legacy_lock_hash" != "$provenance_legacy_lock_hash" ||
+                "$legacy_config_hash" != "$provenance_legacy_config_hash" ||
+                "$locked_config_hash" != "$provenance_legacy_config_hash" ]]; then
             echo "Legacy test dependency lock provenance does not match the source commit." >&2
             exit 1
           fi
@@ -340,8 +342,9 @@ jobs:
             echo "Installer payload does not match the provenance manifest." >&2
             exit 1
           fi
+          unsafe_payload_path_pattern='(^|/)\.\.(/|$)'
           while IFS=$'\t' read -r relative_path expected_hash; do
-            if [[ "$relative_path" == /* || "$relative_path" =~ (^|/)\.\.(/|$) ]]; then
+            if [[ "$relative_path" == /* || "$relative_path" =~ $unsafe_payload_path_pattern ]]; then
               echo "Installer provenance contains an unsafe payload path: $relative_path" >&2
               exit 1
             fi
