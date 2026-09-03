@@ -1,0 +1,29 @@
+# Link Tree
+
+The Link tree defines the robot's rigid bodies and their parent-child relationships. Errors here also affect Joints, inertia, and meshes later in the workflow.
+
+## What can you do on this page?
+
+- Create, rename, and delete Links.
+- Drag Links to change parent-child relationships.
+- Assign SolidWorks components to a Link.
+- Copy and paste branches.
+- Organize the hierarchy in an outline editor.
+- Save the configuration and restore it when the assembly is reopened.
+
+## Recommended order
+
+1. Create one root Link.
+2. Group components by real rigid body, not mechanically by part count.
+3. Build the parent-child hierarchy from the base toward the end effectors.
+4. Confirm that no component is assigned to more than one Link.
+5. Move to the Joint page and configure each connection.
+
+## Common mistakes
+
+- Splitting parts that move rigidly together into separate Links.
+- Putting components on opposite sides of a Joint into the same Link.
+- Looking only at display names without checking the actual assembly branch.
+- Reusing an old configuration after changing the assembly without reviewing component assignments.
+
+When finished, the tree should match the robot's real kinematic chain.
