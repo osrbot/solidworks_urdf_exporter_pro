@@ -126,8 +126,8 @@ pnpm docs:dev
 ## Star 趋势
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/star-history/assets/star-history-dark.svg">
-  <img alt="SW2URDF GitHub Star 数量变化趋势" src="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/star-history/assets/star-history.svg" width="720">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/master/assets/star-history-dark.svg">
+  <img alt="SW2URDF GitHub Star 数量变化趋势" src="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/master/assets/star-history.svg" width="720">
 </picture>
 
 ## 许可证与致谢

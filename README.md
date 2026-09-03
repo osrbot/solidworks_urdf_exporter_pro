@@ -129,8 +129,8 @@ pnpm docs:dev
 ## Star history
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/star-history/assets/star-history-dark.svg">
-  <img alt="SW2URDF GitHub star history" src="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/star-history/assets/star-history.svg" width="720">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/master/assets/star-history-dark.svg">
+  <img alt="SW2URDF GitHub star history" src="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/master/assets/star-history.svg" width="720">
 </picture>
 
 ## License and credits

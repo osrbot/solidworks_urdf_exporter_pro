@@ -84,6 +84,11 @@ jobs:
           dotnet restore src/OSURDF.Cli/OSURDF.Cli.csproj --locked-mode
           dotnet build src/OSURDF.Cli/OSURDF.Cli.csproj --configuration Release --no-restore
 
+      - name: Install pinned OpenUSD Python runtime
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-deps \
+            "https://files.pythonhosted.org/packages/19/0b/efe5c0d7c273149ac94083831e5b36649925a621a73cd2ddf9616e160c8c/usd_core-26.8-cp312-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl#sha256=204fb1ef1fc977b827c491f4e9fa39b57518504ed0cacfe12e026e95123cacf1"
+
       - name: Validate JSON schemas and Python adapter
         run: |
           set -euo pipefail
