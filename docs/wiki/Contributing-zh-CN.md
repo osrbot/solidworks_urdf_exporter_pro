@@ -5,9 +5,9 @@
 欢迎提交可复现的问题、测试、文档和代码修复。本页只描述仓库已经具备的流程，不虚构 CLA、响应
 时限或未建立的分支规则。
 
-当前维护分支贡献者包括 [dajianli](https://github.com/dajianli)、
-[kitso666](https://github.com/kitso666)、[sunmaxwll](https://github.com/sunmaxwll) 和
-[W472351926](https://github.com/W472351926)。名单不区分贡献主次，完整记录见
+当前维护分支贡献者按项目展示顺序为 [kitso666](https://github.com/kitso666)、
+[W472351926](https://github.com/W472351926)、[dajianli](https://github.com/dajianli) 和
+[sunmaxwll](https://github.com/sunmaxwll)。完整记录见
 [CONTRIBUTORS.md](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CONTRIBUTORS.md)。
 
 ## 开发环境

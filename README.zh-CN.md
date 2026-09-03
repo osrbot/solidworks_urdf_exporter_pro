@@ -110,9 +110,9 @@ Joint，容易出错。SW2URDF 把这些步骤放进一个三步向导，并在�
 以及仍未验证的范围。开发环境和测试命令见
 [贡献说明](docs/wiki/Contributing-zh-CN.md)。
 
-当前维护分支贡献者包括 [dajianli](https://github.com/dajianli)、
-[kitso666](https://github.com/kitso666)、[sunmaxwll](https://github.com/sunmaxwll) 和
-[W472351926](https://github.com/W472351926)。完整说明见[贡献者名单](CONTRIBUTORS.md)。
+当前维护分支贡献者按项目展示顺序为 [kitso666](https://github.com/kitso666)、
+[W472351926](https://github.com/W472351926)、[dajianli](https://github.com/dajianli) 和
+[sunmaxwll](https://github.com/sunmaxwll)。完整说明见[贡献者名单](CONTRIBUTORS.md)。
 
 ## 文档
 
@@ -122,6 +122,13 @@ Joint，容易出错。SW2URDF 把这些步骤放进一个三步向导，并在�
 pnpm install --frozen-lockfile
 pnpm docs:dev
 ```
+
+## Star 趋势
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/star-history/assets/star-history-dark.svg">
+  <img alt="SW2URDF GitHub Star 数量变化趋势" src="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/star-history/assets/star-history.svg" width="720">
+</picture>
 
 ## 许可证与致谢
 

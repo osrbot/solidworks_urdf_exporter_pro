@@ -46,7 +46,7 @@ MJCF 输出机器人模型，不生成控制器、任务或强化学习工程。
 
 - 问题反馈：<https://github.com/osrbot/solidworks_urdf_exporter_pro/issues>
 - 贡献代码与文档：[参与贡献](Contributing-zh-CN)
-- 当前维护分支贡献者：[dajianli](https://github.com/dajianli)、
-  [kitso666](https://github.com/kitso666)、[sunmaxwll](https://github.com/sunmaxwll)、
-  [W472351926](https://github.com/W472351926)
+- 当前维护分支贡献者：[kitso666](https://github.com/kitso666)、
+  [W472351926](https://github.com/W472351926)、[dajianli](https://github.com/dajianli)、
+  [sunmaxwll](https://github.com/sunmaxwll)
 - 完整记录：[贡献者名单](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CONTRIBUTORS.md)

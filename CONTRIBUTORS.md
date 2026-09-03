@@ -2,15 +2,14 @@
 
 ## Current maintained fork / 当前维护分支
 
-- [dajianli](https://github.com/dajianli)
-- [kitso666](https://github.com/kitso666)
-- [sunmaxwll](https://github.com/sunmaxwll)
-- [W472351926](https://github.com/W472351926)
+1. [kitso666](https://github.com/kitso666)
+2. [W472351926](https://github.com/W472351926)
+3. [dajianli](https://github.com/dajianli)
+4. [sunmaxwll](https://github.com/sunmaxwll)
 
-The list above records contributors to the current maintained fork without implying rank or
-exclusive ownership.
+The list above records contributors to the current maintained fork in the project's display order.
 
-以上名单记录当前维护分支的项目贡献者，不代表贡献排序，也不表示项目仅由这些人员共同完成。
+以上名单按项目约定顺序记录当前维护分支的项目贡献者。
 
 ## Upstream and project history / 上游与项目历史
 

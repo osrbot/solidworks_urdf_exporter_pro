@@ -1,11 +1,30 @@
 :root {
-  --vp-c-brand-1: #0b67a3;
-  --vp-c-brand-2: #075482;
-  --vp-c-brand-3: #064365;
-  --vp-c-brand-soft: rgba(11, 103, 163, 0.12);
-  --vp-c-tip-1: #18745b;
-  --vp-c-tip-2: #125c48;
-  --vp-c-warning-1: #9a5a00;
+  --vp-c-brand-1: #087f8c;
+  --vp-c-brand-2: #006d77;
+  --vp-c-brand-3: #00545c;
+  --vp-c-brand-soft: rgba(8, 127, 140, 0.13);
+  --vp-c-tip-1: #16876f;
+  --vp-c-tip-2: #0f6e5b;
+  --vp-c-warning-1: #a95d08;
+  --vp-c-danger-1: #c2413b;
+  --vp-button-brand-bg: #087f8c;
+  --vp-button-brand-hover-bg: #006d77;
+  --vp-button-brand-active-bg: #00545c;
+  --vp-button-brand-border: transparent;
+}
+
+.dark {
+  --vp-c-brand-1: #5bc8c8;
+  --vp-c-brand-2: #3aacb3;
+  --vp-c-brand-3: #238b95;
+  --vp-c-brand-soft: rgba(91, 200, 200, 0.14);
+  --vp-c-tip-1: #65c9a8;
+  --vp-c-tip-2: #47aa8b;
+  --vp-c-warning-1: #e3a94f;
+  --vp-c-danger-1: #ee7770;
+  --vp-button-brand-bg: #238b95;
+  --vp-button-brand-hover-bg: #3aacb3;
+  --vp-button-brand-active-bg: #1d727a;
 }
 
 .VPSidebar {
@@ -25,6 +44,28 @@
   letter-spacing: 0;
 }
 
+.VPNavBar {
+  border-bottom-color: color-mix(in srgb, var(--vp-c-brand-1) 20%, var(--vp-c-divider));
+}
+
+.VPNavBarMenuLink.active,
+.VPNavBarMenuLink:hover,
+.VPSidebarItem.is-active > .item .link > .text {
+  color: var(--vp-c-brand-1);
+}
+
+.VPDoc a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.VPButton,
+.DocSearch-Button,
+.VPLocalSearchBox .shell,
+.VPDoc .custom-block {
+  border-radius: 6px;
+}
+
 .VPDoc h1 {
   font-size: 32px;
 }
@@ -34,13 +75,34 @@
   padding-top: 24px;
 }
 
+.VPDoc h2::before {
+  display: inline-block;
+  width: 3px;
+  height: 0.9em;
+  margin-right: 10px;
+  border-radius: 2px;
+  background: var(--vp-c-brand-1);
+  content: '';
+  vertical-align: -0.05em;
+}
+
 .VPDoc img {
   display: block;
   width: 100%;
   margin: 18px 0 10px;
   border: 1px solid var(--vp-c-divider);
-  border-radius: 6px;
+  border-radius: 8px;
   background: #fff;
+  box-shadow: 0 10px 28px rgba(20, 38, 45, 0.08);
+}
+
+.dark .VPDoc img {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+}
+
+.VPDoc :not(pre) > code {
+  border: 1px solid color-mix(in srgb, var(--vp-c-brand-1) 18%, var(--vp-c-divider));
+  border-radius: 4px;
 }
 
 .VPDoc table {

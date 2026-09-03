@@ -6,12 +6,12 @@
 
 当前维护分支的贡献者包括：
 
-- [dajianli](https://github.com/dajianli)
-- [kitso666](https://github.com/kitso666)
-- [sunmaxwll](https://github.com/sunmaxwll)
-- [W472351926](https://github.com/W472351926)
+1. [kitso666](https://github.com/kitso666)
+2. [W472351926](https://github.com/W472351926)
+3. [dajianli](https://github.com/dajianli)
+4. [sunmaxwll](https://github.com/sunmaxwll)
 
-名单不区分贡献主次。上游及完整项目记录以
+名单按项目约定顺序展示。上游及完整项目记录以
 [贡献者名单](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CONTRIBUTORS.md)
 和 Git 历史为准。
 

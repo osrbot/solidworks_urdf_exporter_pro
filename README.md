@@ -112,9 +112,10 @@ Reproducible bug reports, tests, documentation, and focused code fixes are welco
 should explain the problem, implementation, test results, and anything not yet validated. See
 [Contributing](docs/wiki/Contributing.md) for development and test commands.
 
-Current maintained-fork contributors include [dajianli](https://github.com/dajianli),
-[kitso666](https://github.com/kitso666), [sunmaxwll](https://github.com/sunmaxwll), and
-[W472351926](https://github.com/W472351926). See the full [contributors record](CONTRIBUTORS.md).
+Current maintained-fork contributors, in project display order, are
+[kitso666](https://github.com/kitso666), [W472351926](https://github.com/W472351926),
+[dajianli](https://github.com/dajianli), and [sunmaxwll](https://github.com/sunmaxwll). See the full
+[contributors record](CONTRIBUTORS.md).
 
 ## Documentation
 
@@ -124,6 +125,13 @@ The documentation source is under [`docs/`](docs/index.md). Run it locally with:
 pnpm install --frozen-lockfile
 pnpm docs:dev
 ```
+
+## Star history
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/star-history/assets/star-history-dark.svg">
+  <img alt="SW2URDF GitHub star history" src="https://raw.githubusercontent.com/osrbot/solidworks_urdf_exporter_pro/star-history/assets/star-history.svg" width="720">
+</picture>
 
 ## License and credits
 

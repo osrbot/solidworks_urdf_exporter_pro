@@ -52,8 +52,8 @@ When reporting a problem, include your SolidWorks version, plugin version, repro
 and export report. See [Questions and Contributions](/en/support/help-and-contribute) for the
 recommended format.
 
-Contributors to the maintained fork include [dajianli](https://github.com/dajianli),
-[kitso666](https://github.com/kitso666), [sunmaxwll](https://github.com/sunmaxwll), and
-[W472351926](https://github.com/W472351926). See the repository
+Contributors to the maintained fork, in project display order, include
+[kitso666](https://github.com/kitso666), [W472351926](https://github.com/W472351926),
+[dajianli](https://github.com/dajianli), and [sunmaxwll](https://github.com/sunmaxwll). See the repository
 [contributors record](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CONTRIBUTORS.md)
 and Git history for the complete record.
