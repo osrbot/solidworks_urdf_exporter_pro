@@ -46,3 +46,7 @@ project. Check frames, collision, inertia, and motion again in the actual target
 
 - Report a problem: <https://github.com/osrbot/solidworks_urdf_exporter_pro/issues>
 - Contribute code or documentation: [Contributing](Contributing)
+- Maintained-fork contributors: [dajianli](https://github.com/dajianli),
+  [kitso666](https://github.com/kitso666), [sunmaxwll](https://github.com/sunmaxwll), and
+  [W472351926](https://github.com/W472351926)
+- Complete record: [Contributors](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CONTRIBUTORS.md)

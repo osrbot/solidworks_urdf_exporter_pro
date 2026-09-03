@@ -112,6 +112,10 @@ Reproducible bug reports, tests, documentation, and focused code fixes are welco
 should explain the problem, implementation, test results, and anything not yet validated. See
 [Contributing](docs/wiki/Contributing.md) for development and test commands.
 
+Current maintained-fork contributors include [dajianli](https://github.com/dajianli),
+[kitso666](https://github.com/kitso666), [sunmaxwll](https://github.com/sunmaxwll), and
+[W472351926](https://github.com/W472351926). See the full [contributors record](CONTRIBUTORS.md).
+
 ## Documentation
 
 The documentation source is under [`docs/`](docs/index.md). Run it locally with:
@@ -125,4 +129,4 @@ pnpm docs:dev
 
 This project is released under the [MIT License](LICENSE) and preserves the upstream project
 history, authors, and contributions. Thanks to original author Stephen Brawner, PickNik Consulting,
-Verb Surgical, Open Robotics, Willow Garage, and later community contributors.
+Verb Surgical, Open Robotics, Willow Garage, and all current and historical community contributors.

@@ -2,6 +2,19 @@
 
 项目地址：<https://github.com/osrbot/solidworks_urdf_exporter_pro>
 
+## 项目贡献者
+
+当前维护分支的贡献者包括：
+
+- [dajianli](https://github.com/dajianli)
+- [kitso666](https://github.com/kitso666)
+- [sunmaxwll](https://github.com/sunmaxwll)
+- [W472351926](https://github.com/W472351926)
+
+名单不区分贡献主次。上游及完整项目记录以
+[贡献者名单](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CONTRIBUTORS.md)
+和 Git 历史为准。
+
 ## 提交问题
 
 在 [GitHub Issues](https://github.com/osrbot/solidworks_urdf_exporter_pro/issues) 新建问题，并提供：

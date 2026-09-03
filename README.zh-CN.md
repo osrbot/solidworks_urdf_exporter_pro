@@ -110,6 +110,10 @@ Joint，容易出错。SW2URDF 把这些步骤放进一个三步向导，并在�
 以及仍未验证的范围。开发环境和测试命令见
 [贡献说明](docs/wiki/Contributing-zh-CN.md)。
 
+当前维护分支贡献者包括 [dajianli](https://github.com/dajianli)、
+[kitso666](https://github.com/kitso666)、[sunmaxwll](https://github.com/sunmaxwll) 和
+[W472351926](https://github.com/W472351926)。完整说明见[贡献者名单](CONTRIBUTORS.md)。
+
 ## 文档
 
 在线文档源码位于 [`docs/`](docs/index.md)。本地预览：
@@ -123,4 +127,4 @@ pnpm docs:dev
 
 项目按 [MIT License](LICENSE) 发布，并保留上游项目历史、作者和贡献记录。感谢原项目作者
 Stephen Brawner，以及 PickNik Consulting、Verb Surgical、Open Robotics、Willow Garage 和
-后续社区贡献者。
+所有当前及历史社区贡献者。

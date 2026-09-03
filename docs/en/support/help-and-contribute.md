@@ -2,6 +2,19 @@
 
 Project: <https://github.com/osrbot/solidworks_urdf_exporter_pro>
 
+## Project Contributors
+
+Contributors to the current maintained fork include:
+
+- [dajianli](https://github.com/dajianli)
+- [kitso666](https://github.com/kitso666)
+- [sunmaxwll](https://github.com/sunmaxwll)
+- [W472351926](https://github.com/W472351926)
+
+The list does not imply rank. See the
+[contributors record](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CONTRIBUTORS.md)
+and Git history for upstream and complete project attribution.
+
 ## Report a Problem
 
 Open a new [GitHub Issue](https://github.com/osrbot/solidworks_urdf_exporter_pro/issues) and include:

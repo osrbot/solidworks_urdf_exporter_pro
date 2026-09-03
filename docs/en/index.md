@@ -51,3 +51,9 @@ Project: <https://github.com/osrbot/solidworks_urdf_exporter_pro>
 When reporting a problem, include your SolidWorks version, plugin version, reproduction steps, log,
 and export report. See [Questions and Contributions](/en/support/help-and-contribute) for the
 recommended format.
+
+Contributors to the maintained fork include [dajianli](https://github.com/dajianli),
+[kitso666](https://github.com/kitso666), [sunmaxwll](https://github.com/sunmaxwll), and
+[W472351926](https://github.com/W472351926). See the repository
+[contributors record](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CONTRIBUTORS.md)
+and Git history for the complete record.

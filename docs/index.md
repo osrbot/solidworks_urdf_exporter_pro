@@ -44,3 +44,9 @@ SW2URDF 用于把 SolidWorks 装配体整理成机器人描述文件。你在插
 
 遇到问题时请提供 SolidWorks 版本、插件版本、复现步骤、日志和导出报告。具体格式见
 [提问与贡献代码](/support/help-and-contribute)。
+
+当前维护分支由 [dajianli](https://github.com/dajianli)、[kitso666](https://github.com/kitso666)、
+[sunmaxwll](https://github.com/sunmaxwll) 和 [W472351926](https://github.com/W472351926)
+共同贡献。完整记录以仓库的
+[贡献者名单](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CONTRIBUTORS.md)
+和 Git 历史为准。

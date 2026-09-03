@@ -38,6 +38,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Changed
 
+- Added an explicit maintained-fork contributor record and linked it from the bilingual README,
+  handbook, support pages, and Wiki without assigning rank or replacing upstream attribution.
 - Added built-in Chinese/English documentation routing with matching navigation, search, page
   controls, and content. The sidebar keeps independent scrolling without showing a heavy scrollbar,
   and now follows the active light or dark theme consistently.
