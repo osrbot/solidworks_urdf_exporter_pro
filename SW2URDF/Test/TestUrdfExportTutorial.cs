@@ -83,12 +83,14 @@ namespace SW2URDF.Test
             Assert.Contains("ComponentBoxes", completeText);
             Assert.Contains("inertial_validation.csv", completeText);
             Assert.Contains("mesh_manifest.csv", completeText);
-            Assert.Contains("target packages", completeText);
+            Assert.Contains("OpenUSD robot asset", completeText);
+            Assert.Contains("MuJoCo MJCF asset", completeText);
             Assert.DoesNotContain("Robot Bundle", completeText);
             Assert.Contains("Model and export", completeText);
             Assert.Contains("Export URDF Without Meshes", completeText);
-            Assert.Contains("ROS1", completeText);
-            Assert.Contains("ROS2", completeText);
+            Assert.Contains("ROS 1/ROS 2", completeText);
+            Assert.Contains("robot.usd", completeText);
+            Assert.Contains("scene.xml", completeText);
             Assert.Contains("robot_state_publisher", completeText);
         }
 

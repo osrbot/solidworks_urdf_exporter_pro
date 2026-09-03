@@ -163,8 +163,8 @@ namespace SW2URDF.UI
                 Location = new Point(20, 54),
                 Size = new Size(610, 92),
                 Text = chinese ?
-                    "教程会在真实导出界面旁显示 8 个步骤，覆盖坐标系、Link 树、Joint、质量惯性、碰撞网格、ROS1/ROS2 导出和结果校验。它不会自动点击界面，也不会修改模型。选择“跳过本次”后，下次导出仍会询问。" :
-                    "The tutorial stays beside the real exporter and covers frames, the Link tree, Joints, mass and inertia, collision meshes, ROS1/ROS2 output, and validation. It never clicks controls or modifies the model. Skip once asks again on a later export."
+                    "教程会在真实导出界面旁显示 8 个步骤，覆盖坐标系、Link 树、Joint、质量惯性、碰撞网格，以及 ROS、OpenUSD、MuJoCo 输出校验。它不会自动点击界面，也不会修改模型。选择“跳过本次”后，下次导出仍会询问。" :
+                    "The tutorial stays beside the real exporter and covers frames, the Link tree, Joints, mass and inertia, collision meshes, and validation of ROS, OpenUSD, and MuJoCo outputs. It never clicks controls or modifies the model. Skip once asks again on a later export."
             };
 
             FlowLayoutPanel buttons = new FlowLayoutPanel

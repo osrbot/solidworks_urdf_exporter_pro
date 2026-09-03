@@ -127,26 +127,24 @@ namespace SW2URDF.UI
                     "碰撞体覆盖真实接触区域且没有明显穿透；轮廓满足用途；网格大小和三角面数量可接受。"),
                 new UrdfExportTutorialStep(
                     "export",
-                    "7. 导出目标功能包",
-                    "选择实际需要的 ROS、Gazebo 或 Isaac 输出；插件在后台完成规范化与校验。",
-                    "1. ROS 包名使用小写字母、数字和下划线，例如 rover_description。\r\n" +
+                    "7. 选择并导出目标",
+                    "按下游用途选择 ROS 功能包、OpenUSD 机器人资产或 MuJoCo MJCF 资产。",
+                    "1. 导出 ROS 时，包名使用小写字母、数字和下划线，例如 rover_description。\r\n" +
                     "2. 在 Link 属性页完成颜色、材质、网格格式、碰撞策略和精简比例设置。\r\n" +
-                    "3. 进入 模型与导出 页，只填写一次整机维护者、邮箱、许可证、模型作者，并选择 ROS、Gazebo 与 Isaac 输出目标。\r\n" +
-                    "4. 需要完整交付时点击 导出 URDF 和网格；只有调试 XML 时才选择 导出 URDF（不含网格），该轻量兼容路径不生成 Isaac 或其他派生功能包。\r\n" +
-                    "5. 选择一个可写的新目录，等待所有 Link 的网格和报告完成后再关闭 SolidWorks。\r\n" +
-                    "6. 检查已选的 ROS1/<包名>、ROS2/<包名> 以及其他目标输出。",
-                    "内部校验通过；所有 mesh URI 都能找到对应文件；所选功能包完整；导出错误已被阻断或明确记录。"),
+                    "3. 在 模型与导出 页选择需要的目标；ROS 功能包需要版本、说明、维护者和邮箱，OpenUSD 资产需要明确的模型许可证。\r\n" +
+                    "4. 完整交付请选择 导出 URDF 和网格；导出 URDF（不含网格）只用于轻量 XML 调试，不生成 OpenUSD 或 MuJoCo 资产。\r\n" +
+                    "5. 选择可写目录并等待导出完成。不要单独复制 URDF、USD 或 XML，网格、依赖和报告应随目录一起保留。",
+                    "导出无错误；所有引用文件存在；所选 ROS、OpenUSD 或 MuJoCo 输出目录完整。"),
                 new UrdfExportTutorialStep(
                     "validate",
-                    "8. 检查报告并在查看器验证",
-                    "在进入 Gazebo、RViz 或控制代码之前发现缺失网格、错误惯性、坐标方向和关节配置问题。",
-                    "1. 打开 config/export_report.md，先处理 error 和 warning，再确认每个 Link 的有效碰撞策略。\r\n" +
-                    "2. 打开 config/inertial_validation.csv，对照 SW 质量、重心、COM 惯性张量、URDF 值和误差百分比。\r\n" +
-                    "3. 打开 config/mesh_manifest.csv，确认每个 visual/collision 网格的路径、大小、精简和 fallback。\r\n" +
-                    "4. 在 URDF 查看器中分别切换 Visual、Collision、Inertia、COM、Axes 和 Joint Axes。\r\n" +
-                    "5. 驱动所有可动 Joint 到上下限，确认旋转中心、方向、Mimic 和几何没有脱离。\r\n" +
-                    "6. 最后在目标 ROS1/ROS2 环境运行 URDF 解析或 robot_state_publisher，再把包交给仿真。",
-                    "解析无错误；视觉与碰撞齐全；COM/惯性等效长方体位置合理；关节方向和限位正确；ROS1/ROS2 结果一致。")
+                    "8. 检查导出结果",
+                    "先确认报告和引用完整，再用对应入口文件进行下游验证。",
+                    "1. 先查看导出根目录的 export_report.md，处理 error 和 warning。\r\n" +
+                    "2. ROS 1/ROS 2：检查功能包 config 目录中的 export_report.md、inertial_validation.csv 和 mesh_manifest.csv，再用 URDF 查看器、RViz 或 robot_state_publisher 加载。\r\n" +
+                    "3. OpenUSD：保留完整 USD/<名称> 目录，从 robot.usd 打开，检查层级、关节、材质、碰撞和质量属性；导出本身不要求本机安装 Isaac Sim。\r\n" +
+                    "4. MuJoCo：保留完整 MuJoCo/<名称> 目录，加载 robot.xml 或 scene.xml，检查模型姿态、关节和碰撞。\r\n" +
+                    "5. 对所有目标确认网格引用可解析，并检查 COM、惯性、关节轴、方向和限位。",
+                    "报告无 error；引用文件齐全；模型结构和物理属性合理；所选入口文件可被对应下游工具加载。")
             };
         }
 
@@ -160,8 +158,8 @@ namespace SW2URDF.UI
                 new UrdfExportTutorialStep("joints", "4. Configure Joints", "Set the type, name, pose, axis, limits, and optional Mimic relation for every connection.", "1. Review generated *_joint names.\r\n2. Use fixed, continuous, revolute, or prismatic according to the real mechanism.\r\n3. Select types explicitly for STEP, imported, or fixed assemblies; zero remaining DOFs does not prove fixed URDF semantics.\r\n4. Try SolidWorks Mate detection only on a native movable assembly with correct Mates. If it cannot find one unique DOF, use an explicit type and explicit reference geometry for moving Joints.\r\n5. Select Origin_* and Axis and verify parent/child direction.\r\n6. Add lower, upper, effort, and velocity for finite Joints; continuous has no position bounds.\r\n7. Add dynamics only when values are known.\r\n8. Configure Mimic after its source Joint and avoid cycles.", "Every moving Joint has an axis; finite Joints have limits; names are unique; Mimic graph is acyclic."),
                 new UrdfExportTutorialStep("inertia", "5. Validate mass, COM, and inertia", "Match every URDF inertial block to SolidWorks using the same frame convention.", "1. Verify mass comes from assigned bodies and real materials.\r\n2. inertial origin is the COM relative to the Link frame in metres.\r\n3. Inertia is the COM tensor in kg*m^2.\r\n4. Check symmetry, positive principal moments, and rigid-body triangle inequalities.\r\n5. Show the equivalent inertia cuboid and inspect its center, orientation, and scale.\r\n6. Check order of magnitude for sensors, plates, and small parts.", "Valid equivalent cuboid; plausible mass and COM; no negative principal moments or triangle inequality errors."),
                 new UrdfExportTutorialStep("geometry", "6. Choose visual and collision geometry", "Keep useful visual detail while producing stable, lightweight collision geometry.", "1. Visual represents appearance; Collision serves contact computation.\r\n2. Start with ComponentBoxes. Use BoxPrimitive for boxes, CylinderPrimitive for wheels, and SpherePrimitive for spheres.\r\n3. Use ConvexHull for one complex body, SimplifiedMesh when primitives do not fit, and AccurateMesh only when detail is essential.\r\n4. STL reduction 0 adds no reduction; larger values usually reduce size but require shape inspection.\r\n5. Failed strategies fall back to VisualMesh and are recorded as the effective strategy.", "Collision covers contact areas without severe penetration; shape and mesh size suit the target simulator."),
-                new UrdfExportTutorialStep("export", "7. Export target packages", "Select the ROS, Gazebo, or Isaac outputs you actually need; the exporter performs normalization and verification internally.", "1. Use a lowercase package name with digits and underscores, such as rover_description.\r\n2. Finish materials, mesh format, collision strategy, and reduction settings on the Link page.\r\n3. Open Model and export, enter the robot-wide maintainer, email, license, and model author once, then select the ROS, Gazebo, and Isaac targets.\r\n4. Choose Export URDF and Meshes for a complete delivery. Export URDF Without Meshes is a lightweight XML-debug compatibility path and does not create Isaac or other derived target packages.\r\n5. Select a writable directory and wait for all Link exports and reports.\r\n6. Check each selected ROS1/<package>, ROS2/<package>, and other target output.", "Internal verification passes; every mesh URI resolves; selected target packages are complete; export errors are blocked or explicitly recorded."),
-                new UrdfExportTutorialStep("validate", "8. Review reports and validate in a viewer", "Catch mesh, inertia, frame, and Joint errors before simulation or control integration.", "1. Review config/export_report.md.\r\n2. Compare SolidWorks and URDF values in config/inertial_validation.csv.\r\n3. Inspect paths, sizes, reduction, and fallback in config/mesh_manifest.csv.\r\n4. Toggle Visual, Collision, Inertia, COM, Axes, and Joint Axes in a URDF viewer.\r\n5. Move every Joint through its limits and verify pivot, direction, Mimic, and geometry.\r\n6. Parse the package or run robot_state_publisher in the target ROS1/ROS2 environment.", "No parser errors; complete visual/collision geometry; plausible COM/inertia; correct Joint motion; ROS1/ROS2 parity.")
+                new UrdfExportTutorialStep("export", "7. Select and export targets", "Choose the ROS package, OpenUSD robot asset, or MuJoCo MJCF asset required by the downstream workflow.", "1. When exporting ROS, use a lowercase package name with digits and underscores, such as rover_description.\r\n2. Finish colors, materials, mesh format, collision strategy, and reduction settings on the Link page.\r\n3. Select the required targets on Model and export. ROS packages require version, description, maintainer, and email; OpenUSD assets require an explicit model license.\r\n4. Choose Export URDF and Meshes for a complete delivery. Export URDF Without Meshes is only for lightweight XML debugging and does not generate OpenUSD or MuJoCo assets.\r\n5. Select a writable directory and wait for completion. Keep each output directory intact instead of copying only its URDF, USD, or XML entry file.", "No export errors; every referenced file exists; selected ROS, OpenUSD, or MuJoCo output directories are complete."),
+                new UrdfExportTutorialStep("validate", "8. Check exported results", "Confirm reports and references first, then validate the appropriate entry file downstream.", "1. Review export_report.md at the export root and resolve errors and warnings.\r\n2. ROS 1/ROS 2: review export_report.md, inertial_validation.csv, and mesh_manifest.csv under the package config directory, then load the URDF in a viewer, RViz, or robot_state_publisher.\r\n3. OpenUSD: keep the complete USD/<name> directory and open robot.usd to inspect hierarchy, Joints, materials, collision, and mass properties. Export does not require Isaac Sim on this computer.\r\n4. MuJoCo: keep the complete MuJoCo/<name> directory and load robot.xml or scene.xml to inspect pose, Joints, and collision.\r\n5. For every target, verify mesh references, COM, inertia, Joint axes, direction, and limits.", "No report errors; all references exist; model structure and physical properties are plausible; selected entry files load in their downstream tools.")
             };
         }
     }
