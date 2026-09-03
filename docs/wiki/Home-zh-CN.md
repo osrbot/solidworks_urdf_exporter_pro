@@ -1,107 +1,64 @@
-# SolidWorks to URDF Exporter Wiki
+# SW2URDF Wiki
 
 **简体中文** | [English](Home)
 
-这是 OSRBot 维护分支的详细用户与维护文档。项目入口、支持范围和致谢见
-[README](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/README.md)。
+SW2URDF 是社区维护的 SolidWorks 机器人模型导出插件。它把用户确认过的 Link、Joint、坐标系、
+质量属性、Visual 和 Collision 整理成四种明确交付物：ROS 1 功能包、ROS 2 功能包、OpenUSD
+机器人资产和 MuJoCo MJCF 模型。
 
-## 为什么需要这个维护分支
+项目地址：<https://github.com/osrbot/solidworks_urdf_exporter_pro>
 
-上游导出器提供了原始插件和 URDF 导出管线。本维护分支的目的不是重新打包历史二进制文件，
-而是补齐生产使用中长期存在的工程缺口：
+## 先看哪一页
 
-- Link 树现在具备事务化编辑、严格的 v2 PID 配置持久化、恢复草稿，以及覆盖预览和重开流程的
-  严格校验。组件实例 PID 与特征 PID 可唯一识别深层组件中 Unicode 或同名的参考几何。
-- STEP 和固定装配使用可审核的手工 Joint 工作流；Mate 识别必须显式触发，0 个剩余 DOF 不会被
-  静默写成 `fixed`。
-- 质量、COM 和惯性统一使用显式单位及零件/装配体坐标转换路线，并执行边界、物理张量和 API
-  主惯量校验。
-- 碰撞策略按 Link 局部拟合、在 SolidWorks 中预览，并记录所有回退，从而区分请求策略和实际
-  导出结果。
-- 维护流程增加确定性 Link 自动配色、简体中文 UI、导出进度、校验报告和可复现的 Draft-only
-  安装包发布管线。
-- OpenUSD 与 MJCF 是具有固定自动化检查的具体资产输出，不包装成控制器、任务或强化学习工程。
-
-本分支保留上游历史、作者署名和 MIT 许可证。按日期整理的变更与提交证据见
-[Changelog](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CHANGELOG.md)。
-
-## 项目定位
-
-该插件运行在 Windows x64 SolidWorks 中，将明确配置的 Link、Joint、坐标系、质量属性、Visual
-和 Collision 导出为四种具体目标：ROS 1 功能包、ROS 2 功能包、OpenUSD 机器人资产和 MuJoCo
-MJCF 模型。
-
-它坚持三个边界：
-
-- `visual` 服务渲染和识别，目标是外观与几何可辨识。
-- `collision` 服务接触求解，目标是尽量简单且保留任务相关接触形状。
-- `inertial` 服务动力学，目标是尽可能真实地保存质量、质心和惯性张量。
-
-Collision 策略不会重算或替换 Inertial。SolidWorks 中的临时碰撞体和等效惯性体用于检查，
-正式导出结果以 URDF、`mesh_manifest.csv` 和 `inertial_validation.csv` 为准。
-
-`Robot Bundle` 只是私有规范暂存表示。插件在系统临时目录中创建它，供所选目标导出器使用，
-随后清理；它不是用户可选目标，也不会作为目录树交付。
-
-## 版本边界
-
-`URDF Export Configuration (v2)` 与 `robot.schema.v3` 不是同一份数据的两个版本。前者是持久化
-在 SolidWorks 装配体中的 PID 配置特征；后者是各导出器使用的当前规范临时机器人文档。名称型
-SolidWorks configuration v1.x 不自动迁移，而历史 robot schema v2 会在内存中迁移为 v3，当前
-writer 只生成 v3。robot schema v3 新增 `profiles.usdSimulation`，明确记录基座模式、机器人分类、
-自碰撞、SI 增益单位和逐 Joint drive 意图。项目 README 也给出了相同边界说明。
-
-## 文档导航
-
-- [Installation](Installation)：安装、升级与版本边界
-- [Quick Start](Quick-Start-zh-CN)：从 SolidWorks 装配体到四种导出目标
-- [Link Tree](Link-Tree)：层级、事务编辑、持久化与恢复
-- [Inertia](Inertia)：坐标系、单位、符号和物理校验
-- [Collision](Collision)：碰撞策略、预览和回退
-- [OpenUSD](OpenUSD-zh-CN)：USD 交付文件与验证边界
-- [MuJoCo MJCF](MJCF-zh-CN)：MJCF 交付文件与官方运行时验证边界
-- [Troubleshooting](Troubleshooting)：按症状排查
-- [Contributing](Contributing)：开发、测试与问题报告
-- [Release Process](Release-Process)：可追溯安装包与人工发布门禁
+- 第一次使用：[快速开始](Quick-Start-zh-CN)
+- 安装和升级：[安装](Installation-zh-CN)
+- Link 层级与保存：[Link 树](Link-Tree-zh-CN)
+- 质量、质心与惯性：[惯性](Inertia-zh-CN)
+- 碰撞策略与预览：[碰撞](Collision-zh-CN)
+- USD 文件与验证范围：[OpenUSD](OpenUSD-zh-CN)
+- MuJoCo 文件与验证范围：[MuJoCo MJCF](MJCF-zh-CN)
+- 导出失败：[问题排查](Troubleshooting-zh-CN)
 
 ## 输出结果
 
 | 目标 | 交付目录 | 主要内容 |
 | --- | --- | --- |
-| ROS 1 功能包 | `ROS1/<package>` | URDF、Visual/Collision 网格、配置、Markdown/CSV 报告 |
-| ROS 2 功能包 | `ROS2/<package>` | URDF、Visual/Collision 网格、配置、Markdown/CSV 报告 |
-| OpenUSD 资产 | `USD/<package>` | `robot.usd`、几何依赖、源网格证据、`name_map.json`、`export_report.json` |
-| MuJoCo MJCF | `MuJoCo/<robot>` | `robot.xml`、`scene.xml`、Visual/Collision 资产、`name_map.json`、`export_report.json` |
+| ROS 1 | `ROS1/<package>` | URDF、网格、配置和报告 |
+| ROS 2 | `ROS2/<package>` | URDF、网格、配置和报告 |
+| OpenUSD | `USD/<package>` | `robot.usd`、几何依赖、名称映射和报告 |
+| MuJoCo MJCF | `MuJoCo/<robot>` | `robot.xml`、`scene.xml`、网格资产、名称映射和报告 |
 
-四个目标可独立选择，但至少选择一个。USD 与 MJCF 要求 STL 几何。主流程不再要求 Isaac 版本、
-Isaac Lab profile、actuator profile 或 Bundle 目标目录。
+四个目标可以独立选择，但至少选择一个。Robot Bundle 是系统临时目录中的内部暂存，不是第五个
+目标，也不会交付给用户。OpenUSD 不要求本机安装 Isaac Sim/Isaac Lab 或填写其版本；MJCF 不
+生成 actuator、控制器、任务或强化学习工程。
 
-每次导出只原子替换本次选中的目标目录。未选目标的既有目录会保留，可能是较早一次导出的结果；
-请以顶层 `export_report.md` 记录的本次生成和验证目标为准。
+## 三类数据不要混用
 
-## 支持与证据边界
+- `visual` 负责显示，重点是外观和可辨识几何。
+- `collision` 负责接触求解，重点是简单并保留关键接触形状。
+- `inertial` 负责动力学，保存质量、质心和惯性张量。
 
-- **生成能力**：导出器从同一份已校验规范模型写出约定的目标文件。
-- **自动化验证**：USD 使用固定的内置 OpenUSD 运行时生成并重新打开；两个 MJCF 入口使用固定
-  的 MuJoCo 官方工具完成编译、规范保存、重载和一步零控制推进。
-- **实际应用运行验证**：USD 结果不声称已运行 Isaac Sim/Isaac Lab；ROS 结果不声称已在
-  ROS/Gazebo 中启动；MJCF 结果不声称控制器质量、接触调参、长时间稳定性、任务行为、性能或
-  强化学习已经验证。
-- 历史最低要求为 SolidWorks 2018 SP5。
-- 当前维护和 Live API 验证重点是 SolidWorks 2023。
-- Live 测试覆盖 SolidWorks 2023 不代表每个版本和 Service Pack 都已验证。
-- 深层参考几何和临时预览变更仍须维护者完成 Live SolidWorks 测试后才能公开发布。
-- 软件依据 MIT License 按原样提供；进入生产仿真前必须在目标求解器中复核。
+更换 Collision 策略不会重算 Inertial。SolidWorks 临时预览用于检查，正式结果以导出文件和报告
+为准。
 
-## 致谢
+## 版本怎么理解
 
-- 原项目：[ros/solidworks_urdf_exporter](https://github.com/ros/solidworks_urdf_exporter)
-- 原作者及历史维护者：Stephen Brawner
-- 原 README 记录的历史支持者：PickNik Consulting、Verb Surgical、Open Robotics、Willow Garage
-- 3DXML 贡献：Kento Matsuo 及提交 `22cb778` 记录的贡献者
-- 当前维护者：`kitso666 <kitso@osrbot.com>`
-- 维护者提供的社区惯性参考：
-  [SolidWorks 到 URDF 惯性文章](https://zhuanlan.zhihu.com/p/1887859297221845818)
+- 插件产品版本用于安装包和 DLL。
+- `URDF Export Configuration (v2)` 是保存在 SolidWorks 装配体中的 PID 配置。
+- `robot.schema.v3` 是导出过程中使用的临时规范文档。
+- `usd-core 26.8` 与 MuJoCo `3.12.0` 是当前固定验证工具版本。
 
-该文章作为背景阅读资料致谢；插件实际使用的 API 路径、代码、测试与导出报告才是当前实现行为
-的事实来源。
+这些版本服务不同职责。小的 UI 或文档更新不应推动 schema 主版本变化；只有不兼容的数据合同
+变化才需要增加 schema 主版本。
+
+## 验证边界
+
+- OpenUSD 会使用固定运行时生成并重新打开 stage。
+- MuJoCo 会使用固定官方工具编译、保存、重载并推进一步零控制。
+- ROS 2 最小夹具可通过手动触发的集成门禁，在指定 ROS 2/Gazebo 环境构建、启动并激活控制器。
+- ROS 1 当前主要覆盖结构和生成测试。
+- 上述检查都不代替用户模型在实际控制器、接触参数和任务中的工程验收。
+
+当前维护和 Live API 验证重点是 SolidWorks 2023；继承自上游的历史最低要求是 SolidWorks 2018
+SP5，这不表示每个版本和 Service Pack 都已回归。完整证据见
+[兼容性矩阵](../development/compatibility-matrix)。

@@ -2,7 +2,8 @@
 
 > **当前状态（2026-09-01）**：本文记录内部规范模型的架构。Robot Bundle 已收敛为插件私有、
 > 短生命周期的暂存表示，不再是 UI 可选目标，也不交付到用户输出目录。现行用户目标和验证边界以
-> [README](../../README.zh-CN.md) 与 [Wiki 首页](../wiki/Home-zh-CN.md) 为准。
+> [README](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/README.zh-CN.md) 与
+> [Wiki 首页](../wiki/Home-zh-CN.md) 为准。
 
 本文文件名中的历史 `v2` 不表示当前 `robot.json` schema 版本。SolidWorks 持久化配置使用
 `URDF Export Configuration (v2)`，而 Bundle 中当前规范 `robot.json` 使用 `robot.schema.v3`；

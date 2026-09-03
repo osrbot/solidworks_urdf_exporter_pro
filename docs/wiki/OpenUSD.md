@@ -8,8 +8,9 @@ The OpenUSD target produces a portable robot asset from the same validated Link,
 Collision, and Inertial data used by the ROS exporters. It is an asset-format target, not an Isaac
 Sim or Isaac Lab project generator.
 
-No local Isaac installation is required or detected. The installer supplies a pinned OpenUSD
-runtime used only for generation and structural validation.
+No local Isaac installation is required or detected. The installer pins `usd-core 26.8` for
+generation and structural validation; the actual runtime version is also recorded in
+`export_report.json`.
 
 ## Delivered Files
 

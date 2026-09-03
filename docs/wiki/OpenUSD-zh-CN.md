@@ -7,8 +7,8 @@
 OpenUSD 目标使用与 ROS 导出器相同的已校验 Link、Joint、Visual、Collision 和 Inertial 数据，
 生成可移植机器人资产。它是资产格式目标，不是 Isaac Sim 或 Isaac Lab 工程生成器。
 
-用户不需要在本机安装 Isaac，插件也不会检测 Isaac。安装包提供固定版本的 OpenUSD 运行时，
-只用于生成和结构校验。
+用户不需要在本机安装 Isaac，插件也不会检测 Isaac。安装包固定使用 `usd-core 26.8`，只用于
+生成和结构校验；实际版本也会写入 `export_report.json`。
 
 ## 交付文件
 

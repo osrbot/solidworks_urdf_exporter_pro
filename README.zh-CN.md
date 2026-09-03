@@ -6,6 +6,8 @@
 [![平台](https://img.shields.io/badge/platform-Windows%20x64-blue.svg)](#支持环境)
 [![框架](https://img.shields.io/badge/.NET%20Framework-4.8-blueviolet.svg)](#开发)
 
+[在线文档源文件](docs/index.md) | [Wiki](docs/wiki/Home-zh-CN.md) | [快速开始](docs/guide/getting-started.md)
+
 本仓库是 ROS 原项目
 [`solidworks_urdf_exporter`](https://github.com/ros/solidworks_urdf_exporter) 的 OSRBot
 持续维护分支。它保留原有 SolidWorks 插件工作流，并维护 Link 树编辑、坐标系感知质量属性、
@@ -61,9 +63,9 @@ SolidWorks、复杂装配体、物理参数校验和长期发布维护中暴露�
 | 用户目标 | 交付文件 | 自动化证据 | 不代表 |
 | --- | --- | --- | --- |
 | ROS 1 功能包 | `ROS1/<package>`，包含 URDF、网格、配置和报告 | 规范模型校验与事务化功能包生成 | 已在 ROS 1 中启动、控制或执行任务 |
-| ROS 2 功能包 | `ROS2/<package>`，包含 URDF、网格、配置和报告 | 规范模型校验与事务化功能包生成 | 已在 ROS 2/Gazebo 或 `ros2_control` 中运行 |
-| OpenUSD 机器人资产 | `USD/<package>/robot.usd`、几何依赖、源网格证据、名称映射和 JSON 报告 | 使用安装包固定的 OpenUSD 运行时生成并重新打开 stage | 已导入或运行于 Isaac Sim/Isaac Lab |
-| MuJoCo MJCF 模型 | `MuJoCo/<robot>/robot.xml`、`scene.xml`、资产、名称映射和 JSON 报告 | 使用安装包固定的 MuJoCo 官方工具对两个 XML 入口完成编译、规范保存、重载及一步零控制推进 | 已生成执行器、PID、控制器、任务、接触调参或强化学习工程 |
+| ROS 2 功能包 | `ROS2/<package>`，包含 URDF、网格、配置和报告 | 规范模型校验；手动门禁可在固定最小夹具上构建、启动 Gazebo 并检查控制器激活 | 任意用户模型已在目标 ROS 2/Gazebo 环境通过 |
+| OpenUSD 机器人资产 | `USD/<package>/robot.usd`、几何依赖、源网格证据、名称映射和 JSON 报告 | 使用固定 `usd-core 26.8` 生成并重新打开 stage | 已导入或运行于 Isaac Sim/Isaac Lab |
+| MuJoCo MJCF 模型 | `MuJoCo/<robot>/robot.xml`、`scene.xml`、资产、名称映射和 JSON 报告 | 使用固定 MuJoCo `3.12.0` 工具对两个 XML 入口完成编译、规范保存、重载及一步零控制推进 | 已生成执行器、PID、控制器、任务、接触调参或强化学习工程 |
 
 OpenUSD 在主页面仍是一个目标，旁边的**设置...**对话框只在用户主动打开时加载，用于保存可移植
 仿真意图：源语义/固定/浮动基座、官方机器人分类、自碰撞，以及逐个单自由度 Joint 的被动/位置/

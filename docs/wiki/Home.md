@@ -1,124 +1,67 @@
-# SolidWorks to URDF Exporter Wiki
+# SW2URDF Wiki
 
-**English** | [简体中文](Home-zh-CN)
+[简体中文](Home-zh-CN) | **English**
 
-This is the detailed user and maintainer documentation for the OSRBot-maintained fork. See the
-[README](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/README.md) for the project
-entry point, support boundaries, and credits.
+SW2URDF is a community-maintained SolidWorks robot-model exporter. It converts user-reviewed Link,
+Joint, frame, mass-property, Visual, and Collision data into four concrete deliverables: ROS 1 and
+ROS 2 packages, an OpenUSD robot asset, and a MuJoCo MJCF model.
 
-## Why the Maintained Fork Exists
+Project: <https://github.com/osrbot/solidworks_urdf_exporter_pro>
 
-The upstream exporter supplied the original add-in and URDF pipeline. The maintained fork is needed
-to close production gaps rather than merely repackage the historical binaries:
+## Start here
 
-- Link-tree sessions now have transactional editing, strict v2 PID-backed configurations, recovery
-  drafts, and stricter validation across preview and reopen transitions. Component-instance and
-  feature PIDs keep nested Unicode or duplicate reference-geometry names unambiguous.
-- STEP and fixed assemblies use a reviewable manual Joint workflow. Mate detection is an explicitly
-  triggered assistant, and zero remaining DOF is never silently exported as `fixed`.
-- Mass, COM, and inertia use explicit units and one frame-conversion route for parts and assemblies,
-  with bounds, physical-tensor, and API-principal-moment checks.
-- Collision strategies are fitted per Link, previewed in SolidWorks, and recorded with any fallback
-  so the requested and actually exported geometry can be distinguished.
-- The maintained workflow adds deterministic Link coloring, Simplified Chinese UI, export progress,
-  validation reports, and reproducible draft-only installer packaging.
-- OpenUSD and MJCF are concrete asset outputs with pinned automated checks; neither target is
-  presented as a controller, task, or reinforcement-learning project.
+- First export: [Quick Start](Quick-Start)
+- Installation and upgrades: [Installation](Installation)
+- Link hierarchy and persistence: [Link Tree](Link-Tree)
+- Mass, center of mass, and inertia: [Inertia](Inertia)
+- Collision strategies and preview: [Collision](Collision)
+- USD output and evidence: [OpenUSD](OpenUSD)
+- MuJoCo output and evidence: [MuJoCo MJCF](MJCF)
+- Export failures: [Troubleshooting](Troubleshooting)
 
-The upstream history, authorship, and MIT license remain intact. See the
-[Changelog](https://github.com/osrbot/solidworks_urdf_exporter_pro/blob/master/CHANGELOG.md) for dated
-changes and commit evidence.
+## Outputs
 
-## Project Scope
-
-The Windows x64 SolidWorks add-in exports explicitly configured Links, Joints, coordinate systems,
-mass properties, Visual geometry, and Collision geometry into four concrete targets: ROS 1 package,
-ROS 2 package, OpenUSD robot asset, and MuJoCo MJCF model.
-
-It keeps three responsibilities separate:
-
-- `visual` serves rendering and recognition; recognizable appearance and geometry matter.
-- `collision` serves contact solving; geometry should be as simple as possible while preserving
-  task-relevant contact shape.
-- `inertial` serves dynamics; mass, center of mass, and inertia tensor should remain physically
-  faithful.
-
-Changing a Collision strategy does not recompute or replace Inertial. Temporary collision and
-equivalent-inertia bodies in SolidWorks are inspection aids. The exported URDF,
-`mesh_manifest.csv`, and `inertial_validation.csv` record the formal result.
-
-`Robot Bundle` is a private canonical staging representation. It is created in the system temporary
-directory, consumed by the selected target exporters, and cleaned after export. It is not a
-user-selectable target or a delivered file tree.
-
-## Version Boundaries
-
-`URDF Export Configuration (v2)` and `robot.schema.v3` do not describe the same data. The former is
-the PID-backed SolidWorks feature persisted in the assembly; the latter is the current canonical
-temporary robot document used by the exporters. Name-based SolidWorks configuration v1.x is not
-auto-migrated, while historical robot schema v2 documents are migrated in memory to v3 and all
-current writers emit v3. Robot schema v3 adds `profiles.usdSimulation` for base mode, robot
-classification, self-collision, SI gain units, and explicit per-Joint drive intent. This
-distinction is also summarized in the project README.
-
-## Documentation
-
-- [Installation](Installation): installation, upgrade, and version boundaries
-- [Quick Start](Quick-Start): SolidWorks assembly to the four export targets
-- [Link Tree](Link-Tree): hierarchy, transactional editing, persistence, and recovery
-- [Inertia](Inertia): frames, units, conventions, and physical validation
-- [Collision](Collision): strategies, previews, and fallbacks
-- [OpenUSD](OpenUSD): delivered USD files and validation boundary
-- [MuJoCo MJCF](MJCF): delivered MJCF files and official-runtime validation boundary
-- [Troubleshooting](Troubleshooting): symptom-based diagnosis
-- [Contributing](Contributing): development, testing, and issue reports
-- [Release Process](Release-Process): traceable installers and the manual publication gate
-
-## Exported Results
-
-| Target | Delivered directory | Main contents |
+| Target | Directory | Main contents |
 | --- | --- | --- |
-| ROS 1 package | `ROS1/<package>` | URDF, Visual/Collision meshes, configuration, Markdown/CSV reports |
-| ROS 2 package | `ROS2/<package>` | URDF, Visual/Collision meshes, configuration, Markdown/CSV reports |
-| OpenUSD asset | `USD/<package>` | `robot.usd`, geometry dependencies, source mesh evidence, `name_map.json`, `export_report.json` |
-| MuJoCo MJCF | `MuJoCo/<robot>` | `robot.xml`, `scene.xml`, Visual/Collision assets, `name_map.json`, `export_report.json` |
+| ROS 1 | `ROS1/<package>` | URDF, meshes, configuration, and reports |
+| ROS 2 | `ROS2/<package>` | URDF, meshes, configuration, and reports |
+| OpenUSD | `USD/<package>` | `robot.usd`, geometry dependencies, name map, and report |
+| MuJoCo MJCF | `MuJoCo/<robot>` | `robot.xml`, `scene.xml`, mesh assets, name map, and report |
 
-The four targets are independent selections, but at least one is required. USD and MJCF require STL
-geometry. There is no user-facing Isaac version, Isaac Lab profile, actuator profile, or Bundle
-destination.
+At least one target must be selected. Robot Bundle is private temporary staging, not a fifth user
+target. OpenUSD does not require a local Isaac installation or version field. MJCF does not generate
+actuators, controllers, tasks, or reinforcement-learning projects.
 
-An export atomically replaces only its selected target directories. Unselected target directories
-are retained and may contain results from an earlier run; check the top-level `export_report.md` for
-the targets generated and validated by the current run.
+## Keep the data roles separate
 
-## Evidence Boundaries
+- `visual` serves rendering and recognition.
+- `collision` serves contact solving with deliberately simpler geometry.
+- `inertial` stores mass, center of mass, and the inertia tensor.
 
-- **Generation capability:** the exporter writes the documented target files from one validated
-  canonical model.
-- **Automated validation:** OpenUSD is generated and reopened with the pinned bundled OpenUSD
-  runtime. Both MJCF entry points are compiled, canonically saved, reloaded, and advanced one
-  zero-control step with pinned official MuJoCo tools.
-- **Application runtime validation:** no USD export result claims Isaac Sim or Isaac Lab execution;
-  no ROS result claims a ROS/Gazebo launch; no MJCF result claims controller quality, contact tuning,
-  long-horizon stability, task behavior, performance, or reinforcement-learning validation.
-- The historical minimum requirement is SolidWorks 2018 SP5.
-- Current maintenance and Live API verification focus on SolidWorks 2023.
-- Live coverage on SolidWorks 2023 is not evidence that every release and service pack is verified.
-- Deep-reference and temporary-preview changes still require the maintainer's live SolidWorks test
-  before a public release.
-- The software is provided under the MIT License. Production models still require validation in the
-  intended simulator and task.
+Changing a Collision strategy does not recompute Inertial data. SolidWorks previews support review;
+the exported files and reports state what was actually delivered.
 
-## Credits
+## Version domains
 
-- Upstream project: [ros/solidworks_urdf_exporter](https://github.com/ros/solidworks_urdf_exporter)
-- Original author and historical maintainer: Stephen Brawner
-- Historical supporters named by upstream: PickNik Consulting, Verb Surgical, Open Robotics, and
-  Willow Garage
-- 3DXML contribution: Kento Matsuo and the contributors recorded by commit `22cb778`
-- Current maintainer: `kitso666 <kitso@osrbot.com>`
-- Community inertia reference supplied by the maintainers:
-  [SolidWorks-to-URDF inertia article](https://zhuanlan.zhihu.com/p/1887859297221845818)
+- The product version identifies the installer and DLL.
+- `URDF Export Configuration (v2)` is the PID-backed configuration saved in SolidWorks.
+- `robot.schema.v3` is the temporary canonical document used during export.
+- `usd-core 26.8` and MuJoCo `3.12.0` are the currently pinned validation tools.
 
-The reference is acknowledged for background reading. The API path, code, tests, and export reports
-remain the source of truth for this exporter.
+These versions have different jobs. UI or documentation changes do not justify a schema major
+version bump; only an incompatible data-contract change does.
+
+## Evidence boundary
+
+- OpenUSD output is generated and reopened with the pinned runtime.
+- MuJoCo output is compiled, canonically saved, reloaded, and advanced one zero-control step with
+  pinned official tools.
+- A manually triggered ROS 2 integration gate builds and launches a minimum fixture in selected
+  ROS 2/Gazebo environments and checks its controllers.
+- ROS 1 currently has structural and generation coverage.
+- None of these checks replaces engineering acceptance of the user's controller, contact settings,
+  or task.
+
+Current live API maintenance focuses on SolidWorks 2023. SolidWorks 2018 SP5 is the inherited
+historical minimum, not a claim that every release and service pack is covered. See the
+[compatibility matrix](../development/compatibility-matrix) for the exact evidence.

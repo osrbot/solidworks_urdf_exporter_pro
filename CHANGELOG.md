@@ -20,6 +20,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
   zero-control step.
 - Added bilingual output documentation that separates generation capability, automated validation,
   and application-level runtime validation.
+- Added a locally searchable VitePress handbook under `docs/`, with practical Chinese entry pages,
+  versioned Wiki content, current UI screenshots, and repeatable build/preview commands.
 - Added an on-demand OpenUSD simulation-intent dialog beside the target checkbox. It configures
   source/fixed/floating base behavior, official robot classification, articulation self-collision,
   and passive/position/velocity/effort intent for supported single-DOF Joints without adding an
@@ -70,6 +72,9 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Fixed
 
+- Made the delivered OpenUSD root layer readable UTF-8 USDA text with portable relative geometry
+  references, while retaining the original filename `robot.usd` and reopen validation.
+
 - Removed unnecessary vertical scrollbars from the Joint Basics and Constraints pages at the
   standard exporter window size while retaining scrolling as a fallback for smaller windows.
 - Reflowed the Joint identity and reference-geometry cards into separate full-width rows. Coordinate
@@ -105,10 +110,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
   deterministic plugin suite with `--exclude-live-solidworks`; native SolidWorks COM suites remain
   explicit Live API evidence and are recorded as not requested when they were not run.
 - **Application runtime validation:** this development state does not claim that the new USD has
-  been run in Isaac Sim or Isaac Lab, that ROS packages have been launched in a ROS installation,
-  or that exported models have passed task-specific controller, contact, stability, performance,
-  or reinforcement-learning validation. Deep SolidWorks preview behavior remains subject to live
-  maintainer testing before a public release.
+  been run in Isaac Sim or Isaac Lab. A manually triggered ROS 2 gate launches only the fixed
+  minimum fixture and checks its named controllers; it does not prove arbitrary user models.
+  Task-specific controller, contact, stability, performance, and reinforcement-learning validation
+  remain user responsibilities.
 
 ### 简体中文
 
@@ -122,6 +127,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
 - 为两种资产目标增加固定运行时验证。OpenUSD 必须使用安装包内置运行时重新打开生成的 stage；
   MJCF 必须使用内置 MuJoCo 官方工具对两个 XML 入口完成编译、规范保存、重载和一步零控制推进。
 - 增加双语输出文档，分别说明生成能力、自动化验证和实际应用运行验证。
+- 在 `docs/` 下增加可本地搜索的 VitePress 手册，提供通俗中文入口、版本化 Wiki、当前 UI 截图
+  和可重复的构建、预览命令。
 - 在 OpenUSD 目标勾选项旁增加按需打开的仿真意图设置，不新增常驻 profile 页面，也不依赖 Isaac
   版本。用户可配置源语义/固定/浮动基座、官方机器人分类、articulation 自碰撞，以及受支持
   单自由度 Joint 的被动/位置/速度/effort 意图。
@@ -162,6 +169,9 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### 修复
 
+- 将交付的 OpenUSD 根层写成可读的 UTF-8 USDA 文本，几何依赖使用可搬运的相对路径，同时保留
+  `robot.usd` 文件名和重开校验。
+
 - 将 Joint 基本信息与参考几何改为上下两个全宽功能区；坐标系和轴选择器各占整行，并通过有上限
   的下拉宽度扩展与精确值提示完整呈现深层组件路径，Tab 切换时不重建内容控件。
 - 使用根装配安全的临时体宿主与完整组件变换，修复深层或隐藏 Link 的预览显示，且不增加持久化
@@ -185,9 +195,9 @@ All notable OSRBot-maintained changes to this fork are documented here.
   固定 MuJoCo 官方工具完成编译、保存、重载和一步零控制推进。可复现安装包构建使用
   `--exclude-live-solidworks` 运行确定性插件套件；原生 SolidWorks COM 套件仍是独立的 Live API
   证据，未运行时明确记录为未请求。
-- **实际应用运行验证**：当前开发状态不声称新 USD 已在 Isaac Sim/Isaac Lab 中运行，不声称
-  ROS 功能包已在 ROS 环境中启动，也不声称目标模型通过了控制器、接触、稳定性、性能、任务或
-  强化学习验证。公开发布前仍须由维护者完成深层 SolidWorks 预览的 Live 测试。
+- **实际应用运行验证**：当前开发状态不声称新 USD 已在 Isaac Sim/Isaac Lab 中运行。手动 ROS 2
+  门禁只启动固定最小夹具并检查指定控制器，不证明任意用户模型。控制器、接触、稳定性、性能、
+  任务和强化学习仍需用户在目标工程中验收。
 
 ## 2026-08-29
 

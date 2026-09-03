@@ -8,8 +8,9 @@ The MJCF target produces a standalone MuJoCo robot model from the validated CAD-
 Its first responsibility is a loadable robot asset, not a controller stack, task environment, or
 reinforcement-learning project.
 
-No separate MuJoCo installation is required for export validation. The installer supplies pinned
-official MuJoCo tools for the validation sequence.
+No separate MuJoCo installation is required for export validation. The installer pins official
+MuJoCo `3.12.0` tools for the validation sequence and records the actual version in
+`export_report.json`.
 
 ## Delivered Files
 
@@ -27,7 +28,8 @@ The model preserves the Link hierarchy, Visual/Collision separation, CAD mass, C
 tensor. Joint mappings are explicit: fixed contributes no movable MJCF Joint, continuous/revolute
 maps to hinge, prismatic maps to slide, and floating maps to three orthogonal `slide` Joints plus
 one `ball` Joint. Planar Joint export fails with an actionable error rather than silently
-approximating a different mechanism.
+approximating a different mechanism. These are exporter mapping decisions, not limitations of what
+MJCF itself can model.
 
 ## Automated Validation
 

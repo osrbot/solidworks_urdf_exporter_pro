@@ -7,7 +7,8 @@
 MJCF 目标根据已校验的 CAD 机器人数据生成独立的 MuJoCo 机器人模型。它的第一职责是可载入的
 机器人资产，不是控制器栈、任务环境或强化学习工程。
 
-导出验证不要求用户另行安装 MuJoCo。安装包提供固定版本的 MuJoCo 官方工具执行验证流程。
+导出验证不要求用户另行安装 MuJoCo。安装包固定使用 MuJoCo `3.12.0` 官方工具执行验证流程，
+实际版本也会写入 `export_report.json`。
 
 ## 交付文件
 
@@ -24,7 +25,8 @@ MuJoCo/<robot>/
 模型保留 Link 层级、Visual/Collision 分离，以及来自 CAD 的质量、COM 和完整惯性张量。Joint
 映射是显式的：fixed 不生成可动 MJCF Joint；continuous/revolute 映射为 hinge；prismatic 映射
 为 slide；floating 映射为三个正交 `slide` Joint 加一个 `ball` Joint。planar 会以可操作错误
-终止导出，不会静默近似为另一种机构。
+终止导出，不会静默近似为另一种机构。这些是本导出器的映射策略，不表示 MJCF 格式本身缺少
+其他建模方式。
 
 ## 自动化验证
 

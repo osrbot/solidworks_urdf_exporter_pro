@@ -107,5 +107,8 @@ Read the evidence literally:
 - USD automated validation means the bundled pinned OpenUSD runtime reopened the generated stage;
 - MJCF automated validation means pinned official MuJoCo tools compiled, canonically saved,
   reloaded, and advanced both XML entry points one zero-control step;
-- no result claims a ROS/Gazebo launch, Isaac Sim/Isaac Lab import, controller quality, contact
-  tuning, long-horizon stability, task behavior, performance, or reinforcement-learning validation.
+- the manually triggered ROS 2 gate only proves that the fixed minimum fixture builds, launches in
+  the selected ROS 2/Gazebo combination, and activates the named controllers; it does not generalize
+  to every user model;
+- no result claims an Isaac Sim/Isaac Lab import, controller quality, contact tuning, long-horizon
+  stability, task behavior, performance, or reinforcement-learning validation.

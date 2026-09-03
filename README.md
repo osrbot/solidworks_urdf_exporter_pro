@@ -6,6 +6,8 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-blue.svg)](#supported-environment)
 [![Framework](https://img.shields.io/badge/.NET%20Framework-4.8-blueviolet.svg)](#development)
 
+[Documentation source](docs/index.md) | [Wiki](docs/wiki/Home.md) | [Quick start](docs/guide/getting-started.md)
+
 This repository is the OSRBot-maintained fork of the ROS
 [`solidworks_urdf_exporter`](https://github.com/ros/solidworks_urdf_exporter). It keeps the
 original SolidWorks add-in workflow and adds maintained Link-tree editing, frame-aware mass
@@ -66,9 +68,9 @@ journal before the next export starts.
 | User target | Delivered files | Automated evidence | Not claimed |
 | --- | --- | --- | --- |
 | ROS 1 package | `ROS1/<package>` with URDF, meshes, configuration, and reports | Canonical model validation and transactional package generation | A ROS 1 launch, controller, or task run |
-| ROS 2 package | `ROS2/<package>` with URDF, meshes, configuration, and reports | Canonical model validation and transactional package generation | A ROS 2/Gazebo launch or `ros2_control` runtime |
-| OpenUSD robot asset | `USD/<package>/robot.usd`, geometry dependencies, source mesh evidence, name map, and JSON report | Generated and reopened with the pinned OpenUSD runtime bundled by the installer | Import or execution in Isaac Sim/Isaac Lab |
-| MuJoCo MJCF model | `MuJoCo/<robot>/robot.xml`, `scene.xml`, assets, name map, and JSON report | Both XML entry points are compiled, canonically saved, reloaded, and advanced one zero-control step with pinned official MuJoCo tools | Actuators, PID gains, controllers, tasks, contact tuning, or RL code |
+| ROS 2 package | `ROS2/<package>` with URDF, meshes, configuration, and reports | Canonical validation; a manual gate builds, launches Gazebo, and checks controllers for the fixed minimum fixture | Every user model passes in its target ROS 2/Gazebo environment |
+| OpenUSD robot asset | `USD/<package>/robot.usd`, geometry dependencies, source mesh evidence, name map, and JSON report | Generated and reopened with pinned `usd-core 26.8` | Import or execution in Isaac Sim/Isaac Lab |
+| MuJoCo MJCF model | `MuJoCo/<robot>/robot.xml`, `scene.xml`, assets, name map, and JSON report | Both XML entry points are compiled, canonically saved, reloaded, and advanced one zero-control step with pinned MuJoCo `3.12.0` tools | Actuators, PID gains, controllers, tasks, contact tuning, or RL code |
 
 OpenUSD remains a single target on the main page. Its adjacent **Settings...** dialog is loaded only
 when requested and stores portable simulation intent: source/fixed/floating base, official robot
