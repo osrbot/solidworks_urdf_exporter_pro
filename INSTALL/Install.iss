@@ -2,7 +2,6 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "SolidWorks To URDF"
-#define MyAppVersion "2018 v1.6"
 #define MyAppPublisher "OSRBot / kitso666"
 #define MyAppURL "https://github.com/osrbot/solidworks_urdf_exporter_pro"
 
@@ -42,7 +41,6 @@ AppVersion={#InstallerVersion}
 VersionInfoVersion={#BuildVersion}
 VersionInfoCopyright=2019
 VersionInfoProductName={#MyAppName}
-;AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
