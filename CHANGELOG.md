@@ -38,6 +38,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Changed
 
+- Refocused README, VitePress, and Wiki navigation on user decisions: why to use the exporter,
+  differences from the community version, each configuration page, delivered files, troubleshooting,
+  and contribution. Internal schemas, staging details, and release procedures remain maintainer
+  documentation and are no longer exposed through the ordinary handbook.
 - Reduced the user-facing export choices to four concrete deliverables: ROS 1 package, ROS 2
   package, OpenUSD robot asset, and MuJoCo MJCF model. The canonical Robot Bundle is now a private,
   temporary staging representation and is neither a selectable target nor a delivered artifact.

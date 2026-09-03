@@ -1,11 +1,11 @@
 # 文档维护
 
-`docs/` 同时保存在线手册和版本化 Wiki 内容：
+`docs/` 同时保存普通用户手册和项目维护资料：
 
-- `index.md`、`guide/`、`exports/`、`reference/`：面向用户的简明入口；
-- `wiki/`：GitHub Wiki 的版本化事实源，也直接参与在线站点构建；
-- `architecture/`、`development/`：架构、兼容性和维护资料；
-- `planning/`、`reviews/`：历史设计记录，不参与站点构建。
+- `index.md`、`guide/`、`features/`、`exports/`、`support/`：VitePress 用户站点；
+- `wiki/`：GitHub Wiki 的版本化内容，不参与 VitePress 构建；
+- `architecture/`、`development/`：架构、兼容性和维护资料，不进入用户站点；
+- `planning/`、`reviews/`：历史设计记录，不进入用户站点。
 
 ## 本地预览
 
@@ -30,7 +30,8 @@ VitePress 输出目录是 `docs/.vitepress/dist/`，该目录是生成物，不�
 
 ## 内容规则
 
-- 先说明用户能得到什么文件，再解释内部实现。
-- 把生成、自动检查和目标应用验收分开描述。
+- 先说明为什么使用、页面怎么操作、最终得到什么。
+- 普通用户页面不介绍内部数据结构、临时目录或维护流程。
+- 只有在影响用户判断时，才说明自动检查与目标应用验收的区别。
 - 截图必须来自当前 UI，不包含本机绝对路径、个人信息或失败弹窗。
-- 修改产品边界时同步 README、Wiki 首页、目标专项页、兼容性矩阵和 Changelog。
+- 修改用户可见功能时同步 README、Wiki 首页、对应功能页和 Changelog。

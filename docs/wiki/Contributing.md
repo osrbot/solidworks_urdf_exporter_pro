@@ -56,7 +56,7 @@ Record evidence at the level actually exercised:
 
 - Formal Link Tree code lives under `SW2URDF/UI/LinkTreeCanvas` plus its session/store boundaries.
 - Do not restore or copy retired standalone implementations under `prototypes`.
-- UI, configuration persistence, and URDF output must share canonical Joint types and validation.
+- UI, configuration persistence, and URDF output must use the same Joint types and validation.
 - Release SolidWorks COM objects explicitly; preview, cancel, and failure paths must all clean
   temporary bodies and selection state.
 - Frame transforms, inertia conventions, and Collision fallback changes need independent tests, not

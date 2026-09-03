@@ -37,7 +37,7 @@ Open `Tools > Export as URDF`:
 For every non-root Link, check:
 
 - Joint name;
-- canonical type: `fixed`, `revolute`, `continuous`, `prismatic`, `floating`, or `planar`;
+- type: `fixed`, `revolute`, `continuous`, `prismatic`, `floating`, or `planar`;
 - parent and child Link;
 - Origin and Axis;
 - Limit and Dynamics;
@@ -46,8 +46,8 @@ For every non-root Link, check:
 Choose explicit Joint types for STEP, imported, or fixed assemblies. `Automatically Detect` means
 “try SolidWorks Mate detection” and is only suitable for a native movable assembly with correct
 Mates; it is not a legal final URDF Joint type. Zero remaining DOFs may mean fixed, fully
-constrained, or missing Mate semantics, so it is not automatically mapped to `fixed`. Detection
-must resolve to a canonical type before export.
+constrained, or missing Mate semantics, so it is not automatically mapped to `fixed`. Choose an
+explicit type before export.
 After selecting `Automatically Detect`, press Next to run the assist for those Joints. The result is
 filled as a provisional, blocked suggestion. Open every suggested Joint, explicitly select its final
 type, and enter required limits. A single rotational DOF is displayed as `continuous` because CAD
@@ -86,9 +86,6 @@ MJCF require STL geometry. They do not require an Isaac installation, Isaac/Isaa
 actuator profile, or user-provided controller file. At least one target must be selected. The
 progress window remains above SolidWorks and blocks export re-entry.
 
-The exporter uses a private canonical Bundle only as temporary staging. It is not shown as a target,
-written into the delivery tree, or retained after export.
-
 ## 8. Inspect the Result
 
 Review:
@@ -101,14 +98,6 @@ Review:
    `MuJoCo/<robot>`;
 5. Visual, Collision, Inertia, COM, axes, and Joint motion in the actual target application.
 
-Read the evidence literally:
-
-- generation success means the documented files were written from a validated model;
-- USD automated validation means the bundled pinned OpenUSD runtime reopened the generated stage;
-- MJCF automated validation means pinned official MuJoCo tools compiled, canonically saved,
-  reloaded, and advanced both XML entry points one zero-control step;
-- the manually triggered ROS 2 gate only proves that the fixed minimum fixture builds, launches in
-  the selected ROS 2/Gazebo combination, and activates the named controllers; it does not generalize
-  to every user model;
-- no result claims an Isaac Sim/Isaac Lab import, controller quality, contact tuning, long-horizon
-  stability, task behavior, performance, or reinforcement-learning validation.
+A successful export means that the files were created and passed basic structural checks. It does
+not replace final testing in the target application or configure controllers, contacts, tasks, or
+reinforcement learning for the user.

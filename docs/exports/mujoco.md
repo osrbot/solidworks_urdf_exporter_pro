@@ -1,9 +1,9 @@
-# MuJoCo MJCF 模型
+# MuJoCo MJCF
 
-## 第一职责
+## 为什么使用
 
-MJCF 输出提供一个能由固定 MuJoCo 官方工具载入的机器人模型。它不生成完整世界、控制器、
-传感器、奖励函数或强化学习工程。
+MJCF 输出适合把 CAD 机器人带入 MuJoCo，再继续添加场景、执行器、控制器和任务。插件负责生成
+可载入的机器人模型，不生成强化学习工程。
 
 ## 输出目录
 
@@ -17,23 +17,19 @@ MuJoCo/<robot>/
 `-- export_report.json
 ```
 
-`scene.xml` 只是引用 `robot.xml` 的最小入口，方便验证和继续搭建场景。
+`robot.xml` 是机器人主体，`scene.xml` 是引用它的最小场景入口。
 
-## Joint 映射
+## Joint 转换
 
-| 源 Joint | 本导出器的 MJCF 写法 |
+| SolidWorks/URDF Joint | MJCF 结果 |
 | --- | --- |
 | fixed | 不生成可动 Joint |
 | revolute / continuous | `hinge` |
 | prismatic | `slide` |
-| floating | 三个正交 `slide` 加一个 `ball` |
-| planar | 明确拒绝并提示用户处理 |
+| floating | 三个 `slide` 加一个 `ball` |
+| planar | 当前会提示用户处理，不做静默近似 |
 
-这里描述的是 SW2URDF 的映射策略，不表示 MuJoCo 格式本身只能这样建模。
+## 导出后检查
 
-## 自动检查到哪里
-
-安装包固定使用 MuJoCo `3.12.0`，对 `robot.xml` 和 `scene.xml` 执行编译、规范保存、重载和一步
-零控制推进。控制器、接触参数、长时间稳定性和任务效果仍需在用户工程中验证。
-
-更多细节见 [MJCF Wiki](/wiki/MJCF-zh-CN)。
+插件会使用随安装包提供的 MuJoCo 工具检查两个 XML 入口能否载入并完成最小运行步骤。用户仍需
+在自己的工程中添加和验证 actuator、控制器、摩擦、接触、仿真步长和任务参数。

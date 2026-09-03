@@ -1,43 +1,46 @@
 ---
-title: SW2URDF 文档
-description: SolidWorks 机器人模型导出手册
+title: SW2URDF 使用文档
+description: 从 SolidWorks 导出机器人模型的实用说明
 ---
 
-# SW2URDF 文档
+# SW2URDF 使用文档
 
-SW2URDF 在 SolidWorks 中读取用户明确配置的 Link、Joint、坐标系、质量属性、外观与碰撞几何，
-再导出 ROS、OpenUSD 或 MuJoCo 可以继续使用的机器人资产。
+SW2URDF 用于把 SolidWorks 装配体整理成机器人描述文件。你在插件中确认 Link、Joint、坐标系、
+质量、碰撞和外观，然后选择导出 ROS、OpenUSD 或 MuJoCo 文件。
 
-::: tip 先说清楚职责
-插件负责整理 CAD 数据、生成目标文件并完成约定的结构检查。它不会替用户猜控制器参数，也不会
-把一个机器人模型包装成完整的仿真或强化学习工程。
-:::
+## 为什么使用这个版本
 
-## 从这里开始
+原社区版建立了 SolidWorks 到 URDF 的基础流程，但在新版 SolidWorks、深层装配体、中文名称、
+碰撞检查和现代仿真格式上存在不少实际使用问题。当前版本重点解决这些问题：
 
-1. 第一次使用：按[快速开始](/guide/getting-started)走完一次完整导出。
-2. 不清楚 Link、Joint 或碰撞怎么填：看[模型配置](/guide/model-setup)。
-3. 不确定该勾选哪种输出：看[先选对输出](/exports/)。
-4. 遇到失败：先看输出根目录的 `export_report.md`，再查[常见问题](/wiki/Troubleshooting-zh-CN)。
+- 深层组件中的坐标系和轴可以稳定识别，同名或中文名称不再依赖文字猜测。
+- Joint 类型、轴和限位由用户明确确认，避免把固定装配或 STEP 模型误判。
+- 质量、质心和惯性增加检查，碰撞几何可以在导出前预览。
+- 外观颜色、碰撞设置和惯性设置分开，不再挤在同一页面。
+- 可以直接导出 ROS 1、ROS 2、OpenUSD 和 MuJoCo MJCF。
+- 中文界面、错误说明和导出报告更容易看懂，页面切换也更流畅。
 
-## 可以得到什么
+[查看与社区原版的具体差异](/guide/whats-new)
+
+## 第一次使用
+
+1. [安装插件](/guide/installation)
+2. [按快速开始完成一次导出](/guide/getting-started)
+3. [逐页了解各项设置](/features/link-tree)
+4. [选择真正需要的输出](/exports/)
+
+## 四种输出
 
 <div class="output-list">
-  <div><strong>ROS 1 功能包</strong><p>URDF、网格、配置和导出报告。</p></div>
-  <div><strong>ROS 2 功能包</strong><p>现代 ROS 2 描述包及可选控制配置。</p></div>
-  <div><strong>OpenUSD 机器人资产</strong><p>可移动目录中的 robot.usd、几何依赖和报告。</p></div>
-  <div><strong>MuJoCo MJCF 模型</strong><p>robot.xml、scene.xml、网格资产和报告。</p></div>
+  <div><strong>ROS 1 功能包</strong><p>用于已有 ROS 1 机器人描述项目。</p></div>
+  <div><strong>ROS 2 功能包</strong><p>用于 ROS 2 描述、显示和后续控制配置。</p></div>
+  <div><strong>OpenUSD 机器人资产</strong><p>用于 Isaac Sim 或其他支持 USD 的工具。</p></div>
+  <div><strong>MuJoCo MJCF 模型</strong><p>用于继续搭建 MuJoCo 场景和控制。</p></div>
 </div>
 
-这些是四种独立交付物。内部使用的 Robot Bundle 不显示为导出目标，也不会写进用户选择的输出
-目录。
+## 项目与反馈
 
-## 当前重点
+项目地址：<https://github.com/osrbot/solidworks_urdf_exporter_pro>
 
-- 三步向导分别处理 Joint、Link 和最终导出，页面切换不执行文件导出工作。
-- 外观从碰撞设置中分离，RGBA、选色与按 Link 层级自动配色集中在同一页。
-- OpenUSD 设置只在需要时打开，用于基座、自碰撞和单自由度 Joint 驱动意图。
-- `robot.usd` 使用 UTF-8 可读文本，几何依赖使用相对路径；移动时应整体复制 `USD/<package>`。
-- 导出器给出结构与运行时检查结果，但目标应用中的控制、接触和任务效果仍需用户确认。
-
-完整变化见[本次主要变化](/guide/whats-new)，兼容性与验证边界见[版本与验证](/reference/versions)。
+遇到问题时请提供 SolidWorks 版本、插件版本、复现步骤、日志和导出报告。具体格式见
+[提问与贡献代码](/support/help-and-contribute)。

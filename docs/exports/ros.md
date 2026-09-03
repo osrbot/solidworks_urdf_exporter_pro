@@ -1,25 +1,26 @@
-# ROS 1 / ROS 2 功能包
+# ROS 1 / ROS 2
 
-## 会导出什么
+## 会得到什么
 
-ROS 目标生成可以作为机器人描述包继续使用的目录，包含 URDF、Visual/Collision 网格、配置文件
-和校验报告。ROS 1 与 ROS 2 分开输出，用户可以只选其中一个。
+ROS 1 和 ROS 2 分别输出独立的机器人描述功能包，包含 URDF、Visual/Collision 网格、配置和
+检查报告。可以只选自己使用的 ROS 版本。
 
-## 控制相关文件
+## 控制相关内容
 
-控制配置只有在已校验配置存在时才生成。插件不会根据 CAD 外形猜 PID，也不会承诺任意机器人
-直接启动后就有合适的控制效果。Joint 类型、接口、限位与控制器参数必须符合真实硬件或仿真模型。
+插件可以根据已经确认的 Joint 信息生成对应描述和配置，但不会从 CAD 形状猜 PID，也不会保证
+任意机器人导出后直接获得合适的控制效果。
 
-ROS 2 的固定最小测试夹具已通过手动触发的集成门禁：功能包构建、Gazebo 启动以及
-`joint_state_broadcaster`、`arm_controller` 激活。该证据只覆盖测试夹具和指定环境，不代表用户
-模型自动通过。
+使用控制配置前必须确认：
 
-## 导出后先看什么
+- Joint 名称与控制器配置一致。
+- 位置、速度、力或力矩接口符合硬件或仿真插件。
+- 限位和 PID 来自真实设备或经过验证的模型。
+- 启动后先低风险测试运动方向和范围。
 
-1. `config/export_report.md`
-2. `config/inertial_validation.csv`
-3. `config/mesh_manifest.csv`
-4. URDF 中的 Link、Joint、transmission 或 `ros2_control` 配置
-5. 目标 ROS 环境中的解析、显示、控制器启动与运动方向
+## 导出后检查
 
-详细步骤见 [Wiki Quick Start](/wiki/Quick-Start-zh-CN)。
+1. 打开 `config/export_report.md` 查看错误和警告。
+2. 查看 `config/inertial_validation.csv`。
+3. 查看 `config/mesh_manifest.csv`。
+4. 在 RViz 中检查外观、坐标和 Joint。
+5. 在目标 ROS/Gazebo 环境中检查控制器启动和运动。

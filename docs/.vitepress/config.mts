@@ -9,14 +9,22 @@ export default defineConfig({
   base: process.env.DOCS_BASE || '/',
   cleanUrls: true,
   lastUpdated: true,
-  srcExclude: ['planning/**', 'reviews/**'],
+  srcExclude: [
+    'README.md',
+    'architecture/**',
+    'development/**',
+    'isaac/**',
+    'planning/**',
+    'reviews/**',
+    'wiki/**'
+  ],
   themeConfig: {
     siteTitle: 'SW2URDF 文档',
     nav: [
-      { text: '开始使用', link: '/guide/getting-started' },
-      { text: '模型配置', link: '/guide/model-setup' },
+      { text: '为什么使用', link: '/guide/why-use' },
+      { text: '功能页面', link: '/features/link-tree' },
       { text: '导出目标', link: '/exports/' },
-      { text: '版本与验证', link: '/reference/versions' },
+      { text: '问题与贡献', link: '/support/help-and-contribute' },
       { text: 'GitHub', link: repository }
     ],
     sidebar: [
@@ -24,17 +32,21 @@ export default defineConfig({
         text: '开始',
         items: [
           { text: '文档首页', link: '/' },
+          { text: '为什么使用', link: '/guide/why-use' },
+          { text: '安装', link: '/guide/installation' },
           { text: '快速开始', link: '/guide/getting-started' },
-          { text: '本次主要变化', link: '/guide/whats-new' }
+          { text: '相比社区原版', link: '/guide/whats-new' }
         ]
       },
       {
-        text: 'SolidWorks 配置',
+        text: '功能页面',
         items: [
-          { text: 'Link、Joint 与几何', link: '/guide/model-setup' },
-          { text: 'Link Tree 细节', link: '/wiki/Link-Tree' },
-          { text: '惯性', link: '/wiki/Inertia' },
-          { text: '碰撞', link: '/wiki/Collision-zh-CN' }
+          { text: 'Link 树', link: '/features/link-tree' },
+          { text: 'Joint 属性', link: '/features/joint' },
+          { text: '惯性', link: '/features/inertia' },
+          { text: '可视与碰撞', link: '/features/collision' },
+          { text: '外观', link: '/features/appearance' },
+          { text: '模型与导出', link: '/features/export-page' }
         ]
       },
       {
@@ -47,21 +59,10 @@ export default defineConfig({
         ]
       },
       {
-        text: '参考',
+        text: '帮助',
         items: [
-          { text: '版本怎么理解', link: '/reference/versions' },
-          { text: '验证范围', link: '/reference/validation' },
-          { text: '常见问题', link: '/wiki/Troubleshooting-zh-CN' },
-          { text: '兼容性矩阵', link: '/development/compatibility-matrix' }
-        ]
-      },
-      {
-        text: '维护',
-        collapsed: true,
-        items: [
-          { text: '参与开发', link: '/wiki/Contributing-zh-CN' },
-          { text: '发布流程', link: '/wiki/Release-Process-zh-CN' },
-          { text: '内部 Robot Bundle', link: '/architecture/robot-bundle-v2' }
+          { text: '常见问题', link: '/support/troubleshooting' },
+          { text: '提问与贡献代码', link: '/support/help-and-contribute' }
         ]
       }
     ],

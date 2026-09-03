@@ -2,92 +2,53 @@
 
 **简体中文** | [English](OpenUSD)
 
-## 用途
+## 为什么使用
 
-OpenUSD 目标使用与 ROS 导出器相同的已校验 Link、Joint、Visual、Collision 和 Inertial 数据，
-生成可移植机器人资产。它是资产格式目标，不是 Isaac Sim 或 Isaac Lab 工程生成器。
-
-用户不需要在本机安装 Isaac，插件也不会检测 Isaac。安装包固定使用 `usd-core 26.8`，只用于
-生成和结构校验；实际版本也会写入 `export_report.json`。
+OpenUSD 适合把 SolidWorks 机器人带入 Isaac Sim 或其他支持 USD 的工具。插件生成机器人资产，
+不要求导出电脑安装 Isaac Sim，也不要求填写 Isaac Sim 或 Isaac Lab 版本。
 
 ## 交付文件
 
 ```text
 USD/<package>/
 |-- robot.usd
-|-- geometry/                 # 由 STL 转换的 USD 网格依赖
-|-- meshes/                   # 保留的规范源网格证据
-|-- name_map.json             # 源名称到合法 USD 标识符的映射
-`-- export_report.json        # 数量、运行时版本、检查结果和证据边界
+|-- geometry/                 # robot.usd 引用的 USD 几何
+|-- meshes/                   # 保留的源 STL
+|-- name_map.json             # 原名称和导出名称的对应关系
+`-- export_report.json        # 导出数量和检查结果
 ```
 
-`robot.usd` 包含机器人层级、Visual/Collision 形状、physics Joint、质量、质心和惯性。fixed、
-revolute/continuous、prismatic 使用对应的核心 USD Physics schema。planar 使用通用 USD Physics
-Joint，并按固定版本 OpenUSD schema 的规定，对 `transZ`、`rotX` 和 `rotY` 应用 `low > high` 的
-`LimitAPI` 来锁定这些轴，只保留平面内 `transX`/`transY` 平移与 `rotZ` 旋转；其局部 Z 轴与源平面
-法向对齐。若这些约束无法写入并重开验证，适配器会拒绝导出。floating 仍使用通用 USD Physics
-Joint，并在报告中标记为非精确映射。
+`robot.usd` 包含机器人层级、Visual、Collision、质量、质心、惯性和 Joint。
 
-USD 与 MJCF 目标要求 STL 网格输入。适配器会拒绝 3DXML，而不是静默丢失几何。
+## OpenUSD 设置
 
-## 可选仿真意图
+主导出页只显示一个 OpenUSD 选项。勾选后，可以按需打开设置：
 
-主向导仍只显示一个 OpenUSD 勾选项。旁边的**设置...**按钮按需打开缓存对话框，不增加新的
-向导页面，切换页面时也不会执行 USD 或文件系统工作。保守默认值为：**保持源语义**、机器人类型
-**默认**、关闭自碰撞、所有受支持的单自由度 Joint 均为被动。
+- **基座方式**：保持源模型、固定基座或浮动基座；
+- **机器人类型**：为下游工具提供分类；
+- **自碰撞**：是否允许机器人各 Link 之间发生碰撞；
+- **Joint 驱动**：被动、位置、速度或力控制意图；
+- **刚度和阻尼**：只使用用户明确填写的值，不根据 CAD 外形猜测。
 
-| 设置 | USD 结果 |
-| --- | --- |
-| 保持源语义 | 保留源模型根部行为，不注入 world Joint |
-| 固定基座 | 自动增加 world 到源根 Link 的 fixed Joint |
-| 浮动基座 | 显式记录移动基座意图，不注入 world Joint |
-| 机器人类型 | 写入对应的官方 `isaac:robotType` token；它只做分类，不改写运动学 |
-| 允许自碰撞 | 写入 `physxArticulation:enabledSelfCollisions`；默认关闭 |
-| 被动 Joint | 不写入主动 `DriveAPI` |
-| 位置或速度 Joint | 根据转动/直线运动写入对应 `DriveAPI`；只有用户显式填写时才使用非负刚度/阻尼 |
-| effort Joint | 记录 `osurdf:driveIntent=effort` 供下游运行时配置，刻意不创建主动 `DriveAPI` |
+不确定时可以保留默认设置，先导出并在目标工具中检查。
 
-对话框中的 Joint 力矩/力限值和速度限值来自已校验的 CAD/URDF 模型，只读显示。插件不会根据
-几何猜测控制器增益，也不要求每个可动 Joint 都必须配置主动驱动。
+## 路径和编码
 
-## Stage 合同
+主文件使用可读的 UTF-8 文本，几何引用使用相对路径。复制到其他电脑时必须整体移动
+`USD/<package>` 文件夹；只复制 `robot.usd` 会丢失几何。
 
-`/Robot` 是默认 Prim 与 articulation root。机器人、Link、Joint 分别应用 `IsaacRobotAPI`、
-`IsaacLinkAPI`、`IsaacJointAPI`，同时保留标准 USD Physics schema 作为可执行物理合同。根 Link
-在 `isaac:physics:robotLinks` 中排第一。Collision Prim 使用 `guide` purpose。collision STL 已经
-由用户在 SolidWorks 中选择的碰撞策略生成，因此网格 Collision 使用近似 `none` 保留其拓扑，
-不会再被转换成另一层凸包。STL 转换后的几何以相对 USD 依赖保存，因此必须整体移动完整输出
-目录，不能只拿走 `robot.usd`。
+## 自动检查
 
-OpenUSD 设置通过临时 robot schema v3 文档进入导出器；它不会替代 SolidWorks 装配体中 PID
-持久化的 `URDF Export Configuration (v2)` 配置特征。用户填写的刚度和阻尼为 SI 值；适配器会把
-角关节增益从“每弧度”的 SI 值换算为 USD 的“每度”值，线性关节增益保持不变，并强制速度驱动
-刚度为 0。effort 意图会连同力/力矩限值一起保留，但刻意不创建 `DriveAPI`。
+插件会在交付前重新打开 `robot.usd`，确认层级、Joint 和本地几何引用可以读取。该检查只说明
+USD 文件结构完整，不表示模型已经在某个 Isaac Sim 版本中完成物理、控制或任务验证。
 
-## 自动化验证
+## 导出后检查
 
-只有固定的内置 OpenUSD 运行时完成以下步骤，导出才成功：
+在目标工具中确认：
 
-1. 创建 stage 和几何依赖；
-2. 重新打开 `robot.usd`；
-3. 检查预期 Link、Joint 和刚体数量、本地资产解析，验证每个 planar Joint 的三个锁定与三个
-   自由 DOF，并记录质量属性、Collision 数量、基座解析结果、Joint 意图、主动 DriveAPI、保留的
-   effort 限值、网格近似和组合后的网格拓扑；
-4. 在 `export_report.json` 记录 OpenUSD 版本和校验结果。
-
-这证明生成能力和 OpenUSD 结构可读性，但**不证明**已在 Isaac Sim 或 Isaac Lab 中完成导入、
-渲染、物理运行或扩展兼容性验证。
-
-## 下游使用
-
-将完整 `USD/<package>` 目录复制到目标机器，再按下游应用的正常资产流程导入 `robot.usd`。
-用户应在实际应用中检查 articulation 映射、碰撞/接触行为、单位、材质、控制器设置和任务行为。
-
-插件有意不生成 Isaac 版本、扩展配置、actuator group、控制器/PID 文件、推测增益、传感器、
-环境、奖励、观测、重置逻辑或强化学习代码；只会写入用户显式填写的 USD drive 刚度/阻尼。
-
-## 证据术语
-
-- **已生成**：约定资产文件均已写出。
-- **已通过 OpenUSD 验证**：内置运行时已重开并检查 stage 结构。
-- **已通过 Isaac 验证**：本插件不执行；只有用户在实际 Isaac 环境中的独立测试才能支持该结论。
+1. Link 层级和缩放；
+2. Visual 与材质；
+3. Collision 和接触；
+4. 质量、质心和惯性；
+5. Joint 方向、限位和驱动；
+6. 实际控制器和任务行为。

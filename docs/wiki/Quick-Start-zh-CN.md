@@ -44,7 +44,7 @@
 STEP、导入模型或固定装配应手动选择 Joint 类型。`Automatically Detect` 是“尝试从
 SolidWorks Mate 识别”的可选配置态，只适用于保留正确 Mate 的原生可动装配，不是合法的最终
 URDF Joint 类型。0 个剩余自由度可能表示固定、完全约束或 Mate 语义缺失，不能据此自动推断为
-`fixed`。正式导出前必须解析成标准类型。
+`fixed`。正式导出前必须明确选择一种类型。
 选择 `Automatically Detect` 后，点击“下一步”才会对这些 Joint 运行辅助识别。结果会以待确认
 建议回填；用户必须逐个打开建议 Joint、明确选择最终类型并按需填写 limit。单旋转自由度
 暂以 `continuous` 显示，因为 CAD 自由度无法区分 `continuous` 与有界 `revolute`。
@@ -79,8 +79,6 @@ ROS 目标使用 UI 中显示的功能包元数据和维护的 ROS/Gazebo 组合
 不要求安装 Isaac，不要求填写 Isaac/Isaac Lab 版本、actuator profile 或用户控制器文件。至少要
 勾选一个目标。进度窗口保持在 SolidWorks 前方并阻止导出重入。
 
-插件只把私有规范 Bundle 用作临时暂存；它不显示为目标、不写入交付目录，并在导出后清理。
-
 ## 8. 检查结果
 
 依次查看：
@@ -93,13 +91,5 @@ ROS 目标使用 UI 中显示的功能包元数据和维护的 ROS/Gazebo 组合
    `export_report.json`；
 5. 在实际目标应用中检查 Visual、Collision、Inertia、COM、轴和 Joint 运动。
 
-必须按证据字面理解：
-
-- 生成成功只表示由已校验模型写出了约定文件；
-- USD 自动化验证只表示固定的内置 OpenUSD 运行时重新打开了生成的 stage；
-- MJCF 自动化验证只表示固定的 MuJoCo 官方工具对两个 XML 入口完成编译、规范保存、重载和
-  一步零控制推进；
-- ROS 2 的手动集成门禁只证明固定最小夹具可在所选 ROS 2/Gazebo 组合中构建、启动并激活指定
-  控制器，不代表任意用户模型自动通过；
-- 任何结果都不代表已完成 Isaac Sim/Isaac Lab 导入、控制器质量、接触调参、长时间稳定性、
-  任务行为、性能或强化学习验证。
+导出成功表示文件已经生成并通过基础结构检查。它不代替目标软件中的最终检查，也不会自动完成
+控制器、接触参数、任务或强化学习配置。
