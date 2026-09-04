@@ -85,6 +85,9 @@ namespace TestRunner
                 runner.Start(typeName);
 
                 finished.WaitOne();
+                // The completion callback returns before the runner transitions to Idle.
+                while (runner.Status != AssemblyRunnerStatus.Idle)
+                    Thread.Sleep(10);
                 finished.Dispose();
             }
 
