@@ -31,7 +31,82 @@ namespace SW2URDF.Test
             Assert.Equal(3, fixture.Properties.Count); // shared metadata, COM, inertia
             Assert.Equal(new[] { part }, fixture.LastScope);
             fixture.Extension.Verify(value => value.CreateMassProperty(), Times.Never);
+            fixture.Assembly.Verify(value => value.ClearSelection2(true), Times.Exactly(3));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void SelectionIsolationRestoresOriginalListAndClearsEveryFreshProperty(bool preselected)
+        {
+            var fixture = new Fixture();
+            var part = fixture.Component("part-1", 3.0);
+            object[] original = preselected ? new object[] { new object(), new object() } : new object[0];
+            fixture.Selection = original;
+
+            Assert.Equal(3.0, fixture.Read(part.Object).Mass);
+
+            Assert.Same(original, fixture.Selection);
+            Assert.False(fixture.SelectionSuspended);
+            fixture.SelectionManager.Verify(value => value.SuspendSelectionList(), Times.Once);
+            fixture.SelectionManager.Verify(value => value.ResumeSelectionList2(false), Times.Once);
+            fixture.Assembly.Verify(value => value.ClearSelection2(true), Times.Exactly(3));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void SelectionIsolationRestoresOriginalListAfterMetadataOrComFailure(bool comFailure)
+        {
+            var fixture = new Fixture();
+            var part = fixture.Component("part-1", 3.0);
+            object[] original = { new object() };
+            fixture.Selection = original;
+            if (comFailure)
+                fixture.ConfigureProperty = (property, index) => property.Setup(value => value.Recalculate())
+                    .Throws(new COMException("read failed", unchecked((int)0x80004005)));
+            else
+                fixture.ComponentConfigurations["part-1"].SetupGet(value => value.Name).Returns("Wrong active");
+
+            Assert.Throws<InvalidOperationException>(() => fixture.Read(part.Object));
+
+            Assert.Same(original, fixture.Selection);
+            Assert.False(fixture.SelectionSuspended);
+            fixture.SelectionManager.Verify(value => value.ResumeSelectionList2(false), Times.Once);
+        }
+
+        [Fact]
+        public void FailedSuspendDoesNotClearOrResumeTheOriginalList()
+        {
+            var fixture = new Fixture();
+            var part = fixture.Component("part-1", 3.0);
+            object[] original = { new object() };
+            fixture.Selection = original;
+            fixture.SelectionManager.Setup(value => value.SuspendSelectionList()).Throws(new COMException("suspend failed"));
+
+            Assert.Throws<InvalidOperationException>(() => fixture.Read(part.Object));
+
+            Assert.Same(original, fixture.Selection);
             fixture.Assembly.Verify(value => value.ClearSelection2(It.IsAny<bool>()), Times.Never);
+            fixture.SelectionManager.Verify(value => value.ResumeSelectionList2(It.IsAny<bool>()), Times.Never);
+            Assert.Empty(fixture.Properties);
+        }
+
+        [Fact]
+        public void RestoreFailureDoesNotHideTheOriginalReadFailure()
+        {
+            var fixture = new Fixture();
+            var part = fixture.Component("part-1", 3.0);
+            fixture.ComponentConfigurations["part-1"].SetupGet(value => value.Name).Returns("Wrong active");
+            var restoreFailure = new COMException("restore failed");
+            fixture.SelectionManager.Setup(value => value.ResumeSelectionList2(false)).Throws(restoreFailure);
+
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Read(part.Object));
+
+            Assert.Contains("restore the original selection", error.Message);
+            var causes = Assert.IsType<AggregateException>(error.InnerException);
+            Assert.Contains("Wrong active", causes.InnerExceptions[0].Message);
+            Assert.Same(restoreFailure, causes.InnerExceptions[1]);
         }
 
         [Fact]
@@ -162,9 +237,58 @@ namespace SW2URDF.Test
             fixture.EffectiveMass = components => components.Single().ReferencedConfiguration == "Measured variant" ? 9.0 : 3.0;
 
             Assert.Equal(9.0, fixture.Read(part.Object).Mass);
-            part.Verify(value => value.GetModelDoc2(), Times.Never);
+            part.Verify(value => value.GetModelDoc2(), Times.Exactly(2));
             part.VerifySet(value => value.ReferencedConfiguration = It.IsAny<string>(), Times.Never);
             fixture.Assembly.Verify(value => value.ShowConfiguration2(It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public void MismatchedActiveComponentConfigurationRejectsMetadataBeforeReadingIt()
+        {
+            var fixture = new Fixture();
+            var part = fixture.Component("part-1", 3.0);
+            fixture.ComponentConfigurations["part-1"].SetupGet(value => value.Name).Returns("Wrong active");
+
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Read(part.Object));
+
+            Assert.Contains("part-1", error.Message);
+            Assert.Contains("Referenced configuration", error.Message);
+            Assert.Contains("Wrong active", error.Message);
+            Assert.Contains("no configuration was switched", error.Message);
+            fixture.Properties[0].Verify(value => value.GetOverrideOptions(), Times.Once); // document only
+            Assert.Equal(0, fixture.NumericReads);
+        }
+
+        [Fact]
+        public void ActiveComponentConfigurationChangingDuringMetadataReadIsRejected()
+        {
+            var fixture = new Fixture();
+            var part = fixture.Component("part-1", 3.0);
+            fixture.BeforeOverridesRead = scope =>
+            {
+                if (scope.Length > 0)
+                    fixture.ComponentConfigurations["part-1"].SetupGet(value => value.Name).Returns("Changed active");
+            };
+
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Read(part.Object));
+
+            Assert.Contains("Changed active", error.Message);
+            fixture.Properties[0].Verify(value => value.GetOverrideOptions(), Times.Exactly(2));
+            Assert.Equal(0, fixture.NumericReads);
+        }
+
+        [Fact]
+        public void UnavailableComponentDocumentRejectsUnverifiableOverrideMetadata()
+        {
+            var fixture = new Fixture();
+            var part = fixture.Component("part-1", 3.0);
+            part.Setup(value => value.GetModelDoc2()).Returns((object)null);
+
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Read(part.Object));
+
+            Assert.Contains("part-1", error.Message);
+            Assert.Contains("<unavailable>", error.Message);
+            Assert.Equal(0, fixture.NumericReads);
         }
 
         [Fact]
@@ -234,6 +358,28 @@ namespace SW2URDF.Test
             Assert.True(result.HasInertiaOverride);
             fixture.Configuration.Verify(value => value.GetRootComponent3(false), Times.Once);
             Assert.Empty(fixture.LastScope);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void DocumentScopeAlwaysUsesNonNullEmptyArray(bool wholeDocument)
+        {
+            var fixture = new Fixture { AllowWholeDocument = wholeDocument };
+            if (wholeDocument) fixture.Override(string.Empty, true, true, true);
+            Component2[] selection = wholeDocument ? null : new[] { fixture.Component("part-1", 3.0).Object };
+
+            fixture.Read(selection);
+
+            Assert.Equal(3, fixture.Properties.Count);
+            fixture.Properties[0].VerifySet(value => value.SelectedItems =
+                It.Is<object>(scope => scope is object[] && ((object[])scope).Length == 0), Times.Once);
+            foreach (var property in fixture.Properties)
+                property.VerifySet(value => value.SelectedItems = null, Times.Never);
+            foreach (var property in fixture.Properties.Skip(1))
+                property.VerifySet(value => value.SelectedItems = It.Is<object>(scope =>
+                    wholeDocument ? scope.GetType() == typeof(object[]) && ((object[])scope).Length == 0
+                        : scope is DispatchWrapper[] && ((DispatchWrapper[])scope).Length == 1), Times.Once);
         }
 
         [Fact]
@@ -393,8 +539,14 @@ namespace SW2URDF.Test
             public readonly Mock<ModelDoc2> Assembly = new Mock<ModelDoc2>(MockBehavior.Strict);
             public readonly Mock<ModelDocExtension> Extension = new Mock<ModelDocExtension>(MockBehavior.Strict);
             public readonly Mock<Configuration> Configuration = new Mock<Configuration>();
+            public readonly Mock<SelectionMgr> SelectionManager = new Mock<SelectionMgr>(MockBehavior.Strict);
+            public object[] Selection = new object[0];
+            public bool SelectionSuspended;
+            private object[] savedSelection;
             public readonly List<Mock<IMassProperty2>> Properties = new List<Mock<IMassProperty2>>();
+            public readonly Dictionary<string, Mock<Configuration>> ComponentConfigurations = new Dictionary<string, Mock<Configuration>>();
             public Action<Mock<IMassProperty2>, int> ConfigureProperty;
+            public Action<Component2[]> BeforeOverridesRead;
             public Func<Component2[], double> EffectiveMass;
             public Component2[] LastScope;
             public int NumericReads;
@@ -410,15 +562,46 @@ namespace SW2URDF.Test
                 Assembly.Setup(value => value.GetType()).Returns((int)swDocumentTypes_e.swDocASSEMBLY);
                 Assembly.SetupGet(value => value.ConfigurationManager).Returns(manager.Object);
                 Assembly.SetupGet(value => value.Extension).Returns(Extension.Object);
+                Assembly.SetupGet(value => value.SelectionManager).Returns(SelectionManager.Object);
+                SelectionManager.Setup(value => value.SuspendSelectionList()).Returns(() =>
+                {
+                    Assert.False(SelectionSuspended);
+                    savedSelection = Selection;
+                    Selection = new object[0];
+                    SelectionSuspended = true;
+                    return savedSelection.Length == 0 ? 0 : 1;
+                });
+                SelectionManager.Setup(value => value.ResumeSelectionList2(false)).Callback(() =>
+                {
+                    Assert.True(SelectionSuspended);
+                    Selection = savedSelection;
+                    SelectionSuspended = false;
+                });
+                SelectionManager.Setup(value => value.GetSelectedObjectCount2(-1)).Returns(() => Selection.Length);
+                Assembly.Setup(value => value.ClearSelection2(true)).Callback(() =>
+                {
+                    Assert.True(SelectionSuspended);
+                    Selection = new object[0];
+                });
                 Extension.Setup(value => value.CreateMassProperty2()).Returns(() => CreateProperty().Object);
                 EffectiveMass = components => components.Sum(component => masses[component.Name2]);
             }
 
             public Mock<Component2> Component(string name, double mass, Component2 parent = null)
             {
-                var component = new Mock<Component2>(MockBehavior.Strict);
+                // Interface-only Moq proxies have a ComVisible(false) base. A class proxy
+                // keeps real DispatchWrapper construction testable without a SolidWorks RCW.
+                var component = new Mock<object>(MockBehavior.Strict).As<Component2>();
                 component.SetupGet(value => value.Name2).Returns(name);
                 component.SetupGet(value => value.ReferencedConfiguration).Returns("Referenced configuration");
+                var configuration = new Mock<Configuration>();
+                configuration.SetupGet(value => value.Name).Returns(() => component.Object.ReferencedConfiguration);
+                var manager = new Mock<ConfigurationManager>();
+                manager.SetupGet(value => value.ActiveConfiguration).Returns(configuration.Object);
+                var document = new Mock<ModelDoc2>(MockBehavior.Strict);
+                document.SetupGet(value => value.ConfigurationManager).Returns(manager.Object);
+                component.Setup(value => value.GetModelDoc2()).Returns(document.Object);
+                ComponentConfigurations.Add(name, configuration);
                 component.Setup(value => value.GetParent()).Returns(parent);
                 component.Setup(value => value.GetChildren()).Returns((object)null);
                 component.Setup(value => value.IsRoot()).Returns(false);
@@ -443,6 +626,8 @@ namespace SW2URDF.Test
 
             private Mock<IMassProperty2> CreateProperty()
             {
+                Assert.True(SelectionSuspended);
+                Assert.Empty(Selection);
                 var property = new Mock<IMassProperty2>(MockBehavior.Strict);
                 Component2[] scope = new Component2[0];
                 bool readCenter = false;
@@ -451,8 +636,21 @@ namespace SW2URDF.Test
                 property.SetupProperty(value => value.IncludeHiddenBodiesOrComponents, false);
                 property.SetupSet(value => value.SelectedItems = It.IsAny<object>()).Callback<object>(value =>
                 {
-                    scope = value == null ? new Component2[0] : ((Array)value).Cast<Component2>().ToArray();
+                    // Native SW2023 crashes on null; accepting it here hid the regression.
+                    Assert.NotNull(value);
+                    var items = Assert.IsAssignableFrom<Array>(value);
+                    if (items.Length == 0)
+                    {
+                        Assert.IsType<object[]>(value);
+                        scope = new Component2[0];
+                    }
+                    else
+                    {
+                        var dispatch = Assert.IsType<DispatchWrapper[]>(value);
+                        scope = dispatch.Select(item => Assert.IsAssignableFrom<Component2>(item.WrappedObject)).ToArray();
+                    }
                     LastScope = scope;
+                    Selection = scope.Cast<object>().ToArray();
                 });
                 property.SetupGet(value => value.SelectedItems).Returns(() => scope.Cast<object>().ToArray());
                 property.Setup(value => value.Recalculate()).Returns(() =>
@@ -464,6 +662,7 @@ namespace SW2URDF.Test
                 });
                 property.Setup(value => value.GetOverrideOptions()).Returns(() =>
                 {
+                    if (BeforeOverridesRead != null) BeforeOverridesRead(scope);
                     Assert.False(recalculated);
                     Assert.True(scope.Length <= 1);
                     string name = scope.Length == 0 ? string.Empty : scope[0].Name2;

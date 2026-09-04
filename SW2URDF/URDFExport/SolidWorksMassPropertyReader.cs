@@ -26,6 +26,9 @@ namespace SW2URDF.URDFExport
             if (!wholeDocument && selectedComponents.Count == 0)
                 throw new ArgumentException("Select at least one component; an empty Link must not read the whole assembly.", "selectedComponents");
 
+            SelectionMgr selectionManager = null;
+            bool selectionSuspended = false;
+            Exception readFailure = null;
             try
             {
                 int documentType = assembly.GetType();
@@ -62,9 +65,17 @@ namespace SW2URDF.URDFExport
                 ModelDocExtension extension = assembly.Extension;
                 if (extension == null) throw new InvalidOperationException("SolidWorks returned no document extension.");
 
+                selectionManager = assembly.SelectionManager as SelectionMgr;
+                if (selectionManager == null)
+                    throw new InvalidOperationException("SolidWorks returned no selection manager; mass-property selection cannot be isolated.");
+                // SelectedItems can change the working selection, and fresh properties inherit it.
+                // Suspend once for the entire read; 0 (an empty saved list) is also success.
+                selectionManager.SuspendSelectionList();
+                selectionSuspended = true;
+
                 // For bounded reads, the empty selection ONLY inspects document-level overrides.
                 // This API cannot establish Link ownership of a whole-assembly override.
-                IMassProperty2 metadata = CreateProperty(extension);
+                IMassProperty2 metadata = CreateProperty(assembly, extension);
                 Overrides documentOverrides = ReadOverrides(metadata, new Component2[0]);
                 if (!wholeDocument && documentOverrides != Overrides.None)
                     throw new InvalidOperationException(
@@ -99,10 +110,10 @@ namespace SW2URDF.URDFExport
                 // Retain the separate-object read discipline of the SW2023 legacy cache workaround.
                 // Never ReleaseComObject: these RCWs are owned by SolidWorks and releasing them
                 // has terminated the host after repeated Link queries.
-                IMassProperty2 centerProperty = CreateScopedProperty(extension, bounded);
+                IMassProperty2 centerProperty = CreateScopedProperty(assembly, extension, bounded);
                 double[] center = ReadArray(centerProperty.CenterOfMass, 3, "CenterOfMass");
                 double mass = centerProperty.Mass;
-                IMassProperty2 inertiaProperty = CreateScopedProperty(extension, bounded);
+                IMassProperty2 inertiaProperty = CreateScopedProperty(assembly, extension, bounded);
                 double[] moment = ReadArray(inertiaProperty.GetMomentOfInertia(
                     (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass), 9, "GetMomentOfInertia");
 
@@ -117,14 +128,40 @@ namespace SW2URDF.URDFExport
             }
             catch (COMException error)
             {
-                throw new InvalidOperationException(
+                readFailure = new InvalidOperationException(
                     "SolidWorks effective mass-property API failed (0x" + error.ErrorCode.ToString("X8") + "): " +
                     error.Message + " No body-only fallback was used because it could discard overrides.", error);
+                throw readFailure;
+            }
+            catch (Exception error)
+            {
+                readFailure = error;
+                throw;
+            }
+            finally
+            {
+                if (selectionSuspended)
+                {
+                    try
+                    {
+                        selectionManager.ResumeSelectionList2(false);
+                    }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException("SolidWorks could not restore the original selection after reading mass properties.",
+                            readFailure == null ? restoreError : new AggregateException(readFailure, restoreError));
+                    }
+                }
             }
         }
 
-        private static IMassProperty2 CreateProperty(ModelDocExtension extension)
+        private static IMassProperty2 CreateProperty(ModelDoc2 document, ModelDocExtension extension)
         {
+            // Only called inside the suspended list. Never clear the user's saved selection.
+            // Earlier metadata/numeric reads can populate this temporary list again.
+            document.ClearSelection2(true);
+            if (((SelectionMgr)document.SelectionManager).GetSelectedObjectCount2(-1) != 0)
+                throw new InvalidOperationException("SolidWorks did not clear the temporary mass-property selection; refusing inherited component scope.");
             IMassProperty2 property = extension.CreateMassProperty2() as IMassProperty2;
             if (property == null)
                 throw new InvalidOperationException(
@@ -134,9 +171,9 @@ namespace SW2URDF.URDFExport
             return property;
         }
 
-        private static IMassProperty2 CreateScopedProperty(ModelDocExtension extension, IList<Component2> components)
+        private static IMassProperty2 CreateScopedProperty(ModelDoc2 document, ModelDocExtension extension, IList<Component2> components)
         {
-            IMassProperty2 property = CreateProperty(extension);
+            IMassProperty2 property = CreateProperty(document, extension);
             // A fresh object uses the document coordinate system, not a Link coordinate system.
             // UseSystemUnits explicitly requests meters and kilograms (IMassProperty2 contract).
             property.UseSystemUnits = true;
@@ -144,23 +181,31 @@ namespace SW2URDF.URDFExport
             SetScope(property, components);
             if (!property.Recalculate())
                 throw new InvalidOperationException("SolidWorks IMassProperty2.Recalculate failed for the requested component scope.");
-            VerifyScope(property, components);
+            VerifyScope(property, components, "after Recalculate");
             return property;
         }
 
         private static void SetScope(IMassProperty2 property, IList<Component2> components)
         {
-            property.SelectedItems = components.Count == 0 ? null : components.Cast<object>().ToArray();
-            VerifyScope(property, components);
+            // SW2023 faults natively on a null setter value, even on a fresh property.
+            // An empty SAFEARRAY requests document scope; never send VT_EMPTY here.
+            // Nonempty interface arrays must be marshaled as IDispatch, not VARIANT elements.
+            property.SelectedItems = components.Count == 0 ? (object)new object[0]
+                : components.Select(component => new DispatchWrapper(component)).ToArray();
+            VerifyScope(property, components, "scope assignment");
         }
 
-        private static void VerifyScope(IMassProperty2 property, IList<Component2> expected)
+        private static void VerifyScope(IMassProperty2 property, IList<Component2> expected, string stage)
         {
             object value = property.SelectedItems;
             var items = value as Array;
+            string diagnostic = " [stage=" + stage + ", expectedCount=" + expected.Count +
+                ", actualCount=" + (items == null ? (value == null ? "0" : "<not-array>") : items.Length.ToString()) +
+                ", actualType=" + (value == null ? "null" : value.GetType().FullName) +
+                ", rank=" + (items == null ? "n/a" : items.Rank.ToString()) + "]";
             if ((value != null && (items == null || items.Rank != 1)) ||
                 (items == null ? 0 : items.Length) != expected.Count)
-                throw new InvalidOperationException("SolidWorks did not retain the requested mass-property SelectedItems; refusing an unbounded assembly result.");
+                throw new InvalidOperationException("SolidWorks did not retain the requested mass-property SelectedItems; refusing an unbounded assembly result." + diagnostic);
             var configurations = expected.ToDictionary(component => component.Name2,
                 component => component.ReferencedConfiguration, StringComparer.OrdinalIgnoreCase);
             if (items == null) return;
@@ -171,7 +216,7 @@ namespace SW2URDF.URDFExport
                 string configuration;
                 if (component == null || !configurations.TryGetValue(component.Name2, out configuration) ||
                     !String.Equals(configuration, component.ReferencedConfiguration, StringComparison.Ordinal))
-                    throw new InvalidOperationException("SolidWorks returned different mass-property SelectedItems or referenced configuration; refusing an unbounded assembly result.");
+                    throw new InvalidOperationException("SolidWorks returned different mass-property SelectedItems or referenced configuration; refusing an unbounded assembly result." + diagnostic);
                 configurations.Remove(component.Name2);
             }
         }
@@ -181,6 +226,7 @@ namespace SW2URDF.URDFExport
             // Override options describe stored settings, not calculated geometry. Their API
             // has no Recalculate precondition. Reuse this metadata-only object for each scope;
             // leave hidden/unit settings untouched and recalculate only the two numeric objects.
+            foreach (Component2 component in components) VerifyMetadataConfiguration(component);
             SetScope(property, components);
             IMassPropertyOverrideOptions options = property.GetOverrideOptions() as IMassPropertyOverrideOptions;
             if (options == null)
@@ -188,8 +234,39 @@ namespace SW2URDF.URDFExport
             Overrides result = (options.OverrideMass ? Overrides.Mass : Overrides.None) |
                 (options.OverrideCenterOfMass ? Overrides.Center : Overrides.None) |
                 (options.OverrideMomentsOfInertia ? Overrides.Inertia : Overrides.None);
-            VerifyScope(property, components);
+            foreach (Component2 component in components) VerifyMetadataConfiguration(component);
+            VerifyScope(property, components, "after override metadata");
             return result;
+        }
+
+        private static void VerifyMetadataConfiguration(Component2 component)
+        {
+            string occurrence = component.Name2;
+            string referenced = component.ReferencedConfiguration;
+            string active = null;
+            COMException failure = null;
+            try
+            {
+                var document = component.GetModelDoc2() as ModelDoc2;
+                ConfigurationManager manager = document == null ? null : document.ConfigurationManager;
+                Configuration configuration = manager == null ? null : manager.ActiveConfiguration;
+                active = configuration == null ? null : configuration.Name;
+            }
+            catch (COMException error)
+            {
+                failure = error;
+            }
+            // SW2023 can return override flags from the loaded document's active configuration
+            // despite retaining a different occurrence reference, even after Recalculate.
+            if (failure != null || string.IsNullOrWhiteSpace(referenced) || string.IsNullOrWhiteSpace(active) ||
+                !string.Equals(referenced, active, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Cannot verify effective mass override metadata for occurrence '" + occurrence +
+                    "': referenced configuration='" + (referenced ?? "<unavailable>") +
+                    "', active document configuration='" + (active ?? "<unavailable>") +
+                    "'. Resolve the component and make its loaded document active configuration match the " +
+                    "referenced configuration before retrying. Mixed configurations of the same document " +
+                    "cannot be verified safely in this read; no configuration was switched.", failure);
         }
 
         private static Overrides ReadSubtreeOverrides(IMassProperty2 metadata, Component2 component,

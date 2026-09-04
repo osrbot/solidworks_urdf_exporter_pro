@@ -611,6 +611,29 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestPropertyManagerSuppressesSelectionCallbacksOnlyDuringRobotComputation()
+        {
+            string propertyManager = ReadRepositoryFile(
+                "SW2URDF", "URDFExport", "ExportPropertyManager.cs");
+            int methodStart = propertyManager.IndexOf("private void ExportButtonPress()", StringComparison.Ordinal);
+            Assert.True(methodStart >= 0);
+            int methodEnd = propertyManager.IndexOf("private void EnableControl", methodStart, StringComparison.Ordinal);
+            Assert.True(methodEnd > methodStart);
+            string transition = System.Text.RegularExpressions.Regex.Replace(
+                propertyManager.Substring(methodStart, methodEnd - methodStart), @"\s+", " ");
+
+            Assert.Contains("bool robotCreated;", transition);
+            Assert.Contains(
+                "using (treeSelectionUpdateGuard.Suppress()) { " +
+                "robotCreated = Exporter.CreateRobotFromTreeView(baseNode); } if (!robotCreated)", transition);
+            const string computation = "Exporter.CreateRobotFromTreeView(baseNode)";
+            Assert.Equal(transition.IndexOf(computation, StringComparison.Ordinal),
+                transition.LastIndexOf(computation, StringComparison.Ordinal));
+            Assert.True(transition.IndexOf("bool robotCreated;", StringComparison.Ordinal) <
+                transition.IndexOf("using (treeSelectionUpdateGuard.Suppress())", StringComparison.Ordinal));
+        }
+
+        [Fact]
         public void TestPropertyManagerHasAnAddinOwnerUntilAfterClose()
         {
             string addin = ReadRepositoryFile("SW2URDF", "SW", "SwAddin.cs");

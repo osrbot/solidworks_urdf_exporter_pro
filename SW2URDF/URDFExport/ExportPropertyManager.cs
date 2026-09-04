@@ -308,7 +308,13 @@ namespace SW2URDF.URDFExport
                 return;
             }
 
-            if (!Exporter.CreateRobotFromTreeView(baseNode))
+            bool robotCreated;
+            // Mass and geometry queries use temporary selections, not new Link bindings.
+            using (treeSelectionUpdateGuard.Suppress())
+            {
+                robotCreated = Exporter.CreateRobotFromTreeView(baseNode);
+            }
+            if (!robotCreated)
             {
                 MessageBox.Show(Exporter.ExportErrorWhy);
                 return;
@@ -628,6 +634,7 @@ namespace SW2URDF.URDFExport
 
         void IPropertyManagerPage2Handler9.OnSelectionboxListChanged(int Id, int Count)
         {
+            if (treeSelectionUpdateGuard.IsSuppressed) return;
             if (Id == SelectionID)
             {
                 UpdateSelectedNodeCadBindings();

@@ -4,6 +4,15 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## Unreleased / 未发布
 
+### 预览崩溃修复 / Preview Crash Fix
+
+- 修正 SolidWorks 2023 质量属性读取时的 COM 数组传参，避免点击“预览并导出”时导致宿主崩溃。
+- 计算使用独立的临时选择列表，读取结束后恢复原选择，避免当前高亮组件影响读取范围。
+- 引用配置与文档当前配置不匹配、无法可靠确认覆盖属性时明确提示，不切换用户配置或使用错误标志继续校准。
+- Corrected mass-property COM array marshaling that could crash SolidWorks 2023 when opening preview/export.
+  Reads isolate and restore the selection list. Unverifiable override metadata from mismatched configurations
+  is rejected without switching the user's configuration.
+
 ### Link 编辑、显示适配与惯性校准
 
 - Link 增删、直接子 Link 数量和拖拽改为先验证候选树再提交。失败或取消不留下半次修改；
