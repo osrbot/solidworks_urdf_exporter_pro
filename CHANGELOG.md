@@ -4,6 +4,28 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## Unreleased / 未发布
 
+### Link 编辑、显示适配与惯性校准
+
+- Link 增删、直接子 Link 数量和拖拽改为先验证候选树再提交。失败或取消不留下半次修改；
+  未填写完的 Joint 可以保留为草稿，正式导出仍检查必填项。大纲重命名保留稳定身份，避免丢失配置。
+- 页脚按钮和输入框按逻辑尺寸及当前 DPI 重新计算，不再沿用旧屏幕放大的尺寸；信息横幅重绘整块背景。
+- 通过 SolidWorks 有效质量属性接口读取组件质量、质心和惯性覆盖值。无法合理拆分的整体覆盖明确报错，
+  不悄悄退回忽略覆盖值的几何计算。
+- 惯性页支持实测质量校准和恢复 SW 值。相对质量分布不变时，质量和完整惯性矩阵同比变化，
+  预览与各导出目标保持一致；用户明确输入及 SW 覆盖的惯性矩阵不会被自动改写。
+- 校准信息作为可选配置字段保存，不提升配置 schema 版本；旧配置仍可读取。
+
+### Link Editing, Display Scaling, and Inertia Calibration
+
+- Link count, add/remove, and reparent operations validate a candidate before publishing it; failure
+  or cancellation leaves the prior tree intact. Incomplete Joints remain editable drafts, not export-ready data.
+- Footer and input dimensions are recalculated from logical sizes and current DPI. Information banners repaint their full background.
+- Effective SolidWorks component properties include mass, COM, and inertia overrides. Aggregate
+  overrides that cannot be assigned to individual Links fail explicitly instead of using a body-only fallback.
+- Measured-mass calibration scales the full inertia tensor without changing relative mass distribution.
+  Preview and export share the resolved values; explicit tensors remain untouched. Optional configuration
+  metadata preserves calibration across saves without a schema version bump.
+
 ### English
 
 #### Added

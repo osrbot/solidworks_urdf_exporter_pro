@@ -11,6 +11,27 @@ The Inertia page shows the current Link's mass, center of mass, and inertia matr
 
 Symmetric matrix terms are shown explicitly as `iyx = ixy`, `izx = ixz`, and `izy = iyz` to make clear that they are not separate inputs.
 
+## Use measured mass
+
+Set materials, density, or **Override Mass Properties** in SolidWorks first. The exporter reads
+effective mass, COM, and inertia for the selected components. A subassembly with a whole-subassembly
+override must belong to one Link; its aggregate override cannot be guessed for several Links.
+
+You can also enter the weighed mass here. With **Calibrate inertia with measured mass** enabled,
+the full matrix scales by `measured mass / source mass`. Changing 2 kg to 3 kg multiplies every
+tensor entry by 1.5 while preserving COM, principal directions, and equivalent cuboid dimensions.
+
+This assumes the source model's relative mass distribution is credible. Fix material distribution,
+ballast, and component placement in SolidWorks when that assumption is wrong.
+
+Explicitly entered tensors and SolidWorks inertia overrides are preserved, not automatically scaled.
+**Restore SW values** rereads current properties and discards edits made in the exporter. Preview
+and all export targets use the same final values. A measured mass differing from CAD is not itself
+an error; non-positive mass and physically invalid inertia still block export.
+
+Older configurations without source metadata keep their existing mass and tensor unchanged. Use
+**Restore SW values**, then enter measured mass, to opt into calibration from SW mass distribution.
+
 ## Show the equivalent inertia body
 
 Click **Show Equivalent Inertia Box** to inspect its position and orientation in SolidWorks. This preview helps reveal obvious coordinate or unit errors; it does not replace the original geometry.
