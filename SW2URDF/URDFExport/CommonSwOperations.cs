@@ -27,6 +27,7 @@ using SW2URDF.URDF;
 using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
@@ -153,51 +154,104 @@ namespace SW2URDF.URDFExport
                     componentsToShow.Add(comp);
                 }
             }
-            ShowComponents(model, componentsToShow);
+            SetComponentVisibility(model, componentsToShow, true);
         }
 
         //Shows the components in the list. Useful  for exporting STLs
         public static void ShowComponents(ModelDoc2 model, List<Component2> components)
         {
-            SelectComponents(model, ExpandComponents(components), true);
-            model.ShowComponent2();
+            SetComponentVisibility(model, ExpandComponents(components), true);
         }
 
         //Hides the components from a list
         public static void HideComponents(ModelDoc2 model, List<Component2> components)
         {
-            SelectComponents(model, ExpandComponents(components), true);
-            model.HideComponent2();
+            SetComponentVisibility(model, ExpandComponents(components), false);
         }
 
-        private static List<Component2> ExpandComponents(List<Component2> components)
+        internal static void SetComponentVisibility(
+            ModelDoc2 model, IEnumerable<Component2> components, bool visible)
         {
-            List<Component2> expandedComponents = new List<Component2>();
-            foreach (Component2 component in components)
-            {
-                AddComponentAndChildren(component, expandedComponents);
-            }
-            return expandedComponents;
+            SetComponentVisibility(model, components, visible,
+                component => new DispatchWrapper(component));
         }
 
-        private static void AddComponentAndChildren(Component2 component, List<Component2> components)
+        internal static void SetComponentVisibility(ModelDoc2 model,
+            IEnumerable<Component2> components, bool visible, Func<Component2, object> prepareSelection)
         {
-            if (component == null)
+            // Snapshot restoration is already flat. Do not expand it a second time.
+            HashSet<string> visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            object[] objects = (components ?? Enumerable.Empty<Component2>())
+                .Where(component => component != null && visited.Add(component.Name2) &&
+                    !component.IsSuppressed())
+                .Select(prepareSelection)
+                .ToArray();
+            if (objects.Length == 0)
             {
                 return;
             }
-
-            components.Add(component);
-            object[] children = (object[])component.GetChildren();
-            if (children == null)
+            Exception operationFailure = null;
+            try
             {
-                return;
+                int selected = model.Extension.MultiSelect2(objects, false, null);
+                if (selected != objects.Length)
+                {
+                    throw new InvalidOperationException(String.Format(
+                        "Only {0} of {1} components could be selected to {2}.",
+                        selected, objects.Length, visible ? "show" : "hide"));
+                }
+                if (visible)
+                {
+                    model.ShowComponent2();
+                }
+                else
+                {
+                    model.HideComponent2();
+                }
             }
-
-            foreach (object child in children)
+            catch (Exception exception)
             {
-                AddComponentAndChildren((Component2)child, components);
+                operationFailure = exception;
+                throw;
             }
+            finally
+            {
+                try { model.ClearSelection2(true); }
+                catch (Exception cleanupException)
+                {
+                    if (operationFailure == null) throw;
+                    logger.Error("Clearing a failed visibility selection also failed.", cleanupException);
+                }
+            }
+        }
+
+        private static List<Component2> ExpandComponents(IEnumerable<Component2> components)
+        {
+            return ExpandDistinctComponents(components, component => component.Name2,
+                component => EnumerateComObjects<Component2>(component.GetChildren() as object[],
+                    "reading component children"));
+        }
+
+        internal static List<T> ExpandDistinctComponents<T>(IEnumerable<T> roots,
+            Func<T, string> identity, Func<T, IEnumerable<T>> children) where T : class
+        {
+            List<T> result = new List<T>();
+            HashSet<string> visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            Stack<T> pending = new Stack<T>((roots ?? Enumerable.Empty<T>()).Reverse());
+            while (pending.Count > 0)
+            {
+                T component = pending.Pop();
+                if (component == null || !visited.Add(identity(component)))
+                {
+                    continue;
+                }
+                result.Add(component);
+                foreach (T child in (children(component) ?? Enumerable.Empty<T>()).Reverse())
+                {
+                    pending.Push(child);
+                }
+            }
+            return result;
         }
 
         public static int GetCount(Link Link)

@@ -1158,23 +1158,21 @@ namespace SW2URDF.UI
                     meshFormat = MeshExportFormat.STL;
                 }
                 bool exportSucceeded;
-                using (ExportProgressForm progressForm = new ExportProgressForm())
+                using (ExportProgressSession progressSession = new ExportProgressSession(this))
                 {
                     EventHandler<ExportProgressEventArgs> progressHandler =
-                        (progressSender, progress) => progressForm.UpdateProgress(progress);
-                    Exporter.ExportProgressChanged += progressHandler;
-                    progressForm.Show(this);
-                    progressForm.Refresh();
-                    Enabled = false;
+                        (progressSender, progress) => progressSession.UpdateProgress(progress);
                     try
                     {
+                        Enabled = false;
+                        progressSession.Start();
+                        Exporter.ExportProgressChanged += progressHandler;
                         exportSucceeded = Exporter.ExportRobot(exportSTL, meshFormat);
                     }
                     finally
                     {
                         Enabled = true;
                         Exporter.ExportProgressChanged -= progressHandler;
-                        progressForm.Close();
                     }
                 }
 

@@ -816,6 +816,8 @@ namespace OSURDF.Core.Export
 
         private sealed class ExportBuildContext
         {
+            // MuJoCo's binary STL reader has a face limit that does not apply to OBJ.
+            private const uint MuJoCoStlTriangleLimit = 200000;
             private readonly string bundleRoot;
             private readonly string staging;
             private readonly IDictionary<string, string> copiedAssets =
@@ -955,6 +957,14 @@ namespace OSURDF.Core.Export
                 {
                     throw new FileNotFoundException("Robot Bundle asset is missing.", normalized);
                 }
+                bool convertStl = false;
+                if (string.Equals(Path.GetExtension(source), ".stl", StringComparison.OrdinalIgnoreCase))
+                {
+                    using (BinaryReader reader = new BinaryReader(File.OpenRead(source)))
+                    {
+                        convertStl = ReadBinaryStlTriangleCount(reader, normalized) > MuJoCoStlTriangleLimit;
+                    }
+                }
                 string digest = RobotBundleBuilder.Sha256File(source);
                 string digestKey = role + "\n" + digest;
                 if (copiedByRoleAndDigest.TryGetValue(digestKey, out existing))
@@ -964,6 +974,7 @@ namespace OSURDF.Core.Export
                 }
 
                 string fileName = SafeFileName(Path.GetFileName(source));
+                if (convertStl) fileName = Path.ChangeExtension(fileName, ".obj");
                 string relative = "assets/" + role + "/" + fileName;
                 string destination = RobotBundleBuilder.SafeBundlePath(staging, relative);
                 if (File.Exists(destination))
@@ -974,10 +985,86 @@ namespace OSURDF.Core.Export
                     destination = RobotBundleBuilder.SafeBundlePath(staging, relative);
                 }
                 Directory.CreateDirectory(Path.GetDirectoryName(destination));
-                File.Copy(source, destination, false);
+                if (convertStl)
+                {
+                    WriteBinaryStlAsObj(source, destination);
+                }
+                else
+                {
+                    File.Copy(source, destination, false);
+                }
                 copiedAssets[copyKey] = relative;
                 copiedByRoleAndDigest[digestKey] = relative;
                 return relative;
+            }
+
+            private static uint ReadBinaryStlTriangleCount(BinaryReader reader, string source)
+            {
+                if (reader.BaseStream.Length < 84)
+                {
+                    throw new InvalidDataException("Binary STL header is truncated: " + source);
+                }
+                reader.BaseStream.Position = 80;
+                uint triangles = reader.ReadUInt32();
+                if (triangles == 0 || reader.BaseStream.Length != 84L + 50L * triangles)
+                {
+                    throw new InvalidDataException("Binary STL triangle count does not match its length: " + source);
+                }
+                return triangles;
+            }
+
+            private static void WriteBinaryStlAsObj(string source, string destination)
+            {
+                using (BinaryReader reader = new BinaryReader(File.OpenRead(source)))
+                using (StreamWriter writer = new StreamWriter(destination, false, new UTF8Encoding(false)))
+                {
+                    uint triangles = ReadBinaryStlTriangleCount(reader, source);
+                    int[] faces = new int[checked((int)(3L * triangles))];
+                    Dictionary<(float X, float Y, float Z), int> vertices =
+                        new Dictionary<(float X, float Y, float Z), int>();
+                    writer.NewLine = "\n";
+                    for (int face = 0; face < faces.Length; face += 3)
+                    {
+                        // MuJoCo ignores STL normals and welds exactly equal vertices before computing normals.
+                        for (int axis = 0; axis < 3; axis++) ReadFiniteStlValue(reader, source);
+                        for (int corner = 0; corner < 3; corner++)
+                        {
+                            var vertex = (
+                                X: ReadFiniteStlValue(reader, source),
+                                Y: ReadFiniteStlValue(reader, source),
+                                Z: ReadFiniteStlValue(reader, source));
+                            int index;
+                            if (!vertices.TryGetValue(vertex, out index))
+                            {
+                                index = vertices.Count + 1;
+                                vertices.Add(vertex, index);
+                                writer.WriteLine("v " +
+                                    vertex.X.ToString("G9", CultureInfo.InvariantCulture) + " " +
+                                    vertex.Y.ToString("G9", CultureInfo.InvariantCulture) + " " +
+                                    vertex.Z.ToString("G9", CultureInfo.InvariantCulture));
+                            }
+                            faces[face + corner] = index;
+                        }
+                        reader.ReadUInt16();
+                    }
+                    for (int face = 0; face < faces.Length; face += 3)
+                    {
+                        writer.WriteLine("f " +
+                            faces[face].ToString(CultureInfo.InvariantCulture) + " " +
+                            faces[face + 1].ToString(CultureInfo.InvariantCulture) + " " +
+                            faces[face + 2].ToString(CultureInfo.InvariantCulture));
+                    }
+                }
+            }
+
+            private static float ReadFiniteStlValue(BinaryReader reader, string source)
+            {
+                float value = reader.ReadSingle();
+                if (float.IsNaN(value) || float.IsInfinity(value))
+                {
+                    throw new InvalidDataException("Binary STL contains a non-finite coordinate or normal: " + source);
+                }
+                return value;
             }
         }
 

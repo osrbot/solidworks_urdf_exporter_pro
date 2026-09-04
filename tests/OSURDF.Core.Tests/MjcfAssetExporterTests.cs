@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
 using Newtonsoft.Json.Linq;
 using OSURDF.Core.Bundle;
@@ -180,6 +182,153 @@ public sealed class MjcfAssetExporterTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(200000, ".STL")]
+    [InlineData(200001, ".obj")]
+    [InlineData(642074, ".obj")]
+    public void ExportConvertsOnlyOversizedStlAndPreservesEveryTriangle(int triangles, string extension)
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        string source = Path.Combine(temporaryDirectory, "base_link.STL");
+        WriteBinaryStl(source, triangles);
+        GeometryDocument geometry = robot.Links[0].Visuals[0].Geometry;
+        geometry.Uri = source;
+        geometry.Scale = new Vector3Document { X = 0.001, Y = 2.5, Z = 0.75 };
+        string bundle = BuildBundle(robot, "large-bundle");
+        string canonical = Path.Combine(bundle, "meshes", "visual", "base_link.STL");
+        string digest = FileDigest(source);
+        CultureInfo previousCulture = CultureInfo.CurrentCulture;
+        MjcfExportResult result;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            result = new MjcfAssetExporter().Export(new MjcfExportOptions
+            {
+                BundleDirectory = bundle,
+                OutputDirectory = Path.Combine(temporaryDirectory, "large-delivery"),
+                CompilerValidator = new RecordingValidator()
+            });
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
+
+        XElement mesh = Assert.Single(XDocument.Load(result.RobotXmlPath).Descendants("mesh"));
+        string relative = (string)mesh.Attribute("file")!;
+        Assert.Equal("assets/visual/base_link" + extension, relative);
+        Assert.False(Path.IsPathRooted(relative));
+        Assert.Equal(new[] { 0.001, 2.5, 0.75 }, Numbers(mesh.Attribute("scale")));
+        Assert.Equal(digest, FileDigest(source));
+        Assert.Equal(digest, FileDigest(canonical));
+        Assert.Equal(digest, FileDigest(Path.Combine(result.OutputDirectory, "meshes", "visual", "base_link.STL")));
+        Assert.True(new RobotBundleVerifier().Verify(bundle).IsValid);
+        string asset = Path.Combine(result.OutputDirectory, relative);
+        Assert.Single(Directory.GetFiles(Path.GetDirectoryName(asset)!));
+        if (extension == ".obj")
+        {
+            AssertObjMatchesBinaryStl(source, asset, triangles);
+        }
+        else
+        {
+            Assert.Equal(digest, FileDigest(asset));
+            Assert.Empty(Directory.GetFiles(result.OutputDirectory, "*.obj", SearchOption.AllDirectories));
+        }
+    }
+
+    [Fact]
+    public void ExportReusesConvertedAssetsWithoutClobberingNativeObjAndIsDeterministic()
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        string source = Path.Combine(temporaryDirectory, "shared.STL");
+        WriteBinaryStl(source, 200001);
+        string nativeObj = Path.Combine(temporaryDirectory, "shared.obj");
+        File.WriteAllText(nativeObj, "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n");
+        robot.Links[0].Visuals[0].Geometry = MeshGeometry(nativeObj);
+        for (int index = 0; index < 3; index++)
+        {
+            GeometryDocument geometry = MeshGeometry(source);
+            if (index == 2) geometry.Scale = new Vector3Document { X = 2, Y = 3, Z = 4 };
+            robot.Links[0].Visuals.Add(new VisualDocument { Name = "shared_" + index, Geometry = geometry });
+        }
+        robot.Links[0].Collisions[0].Geometry = MeshGeometry(source);
+        string bundle = BuildBundle(robot, "reuse-bundle");
+        MjcfAssetExporter exporter = new();
+        MjcfExportResult first = exporter.Export(new MjcfExportOptions
+        {
+            BundleDirectory = bundle,
+            OutputDirectory = Path.Combine(temporaryDirectory, "reuse-first"),
+            CompilerValidator = new RecordingValidator()
+        });
+        MjcfExportResult second = exporter.Export(new MjcfExportOptions
+        {
+            BundleDirectory = bundle,
+            OutputDirectory = Path.Combine(temporaryDirectory, "reuse-second"),
+            CompilerValidator = new RecordingValidator()
+        });
+
+        XElement[] meshes = XDocument.Load(first.RobotXmlPath).Descendants("mesh").ToArray();
+        Assert.Equal(4, meshes.Length);
+        Assert.Equal("assets/visual/shared.obj", (string?)meshes[0].Attribute("file"));
+        string converted = (string)meshes[1].Attribute("file")!;
+        Assert.StartsWith("assets/visual/shared-", converted);
+        Assert.EndsWith(".obj", converted);
+        Assert.Equal(converted, (string?)meshes[2].Attribute("file"));
+        Assert.Equal(new[] { 2.0, 3.0, 4.0 }, Numbers(meshes[2].Attribute("scale")));
+        Assert.Equal("assets/collision/shared.obj", (string?)meshes[3].Attribute("file"));
+        Assert.Equal(FileDigest(nativeObj), FileDigest(Path.Combine(first.OutputDirectory, "assets/visual/shared.obj")));
+        Assert.Equal(FileDigest(Path.Combine(first.OutputDirectory, converted)),
+            FileDigest(Path.Combine(first.OutputDirectory, "assets/collision/shared.obj")));
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(first.OutputDirectory, "assets/visual")).Length);
+        string[] files = Directory.GetFiles(first.OutputDirectory, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(first.OutputDirectory, path)).OrderBy(path => path).ToArray();
+        Assert.Equal(files, Directory.GetFiles(second.OutputDirectory, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(second.OutputDirectory, path)).OrderBy(path => path));
+        foreach (string file in files)
+        {
+            Assert.Equal(FileDigest(Path.Combine(first.OutputDirectory, file)),
+                FileDigest(Path.Combine(second.OutputDirectory, file)));
+        }
+    }
+
+    [Theory]
+    [InlineData("short-header")]
+    [InlineData("truncated")]
+    [InlineData("trailing-data")]
+    [InlineData("wrong-count")]
+    [InlineData("overflow-count")]
+    [InlineData("empty")]
+    [InlineData("nan-coordinate")]
+    [InlineData("infinite-coordinate")]
+    [InlineData("nan-normal")]
+    public void ExportRejectsMalformedBinaryStlWithoutPublishing(string corruption)
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        string source = Path.Combine(temporaryDirectory, "malformed.STL");
+        WriteBinaryStl(source, 200001);
+        using (FileStream stream = File.Open(source, FileMode.Open, FileAccess.Write))
+        using (BinaryWriter writer = new(stream))
+        {
+            switch (corruption)
+            {
+                case "short-header": stream.SetLength(83); break;
+                case "truncated": stream.SetLength(stream.Length - 1); break;
+                case "trailing-data": stream.SetLength(stream.Length + 1); break;
+                case "wrong-count": stream.Position = 80; writer.Write(200000u); break;
+                case "overflow-count": stream.Position = 80; writer.Write(uint.MaxValue); break;
+                case "empty": stream.SetLength(84); stream.Position = 80; writer.Write(0u); break;
+                case "nan-coordinate": stream.Position = stream.Length - 14; writer.Write(float.NaN); break;
+                case "infinite-coordinate": stream.Position = 96; writer.Write(float.PositiveInfinity); break;
+                case "nan-normal": stream.Position = 84; writer.Write(float.NaN); break;
+            }
+        }
+        robot.Links[0].Visuals[0].Geometry.Uri = source;
+        string bundle = BuildBundle(robot, "malformed-bundle");
+        RecordingValidator validator = new();
+        AssertValidationFailureDoesNotPublish(bundle, "malformed-delivery", validator, "Binary STL");
+        Assert.Empty(validator.Paths);
+    }
+
     [Fact]
     public void ExportWithoutValidatorDoesNotPublish()
     {
@@ -264,11 +413,54 @@ public sealed class MjcfAssetExporterTests : IDisposable
         Assert.Contains("zero-control", (string?)report["officialCompilation"]?["message"]);
     }
 
+    [Fact]
+    [Trait("Category", "PinnedMuJoCoRuntime")]
+    public void ExportLargeStlPassesBundledOfficialMuJoCoWhenRuntimeIsProvided()
+    {
+        string runtime = Environment.GetEnvironmentVariable("SW2URDF_MUJOCO_BIN")
+            ?? throw new InvalidOperationException("SW2URDF_MUJOCO_BIN is required by the pinned MuJoCo runtime gate.");
+        string version = Environment.GetEnvironmentVariable("SW2URDF_MUJOCO_VERSION")
+            ?? throw new InvalidOperationException("SW2URDF_MUJOCO_VERSION is required by the pinned MuJoCo runtime gate.");
+        RobotDocument robot = LoadFixtureRobot();
+        string source = Path.Combine(temporaryDirectory, "dense.STL");
+        const int triangles = 4 * 224 * 224;
+        WriteBinaryStl(source, triangles);
+        BundledMjcfCompilerValidator validator = new(
+            Path.Combine(runtime, "compile.exe"), Path.Combine(runtime, "testspeed.exe"), version);
+        string unconverted = Path.Combine(temporaryDirectory, "unconverted.xml");
+        File.WriteAllText(unconverted,
+            "<mujoco><asset><mesh name=\"dense\" file=\"dense.STL\"/></asset>" +
+            "<worldbody><geom type=\"mesh\" mesh=\"dense\"/></worldbody></mujoco>");
+        MjcfCompilerValidationResult rejected = validator.Validate(new MjcfCompilerValidationRequest
+        {
+            WorkingDirectory = temporaryDirectory,
+            ModelPaths = new[] { unconverted }
+        });
+        Assert.False(rejected.Succeeded);
+        Assert.Contains("200000", rejected.Message);
+        robot.Links[0].Visuals[0].Geometry = MeshGeometry(source);
+        string bundle = BuildBundle(robot, "official-large-bundle");
+        MjcfExportResult result = new MjcfAssetExporter().Export(new MjcfExportOptions
+        {
+            BundleDirectory = bundle,
+            OutputDirectory = Path.Combine(temporaryDirectory, "official-large-delivery"),
+            CompilerValidator = validator
+        });
+
+        Assert.Equal("passed", result.OfficialCompilationStatus);
+        AssertObjMatchesBinaryStl(source, Path.Combine(result.OutputDirectory, "assets/visual/dense.obj"), triangles);
+        JObject report = JObject.Parse(File.ReadAllText(result.ExportReportPath));
+        Assert.Equal("bundled-official-mujoco-tools", (string?)report["officialCompilation"]?["validator"]);
+        Assert.Equal(version, (string?)report["officialCompilation"]?["muJoCoVersion"]);
+        Assert.Contains("zero-control", (string?)report["officialCompilation"]?["message"]);
+    }
+
     private string BuildBundle(RobotDocument robot, string name)
     {
         return new RobotBundleBuilder().Build(robot, new BundleBuildOptions
         {
             SourceUrdfPath = Fixture("minimal_robot.urdf"),
+            AllowAbsoluteAssetPaths = true,
             OutputDirectory = Path.Combine(temporaryDirectory, name)
         }).OutputDirectory;
     }
@@ -351,9 +543,111 @@ public sealed class MjcfAssetExporterTests : IDisposable
             .ToArray();
     }
 
-    private static RobotDocument LoadFixtureRobot()
+    private RobotDocument LoadFixtureRobot()
     {
-        return UrdfCodec.Read(Fixture("minimal_robot.urdf"));
+        RobotDocument robot = UrdfCodec.Read(Fixture("minimal_robot.urdf"));
+        string mesh = Path.Combine(temporaryDirectory, "base.stl");
+        WriteBinaryStl(mesh, 4);
+        robot.Links[0].Visuals[0].Geometry.Uri = mesh;
+        return robot;
+    }
+
+    private static GeometryDocument MeshGeometry(string path)
+    {
+        return new GeometryDocument { Type = "mesh", Uri = path };
+    }
+
+    private static string FileDigest(string path)
+    {
+        using FileStream stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static void WriteBinaryStl(string path, int triangles)
+    {
+        using BinaryWriter writer = new(File.Create(path));
+        byte[] header = new byte[80];
+        Encoding.ASCII.GetBytes("solid binary STL, not ASCII").CopyTo(header, 0);
+        writer.Write(header);
+        writer.Write((uint)triangles);
+        int subdivisions = (int)Math.Ceiling(Math.Sqrt(triangles / 4.0));
+        int[][] vertices = { new[] { 0, 0, 0 }, new[] { 1, 0, 0 }, new[] { 0, 1, 0 }, new[] { 0, 0, 1 } };
+        int[][] faces = { new[] { 0, 2, 1 }, new[] { 0, 1, 3 }, new[] { 0, 3, 2 }, new[] { 1, 2, 3 } };
+        int written = 0;
+        foreach (int[] face in faces)
+        {
+            for (int row = 0; row < subdivisions && written < triangles; row++)
+            {
+                for (int column = 0; column < subdivisions - row && written < triangles; column++)
+                {
+                    WriteTriangle(Point(row, column), Point(row + 1, column), Point(row, column + 1));
+                    if (column < subdivisions - row - 1 && written < triangles)
+                    {
+                        WriteTriangle(Point(row + 1, column), Point(row + 1, column + 1), Point(row, column + 1));
+                    }
+                }
+            }
+
+            (float X, float Y, float Z) Point(int row, int column)
+            {
+                float Coordinate(int axis) =>
+                    (vertices[face[0]][axis] * (subdivisions - row - column) +
+                     vertices[face[1]][axis] * row + vertices[face[2]][axis] * column) / (float)subdivisions;
+                return (Coordinate(0) * 1.234567f - 0.125f,
+                    Coordinate(1) * 2.1234567f + 0.25f, Coordinate(2) * 0.456789f - 0.375f);
+            }
+        }
+        Assert.Equal(triangles, written);
+
+        void WriteTriangle((float X, float Y, float Z) a, (float X, float Y, float Z) b, (float X, float Y, float Z) c)
+        {
+            writer.Write(0f); writer.Write(0f); writer.Write(0f);
+            WriteVertex(a); WriteVertex(b); WriteVertex(c);
+            writer.Write((ushort)0);
+            written++;
+        }
+
+        void WriteVertex((float X, float Y, float Z) vertex)
+        {
+            writer.Write(vertex.X); writer.Write(vertex.Y); writer.Write(vertex.Z);
+        }
+    }
+
+    private static void AssertObjMatchesBinaryStl(string source, string obj, int triangles)
+    {
+        using BinaryReader reader = new(File.OpenRead(source));
+        reader.BaseStream.Position = 84;
+        List<(float X, float Y, float Z)> vertices = new();
+        int faces = 0;
+        foreach (string line in File.ReadLines(obj))
+        {
+            string[] fields = line.Split(' ');
+            Assert.Equal(4, fields.Length);
+            if (fields[0] == "v")
+            {
+                Assert.Equal(0, faces);
+                vertices.Add((float.Parse(fields[1], CultureInfo.InvariantCulture),
+                    float.Parse(fields[2], CultureInfo.InvariantCulture),
+                    float.Parse(fields[3], CultureInfo.InvariantCulture)));
+            }
+            else
+            {
+                Assert.Equal("f", fields[0]);
+                reader.ReadSingle(); reader.ReadSingle(); reader.ReadSingle();
+                for (int corner = 1; corner <= 3; corner++)
+                {
+                    int index = int.Parse(fields[corner], CultureInfo.InvariantCulture);
+                    Assert.InRange(index, 1, vertices.Count);
+                    Assert.Equal((reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()), vertices[index - 1]);
+                }
+                reader.ReadUInt16();
+                faces++;
+            }
+        }
+        Assert.Equal(triangles, faces);
+        Assert.Equal(reader.BaseStream.Length, reader.BaseStream.Position);
+        Assert.Equal(vertices.Count, vertices.Distinct().Count());
+        Assert.True(vertices.Count < triangles * 3);
     }
 
     private static string Fixture(string relative)

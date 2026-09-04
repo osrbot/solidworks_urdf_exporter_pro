@@ -2712,6 +2712,8 @@ namespace SW2URDF.URDFExport
 
         private T ExecuteWithVisibleLinkComponents<T>(Link link, Func<T> operation)
         {
+            UpdateProgressTitle("Reading component visibility: " + link.Name,
+                "\u6b63\u5728\u8bfb\u53d6\u7ec4\u4ef6\u663e\u793a\u72b6\u6001: " + link.Name);
             List<ComponentVisibilityState> visibilityBeforeExport =
                 CaptureComponentVisibility(link.SWComponents);
             bool visibilityMayHaveChanged = false;
@@ -2719,7 +2721,10 @@ namespace SW2URDF.URDFExport
             try
             {
                 visibilityMayHaveChanged = true;
-                CommonSwOperations.ShowComponents(ActiveSWModel, link.SWComponents);
+                UpdateProgressTitle("Showing mesh components: " + link.Name,
+                    "\u6b63\u5728\u663e\u793a\u7f51\u683c\u7ec4\u4ef6: " + link.Name);
+                CommonSwOperations.SetComponentVisibility(ActiveSWModel,
+                    visibilityBeforeExport.Select(state => state.Component), true);
                 return operation();
             }
             catch (Exception exception)
@@ -2733,6 +2738,16 @@ namespace SW2URDF.URDFExport
                 {
                     try
                     {
+                        try
+                        {
+                            UpdateProgressTitle("Restoring mesh component visibility: " + link.Name,
+                                "\u6b63\u5728\u6062\u590d\u7f51\u683c\u7ec4\u4ef6\u663e\u793a\u72b6\u6001: " + link.Name);
+                        }
+                        catch (Exception progressException)
+                        {
+                            logger.Warn("Updating cleanup progress failed; visibility restoration will continue.",
+                                progressException);
+                        }
                         RestoreComponentVisibility(ActiveSWModel, visibilityBeforeExport);
                     }
                     catch (Exception cleanupException)
@@ -2775,18 +2790,10 @@ namespace SW2URDF.URDFExport
             {
                 return;
             }
-            string identity;
-            try
-            {
-                identity = component.Name2;
-            }
-            catch (COMException)
-            {
-                identity = component.GetHashCode().ToString(CultureInfo.InvariantCulture);
-            }
+            string identity = component.Name2;
             if (String.IsNullOrWhiteSpace(identity))
             {
-                identity = component.GetHashCode().ToString(CultureInfo.InvariantCulture);
+                throw new InvalidOperationException("A component has no assembly-instance identity.");
             }
             if (!visited.Add(identity ?? String.Empty))
             {
@@ -2794,12 +2801,8 @@ namespace SW2URDF.URDFExport
             }
 
             states.Add(new ComponentVisibilityState(component, component.Visible));
-            object[] children = null;
-            try
-            {
-                children = component.GetChildren() as object[];
-            }
-            catch (COMException) { }
+            // A partial snapshot cannot safely drive mesh visibility or restore the assembly.
+            object[] children = component.GetChildren() as object[];
             foreach (object child in children ?? new object[0])
             {
                 CaptureComponentVisibilityRecursive(child as Component2, states, visited);
@@ -2809,6 +2812,12 @@ namespace SW2URDF.URDFExport
         internal static void RestoreComponentVisibility(
             ModelDoc2 model,
             IList<ComponentVisibilityState> states)
+        {
+            RestoreComponentVisibility(model, states, component => new DispatchWrapper(component));
+        }
+
+        internal static void RestoreComponentVisibility(ModelDoc2 model,
+            IList<ComponentVisibilityState> states, Func<Component2, object> prepareSelection)
         {
             if (model == null || states == null)
             {
@@ -2826,14 +2835,19 @@ namespace SW2URDF.URDFExport
                         (int)swComponentVisibilityState_e.swComponentHidden)
                     .Select(state => state.Component)
                     .ToList();
+                List<Exception> failures = new List<Exception>();
                 if (visibleComponents.Count > 0)
                 {
-                    CommonSwOperations.ShowComponents(model, visibleComponents);
+                    try { CommonSwOperations.SetComponentVisibility(model, visibleComponents, true, prepareSelection); }
+                    catch (Exception exception) { failures.Add(exception); }
                 }
                 if (hiddenComponents.Count > 0)
                 {
-                    CommonSwOperations.HideComponents(model, hiddenComponents);
+                    try { CommonSwOperations.SetComponentVisibility(model, hiddenComponents, false, prepareSelection); }
+                    catch (Exception exception) { failures.Add(exception); }
                 }
+                if (failures.Count > 0)
+                    throw new AggregateException("Restoring component visibility failed.", failures);
             }
             finally
             {

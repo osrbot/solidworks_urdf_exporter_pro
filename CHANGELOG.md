@@ -91,6 +91,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Fixed
 
+- Removed repeated descendant expansion and per-component selection from mesh visibility changes.
+  Export progress now keeps its own responsive window while SolidWorks completes a blocking call.
+- Converted oversized STL meshes to lossless OBJ assets for MuJoCo, avoiding its 200,000-face STL
+  reader limit without reducing the ROS or OpenUSD mesh quality.
 - Made the delivered OpenUSD root layer readable UTF-8 USDA text with portable relative geometry
   references, while retaining the original filename `robot.usd` and reopen validation.
 
@@ -192,6 +196,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### 修复
 
+- 网格导出时，组件显示/隐藏改为去重后批量处理，避免反复展开和逐个选中组件。
+  进度窗口会持续显示当前步骤和用时，不再随 SolidWorks 的耗时调用一起停止刷新。
+- MuJoCo 遇到超过 20 万个三角面的 STL 时，自动转换为保留全部三角面的 OBJ。
+  ROS 和 OpenUSD 的原始网格不受影响，不需要用户为此降低模型精度。
 - 将交付的 OpenUSD 根层写成可读的 UTF-8 USDA 文本，几何依赖使用可搬运的相对路径，同时保留
   `robot.usd` 文件名和重开校验。
 
