@@ -119,7 +119,7 @@ namespace OSURDF.Core.Export
             {
                 RobotDocument packageRobot = RobotJson.Clone(robot);
                 CopyAndRewriteAssets(packageRobot, bundleRoot, staging, package.PackageName);
-                string robotUrdfFile = SafeRobotFileName(packageRobot.Name) + ".urdf";
+                string robotUrdfFile = GetRobotUrdfFileName(packageRobot.Name);
                 string urdfPath = Path.Combine(staging, "urdf", robotUrdfFile);
                 UrdfCodec.Write(urdfPath, packageRobot, false);
                 CopySourceReports(bundleRoot, staging);
@@ -549,6 +549,11 @@ namespace OSURDF.Core.Export
                 Directory.CreateDirectory(Path.GetDirectoryName(destination));
                 File.Copy(file, destination, false);
             }
+        }
+
+        public static string GetRobotUrdfFileName(string robotName)
+        {
+            return SafeRobotFileName(robotName) + ".urdf";
         }
 
         private static string SafeRobotFileName(string value)

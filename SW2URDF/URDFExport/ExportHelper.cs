@@ -213,7 +213,6 @@ namespace SW2URDF.URDFExport
             ExportOutputSnapshot outputBeforeExport = null;
             string stagingDirectory = null;
             V2ExportResult v2Result = null;
-            string pendingTopLevelReport = null;
             try
             {
                 int progressBarBound = GetMeshExportLinks(URDFRobot.BaseLink).Count;
@@ -334,7 +333,11 @@ namespace SW2URDF.URDFExport
                         windowsURDFFileName,
                         outputRobot,
                         meshRecords,
-                        ExportTargets);
+                        ExportTargets,
+                        (target, selected) => ValidateAndWriteTargetReport(
+                            deliveryPackage, target, selected, inertialRecords,
+                            exportSTL, meshFormat, exportStopwatch.Elapsed),
+                        partial => v2Result = partial);
                 }
                 else
                 {
@@ -343,52 +346,18 @@ namespace SW2URDF.URDFExport
                     package.CreateRos2Package(windowsURDFFileName);
                 }
 
-                UpdateProgressTitle("Writing export report", "\u6b63\u5728\u5199\u5165\u5bfc\u51fa\u4f53\u68c0\u62a5\u544a");
-                IEnumerable<MeshExportRecord> reportMeshRecords = v2Result != null
-                    ? v2Result.DeliveryMeshRecords
-                    : meshRecords;
-                string ros1UrdfFileName = Path.Combine(
-                    deliveryPackage.WindowsRobotsDirectory,
-                    URDFRobot.Name + ".urdf");
-                if (v2Result != null)
+                if (v2Result == null)
                 {
-                    ExportReportBuildResult reportResult = BuildExportReportResult(
-                        deliveryPackage,
-                        ros1UrdfFileName,
-                        inertialRecords,
-                        reportMeshRecords,
-                        exportSTL,
-                        meshFormat,
-                        exportStopwatch.Elapsed,
-                        ExportTargets);
-                    pendingTopLevelReport = reportResult.Content;
-                    WriteExportReportContent(
-                        exportedPackage,
-                        pendingTopLevelReport,
-                        ExportTargets,
-                        false,
-                        true);
-                    if (reportResult.HasBlockingFailures)
-                    {
-                        throw new InvalidDataException(
-                            "Export health validation failed: " +
-                            reportResult.BlockingFailureSummary());
-                    }
-                    V2ExportBridge.RefreshRosChecksums(v2Result);
-                }
-                else
-                {
+                    UpdateProgressTitle("Writing export report", "\u6b63\u5728\u5199\u5165\u5bfc\u51fa\u62a5\u544a");
                     WriteExportReport(
                         deliveryPackage,
-                        ros1UrdfFileName,
+                        Path.Combine(deliveryPackage.WindowsRobotsDirectory, URDFRobot.Name + ".urdf"),
                         inertialRecords,
-                        reportMeshRecords,
+                        meshRecords,
                         exportSTL,
                         meshFormat,
                         exportStopwatch.Elapsed,
                         ExportTargets);
-                    UpdateProgressTitle("Copying export log", "\u6b63\u5728\u590d\u5236\u5bfc\u51fa\u65e5\u5fd7");
-                    logger.Info("Copying log file");
                     CopyLogFile(deliveryPackage);
                 }
                 success = true;
@@ -401,11 +370,19 @@ namespace SW2URDF.URDFExport
             }
             finally
             {
-                success = RestoreExportEnvironment(
+                bool environmentRestored = RestoreExportEnvironment(
                     hiddenComponents,
                     visibilityMayHaveChanged,
                     preferencesSaved,
-                    progressStarted) && success;
+                    progressStarted);
+                if (!environmentRestored && v2Result != null)
+                {
+                    v2Result.Warnings.Add("SolidWorks environment restoration needs attention: " + ExportErrorWhy);
+                }
+                else
+                {
+                    success = environmentRestored && success;
+                }
                 bool stagingDeleted = DeleteV2ExportStagingDirectory(stagingDirectory);
                 if (!stagingDeleted)
                 {
@@ -416,60 +393,45 @@ namespace SW2URDF.URDFExport
                 exportStopwatch.Stop();
             }
 
+            if (v2Result != null)
+            {
+                success = v2Result.Targets.Any(target => target.Succeeded);
+                TryWriteIndependentExportReport(exportedPackage, v2Result, exportStopwatch.Elapsed);
+                try
+                {
+                    CopyLogFile(exportedPackage);
+                }
+                catch (Exception exception) when (IndependentTargetExport.IsTargetFailure(exception))
+                {
+                    v2Result.Warnings.Add("Could not copy the export log: " + exception.Message);
+                    logger.Warn("Output results are unchanged; auxiliary log copy failed.", exception);
+                }
+                try
+                {
+                    LastExportSummary = ExportResultSummary.Create(
+                        exportedPackage, outputBeforeExport, exportStopwatch.Elapsed,
+                        v2Result.Targets, v2Result.Warnings);
+                }
+                catch (Exception exception) when (IndependentTargetExport.IsTargetFailure(exception))
+                {
+                    v2Result.Warnings.Add("File statistics are unavailable: " + exception.Message);
+                    LastExportSummary = new ExportResultSummary(
+                        exportedPackage.WindowsExportRootDirectory, 0, 0, exportStopwatch.Elapsed,
+                        v2Result.Targets, v2Result.Warnings);
+                }
+                if (!success)
+                    ExportErrorWhy = String.Join(System.Environment.NewLine,
+                        v2Result.Targets.Select(target => target.TargetName + ": " + target.ErrorMessage));
+                logger.Info("Export finished: " + v2Result.Targets.Count(target => target.Succeeded) +
+                    " succeeded, " + v2Result.Targets.Count(target => !target.Succeeded) +
+                    " failed; elapsed " + OperationHeartbeat.FormatElapsed(exportStopwatch.Elapsed));
+                return success;
+            }
             if (!success)
             {
-                IList<string> rollbackFailures = V2ExportBridge.RollBack(v2Result);
-                if (rollbackFailures.Count > 0)
-                {
-                    logger.Error(
-                        "The selected output transaction could not be fully rolled back: " +
-                        string.Join(" | ", rollbackFailures));
-                }
                 logger.Error("Export process failed after " +
                     OperationHeartbeat.FormatElapsed(exportStopwatch.Elapsed));
                 return false;
-            }
-            if (v2Result != null)
-            {
-                try
-                {
-                    V2ExportBridge.Commit(
-                        v2Result,
-                        () => WriteExportReportContent(
-                            exportedPackage,
-                            pendingTopLevelReport,
-                            ExportTargets,
-                            true,
-                            false));
-                }
-                catch (Exception commitException)
-                {
-                    ExportErrorWhy = "URDF export failed while committing selected outputs: " +
-                        commitException.Message + ". See the UTF-8 export log at " +
-                        Logger.GetFileName();
-                    logger.Error(
-                        "The selected output transaction could not be committed.",
-                        commitException);
-                    IList<string> rollbackFailures = V2ExportBridge.RollBack(v2Result);
-                    if (rollbackFailures.Count > 0)
-                    {
-                        logger.Error(
-                            "The failed output commit could not be fully rolled back: " +
-                            string.Join(" | ", rollbackFailures));
-                    }
-                    return false;
-                }
-                try
-                {
-                    logger.Info("Copying export log");
-                    CopyLogFile(exportedPackage);
-                }
-                catch (Exception logException)
-                {
-                    logger.Warn(
-                        "Selected outputs were committed, but the auxiliary export log copy failed.",
-                        logException);
-                }
             }
             try
             {

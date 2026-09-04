@@ -28,8 +28,8 @@ namespace SW2URDF.URDFExport
         public IList<string> Warnings { get; set; } = new List<string>();
         public IList<ExportHelper.MeshExportRecord> DeliveryMeshRecords { get; set; } =
             new List<ExportHelper.MeshExportRecord>();
-        internal AtomicDirectoryPublication Publication { get; set; }
-        internal string TransactionRoot { get; set; }
+        public IList<ExportTargetResult> Targets { get; } = new List<ExportTargetResult>();
+        public IList<string> Reports { get; } = new List<string>();
     }
 
     internal sealed class DirectoryPublishRequest
@@ -135,6 +135,15 @@ namespace SW2URDF.URDFExport
 
     internal static class AtomicDirectoryPublisher
     {
+        internal static void WithOutputRootLock(string root, Action action)
+        {
+            string fullRoot = Path.GetFullPath(root);
+            EnsurePlainDirectory(fullRoot, "Output root");
+            FileStream publicationLock = AcquirePublicationLock(fullRoot);
+            try { action(); }
+            finally { ReleasePublicationLock(publicationLock); }
+        }
+
         public static IList<string> Publish(IList<DirectoryPublishRequest> requests)
         {
             AtomicDirectoryPublication publication = Begin(requests);
@@ -169,8 +178,16 @@ namespace SW2URDF.URDFExport
             FileStream publicationLock = AcquirePublicationLock(resolvedPublicationRoot);
             try
             {
-                IList<string> recoveryWarnings = RecoverInterruptedPublicationsUnderLock(
-                    resolvedPublicationRoot);
+                IList<string> recoveryWarnings;
+                try
+                {
+                    recoveryWarnings = RecoverInterruptedPublicationsUnderLock(resolvedPublicationRoot);
+                }
+                catch (Exception exception)
+                {
+                    exception.Data["directoryPublishRecovery"] = true;
+                    throw;
+                }
                 string transactionId = Guid.NewGuid().ToString("N");
                 PrepareRequests(requests, transactionId);
                 ValidateNonOverlappingPublicationPaths(
@@ -1278,7 +1295,7 @@ namespace SW2URDF.URDFExport
         }
     }
 
-    internal static class V2ExportBridge
+    internal static partial class V2ExportBridge
     {
         private static readonly log4net.ILog logger = Logger.GetLogger();
         public static V2ExportResult Export(
@@ -1287,17 +1304,19 @@ namespace SW2URDF.URDFExport
             string sourceUrdf,
             LegacyRobot legacyRobot,
             IEnumerable<ExportHelper.MeshExportRecord> meshRecords,
-            ExportTargetOptions options)
+            ExportTargetOptions options,
+            Action<V2ExportResult, ExportTargetOptions> validateTarget = null,
+            Action<V2ExportResult> onAborted = null)
         {
             if (sourcePackage == null) throw new ArgumentNullException("sourcePackage");
             if (outputPackage == null) throw new ArgumentNullException("outputPackage");
             if (legacyRobot == null) throw new ArgumentNullException("legacyRobot");
             if (options == null) throw new ArgumentNullException("options");
 
-            IList<string> optionErrors = options.Validate();
-            if (optionErrors.Count > 0)
+            if (!(options.ExportRos1Legacy || options.ExportRos2 ||
+                options.ExportUsdAsset || options.ExportMjcfAsset))
             {
-                throw new InvalidDataException(string.Join(Environment.NewLine, optionErrors));
+                throw new InvalidDataException("Select at least one output target.");
             }
 
             RobotDocument robot = UrdfCodec.Read(sourceUrdf);
@@ -1318,27 +1337,7 @@ namespace SW2URDF.URDFExport
                 MaintainerEmail = options.MaintainerEmail,
                 License = options.ModelLicense
             };
-            robot.Profiles.Ros1.Enabled = options.ExportRos1Legacy;
-            robot.Profiles.Ros2.Enabled = options.ExportRos2;
-            robot.Profiles.Ros2.Distribution = options.Ros2Distribution;
-            robot.Profiles.Ros2.GazeboDistribution = options.GazeboDistribution;
-            robot.Profiles.Ros2.ModernGazebo = true;
-            if (!string.IsNullOrWhiteSpace(options.Ros2ControlProfileFile))
-            {
-                Ros2ControlProfile control = ReadStrictProfile<Ros2ControlProfile>(
-                    options.Ros2ControlProfileFile,
-                    "ros2_control");
-                if (control == null)
-                {
-                    throw new InvalidDataException("ros2_control profile JSON is empty.");
-                }
-                control.Enabled = true;
-                robot.Profiles.Ros2.Ros2Control = control;
-            }
-            robot.Profiles.Isaac.Enabled = false;
-            robot.Profiles.IsaacLab.Enabled = false;
-            robot.Profiles.UsdSimulation =
-                ExportTargetOptions.CloneUsdSimulation(options.UsdSimulation);
+            IDictionary<string, string> targetErrors = PrepareTargetProfiles(robot, options);
 
             Dictionary<string, string> packageMappings = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -1432,7 +1431,10 @@ namespace SW2URDF.URDFExport
                     bundle.OutputDirectory,
                     outputPackage,
                     meshRecords,
-                    options);
+                    options,
+                    targetErrors,
+                    validateTarget,
+                    partial => { result = partial; onAborted?.Invoke(partial); });
                 return result;
             }
             catch (Exception exception)
@@ -1472,221 +1474,114 @@ namespace SW2URDF.URDFExport
             string bundleDirectory,
             URDFPackage outputPackage,
             IEnumerable<ExportHelper.MeshExportRecord> meshRecords,
-            ExportTargetOptions options)
+            ExportTargetOptions options,
+            IDictionary<string, string> targetErrors,
+            Action<V2ExportResult, ExportTargetOptions> validateTarget,
+            Action<V2ExportResult> onAborted)
         {
             string deliveryRoot = Path.GetFullPath(outputPackage.WindowsExportRootDirectory);
             Directory.CreateDirectory(deliveryRoot);
             if ((File.GetAttributes(deliveryRoot) & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new IOException(
-                    "The selected output directory must not be a reparse point: " + deliveryRoot);
-            }
-            string transactionRoot = Path.Combine(
-                deliveryRoot,
-                ".sw2urdf-targets-" + Guid.NewGuid().ToString("N"));
+                throw new IOException("The output directory must not be a reparse point: " + deliveryRoot);
+            string transactionRoot = Path.Combine(deliveryRoot, ".sw2urdf-targets-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(transactionRoot);
-            Exception primaryFailure = null;
             V2ExportResult result = new V2ExportResult();
-            result.TransactionRoot = transactionRoot;
             try
             {
+                List<ExportTargetJob> jobs = new List<ExportTargetJob>();
+                Action<string, string, Func<string>> addJob = (name, destination, build) =>
+                    jobs.Add(new ExportTargetJob
+                    {
+                        Name = name,
+                        OutputDirectory = TrimDirectory(destination),
+                        Build = () =>
+                        {
+                            string error;
+                            if (targetErrors.TryGetValue(name, out error))
+                                throw new InvalidDataException(error);
+                            return build();
+                        },
+                        Validate = target =>
+                        {
+                            ExportTargetOptions selected = ForTarget(options, name);
+                            // Native assets validate their converted geometry through their own adapters.
+                            // ROS reports validate URDF references against this target's published files.
+                            if (selected.ExportRos1Legacy || selected.ExportRos2)
+                                target.DeliveryMeshRecords = BuildDeliveryMeshRecords(
+                                    bundleDirectory, target, target, meshRecords, outputPackage.PackageName);
+                            validateTarget?.Invoke(target, selected);
+                            RefreshRosChecksums(target);
+                        }
+                    });
                 RosPackageExporter exporter = new RosPackageExporter();
-                List<DirectoryPublishRequest> publications =
-                    new List<DirectoryPublishRequest>();
                 if (options.ExportRos1Legacy)
-                {
-                    string staged = exporter.ExportRos1(new RosExportOptions
-                    {
-                        BundleDirectory = bundleDirectory,
-                        OutputDirectory = Path.Combine(transactionRoot, "ROS1"),
-                        Overwrite = true
-                    });
-                    publications.Add(new DirectoryPublishRequest
-                    {
-                        Label = "ROS 1 package",
-                        StagingDirectory = staged,
-                        DestinationDirectory = TrimDirectory(outputPackage.WindowsPackageDirectory)
-                    });
-                }
-                if (options.ExportRos2)
-                {
-                    string staged = exporter.ExportRos2(new RosExportOptions
-                    {
-                        BundleDirectory = bundleDirectory,
-                        OutputDirectory = Path.Combine(transactionRoot, "ROS2"),
-                        Overwrite = true
-                    });
-                    publications.Add(new DirectoryPublishRequest
-                    {
-                        Label = "ROS 2 package",
-                        StagingDirectory = staged,
-                        DestinationDirectory = TrimDirectory(outputPackage.WindowsRos2PackageDirectory)
-                    });
-                }
-                if (options.ExportUsdAsset)
-                {
-                    string applicationRoot = ApplicationRoot();
-                    string stagedDestination = Path.Combine(
-                        transactionRoot,
-                        "USD",
-                        outputPackage.PackageName);
-                    UsdAssetExportResult usd = new UsdAssetExporter().Export(
-                        new UsdAssetExportOptions
+                    addJob("ROS 1", outputPackage.WindowsPackageDirectory,
+                        () => exporter.ExportRos1(new RosExportOptions
                         {
                             BundleDirectory = bundleDirectory,
-                            OutputDirectory = stagedDestination,
-                            PythonExecutable = Path.Combine(
-                                applicationRoot,
-                                "tools",
-                                "openusd_runtime",
-                                "python.exe"),
-                            AdapterScript = Path.Combine(
-                                applicationRoot,
-                                "tools",
-                                "usd_adapter",
-                                "osurdf_usd_adapter.py"),
+                            OutputDirectory = Path.Combine(transactionRoot, "ROS1"),
+                            Overwrite = true
+                        }));
+                if (options.ExportRos2)
+                    addJob("ROS 2", outputPackage.WindowsRos2PackageDirectory,
+                        () => exporter.ExportRos2(new RosExportOptions
+                        {
+                            BundleDirectory = bundleDirectory,
+                            OutputDirectory = Path.Combine(transactionRoot, "ROS2"),
+                            Overwrite = true
+                        }));
+                if (options.ExportUsdAsset)
+                    addJob("OpenUSD", outputPackage.WindowsUsdAssetDirectory, () =>
+                    {
+                        string applicationRoot = ApplicationRoot();
+                        UsdAssetExportResult usd = new UsdAssetExporter().Export(new UsdAssetExportOptions
+                        {
+                            BundleDirectory = bundleDirectory,
+                            OutputDirectory = Path.Combine(transactionRoot, "USD", outputPackage.PackageName),
+                            PythonExecutable = Path.Combine(applicationRoot, "tools", "openusd_runtime", "python.exe"),
+                            AdapterScript = Path.Combine(applicationRoot, "tools", "usd_adapter", "osurdf_usd_adapter.py"),
                             Overwrite = true
                         });
-                    publications.Add(new DirectoryPublishRequest
-                    {
-                        Label = "OpenUSD asset",
-                        StagingDirectory = usd.OutputDirectory,
-                        DestinationDirectory = TrimDirectory(outputPackage.WindowsUsdAssetDirectory)
+                        return usd.OutputDirectory;
                     });
-                    if (!string.IsNullOrWhiteSpace(usd.RetainedPreviousDirectory))
-                    {
-                        string warning =
-                            "A previous OpenUSD staging directory was retained at " +
-                            usd.RetainedPreviousDirectory + ".";
-                        result.Warnings.Add(warning);
-                        logger.Warn(warning);
-                    }
-                }
                 if (options.ExportMjcfAsset)
-                {
-                    string applicationRoot = ApplicationRoot();
-                    string lockPath = Path.Combine(
-                        applicationRoot,
-                        "tools",
-                        "mujoco_runtime.lock.json");
-                    if (!File.Exists(lockPath))
+                    addJob("MuJoCo MJCF",
+                        Path.Combine(outputPackage.WindowsMjcfAssetDirectory,
+                            MjcfAssetExporter.GetRobotDirectoryName(outputPackage.RobotName)), () =>
                     {
-                        throw new FileNotFoundException(
-                            "The bundled MuJoCo runtime lock was not found.",
-                            lockPath);
-                    }
-                    JObject runtimeLock = JObject.Parse(File.ReadAllText(lockPath, Encoding.UTF8));
-                    string version = runtimeLock.Value<string>("version");
-                    if (runtimeLock.Value<int?>("schemaVersion") != 1 ||
-                        string.IsNullOrWhiteSpace(version))
-                    {
-                        throw new InvalidDataException(
-                            "The bundled MuJoCo runtime lock is invalid: " + lockPath);
-                    }
-                    string runtime = Path.Combine(
-                        applicationRoot,
-                        "tools",
-                        "mujoco_runtime");
-                    MjcfExportResult mjcf = new MjcfAssetExporter().Export(
-                        new MjcfExportOptions
+                        string applicationRoot = ApplicationRoot();
+                        string lockPath = Path.Combine(applicationRoot, "tools", "mujoco_runtime.lock.json");
+                        JObject runtimeLock = JObject.Parse(File.ReadAllText(lockPath, Encoding.UTF8));
+                        string version = runtimeLock.Value<string>("version");
+                        if (runtimeLock.Value<int?>("schemaVersion") != 1 || string.IsNullOrWhiteSpace(version))
+                            throw new InvalidDataException("The bundled MuJoCo runtime lock is invalid: " + lockPath);
+                        string runtime = Path.Combine(applicationRoot, "tools", "mujoco_runtime");
+                        MjcfExportResult mjcf = new MjcfAssetExporter().Export(new MjcfExportOptions
                         {
                             BundleDirectory = bundleDirectory,
                             OutputDirectory = transactionRoot,
                             Overwrite = true,
                             CompilerValidator = new BundledMjcfCompilerValidator(
-                                Path.Combine(runtime, "compile.exe"),
-                                Path.Combine(runtime, "testspeed.exe"),
-                                version)
+                                Path.Combine(runtime, "compile.exe"), Path.Combine(runtime, "testspeed.exe"), version)
                         });
-                    if (!string.Equals(
-                        mjcf.OfficialCompilationStatus,
-                        "passed",
-                        StringComparison.Ordinal))
-                    {
-                        throw new InvalidDataException(
-                            "The MJCF asset did not pass the bundled official MuJoCo validation.");
-                    }
-                    publications.Add(new DirectoryPublishRequest
-                    {
-                        Label = "MuJoCo MJCF asset",
-                        StagingDirectory = mjcf.OutputDirectory,
-                        DestinationDirectory = Path.Combine(
-                            TrimDirectory(outputPackage.WindowsMjcfAssetDirectory),
-                            Path.GetFileName(TrimDirectory(mjcf.OutputDirectory)))
+                        if (!string.Equals(mjcf.OfficialCompilationStatus, "passed", StringComparison.Ordinal))
+                            throw new InvalidDataException("The MJCF asset did not pass official MuJoCo validation.");
+                        return mjcf.OutputDirectory;
                     });
-                    if (!string.IsNullOrWhiteSpace(mjcf.RetainedPreviousDirectory))
-                    {
-                        result.Warnings.Add(
-                            "A previous MJCF staging directory was retained at " +
-                            mjcf.RetainedPreviousDirectory + ".");
-                    }
-                }
-
-                V2ExportResult stagingResult = new V2ExportResult();
-                foreach (DirectoryPublishRequest publication in publications)
-                {
-                    if (string.Equals(publication.Label, "ROS 1 package", StringComparison.Ordinal))
-                    {
-                        stagingResult.Ros1Directory = publication.StagingDirectory;
-                        result.Ros1Directory = publication.DestinationDirectory;
-                    }
-                    else if (string.Equals(publication.Label, "ROS 2 package", StringComparison.Ordinal))
-                    {
-                        stagingResult.Ros2Directory = publication.StagingDirectory;
-                        result.Ros2Directory = publication.DestinationDirectory;
-                    }
-                    else if (string.Equals(publication.Label, "OpenUSD asset", StringComparison.Ordinal))
-                    {
-                        stagingResult.UsdDirectory = publication.StagingDirectory;
-                        result.UsdDirectory = publication.DestinationDirectory;
-                    }
-                    else if (string.Equals(publication.Label, "MuJoCo MJCF asset", StringComparison.Ordinal))
-                    {
-                        stagingResult.MjcfDirectory = publication.StagingDirectory;
-                        result.MjcfDirectory = publication.DestinationDirectory;
-                    }
-                }
-                result.DeliveryMeshRecords = BuildDeliveryMeshRecords(
-                    bundleDirectory,
-                    stagingResult,
-                    result,
-                    meshRecords,
-                    outputPackage.PackageName);
-                result.Publication = AtomicDirectoryPublisher.Begin(
-                    publications,
-                    deliveryRoot);
+                result = IndependentTargetExport.Run(deliveryRoot, jobs,
+                    partial => { result = partial; onAborted?.Invoke(partial); });
                 return result;
-            }
-            catch (Exception exception)
-            {
-                primaryFailure = exception;
-                throw;
             }
             finally
             {
                 Exception cleanupFailure;
-                bool cleanupSucceeded = primaryFailure != null
-                    ? AtomicDirectoryPublisher.TryDeleteUnreferencedTransactionRoot(
-                        deliveryRoot,
-                        transactionRoot,
-                        out cleanupFailure)
-                    : AtomicDirectoryPublisher.TryDeleteDirectory(
-                        transactionRoot,
-                        out cleanupFailure);
-                if (!cleanupSucceeded)
+                if (!AtomicDirectoryPublisher.TryDeleteUnreferencedTransactionRoot(
+                    deliveryRoot, transactionRoot, out cleanupFailure))
                 {
-                    if (primaryFailure != null)
-                    {
-                        primaryFailure.Data["targetStagingCleanup"] = cleanupFailure.Message;
-                    }
-                    else
-                    {
-                        string warning =
-                            "Output targets were published, but transaction staging was retained at " +
-                            transactionRoot + ": " + cleanupFailure.Message;
-                        result.Warnings.Add(warning);
-                        logger.Warn(warning, cleanupFailure);
-                    }
+                    string warning = "Temporary output files were retained at " + transactionRoot + ": " +
+                        cleanupFailure.Message;
+                    result.Warnings.Add(warning);
+                    logger.Warn(warning, cleanupFailure);
                 }
             }
         }
@@ -1714,55 +1609,6 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        public static void Commit(V2ExportResult result)
-        {
-            Commit(result, null);
-        }
-
-        internal static void Commit(V2ExportResult result, Action beforeFinalizationUnderLock)
-        {
-            if (result == null || result.Publication == null)
-            {
-                return;
-            }
-
-            foreach (string warning in result.Publication.Commit(beforeFinalizationUnderLock))
-            {
-                result.Warnings.Add(warning);
-                logger.Warn(warning);
-            }
-            result.Publication = null;
-            result.TransactionRoot = null;
-        }
-
-        public static IList<string> RollBack(V2ExportResult result)
-        {
-            if (result == null || result.Publication == null)
-            {
-                return new List<string>();
-            }
-
-            List<string> failures = result.Publication.RollBack().ToList();
-            result.Publication = null;
-            if (failures.Count == 0 &&
-                !String.IsNullOrWhiteSpace(result.TransactionRoot))
-            {
-                Exception cleanupFailure;
-                if (!AtomicDirectoryPublisher.TryDeleteDirectory(
-                        result.TransactionRoot,
-                        out cleanupFailure))
-                {
-                    failures.Add(
-                        "Could not remove rolled-back target staging at " +
-                        result.TransactionRoot + ": " + cleanupFailure.Message);
-                }
-                else
-                {
-                    result.TransactionRoot = null;
-                }
-            }
-            return failures;
-        }
 
         private static IList<ExportHelper.MeshExportRecord> BuildDeliveryMeshRecords(
             string bundleDirectory,

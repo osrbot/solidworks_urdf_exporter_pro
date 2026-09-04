@@ -1098,7 +1098,7 @@ namespace OSURDF.Core.Export
             {
                 NameContext result = new NameContext
                 {
-                    RobotName = SafeName(robot.Name, "robot")
+                    RobotName = GetRobotDirectoryName(robot.Name)
                 };
                 NameAllocator bodies = new NameAllocator();
                 NameAllocator joints = new NameAllocator();
@@ -1187,6 +1187,11 @@ namespace OSURDF.Core.Export
             public string MuJoCoVersion { get; set; }
 
             public string Message { get; set; }
+        }
+
+        public static string GetRobotDirectoryName(string robotName)
+        {
+            return SafeName(robotName, "robot");
         }
 
         private static string SafeName(string value, string fallback)

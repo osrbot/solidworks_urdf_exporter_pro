@@ -361,6 +361,8 @@
     <Compile Include="Test\SWTestFixture.cs" />
     <Compile Include="Test\TestCommon.cs" />
     <Compile Include="Test\TestComponentTraversal.cs" />
+    <Compile Include="Test\TestIndependentTargetExport.cs" />
+    <Compile Include="Test\TestExportTargetProfiles.cs" />
     <Compile Include="Test\TestCSVImportExport.cs" />
     <Compile Include="Test\TestAssemblyExportLayout.cs" />
     <Compile Include="Test\TestAutomaticLinkColorScheme.cs" />
@@ -443,6 +445,8 @@
     <Compile Include="URDFExport\ExportHelperReport.cs" />
     <Compile Include="URDFExport\ExportTargetOptions.cs" />
     <Compile Include="URDFExport\V2ExportBridge.cs" />
+    <Compile Include="URDFExport\IndependentTargetExport.cs" />
+    <Compile Include="URDFExport\V2TargetProfiles.cs" />
     <Compile Include="URDFExport\InertiaEllipsoid.cs" />
     <Compile Include="URDFExport\LinkTreeStores.cs" />
     <Compile Include="URDFExport\LinkTreeValidation.cs" />

@@ -11,6 +11,234 @@ using System.Windows.Forms;
 
 namespace SW2URDF.UI
 {
+    internal sealed class ExportResultsDialog : Form
+    {
+        private readonly string logPath;
+        private readonly Action<string> openPath;
+        private readonly DataGridView targetsGrid;
+        private readonly TextBox details;
+        private readonly Button openDirectoryButton;
+        private readonly Button openLogButton;
+        private readonly Bitmap statusImage;
+
+        internal ExportResultsDialog(ExportResultSummary summary, string logPath, Action<string> openPath = null)
+        {
+            if (summary == null)
+            {
+                throw new ArgumentNullException("summary");
+            }
+            this.logPath = logPath ?? String.Empty;
+            this.openPath = openPath ?? (path => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }));
+            ResultIcon = summary.HasPartialSuccess ? MessageBoxIcon.Warning : summary.HasFailures
+                ? MessageBoxIcon.Error : summary.Warnings.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information;
+            Text = summary.HasPartialSuccess
+                ? ChineseUiText.Translate("Export partially completed", "导出部分完成")
+                : summary.HasFailures ? ChineseUiText.Translate("Export failed", "导出失败")
+                : ChineseUiText.Translate("Export completed", "导出完成");
+            StartPosition = FormStartPosition.CenterParent;
+            ShowIcon = false;
+            ShowInTaskbar = false;
+            MinimizeBox = false;
+            AutoScaleMode = AutoScaleMode.Dpi;
+            Size = new Size(820, 560);
+            MinimumSize = new Size(680, 460);
+
+            TableLayoutPanel shell = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(16),
+                ColumnCount = 1,
+                RowCount = 4
+            };
+            shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 54F));
+            shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 190F));
+            shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            shell.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            statusImage = (ResultIcon == MessageBoxIcon.Error ? SystemIcons.Error :
+                ResultIcon == MessageBoxIcon.Warning ? SystemIcons.Warning : SystemIcons.Information).ToBitmap();
+            Label heading = new Label
+            {
+                Name = "exportResultsHeading",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Text = String.Format(ChineseUiText.Translate("{0}: {1} succeeded, {2} failed", "{0}：{1} 成功，{2} 失败"),
+                    Text, summary.SucceededCount, summary.FailedCount)
+            };
+            TableLayoutPanel header = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0)
+            };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44F));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            header.Controls.Add(new PictureBox
+            {
+                Dock = DockStyle.Fill, Image = statusImage, SizeMode = PictureBoxSizeMode.CenterImage
+            }, 0, 0);
+            header.Controls.Add(heading, 1, 0);
+            targetsGrid = new DataGridView
+            {
+                Name = "exportResultsGrid",
+                Dock = DockStyle.Fill,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                AllowUserToResizeRows = false,
+                ReadOnly = true,
+                MultiSelect = false,
+                RowHeadersVisible = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
+                BackgroundColor = ModernWinFormsTheme.Surface,
+                BorderStyle = BorderStyle.FixedSingle,
+                AutoGenerateColumns = false,
+                Margin = new Padding(0, 0, 0, 10)
+            };
+            targetsGrid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
+            targetsGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "target", HeaderText = ChineseUiText.Translate("Target", "目标"), Width = 110,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
+            targetsGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "status", HeaderText = ChineseUiText.Translate("Result", "结果"), Width = 210,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
+            targetsGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "output", HeaderText = ChineseUiText.Translate("Output directory", "输出目录"),
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 220,
+                DefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.False },
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
+            foreach (ExportTargetResult target in summary.Targets)
+            {
+                int index = targetsGrid.Rows.Add(target.TargetName,
+                    target.FormatStatus(ChineseUiText.ShouldUseChinese()), target.OutputDirectory);
+                targetsGrid.Rows[index].Tag = target;
+                targetsGrid.Rows[index].Cells["output"].ToolTipText = target.OutputDirectory;
+            }
+            details = new TextBox
+            {
+                Name = "exportResultsDetails",
+                Dock = DockStyle.Fill,
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Both,
+                WordWrap = false,
+                Text = summary.FormatDetails() + (String.IsNullOrWhiteSpace(this.logPath) ? String.Empty :
+                    Environment.NewLine + Environment.NewLine + ChineseUiText.Translate("Log: ", "日志: ") + this.logPath),
+                Margin = new Padding(0)
+            };
+            openDirectoryButton = new Button
+            {
+                Name = "exportResultsOpenDirectory", AutoSize = true, MinimumSize = new Size(136, 34),
+                Text = ChineseUiText.Translate("Open directory", "打开目录")
+            };
+            openDirectoryButton.Click += (sender, args) => TryOpenSelectedDirectory();
+            openLogButton = new Button
+            {
+                Name = "exportResultsOpenLog", AutoSize = true, MinimumSize = new Size(104, 34),
+                Text = ChineseUiText.Translate("Open log", "打开日志")
+            };
+            openLogButton.Click += (sender, args) => TryOpenLog();
+            Button copyButton = new Button
+            {
+                Name = "exportResultsCopy", AutoSize = true, MinimumSize = new Size(100, 34),
+                Text = ChineseUiText.Translate("Copy all", "复制全部")
+            };
+            copyButton.Click += (sender, args) => Clipboard.SetText(details.Text);
+            Button closeButton = new Button
+            {
+                Name = "exportResultsClose", AutoSize = true, MinimumSize = new Size(96, 34),
+                Text = ChineseUiText.Translate("Close", "关闭"), DialogResult = DialogResult.Cancel
+            };
+            FlowLayoutPanel commands = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, AutoSize = true, WrapContents = true,
+                Margin = new Padding(0), Padding = new Padding(0, 10, 0, 0)
+            };
+            commands.Controls.AddRange(new Control[] { openDirectoryButton, openLogButton, copyButton, closeButton });
+            shell.Controls.Add(header, 0, 0);
+            shell.Controls.Add(targetsGrid, 0, 1);
+            shell.Controls.Add(details, 0, 2);
+            shell.Controls.Add(commands, 0, 3);
+            Controls.Add(shell);
+            CancelButton = closeButton;
+            ModernWinFormsTheme.Apply(this);
+            targetsGrid.SelectionChanged += (sender, args) => RefreshActions();
+            targetsGrid.ClearSelection();
+            targetsGrid.CurrentCell = null;
+            RefreshActions();
+        }
+
+        internal MessageBoxIcon ResultIcon { get; private set; }
+
+        internal static void ShowResults(IWin32Window owner, ExportResultSummary summary, string logPath)
+        {
+            using (ExportResultsDialog dialog = new ExportResultsDialog(summary, logPath))
+            {
+                dialog.ShowDialog(owner);
+            }
+        }
+
+        private ExportTargetResult SelectedTarget
+        {
+            get
+            {
+                return targetsGrid.SelectedRows.Count == 1
+                    ? targetsGrid.SelectedRows[0].Tag as ExportTargetResult : null;
+            }
+        }
+
+        private void RefreshActions()
+        {
+            ExportTargetResult target = SelectedTarget;
+            openDirectoryButton.Enabled = target != null && target.Succeeded && Directory.Exists(target.OutputDirectory);
+            openLogButton.Enabled = File.Exists(logPath);
+        }
+
+        internal bool TryOpenSelectedDirectory()
+        {
+            RefreshActions();
+            ExportTargetResult target = SelectedTarget;
+            return openDirectoryButton.Enabled && target != null && TryOpenPath(target.OutputDirectory);
+        }
+
+        internal bool TryOpenLog()
+        {
+            RefreshActions();
+            return openLogButton.Enabled && TryOpenPath(logPath);
+        }
+
+        private bool TryOpenPath(string path)
+        {
+            try
+            {
+                openPath(path);
+                return true;
+            }
+            catch (Exception exception) when (exception is System.ComponentModel.Win32Exception ||
+                exception is IOException || exception is UnauthorizedAccessException ||
+                exception is InvalidOperationException || exception is ArgumentException)
+            {
+                details.AppendText(Environment.NewLine + Environment.NewLine +
+                    ChineseUiText.Translate("Could not open: ", "无法打开: ") + path + Environment.NewLine + exception);
+                return false;
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && statusImage != null)
+            {
+                statusImage.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+    }
+
     internal sealed class ExportDiagnosticsDialog : Form
     {
         private static readonly Regex ValidationError = new Regex(

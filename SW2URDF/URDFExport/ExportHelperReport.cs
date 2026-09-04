@@ -12,6 +12,95 @@ namespace SW2URDF.URDFExport
     {
         private const string ExportReportFileName = "export_report.md";
 
+        private static void ValidateAndWriteTargetReport(
+            URDFPackage package, V2ExportResult target, ExportTargetOptions selected,
+            IEnumerable<InertialValidationRecord> inertialRecords,
+            bool exportMeshes, MeshExportFormat meshFormat, TimeSpan elapsed)
+        {
+            ExportReportBuildResult report = BuildExportReportResult(
+                package, Path.Combine(package.WindowsRobotsDirectory,
+                    OSURDF.Core.Export.RosPackageExporter.GetRobotUrdfFileName(package.RobotName)),
+                inertialRecords, target.DeliveryMeshRecords, exportMeshes, meshFormat, elapsed, selected);
+            if (report.HasBlockingFailures)
+                throw new InvalidDataException("Target health validation failed: " + report.BlockingFailureSummary());
+            WriteExportReportContent(package, report.Content, selected, false, true);
+            string nativeDirectory = selected.ExportUsdAsset ? target.UsdDirectory : target.MjcfDirectory;
+            if (!String.IsNullOrWhiteSpace(nativeDirectory))
+            {
+                report.Content += Environment.NewLine +
+                    "Native geometry and relative asset references were validated by this target's exporter. " +
+                    "See export_report.json for its format-specific validation results." + Environment.NewLine;
+                WriteUtf8TextAtomically(Path.Combine(nativeDirectory, ExportReportFileName), report.Content);
+            }
+            target.Reports.Add(report.Content);
+        }
+
+        internal static void TryWriteIndependentExportReport(
+            URDFPackage package, V2ExportResult result, TimeSpan elapsed)
+        {
+            try
+            {
+                AtomicDirectoryPublisher.WithOutputRootLock(package.WindowsExportRootDirectory,
+                    () => WriteUtf8TextAtomically(package.WindowsExportReportFile,
+                        BuildIndependentExportReport(package, result, elapsed)));
+            }
+            catch (Exception exception) when (IndependentTargetExport.IsTargetFailure(exception))
+            {
+                string warning = "Outputs are unchanged, but the summary report could not be updated: " +
+                    exception.Message;
+                result.Warnings.Add(warning);
+                logger.Warn(warning, exception);
+            }
+        }
+
+        internal static string BuildIndependentExportReport(
+            URDFPackage package, V2ExportResult result, TimeSpan elapsed)
+        {
+            int succeeded = result.Targets.Count(target => target.Succeeded);
+            int failed = result.Targets.Count - succeeded;
+            StringBuilder report = new StringBuilder();
+            report.AppendLine("# SW2URDF Export Report");
+            report.AppendLine();
+            report.AppendLine("Status: " + (succeeded == 0 ? "FAIL" : failed > 0 ? "PARTIAL" : "PASS"));
+            report.AppendLine("Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture));
+            report.AppendLine("Commit: " + Versioning.Version.GetCommitHash());
+            report.AppendLine("Elapsed: " + Utilities.OperationHeartbeat.FormatElapsed(elapsed));
+            report.AppendLine("Succeeded: " + succeeded + "; failed: " + failed);
+            report.AppendLine();
+            report.AppendLine("Targets are published independently. Unselected targets are untouched; see each failed target's retention or recovery status.");
+            report.AppendLine();
+            foreach (ExportTargetResult target in result.Targets)
+            {
+                report.AppendLine("## " + target.TargetName);
+                report.AppendLine();
+                report.AppendLine(target.Succeeded ? "Result: SUCCESS" : "Result: FAILED");
+                if (target.PreviousOutputRetained)
+                    report.AppendLine("Previous output retained; NOT updated by this export.");
+                if (target.Succeeded)
+                {
+                    Uri root = new Uri(Path.GetFullPath(package.WindowsExportRootDirectory).TrimEnd('\\', '/') + "/");
+                    string relative = root.MakeRelativeUri(new Uri(Path.GetFullPath(target.OutputDirectory).TrimEnd('\\', '/') + "/")).ToString();
+                    string detail = target.TargetName.StartsWith("ROS ", StringComparison.Ordinal)
+                        ? "config/export_report.md" : "export_report.md";
+                    report.AppendLine("[Output directory](" + relative + ") | [Validation report](" + relative + detail + ")");
+                }
+                else
+                {
+                    report.AppendLine();
+                    foreach (string line in (target.ErrorMessage ?? String.Empty).Replace("\r", String.Empty).Split('\n'))
+                        report.AppendLine("    " + line);
+                }
+                report.AppendLine();
+            }
+            if (result.Warnings.Count > 0)
+            {
+                report.AppendLine("## Warnings");
+                foreach (string warning in result.Warnings)
+                    report.AppendLine("- " + warning.Replace("\r", " ").Replace("\n", " "));
+            }
+            return report.ToString();
+        }
+
         internal sealed class ExportReportBuildResult
         {
             public string Content { get; set; }
@@ -180,7 +269,10 @@ namespace SW2URDF.URDFExport
             List<MeshExportRecord> meshRows =
                 meshRecords == null ? new List<MeshExportRecord>() : meshRecords.ToList();
 
-            string ros2UrdfFileName = Path.Combine(package.WindowsRos2RobotsDirectory, package.RobotName + ".urdf");
+            string ros2UrdfFileName = Path.Combine(package.WindowsRos2RobotsDirectory,
+                targets != null && targets.UseV2Pipeline
+                    ? OSURDF.Core.Export.RosPackageExporter.GetRobotUrdfFileName(package.RobotName)
+                    : package.RobotName + ".urdf");
             UrdfInspection ros1Urdf = InspectUrdfFile(
                 "ROS 1",
                 ros1UrdfFileName,

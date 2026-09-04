@@ -113,15 +113,14 @@ All notable OSRBot-maintained changes to this fork are documented here.
   the symmetric terms explicit without changing their read-only value bindings.
 - Kept private staging cleanup on both successful and failed export paths so internal Bundle files
   are not left in the user's delivery directory.
-- Made the pinned MuJoCo integration test a hard-failing dedicated category. Hosted portable jobs
-  exclude it explicitly; runtime CI and installer builds require a TRX proving exactly one executed,
-  passed test, preventing missing-runtime skips or zero-test runs from appearing successful.
-- Made selected-target publication fail closed: a blocking `FAIL` in the generated health report
-  now rolls every selected target back. Directory replacement uses an output-root lock and a
-  durable journal so the next export can finish an interrupted commit or reverse an uncommitted
-  multi-target publication without mixing old and new target directories. The journal is retained
-  when old-output cleanup is temporarily blocked, and recovery is idempotent both before the first
-  directory move and after a partially completed rollback.
+- Made pinned MuJoCo runtime checks mandatory: runtime CI and installer builds require both the
+  standard model and large-mesh tests to execute and pass, with no missing-runtime skips.
+- Isolated generation, validation, reports, and directory replacement for each selected target.
+  A failed ROS, OpenUSD, or MJCF export no longer discards other successful outputs. Each target
+  retains atomic replacement, an output-root lock, and recovery journals. Failed targets preserve
+  their previous valid directory; common model preparation failures still stop the whole export.
+- Added a bilingual results window with per-target status, errors, output-directory actions, and
+  explicit labels for old results not updated this run. Partial failures keep the export form open.
 
 #### Validation Scope
 
@@ -212,12 +211,13 @@ All notable OSRBot-maintained changes to this fork are documented here.
 - 将惯性张量镜像标签明确为 `iyx = ixy`、`izx = ixz` 和 `izy = iyz`，只改善含义表达，不改变
   只读镜像值绑定。
 - 成功和失败路径都会清理私有暂存，内部 Bundle 文件不会留在用户交付目录。
-- 固定 MuJoCo 集成测试改为硬失败的专用类别。普通可移植作业显式排除；运行时 CI 与安装包构建
-  必须由 TRX 证明恰好 1 项被执行并通过，禁止缺少运行时的跳过或零测试伪绿。
-- 所选目标现在采用失败即关闭的发布语义：导出体检报告出现阻断级 `FAIL` 时回滚全部所选目标。
-  目录替换使用输出根互斥锁与持久化 journal；若进程中断，下一次导出会完成已经确认的提交，或
-  逆转尚未提交的多目标发布，避免新旧目标目录混杂。旧输出清理暂时受阻时会保留 journal；在
-  第一次目录移动前中断以及部分回滚后再次中断时，恢复操作均保持幂等。
+- MuJoCo 运行时 CI 与安装包构建必须执行并通过普通模型和大网格两项验证，不允许缺少运行时
+  时跳过测试或以零测试通过。
+- ROS、OpenUSD、MJCF 现在分别生成、校验、写报告并替换目录。某一项失败，不再丢弃其他格式的
+  成功结果。每个目标仍保留完整替换、输出目录锁和中断恢复机制；失败项保留原有有效目录。
+  公共模型读取或基础校验失败时，仍整体停止。
+- 新增中英文结果窗口，逐项显示成功、失败、错误和输出目录；旧文件明确标注“本次未更新”，
+  不计入本次成功结果。部分失败时保留导出页面，便于只重试失败格式。
 
 #### 验证范围
 

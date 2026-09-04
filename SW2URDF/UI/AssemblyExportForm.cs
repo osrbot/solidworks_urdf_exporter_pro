@@ -1176,6 +1176,17 @@ namespace SW2URDF.UI
                     }
                 }
 
+                if (Exporter.LastExportSummary != null && Exporter.LastExportSummary.Targets.Count > 0)
+                {
+                    ExportResultSummary summary = Exporter.LastExportSummary;
+                    ExportResultsDialog.ShowResults(this, summary, Logger.GetFileName());
+                    if (!summary.HasFailures)
+                    {
+                        CloseWithoutRecoveryDraft();
+                    }
+                    return;
+                }
+
                 if (!exportSucceeded)
                 {
                     logger.Error(Exporter.ExportErrorWhy);
