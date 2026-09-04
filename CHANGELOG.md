@@ -22,8 +22,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
     `name_map.json`, and `export_report.json`.
 - Added pinned runtime validation for both asset targets. OpenUSD generation must reopen the stage
   with the bundled OpenUSD runtime. MJCF export must pass the bundled official MuJoCo tools by
-  compiling and canonically saving both XML entry points, reloading them, and advancing one
-  zero-control step.
+  compiling both XML entry points to MJB and independently loading and advancing both the original
+  XML and compiled MJB for one zero-control step.
 - Added bilingual output documentation that separates generation capability, automated validation,
   and application-level runtime validation.
 - Added a locally searchable VitePress handbook under `docs/`, with practical Chinese entry pages,
@@ -91,6 +91,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Fixed
 
+- Fixed false MJCF inertia failures caused by MuJoCo's canonical XML writer rounding small nonzero
+  inertia values to zero. Validation now uses the delivered XML and compiled MJB without changing
+  CAD mass/inertia or enabling `balanceinertia`; genuinely invalid inertia still fails validation.
+
 - Restored the familiar progress-bar appearance and shared dialog theme while preserving the
   independent progress window, elapsed times, and responsive status updates.
 - Recover incomplete SolidWorks component selections through verified visibility updates.
@@ -156,7 +160,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
   - MuJoCo MJCF 写出 `MuJoCo/<robot>/robot.xml`、`scene.xml`、Visual/Collision 资产、
     `name_map.json` 和 `export_report.json`。
 - 为两种资产目标增加固定运行时验证。OpenUSD 必须使用安装包内置运行时重新打开生成的 stage；
-  MJCF 必须使用内置 MuJoCo 官方工具对两个 XML 入口完成编译、规范保存、重载和一步零控制推进。
+  MJCF 必须使用内置 MuJoCo 官方工具将两个 XML 入口编译为 MJB，并分别载入原始 XML 与 MJB
+  完成一步零控制推进。
 - 增加双语输出文档，分别说明生成能力、自动化验证和实际应用运行验证。
 - 在 `docs/` 下增加可本地搜索的 VitePress 手册，提供通俗中文入口、版本化 Wiki、当前 UI 截图
   和可重复的构建、预览命令。
@@ -199,6 +204,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
   本次实际生成和验证的目标。
 
 #### 修复
+
+- 修复 MuJoCo 重写中间 XML 时将非零的小惯性值舍入为零，导致 MJCF 导出误报惯性错误的问题。
+  现在验证实际交付的 XML 和编译后的 MJB，不更改 CAD 质量/惯性，不启用 `balanceinertia`；
+  真正不符合物理要求的惯性仍会被拒绝。
 
 - 恢复原有进度条样式和统一的窗口配色，保留独立刷新的进度窗口、当前步骤与用时。
 - 修复 SolidWorks 只选中部分组件时导出失败的问题。批量选择不完整时，改为直接设置并核验显示状态；

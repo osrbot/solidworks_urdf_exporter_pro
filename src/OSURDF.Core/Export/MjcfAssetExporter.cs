@@ -552,7 +552,7 @@ namespace OSURDF.Core.Export
                         ["structuralGenerationPassed"] =
                             "The Robot Bundle manifest/checksums and canonical RobotDocument validation passed, and the exporter wrote structured MJCF XML, copied assets, and stable name mappings. This status does not mean MuJoCo parsed or simulated the model.",
                         ["officialCompilationPassed"] =
-                            "A passed officialCompilation status means the injected validator reported success. For validator 'bundled-official-mujoco-tools', both robot.xml and scene.xml were compiled to MJB, saved as canonical MJCF, reloaded, and advanced for one zero-control step with the reported MuJoCo version.",
+                            "A passed officialCompilation status means the injected validator reported success. For validator 'bundled-official-mujoco-tools', both robot.xml and scene.xml were compiled to MJB; the original XML and compiled MJB were independently loaded and advanced for one zero-control step with the reported MuJoCo version. Canonical XML rewriting is not required because it can round small nonzero inertia values to zero.",
                         ["notCovered"] = new JArray
                         {
                             "Source CAD/URDF engineering correctness or physical fidelity.",
@@ -564,7 +564,7 @@ namespace OSURDF.Core.Export
                         ["structuralGenerationPassed"] =
                             "Robot Bundle 清单/校验和及规范 RobotDocument 验证已通过，导出器已写入结构化 MJCF XML、复制资产并生成稳定名称映射；该状态不代表 MuJoCo 已解析或运行模型。",
                         ["officialCompilationPassed"] =
-                            "officialCompilation 为 passed 仅表示注入的验证器报告成功。对于 bundled-official-mujoco-tools，robot.xml 与 scene.xml 均使用报告版本的 MuJoCo 完成 MJB 编译、规范 MJCF 保存、重新载入及一步零控制仿真。",
+                            "officialCompilation 为 passed 仅表示注入的验证器报告成功。对于 bundled-official-mujoco-tools，robot.xml 与 scene.xml 均使用报告版本的 MuJoCo 编译为 MJB；原始 XML 和编译后的 MJB 均独立载入并执行一步零控制仿真。不要求重写规范 XML，因为该过程可能将非零的小惯性值舍入为零。",
                         ["notCovered"] = new JArray
                         {
                             "源 CAD/URDF 的工程正确性或物理保真度。",
@@ -759,7 +759,7 @@ namespace OSURDF.Core.Export
 
         private static string Number(double value)
         {
-            if (value == 0.0 || Math.Abs(value) < 1e-15) value = 0.0;
+            if (value == 0.0) value = 0.0;
             return value.ToString("G17", CultureInfo.InvariantCulture);
         }
 

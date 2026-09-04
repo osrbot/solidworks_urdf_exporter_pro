@@ -95,6 +95,35 @@ public sealed class MjcfAssetExporterTests : IDisposable
     }
 
     [Fact]
+    public void ExportPreservesSubFemtounitInertiaProducts()
+    {
+        RobotDocument robot = LoadFixtureRobot();
+        InertiaTensorDocument tensor = new()
+        {
+            Ixx = 2.8308277822085223E-12,
+            Iyy = 6.8483656743381496E-13,
+            Izz = 2.1659214380116057E-12,
+            Ixy = 2.8958180499321997E-17,
+            Ixz = -2.3128013967485235E-19,
+            Iyz = -5.0026743792011031E-14
+        };
+        robot.Links[0].Inertial!.Inertia = tensor;
+        robot.Links[0].Inertial!.Mass = 2.284465040809662E-06;
+        MjcfExportResult result = new MjcfAssetExporter().Export(new MjcfExportOptions
+        {
+            BundleDirectory = BuildBundle(robot, "tiny-inertia"),
+            OutputDirectory = Path.Combine(temporaryDirectory, "tiny-inertia-delivery"),
+            CompilerValidator = new RecordingValidator()
+        });
+
+        XElement inertial = XDocument.Load(result.RobotXmlPath).Root!
+            .Element("worldbody")!.Element("body")!.Element("inertial")!;
+        Assert.Equal(
+            new[] { tensor.Ixx, tensor.Iyy, tensor.Izz, tensor.Ixy, tensor.Ixz, tensor.Iyz },
+            Numbers(inertial.Attribute("fullinertia")));
+    }
+
+    [Fact]
     public void ExportMapsAllContractJointTypesWithoutInventingActuators()
     {
         RobotDocument robot = LoadFixtureRobot();
@@ -360,8 +389,8 @@ public sealed class MjcfAssetExporterTests : IDisposable
 
     [Theory]
     [InlineData("compile")]
-    [InlineData("save")]
-    [InlineData("reload")]
+    [InlineData("load XML")]
+    [InlineData("load MJB")]
     [InlineData("zero-control step")]
     public void ExportWhenValidationPhaseFailsDoesNotPublish(string phase)
     {
@@ -453,6 +482,74 @@ public sealed class MjcfAssetExporterTests : IDisposable
         Assert.Equal("bundled-official-mujoco-tools", (string?)report["officialCompilation"]?["validator"]);
         Assert.Equal(version, (string?)report["officialCompilation"]?["muJoCoVersion"]);
         Assert.Contains("zero-control", (string?)report["officialCompilation"]?["message"]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "PinnedMuJoCoRuntime")]
+    public void OfficialValidationPreservesSmallNonzeroCadInertia(bool moving)
+    {
+        // Actual imu_link values: canonical MuJoCo XML used to round Iyy to zero.
+        string model = Path.Combine(temporaryDirectory, "small inertia.xml");
+        string source = "<mujoco><compiler inertiafromgeom=\"false\"/><worldbody>" +
+            "<body name=\"imu_link\">" + (moving ? "<joint type=\"hinge\"/>" : "") +
+            "<inertial pos=\"-0.025781921715139711 -0.035159866426265632 -0.0038614727064569046\" " +
+            "mass=\"2.284465040809662E-06\" " +
+            "fullinertia=\"2.8308277822085223E-12 6.8483656743381496E-13 2.1659214380116057E-12 " +
+            "2.8958180499321997E-17 -2.3128013967485235E-19 -5.0026743792011031E-14\"/>" +
+            "</body></worldbody></mujoco>";
+        File.WriteAllText(model, source, new UTF8Encoding(false));
+        string scene = Path.Combine(temporaryDirectory, "scene.xml");
+        File.WriteAllText(scene, "<mujoco><include file=\"small inertia.xml\"/></mujoco>");
+        byte[] original = File.ReadAllBytes(model);
+
+        MjcfCompilerValidationResult result = PinnedValidator().Validate(new MjcfCompilerValidationRequest
+        {
+            WorkingDirectory = temporaryDirectory,
+            ModelPaths = new[] { model, scene }
+        });
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Contains("original XML and MJB", result.Message);
+        Assert.Contains("scene.xml", result.Message);
+        Assert.Equal(original, File.ReadAllBytes(model));
+        Assert.Equal(2, Directory.GetFiles(temporaryDirectory).Length);
+        Assert.Empty(Directory.GetDirectories(temporaryDirectory));
+    }
+
+    [Theory]
+    [InlineData("1 1 3 0 0 0")]
+    [InlineData("1E-12 1E-12 3E-12 0 0 0")]
+    [Trait("Category", "PinnedMuJoCoRuntime")]
+    public void OfficialValidationStillRejectsPhysicallyInvalidInertia(string inertia)
+    {
+        string model = Path.Combine(temporaryDirectory, "invalid.xml");
+        string source = "<mujoco><worldbody><body name=\"invalid_inertia\">" +
+            "<inertial pos=\"0 0 0\" mass=\"1\" fullinertia=\"" + inertia + "\"/>" +
+            "</body></worldbody></mujoco>";
+        File.WriteAllText(model, source);
+
+        MjcfCompilerValidationResult result = PinnedValidator().Validate(new MjcfCompilerValidationRequest
+        {
+            WorkingDirectory = temporaryDirectory,
+            ModelPaths = new[] { model }
+        });
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("inertia must satisfy", result.Message);
+        Assert.Equal(source, File.ReadAllText(model));
+        Assert.Empty(Directory.GetDirectories(temporaryDirectory));
+    }
+
+    private static BundledMjcfCompilerValidator PinnedValidator()
+    {
+        string runtime = Environment.GetEnvironmentVariable("SW2URDF_MUJOCO_BIN")
+            ?? throw new InvalidOperationException("SW2URDF_MUJOCO_BIN is required by the pinned MuJoCo runtime gate.");
+        string version = Environment.GetEnvironmentVariable("SW2URDF_MUJOCO_VERSION")
+            ?? throw new InvalidOperationException("SW2URDF_MUJOCO_VERSION is required by the pinned MuJoCo runtime gate.");
+        return new BundledMjcfCompilerValidator(
+            Path.Combine(runtime, "compile.exe"), Path.Combine(runtime, "testspeed.exe"), version);
     }
 
     private string BuildBundle(RobotDocument robot, string name)

@@ -54,26 +54,16 @@ namespace OSURDF.Core.Export
                     string model = RequireChildFile(working, requestedModel, "MJCF model");
                     string stem = Path.GetFileNameWithoutExtension(model);
                     string binary = Path.Combine(validation, stem + ".mjb");
-                    string canonical = Path.Combine(
+                    // MuJoCo's canonical XML writer rounds values below 1e-12 to zero.
+                    // Validate the delivered XML and lossless MJB, not that lossy rewrite.
+                    RunChecked(
+                        compileExecutable,
+                        new[] { model, binary },
                         working,
-                        ".osurdf-compiled-" + Guid.NewGuid().ToString("N") + "-" + stem + ".xml");
-                    try
+                        "compile " + Path.GetFileName(model));
+                    RequireFile(binary, "Compiled MuJoCo model");
+                    foreach (string simulationModel in new[] { model, binary })
                     {
-                        RunChecked(
-                            compileExecutable,
-                            new[] { model, binary },
-                            working,
-                            "compile " + Path.GetFileName(model));
-                        RunChecked(
-                            compileExecutable,
-                            new[] { model, canonical },
-                            working,
-                            "save canonical " + Path.GetFileName(model));
-                        RunChecked(
-                            compileExecutable,
-                            new[] { canonical },
-                            working,
-                            "reload canonical " + Path.GetFileName(model));
                         RunChecked(
                             testSpeedExecutable,
                             new[]
@@ -82,19 +72,13 @@ namespace OSURDF.Core.Export
                                 "--nthread=1",
                                 "--noisestd=0",
                                 "--noiserate=0",
-                                canonical
+                                simulationModel
                             },
                             working,
-                            "one zero-control simulation step " + Path.GetFileName(model));
-                        completed.Add(Path.GetFileName(model));
+                            "load and run one zero-control simulation step for " +
+                            Path.GetFileName(simulationModel));
                     }
-                    finally
-                    {
-                        if (File.Exists(canonical))
-                        {
-                            File.Delete(canonical);
-                        }
-                    }
+                    completed.Add(Path.GetFileName(model));
                 }
                 return new MjcfCompilerValidationResult
                 {
@@ -102,9 +86,9 @@ namespace OSURDF.Core.Export
                     Validator = "bundled-official-mujoco-tools",
                     MuJoCoVersion = version,
                     Message =
-                        "Official MuJoCo compiled, saved, reloaded, and advanced one zero-control step for: " +
+                        "Official MuJoCo compiled to MJB and independently loaded and advanced one zero-control step for both the original XML and MJB: " +
                         string.Join(", ", completed) +
-                        ". / MuJoCo 官方工具已完成编译、规范化保存、重新载入和一步零控制仿真。"
+                        ". / MuJoCo 官方工具已完成 MJB 编译，原始 XML 与 MJB 均已独立载入并执行一步零控制仿真。"
                 };
             }
             catch (Exception exception) when (
