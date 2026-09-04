@@ -1690,12 +1690,12 @@ namespace SW2URDF.UI
             modernUsdAssetCheckBox = CreateTargetCheckBox(
                 "OpenUSD robot asset",
                 "OpenUSD 机器人资产",
-                false);
+                true);
             modernUsdAssetCheckBox.Name = "modernUsdAssetCheckBox";
             modernMjcfAssetCheckBox = CreateTargetCheckBox(
                 "MuJoCo MJCF asset",
                 "MuJoCo MJCF 资产",
-                false);
+                true);
             modernMjcfAssetCheckBox.Name = "modernMjcfAssetCheckBox";
             modernRos1CheckBox.CheckedChanged += ModernTargetSelectionChanged;
             modernRos2CheckBox.CheckedChanged += ModernTargetSelectionChanged;
@@ -1803,15 +1803,16 @@ namespace SW2URDF.UI
 
         private void ModernTargetSelectionChanged(object sender, EventArgs e)
         {
+            if (loadingModernExportTargets)
+            {
+                return;
+            }
             if (modernUsdSettingsButton != null)
             {
                 modernUsdSettingsButton.Enabled = modernUsdAssetCheckBox.Checked;
             }
             SynchronizeAssetMeshFormatControls();
-            if (!loadingModernExportTargets)
-            {
-                UpdateRosPackageNameHintForTargetChange();
-            }
+            UpdateRosPackageNameHintForTargetChange();
         }
 
         private void SynchronizeAssetMeshFormatControls()
@@ -2030,7 +2031,7 @@ namespace SW2URDF.UI
             modernUsdSettingsButton = new Button
             {
                 Name = "modernUsdSettingsButton",
-                Enabled = false,
+                Enabled = true,
                 Text = ChineseUiText.Translate(
                     "OpenUSD settings...",
                     "OpenUSD 设置...")

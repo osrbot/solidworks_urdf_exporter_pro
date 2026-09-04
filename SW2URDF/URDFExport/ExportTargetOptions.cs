@@ -81,10 +81,10 @@ namespace SW2URDF.URDFExport
             return new ExportTargetOptions
             {
                 UseV2Pipeline = true,
-                ExportRos1Legacy = false,
+                ExportRos1Legacy = true,
                 ExportRos2 = true,
-                ExportUsdAsset = false,
-                ExportMjcfAsset = false,
+                ExportUsdAsset = true,
+                ExportMjcfAsset = true,
                 PackageVersion = "0.1.0",
                 Description = "Robot description package for " + normalizedName,
                 MaintainerName = SW2URDF.URDF.PackageXML.DefaultMaintainerName,

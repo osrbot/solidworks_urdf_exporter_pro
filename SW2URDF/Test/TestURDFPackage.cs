@@ -68,7 +68,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void RecommendedExportTargetsAreImmediatelyValidAndConservative()
+        public void RecommendedExportTargetsEnableAllFourAndAreImmediatelyValid()
         {
             ExportTargetOptions options =
                 ExportTargetOptions.RecommendedDefaults("production_robot");
@@ -76,9 +76,9 @@ namespace SW2URDF.Test
             Assert.True(options.UseV2Pipeline);
             Assert.Null(typeof(ExportTargetOptions).GetProperty("CreateRobotBundle"));
             Assert.True(options.ExportRos2);
-            Assert.False(options.ExportRos1Legacy);
-            Assert.False(options.ExportUsdAsset);
-            Assert.False(options.ExportMjcfAsset);
+            Assert.True(options.ExportRos1Legacy);
+            Assert.True(options.ExportUsdAsset);
+            Assert.True(options.ExportMjcfAsset);
             Assert.Equal("0.1.0", options.PackageVersion);
             Assert.Equal("NOASSERTION", options.ModelLicense);
             Assert.Equal(PackageXML.DefaultMaintainerName, options.MaintainerName);
@@ -89,6 +89,24 @@ namespace SW2URDF.Test
             Assert.Equal("SI", options.UsdSimulation.GainUnits);
             Assert.Empty(options.UsdSimulation.JointDrives);
             Assert.Empty(options.ValidateFindings());
+        }
+
+        [Fact]
+        public void DefaultTargetChoicesDoNotOverwriteOtherOptionsOrLegacyExport()
+        {
+            ExportTargetOptions edited = ExportTargetOptions.RecommendedDefaults("first");
+            edited.ExportRos1Legacy = false;
+            edited.ExportUsdAsset = false;
+            edited.ExportMjcfAsset = false;
+            ExportTargetOptions fresh = ExportTargetOptions.RecommendedDefaults("second");
+            Assert.True(fresh.ExportRos1Legacy && fresh.ExportRos2 &&
+                fresh.ExportUsdAsset && fresh.ExportMjcfAsset);
+            Assert.False(edited.ExportRos1Legacy || edited.ExportUsdAsset || edited.ExportMjcfAsset);
+
+            ExportTargetOptions legacy = ExportTargetOptions.LegacyCompatibilityDefaults();
+            Assert.False(legacy.UseV2Pipeline);
+            Assert.True(legacy.ExportRos1Legacy && legacy.ExportRos2);
+            Assert.False(legacy.ExportUsdAsset || legacy.ExportMjcfAsset);
         }
 
         [Fact]

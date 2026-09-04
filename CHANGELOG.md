@@ -44,6 +44,11 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Changed
 
+- New export configurations select all four output targets by default. Existing explicit selections
+  and the URDF-only legacy path retain their own choices.
+- Toggling an output target now updates only the destination hint and dependent controls, without
+  rebuilding the model/export page layout. Package-name changes and window resizing still invalidate
+  the layout when required.
 - Added an explicit maintained-fork contributor record in the project's requested display order and
   linked it from the bilingual README, handbook, support pages, and Wiki without replacing upstream
   attribution.
@@ -184,6 +189,9 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### 变更
 
+- 新建导出配置默认勾选全部四种输出；已有明确选择和仅导出 URDF 的旧路径不受影响。
+- 勾选输出目标时只更新目录提示和相关控件，不再重建模型与导出页面的布局；包名修改与窗口缩放
+  仍会按需重新布局。
 - 用户可见导出目标收敛为四种具体交付物：ROS 1 功能包、ROS 2 功能包、OpenUSD 机器人资产和
   MuJoCo MJCF 模型。规范 Robot Bundle 改为私有临时暂存表示，不再可选，也不作为产物交付。
 - 从主导出流程删除旧 Isaac Sim/Isaac Lab 版本、actuator profile 和原始 `ros2_control` 文件选择。

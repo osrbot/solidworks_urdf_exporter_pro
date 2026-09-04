@@ -515,7 +515,11 @@ namespace SW2URDF.Test
                 Assert.Null(FindDescendant(form, "modernRos2ControlProfileButton"));
                 Assert.Null(FindDescendant(form, "modernIsaacLabProfileButton"));
                 Assert.Null(FindDescendant(form, "modernUsdProfilePage"));
-                Assert.False(usdSettings.Enabled);
+                Assert.True(ros1.Checked);
+                Assert.True(ros2.Checked);
+                Assert.True(usd.Checked);
+                Assert.True(mjcf.Checked);
+                Assert.True(usdSettings.Enabled);
 
                 ros1.Checked = false;
                 ros2.Checked = true;
@@ -543,6 +547,154 @@ namespace SW2URDF.Test
             {
                 form.Dispose();
             }
+        }
+
+        [Fact]
+        public void TestInitializingFreshTargetsKeepsAllFourDefaultsEnabled()
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                form.Exporter.RosPackageName = "rover_description";
+                InvokePrivate(form, "InitializeExportTargetControls");
+                Assert.All(GetExportTargetCheckBoxes(form), target => Assert.True(target.Checked));
+                Assert.True(GetControl<Button>(form, "modernUsdSettingsButton").Enabled);
+                Assert.True(GetControl<RadioButton>(form, "radioButtonStl").Checked);
+                Assert.False(GetControl<RadioButton>(form, "radioButton3dxml").Enabled);
+            }
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(5)]
+        [InlineData(10)]
+        [InlineData(15)]
+        public void TestInitializingTargetsPreservesExistingExplicitChoices(int mask)
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                var existing = new ExportTargetOptions
+                {
+                    UseV2Pipeline = true,
+                    ExportRos1Legacy = (mask & 1) != 0,
+                    ExportRos2 = (mask & 2) != 0,
+                    ExportUsdAsset = (mask & 4) != 0,
+                    ExportMjcfAsset = (mask & 8) != 0,
+                    Description = "Saved description"
+                };
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                form.Exporter.RosPackageName = "rover_description";
+                form.Exporter.ExportTargets = existing;
+                InvokePrivate(form, "InitializeExportTargetControls");
+                InvokePrivate(form, "InitializeExportTargetControls");
+                CheckBox[] targets = GetExportTargetCheckBoxes(form);
+                for (int index = 0; index < targets.Length; index++)
+                {
+                    Assert.Equal((mask & (1 << index)) != 0, targets[index].Checked);
+                }
+                Assert.Same(existing, form.Exporter.ExportTargets);
+                Assert.Equal("Saved description", GetControl<TextBox>(form, "modernPackageDescriptionTextBox").Text);
+                Assert.Equal((mask & 4) != 0, GetControl<Button>(form, "modernUsdSettingsButton").Enabled);
+                Assert.Equal((mask & 12) == 0, GetControl<RadioButton>(form, "radioButton3dxml").Enabled);
+                var captured = (ExportTargetOptions)InvokePrivate(form, "CaptureExportTargetOptions");
+                Assert.Equal(existing.ExportRos1Legacy, captured.ExportRos1Legacy);
+                Assert.Equal(existing.ExportRos2, captured.ExportRos2);
+                Assert.Equal(existing.ExportUsdAsset, captured.ExportUsdAsset);
+                Assert.Equal(existing.ExportMjcfAsset, captured.ExportMjcfAsset);
+            }
+        }
+
+        [Theory]
+        [InlineData(1120, 700)]
+        [InlineData(1344, 812)]
+        public void TestTargetTogglesOnlyUpdateLocalControlsAndKeepCachedLayout(int width, int height)
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                form.Exporter.PackageName = "Robot Model";
+                form.ClientSize = new Size(width, height);
+                GetControl<TextBox>(form, "textBoxRosPackageName").Text = "rover_description";
+                Control[] roots = new[]
+                {
+                    GetControl<Control>(form, "modernModelRoot"),
+                    GetControl<Control>(form, "modernJointRoot"),
+                    GetControl<Control>(form, "panelLinkProperties"),
+                    GetControl<Control>(form, "modernModelFooter")
+                };
+                foreach (Control root in roots) Assert.NotEqual(IntPtr.Zero, root.Handle);
+                InvokePrivate(form, "PrimeModernPageLayouts");
+                ShowModernAssemblyPage(form, "Model");
+                var hint = GetControl<Label>(form, "labelRosPackageNameHint");
+                Assert.NotEqual(IntPtr.Zero, hint.Handle);
+                var tooltip = GetPrivateField<ToolTip>(form, "packagePathToolTip");
+                var settings = GetControl<Button>(form, "modernUsdSettingsButton");
+                var stl = GetControl<RadioButton>(form, "radioButtonStl");
+                var xml = GetControl<RadioButton>(form, "radioButton3dxml");
+                CheckBox[] targets = GetExportTargetCheckBoxes(form);
+                Control[] controls = Descendants(form).ToArray();
+                Font[] fonts = controls.Select(control => control.Font).ToArray();
+                Rectangle[] bounds = roots.Select(root => root.Bounds).ToArray();
+                Rectangle hintBounds = hint.Bounds;
+                int initialLayouts = (int)GetPrivateField<object>(form, "modernModelExplicitLayoutCount");
+                var frozen = GetPrivateField<List<TableLayoutPanel>>(form, "modernModelFrozenLayouts").ToArray();
+                Assert.NotEmpty(frozen);
+                int rootLayouts = 0;
+                int rootInvalidations = 0;
+                int autoSizeChanges = 0;
+                foreach (Control root in roots)
+                {
+                    root.Layout += delegate { rootLayouts++; };
+                    root.Invalidated += delegate { rootInvalidations++; };
+                }
+                foreach (TableLayoutPanel layout in frozen)
+                {
+                    layout.AutoSizeChanged += delegate { autoSizeChanges++; };
+                }
+                string[] paths =
+                {
+                    "ROS1/rover_description", "ROS2/rover_description",
+                    "USD/rover_description", "MuJoCo/robot_model"
+                };
+                for (int cycle = 0; cycle < 3; cycle++)
+                {
+                    for (int mask = 0; mask < 16; mask++)
+                    {
+                        for (int index = 0; index < targets.Length; index++)
+                        {
+                            targets[index].Checked = (mask & (1 << index)) != 0;
+                        }
+                        string expected = mask == 0
+                            ? ChineseUiText.Translate("No target selected", "\u672a\u9009\u62e9\u8f93\u51fa\u76ee\u6807")
+                            : string.Join(" | ", paths.Where((path, index) => (mask & (1 << index)) != 0));
+                        Assert.Equal(expected, hint.Text);
+                        Assert.Equal(mask == 0
+                            ? ChineseUiText.Translate("Select an output target to see its destination.",
+                                "\u8bf7\u9009\u62e9\u8f93\u51fa\u76ee\u6807\u4ee5\u67e5\u770b\u5bf9\u5e94\u76ee\u5f55\u3002")
+                            : expected, tooltip.GetToolTip(hint));
+                        Assert.Equal((mask & 4) != 0, settings.Enabled);
+                        Assert.Equal((mask & 12) == 0, xml.Enabled);
+                        if ((mask & 12) != 0) Assert.True(stl.Checked);
+                        else xml.Checked = true;
+                    }
+                }
+                Assert.Equal(0, rootLayouts);
+                Assert.Equal(0, rootInvalidations);
+                Assert.Equal(0, autoSizeChanges);
+                Assert.Equal(initialLayouts, (int)GetPrivateField<object>(form, "modernModelExplicitLayoutCount"));
+                Assert.Equal(frozen, GetPrivateField<List<TableLayoutPanel>>(form, "modernModelFrozenLayouts"));
+                Assert.All(frozen, layout => Assert.False(layout.AutoSize));
+                Assert.Equal(controls, Descendants(form).ToArray());
+                for (int index = 0; index < controls.Length; index++) Assert.Same(fonts[index], controls[index].Font);
+                Assert.Equal(bounds, roots.Select(root => root.Bounds).ToArray());
+                Assert.Equal(hintBounds, hint.Bounds);
+            }
+        }
+
+        private static CheckBox[] GetExportTargetCheckBoxes(AssemblyExportForm form)
+        {
+            return new[] { "modernRos1CheckBox", "modernRos2CheckBox", "modernUsdAssetCheckBox", "modernMjcfAssetCheckBox" }
+                .Select(name => GetControl<CheckBox>(form, name)).ToArray();
         }
 
         [Fact]
@@ -1331,7 +1483,7 @@ namespace SW2URDF.Test
 
                 packageName.Text = "rover_description";
                 Assert.Equal(
-                    "ROS1/rover_description | ROS2/rover_description",
+                    "ROS1/rover_description | ROS2/rover_description | USD/rover_description | MuJoCo/rover_description",
                     packageHint.Text);
                 Assert.DoesNotContain("and", packageHint.Text);
                 Assert.DoesNotContain("\u548c", packageHint.Text);

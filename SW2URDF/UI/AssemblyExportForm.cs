@@ -1222,15 +1222,16 @@ namespace SW2URDF.UI
 
         private void UpdateRosPackageNameHint()
         {
-            UpdateRosPackageNameHintCore(false);
+            UpdateRosPackageNameHintCore(true);
         }
 
         private void UpdateRosPackageNameHintForTargetChange()
         {
-            UpdateRosPackageNameHintCore(true);
+            // Target choices only change text in the fixed-height, ellipsized hint.
+            UpdateRosPackageNameHintCore(false);
         }
 
-        private void UpdateRosPackageNameHintCore(bool forceLayoutRebuild)
+        private void UpdateRosPackageNameHintCore(bool updateLayout)
         {
             string sanitized = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
             string robotName = Exporter == null
@@ -1265,7 +1266,7 @@ namespace SW2URDF.UI
                     "Select an output target to see its destination.",
                     "请选择输出目标以查看对应目录。")
                 : string.Join(" | ", paths);
-            bool rebuildLayout = forceLayoutRebuild || !String.Equals(
+            bool rebuildLayout = updateLayout && !String.Equals(
                 labelRosPackageNameHint.Text,
                 hint,
                 StringComparison.Ordinal);
