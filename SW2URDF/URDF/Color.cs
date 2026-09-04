@@ -51,13 +51,10 @@ namespace SW2URDF.URDF
             DomainUpDown boxBlue, DomainUpDown boxAlpha, string format)
         {
             string[] rgbaText = RGBAAttribute.GetTextArrayFromDoubleArray(format);
-            if (rgbaText != null)
-            {
-                boxRed.Text = rgbaText[0];
-                boxGreen.Text = rgbaText[1];
-                boxBlue.Text = rgbaText[2];
-                boxAlpha.Text = rgbaText[3];
-            }
+            boxRed.Text = rgbaText == null ? string.Empty : rgbaText[0];
+            boxGreen.Text = rgbaText == null ? string.Empty : rgbaText[1];
+            boxBlue.Text = rgbaText == null ? string.Empty : rgbaText[2];
+            boxAlpha.Text = rgbaText == null ? string.Empty : rgbaText[3];
         }
 
         public void Update(DomainUpDown boxRed, DomainUpDown boxGreen,

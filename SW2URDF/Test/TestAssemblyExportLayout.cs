@@ -1,4 +1,7 @@
 using SW2URDF.UI;
+using Moq;
+using SolidWorks.Interop.sldworks;
+using System.Collections.Generic;
 using SW2URDF.URDFExport;
 using OSURDF.Core.Model;
 using System;
@@ -13,6 +16,413 @@ using UrdfJoint = SW2URDF.URDF.Joint;
 
 namespace SW2URDF.Test
 {
+    public class TestAssemblyUiPerformance
+    {
+        private static readonly string[] LinkPropertyFieldNames =
+        {
+            "textBoxInertialOriginX", "textBoxInertialOriginY", "textBoxInertialOriginZ",
+            "textBoxInertialOriginRoll", "textBoxInertialOriginPitch", "textBoxInertialOriginYaw",
+            "textBoxVisualOriginX", "textBoxVisualOriginY", "textBoxVisualOriginZ",
+            "textBoxVisualOriginRoll", "textBoxVisualOriginPitch", "textBoxVisualOriginYaw",
+            "textBoxIxx", "textBoxIxy", "textBoxIxz", "textBoxIyy", "textBoxIyz", "textBoxIzz",
+            "textBoxMass", "domainUpDownRed", "domainUpDownGreen", "domainUpDownBlue",
+            "domainUpDownAlpha", "comboBoxMaterials"
+        };
+
+        [Fact]
+        public void IdlePreviewsDoNotRedrawTheCadDocument()
+        {
+            var model = new Mock<ModelDoc2>(MockBehavior.Strict);
+            using (var inertia = new InertiaPreview(null, model.Object))
+            using (var collision = new CollisionPreview(null, model.Object, null))
+            {
+                for (int index = 0; index < 25; index++)
+                {
+                    inertia.Hide();
+                    collision.Hide();
+                }
+            }
+            model.Verify(item => item.GraphicsRedraw2(), Times.Never);
+        }
+
+        [Fact]
+        public void RemovingPreviewBodiesRedrawsOnceAndStillReleasesThem()
+        {
+            var model = new Mock<ModelDoc2>();
+            var body = new Mock<Body2>();
+            using (var inertia = new InertiaPreview(null, model.Object))
+            using (var collision = new CollisionPreview(null, model.Object, null))
+            {
+                Field<List<Body2>>(inertia, "temporaryBodies").Add(body.Object);
+                Field<List<Body2>>(collision, "temporaryBodies").Add(body.Object);
+                inertia.Hide();
+                collision.Hide();
+                inertia.Hide();
+                collision.Hide();
+                Assert.False(inertia.IsVisible);
+                Assert.False(collision.IsVisible);
+            }
+            body.Verify(item => item.Hide(model.Object), Times.Exactly(2));
+            model.Verify(item => item.GraphicsRedraw2(), Times.Exactly(2));
+        }
+
+        [Fact]
+        public void Selecting253MockComponentsUsesOneBatchAndNoPerComponentCalls()
+        {
+            var model = new Mock<ModelDoc2>(MockBehavior.Strict);
+            var extension = new Mock<ModelDocExtension>(MockBehavior.Strict);
+            var components = Enumerable.Range(0, 253)
+                .Select(index => new Mock<Component2>(MockBehavior.Strict).Object).ToArray();
+            model.SetupGet(item => item.Extension).Returns(extension.Object);
+            extension.Setup(item => item.MultiSelect2(It.IsAny<object>(), false, null))
+                .Returns((object items, bool append, object data) =>
+                {
+                    Assert.Equal(components, ((object[])items).Cast<Component2>());
+                    return components.Length;
+                });
+
+            AssemblyExportForm.SelectLinkComponents(model.Object, components, item => item);
+
+            extension.Verify(item => item.MultiSelect2(It.IsAny<object>(), false, null), Times.Once);
+            model.Verify(item => item.ClearSelection2(true), Times.Never);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void FailedOrPartialSelectionRetriesAfterClearingTheBatch(bool throws)
+        {
+            var model = new Mock<ModelDoc2>();
+            var extension = new Mock<ModelDocExtension>();
+            var manager = new Mock<SelectionMgr>();
+            var data = new Mock<SelectData>();
+            var component = new Mock<Component2>();
+            var operations = new List<string>();
+            model.SetupGet(item => item.Extension).Returns(extension.Object);
+            model.SetupGet(item => item.SelectionManager).Returns(manager.Object);
+            manager.Setup(item => item.CreateSelectData()).Returns(data.Object);
+            extension.Setup(item => item.MultiSelect2(It.IsAny<object>(), false, null))
+                .Returns(() =>
+                {
+                    operations.Add("batch");
+                    if (throws) throw new InvalidOperationException("Selection unavailable");
+                    return 0;
+                });
+            model.Setup(item => item.ClearSelection2(true)).Callback(() => operations.Add("clear"));
+            component.Setup(item => item.Select4(true, data.Object, false))
+                .Callback(() => operations.Add("single")).Returns(true);
+
+            AssemblyExportForm.SelectLinkComponents(model.Object,
+                new[] { component.Object }, item => item);
+
+            Assert.Equal(new[] { "batch", "clear", "single" }, operations);
+            data.VerifySet(item => item.Mark = -1, Times.Once);
+        }
+
+        [Fact]
+        public void EmptyLinkSelectionClearsOldSelectionWithoutCreatingSelectionData()
+        {
+            var model = new Mock<ModelDoc2>(MockBehavior.Strict);
+            model.Setup(item => item.ClearSelection2(true));
+            AssemblyExportForm.SelectLinkComponents(model.Object, new Component2[0], item => item);
+            model.Verify(item => item.ClearSelection2(true), Times.Once);
+        }
+
+        [Fact]
+        public void UnchangedReferenceChoicesReuseItemsWithoutSelectionEvents()
+        {
+            using (var combo = new ComboBox())
+            {
+                var reference = CadFeatureReference.Automatic(ReferenceGeometryKind.CoordinateSystem);
+                var choice = new CadFeatureReferenceChoice(reference, "Automatic");
+                AssemblyExportForm.BindReferenceChoices(combo, new[] { choice }, reference);
+                int changes = 0;
+                combo.SelectedIndexChanged += delegate { changes++; };
+                for (int index = 0; index < 25; index++)
+                {
+                    AssemblyExportForm.BindReferenceChoices(combo,
+                        new[] { new CadFeatureReferenceChoice(reference.Clone(), "Automatic") }, reference);
+                }
+                Assert.Same(choice, combo.Items[0]);
+                Assert.Equal(0, changes);
+            }
+        }
+
+        [Fact]
+        public void ReferenceChoiceIdentityLabelsAndRemovedItemsInvalidateTheList()
+        {
+            using (var combo = new ComboBox())
+            {
+                var automatic = CadFeatureReference.Automatic(ReferenceGeometryKind.CoordinateSystem);
+                var explicitReference = CadFeatureReference.ExplicitRoot(
+                    ReferenceGeometryKind.CoordinateSystem, new byte[] { 1 });
+                var choices = new[]
+                {
+                    new CadFeatureReferenceChoice(automatic, "Automatic"),
+                    new CadFeatureReferenceChoice(explicitReference, "Old name")
+                };
+                AssemblyExportForm.BindReferenceChoices(combo, choices, explicitReference);
+                Assert.Equal(1, combo.SelectedIndex);
+                choices[1] = new CadFeatureReferenceChoice(explicitReference.Clone(), "Renamed");
+                AssemblyExportForm.BindReferenceChoices(combo, choices, explicitReference);
+                Assert.Equal("Renamed", combo.SelectedItem.ToString());
+                choices[1] = new CadFeatureReferenceChoice(CadFeatureReference.ExplicitRoot(
+                    ReferenceGeometryKind.CoordinateSystem, new byte[] { 2 }), "Renamed");
+                AssemblyExportForm.BindReferenceChoices(combo, choices, choices[1].Reference);
+                Assert.Same(choices[1], combo.SelectedItem);
+                AssemblyExportForm.BindReferenceChoices(combo, new[] { choices[0] }, explicitReference);
+                Assert.Single(combo.Items.Cast<object>());
+                Assert.Equal(0, combo.SelectedIndex);
+            }
+        }
+
+        [Fact]
+        public void PropertyBindingBatchesLayoutsAndRestoresTheGuardAfterFailure()
+        {
+            using (AssemblyExportForm form = CreateForm())
+            using (var panel = new TableLayoutPanel())
+            {
+                var label = new Label { AutoSize = true };
+                panel.Controls.Add(label);
+                int layouts = 0;
+                panel.Layout += delegate { layouts++; };
+                Action fill = () =>
+                {
+                    for (int index = 1; index <= 20; index++) label.Text = new string('x', index);
+                };
+                fill();
+                int unbatched = layouts;
+                layouts = 0;
+                Invoke(form, "BindPropertyControls", panel, (Action)(() =>
+                {
+                    Assert.True(form.AutoUpdatingForm);
+                    fill();
+                }));
+                Assert.True(unbatched > layouts, "Batching must reduce actual Layout events.");
+                Assert.InRange(layouts, 1, 2);
+                Assert.False(form.AutoUpdatingForm);
+                Assert.Throws<TargetInvocationException>(() => Invoke(form,
+                    "BindPropertyControls", panel, (Action)(() => { throw new InvalidOperationException(); })));
+                Assert.False(form.AutoUpdatingForm);
+                form.AutoUpdatingForm = true;
+                Invoke(form, "BindPropertyControls", panel, (Action)(() => { }));
+                Assert.True(form.AutoUpdatingForm);
+            }
+        }
+
+        [Fact]
+        public void LinkBindingSkipsTransientBlanksButReadsFreshMassAndGeometry()
+        {
+            using (AssemblyExportForm form = CreateForm())
+            {
+                var link = new SW2URDF.URDF.Link();
+                link.Inertial.Mass.Value = 2.5;
+                link.Inertial.Inertia.Ixy = 0.125;
+                link.Visual.Origin.X = 3;
+                link.Visual.Material.Color.SetColor(new[] { 0.1, 0.2, 0.3, 1.0 });
+                form.FillLinkPropertyBoxes(link);
+                var mass = Field<TextBox>(form, "textBoxMass");
+                int changes = 0;
+                mass.TextChanged += delegate { changes++; };
+                form.FillLinkPropertyBoxes(link);
+                Assert.Equal(0, changes);
+                link.Inertial.Mass.Value = 7.25;
+                link.Visual.Origin.X = 8;
+                form.FillLinkPropertyBoxes(link);
+                Assert.Equal(1, changes);
+                Assert.Equal("7.25", mass.Text);
+                Assert.Equal("8", Field<TextBox>(form, "textBoxVisualOriginX").Text);
+                Assert.Equal("0.125", Field<TextBox>(form, "textBoxIyxMirror").Text);
+                mass.Text = "9.5";
+                form.SaveLinkDataFromPropertyBoxes(link);
+                form.FillLinkPropertyBoxes(link);
+                Assert.Equal(9.5, link.Inertial.Mass.Value);
+                Assert.Equal("9.5", mass.Text);
+            }
+        }
+
+        [Fact]
+        public void LinkBindingClearsFixedFrameAndRestoresPopulatedNode()
+        {
+            using (AssemblyExportForm form = CreateForm())
+            {
+                var populated = CreatePopulatedLink();
+                form.FillLinkPropertyBoxes(populated);
+                Control[] fields = Field<Control[]>(form, "linkBoxes");
+                string[] expected = fields.Select(field => field.Text).ToArray();
+                Assert.All(expected, value => Assert.False(string.IsNullOrEmpty(value)));
+
+                form.FillLinkPropertyBoxes(new SW2URDF.URDF.Link { isFixedFrame = true });
+                Assert.All(fields, field => Assert.Equal(string.Empty, field.Text));
+                var frame = Field<ComboBox>(form, "comboBoxLinkCoordinateSystem");
+                Assert.False(frame.Enabled);
+                Assert.Empty(frame.Items.Cast<object>());
+                Assert.Equal(string.Empty, Field<TextBox>(form, "textBoxIyxMirror").Text);
+
+                form.FillLinkPropertyBoxes(populated);
+                Assert.Equal(expected, fields.Select(field => field.Text).ToArray());
+                Assert.True(frame.Enabled);
+                Assert.Equal("0.125", Field<TextBox>(form, "textBoxIyxMirror").Text);
+            }
+        }
+
+        [Theory]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public void LinkBindingClearsAbsentArraysAcrossNodeChanges(bool unsetXyz, bool unsetRpy)
+        {
+            using (AssemblyExportForm form = CreateForm())
+            {
+                var populated = CreatePopulatedLink();
+                var unset = new SW2URDF.URDF.Link();
+                foreach (var origin in new[] { unset.Visual.Origin, unset.Inertial.Origin })
+                {
+                    origin.SetXYZ(unsetXyz ? null : new[] { 7.0, 8.0, 9.0 });
+                    origin.SetRPY(unsetRpy ? null : new[] { 0.4, 0.5, 0.6 });
+                }
+                Field<SW2URDF.URDF.URDFAttribute>(unset.Visual.Material.Color, "RGBAAttribute").Value = null;
+                form.FillLinkPropertyBoxes(populated);
+                Control[] fields = Field<Control[]>(form, "linkBoxes");
+                string[] expected = fields.Select(field => field.Text).ToArray();
+
+                form.FillLinkPropertyBoxes(unset);
+                foreach (string prefix in new[] { "textBoxVisualOrigin", "textBoxInertialOrigin" })
+                {
+                    Assert.Equal(unsetXyz ? new[] { "", "", "" } : new[] { "7", "8", "9" },
+                        new[] { "X", "Y", "Z" }.Select(suffix => Field<TextBox>(form, prefix + suffix).Text));
+                    Assert.Equal(unsetRpy ? new[] { "", "", "" } : new[] { "0.4", "0.5", "0.6" },
+                        new[] { "Roll", "Pitch", "Yaw" }.Select(suffix => Field<TextBox>(form, prefix + suffix).Text));
+                }
+                foreach (string channel in new[] { "Red", "Green", "Blue", "Alpha" })
+                {
+                    Assert.Equal(string.Empty, Field<DomainUpDown>(form, "domainUpDown" + channel).Text);
+                }
+                Assert.Null(Field<SW2URDF.URDF.URDFAttribute>(unset.Visual.Material.Color, "RGBAAttribute").Value);
+                Assert.Equal(string.Empty, Field<TextBox>(form, "modernMaterialIdTextBox").Text);
+
+                form.FillLinkPropertyBoxes(populated);
+                Assert.Equal(expected, fields.Select(field => field.Text).ToArray());
+            }
+        }
+
+        private static SW2URDF.URDF.Link CreatePopulatedLink()
+        {
+            var link = new SW2URDF.URDF.Link();
+            foreach (var origin in new[] { link.Visual.Origin, link.Inertial.Origin })
+            {
+                origin.SetXYZ(new[] { 1.0, 2.0, 3.0 });
+                origin.SetRPY(new[] { 0.1, 0.2, 0.3 });
+            }
+            link.Inertial.Mass.Value = 2.5;
+            link.Inertial.Inertia.Ixy = 0.125;
+            link.Visual.Material.Color.SetColor(new[] { 0.1, 0.2, 0.3, 1.0 });
+            return link;
+        }
+
+        [Fact]
+        public void RefreshedCatalogReplacesLabelsAndPreservesUnavailableExplicitReferences()
+        {
+            using (AssemblyExportForm form = CreateForm())
+            {
+                var link = new SW2URDF.URDF.Link();
+                link.FrameReference = CadFeatureReference.ExplicitRoot(
+                    ReferenceGeometryKind.CoordinateSystem, new byte[] { 7 });
+                var catalog = Field<ReferenceGeometryCatalog>(form.Exporter, "referenceGeometryCatalog");
+                var entries = Field<List<ReferenceGeometryEntry>>(catalog, "entries");
+                entries.Add(new ReferenceGeometryEntry(link.FrameReference, "Original", "part"));
+                form.FillLinkPropertyBoxes(link);
+                var combo = Field<ComboBox>(form, "comboBoxLinkCoordinateSystem");
+                Assert.Equal("Original - part", combo.SelectedItem.ToString());
+                entries.Clear();
+                entries.Add(new ReferenceGeometryEntry(link.FrameReference.Clone(), "Renamed", "part"));
+                form.FillLinkPropertyBoxes(link);
+                Assert.Equal("Renamed - part", combo.SelectedItem.ToString());
+                entries.Clear();
+                form.FillLinkPropertyBoxes(link);
+                var unavailable = Assert.IsType<CadFeatureReferenceChoice>(combo.SelectedItem);
+                Assert.True(unavailable.Reference.Equals(link.FrameReference));
+                Assert.Equal(ChineseUiText.Translate("Unavailable reference", "\u5f15\u7528\u4e0d\u53ef\u7528"),
+                    unavailable.DisplayText);
+            }
+        }
+
+        [Fact]
+        public void JointBindingSuppressesClearEventsAndRestoresUserTypeEdits()
+        {
+            using (AssemblyExportForm form = CreateForm())
+            {
+                var link = new SW2URDF.URDF.Link();
+                link.Joint.Type = "revolute";
+                link.Joint.Name = "hinge";
+                form.FillJointPropertyBoxes(link);
+                var type = Field<ComboBox>(form, "comboBoxJointType");
+                bool unguardedChange = false;
+                type.TextChanged += delegate { unguardedChange |= !form.AutoUpdatingForm; };
+                form.FillJointPropertyBoxes(link);
+                Assert.False(unguardedChange);
+                Assert.False(form.AutoUpdatingForm);
+                type.Text = ChineseUiText.JointTypeDisplay("prismatic");
+                Assert.True(unguardedChange);
+                Assert.Equal("prismatic", Field<string>(form, "displayedJointType"));
+            }
+        }
+
+        [Fact]
+        public void HiddenMimicPageDoesNotRelayoutWhenExpandedStateIsUnchanged()
+        {
+            using (AssemblyExportForm form = CreateForm())
+            {
+                Field<CheckBox>(form, "MimicCheckBox").Checked = true;
+                var details = Field<TableLayoutPanel>(form, "modernMimicDetails");
+                Assert.False(details.Visible);
+                Invoke(form, "SynchronizeModernMimicLayout");
+                int layouts = 0;
+                details.Parent.Layout += delegate { layouts++; };
+                for (int index = 0; index < 20; index++) Invoke(form, "SynchronizeModernMimicLayout");
+                Assert.Equal(0, layouts);
+                Field<CheckBox>(form, "MimicCheckBox").Checked = false;
+                Assert.False(Field<bool?>(form, "modernMimicExpanded").Value);
+            }
+        }
+
+        private static AssemblyExportForm CreateForm()
+        {
+            var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true);
+            var exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+            var catalog = (ReferenceGeometryCatalog)FormatterServices.GetUninitializedObject(
+                typeof(ReferenceGeometryCatalog));
+            SetField(catalog, "entries", new List<ReferenceGeometryEntry>());
+            SetField(exporter, "referenceGeometryCatalog", catalog);
+            exporter.URDFRobot = new SW2URDF.URDF.Robot();
+            form.Exporter = exporter;
+            SetField(form, "linkBoxes", LinkPropertyFieldNames.Select(name => Field<Control>(form, name)).ToArray());
+            SetField(form, "jointBoxes", new Control[]
+            {
+                Field<ComboBox>(form, "comboBoxJointType"), Field<ComboBox>(form, "comboBoxAxis"),
+                Field<TextBox>(form, "textBoxLimitLower"), Field<TextBox>(form, "textBoxLimitUpper")
+            });
+            return form;
+        }
+
+        private static T Field<T>(object target, string name)
+        {
+            return (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+                .GetValue(target);
+        }
+
+        private static void SetField(object target, string name, object value)
+        {
+            target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(target, value);
+        }
+
+        private static void Invoke(object target, string name, params object[] arguments)
+        {
+            target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(target, arguments);
+        }
+    }
+
     public class TestAssemblyExportLayout
     {
         [Theory]

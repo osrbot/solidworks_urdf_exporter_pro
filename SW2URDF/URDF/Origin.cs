@@ -100,20 +100,14 @@ namespace SW2URDF.URDF
             TextBox boxPitch, TextBox boxYaw, string format)
         {
             string[] xyzText = XYZAttribute.GetTextArrayFromDoubleArray(format);
-            if (xyzText != null)
-            {
-                boxX.Text = xyzText[0];
-                boxY.Text = xyzText[1];
-                boxZ.Text = xyzText[2];
-            }
+            boxX.Text = xyzText == null ? string.Empty : xyzText[0];
+            boxY.Text = xyzText == null ? string.Empty : xyzText[1];
+            boxZ.Text = xyzText == null ? string.Empty : xyzText[2];
 
             string[] rpyText = RPYAttribute.GetTextArrayFromDoubleArray(format);
-            if (rpyText != null)
-            {
-                boxRoll.Text = rpyText[0];
-                boxPitch.Text = rpyText[1];
-                boxYaw.Text = rpyText[2];
-            }
+            boxRoll.Text = rpyText == null ? string.Empty : rpyText[0];
+            boxPitch.Text = rpyText == null ? string.Empty : rpyText[1];
+            boxYaw.Text = rpyText == null ? string.Empty : rpyText[2];
         }
 
         public void Update(TextBox boxX, TextBox boxY, TextBox boxZ,

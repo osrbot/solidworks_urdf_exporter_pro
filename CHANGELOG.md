@@ -91,6 +91,12 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Fixed
 
+- Reduced page/Link selection overhead by skipping empty-preview CAD redraws, selecting Link
+  components in one batch with a per-component fallback, and batching property binding while
+  suppressing programmatic events. Unchanged reference lists are reused; explicit edits and catalog
+  refreshes still update displayed values. Hidden Mimic pages no longer repeat the same layout work.
+- Kept the current export progress window unchanged. Added UI regressions for empty values,
+  fixed-frame transitions, reference refreshes and selection fallback.
 - Fixed false MJCF inertia failures caused by MuJoCo's canonical XML writer rounding small nonzero
   inertia values to zero. Validation now uses the delivered XML and compiled MJB without changing
   CAD mass/inertia or enabling `balanceinertia`; genuinely invalid inertia still fails validation.
@@ -205,6 +211,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### 修复
 
+- 减少页面与 Link 切换的额外开销：没有预览体时不重绘 CAD，组件选择优先一次批量完成并保留逐个
+  选择回退，属性回填合并布局并抑制程序触发的事件。未变化的参考列表不再重建；用户修改和参考
+  目录刷新仍会更新显示值。隐藏的 Mimic 页面不再重复执行相同布局。
+- 保持当前导出进度窗口不变，补充空字段、固定参考 Link 往返、参考刷新与选择回退测试。
 - 修复 MuJoCo 重写中间 XML 时将非零的小惯性值舍入为零，导致 MJCF 导出误报惯性错误的问题。
   现在验证实际交付的 XML 和编译后的 MJB，不更改 CAD 质量/惯性，不启用 `balanceinertia`；
   真正不符合物理要求的惯性仍会被拒绝。

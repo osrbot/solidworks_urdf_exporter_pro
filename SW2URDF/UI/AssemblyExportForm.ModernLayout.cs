@@ -51,6 +51,7 @@ namespace SW2URDF.UI
         private ModernTabControl modernJointSections;
         private ModernTabControl modernLinkSections;
         private TableLayoutPanel modernMimicDetails;
+        private bool? modernMimicExpanded;
         private Button modernLinkUsageGuideButton;
         private Button modernModelUsageGuideButton;
         private Button modernLinkNextButton;
@@ -2322,15 +2323,8 @@ namespace SW2URDF.UI
             }
 
             bool show = MimicCheckBox.Checked;
-            bool visibilityChanged = modernMimicDetails.Visible != show ||
-                MimicJointLabel.Visible != show ||
-                MimicJointComboBox.Visible != show ||
-                MimicMultiplierLabel.Visible != show ||
-                textBoxMimicMultiplier.Visible != show ||
-                MimicOffsetLabel.Visible != show ||
-                textBoxMimicOffset.Visible != show ||
-                MimicEquationLabel.Visible != show;
-            if (!visibilityChanged)
+            // Visible includes ancestor visibility; hidden pages must not look dirty.
+            if (modernMimicExpanded == show)
             {
                 UpdateModernMimicEquationWrapWidth();
                 return;
@@ -2351,6 +2345,7 @@ namespace SW2URDF.UI
                     textBoxMimicOffset.Visible = show;
                     MimicEquationLabel.Visible = show;
                     modernMimicDetails.Visible = show;
+                    modernMimicExpanded = show;
                     UpdateModernMimicEquationWrapWidth();
                 }
                 finally

@@ -31,6 +31,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -1528,15 +1529,8 @@ namespace SW2URDF.UI
             }
             node.NodeFont = GetTreeNodeFont(true);
             node.Text = node.Text;
-            ActiveSWModel.ClearSelection2(true);
-            SelectionMgr manager = ActiveSWModel.SelectionManager;
-
-            SelectData data = manager.CreateSelectData();
-            data.Mark = -1;
-            foreach (Component2 component in node.Link.SWComponents)
-            {
-                component.Select4(true, data, false);
-            }
+            SelectLinkComponents(ActiveSWModel, node.Link.SWComponents,
+                component => new DispatchWrapper(component));
             FillLinkPropertyBoxes(node.Link);
             treeViewLinkProperties.Focus();
             previouslySelectedNode = node;
@@ -1828,7 +1822,7 @@ namespace SW2URDF.UI
 
         private void MaterialColorValueChanged(object sender, EventArgs e)
         {
-            if (!updatingMaterialColorControls)
+            if (!AutoUpdatingForm && !updatingMaterialColorControls)
             {
                 ValidateMaterialColorInputs();
                 UpdateMaterialColorPreview();
@@ -1981,7 +1975,7 @@ namespace SW2URDF.UI
 
         private void InertiaMatrixOffDiagonalTextChanged(object sender, EventArgs e)
         {
-            UpdateInertiaMatrixMirrorBoxes();
+            if (!AutoUpdatingForm) UpdateInertiaMatrixMirrorBoxes();
         }
 
         private void UpdateInertiaMatrixMirrorBoxes()
@@ -2417,19 +2411,46 @@ namespace SW2URDF.UI
             {
                 previouslySelectedNode.NodeFont = GetTreeNodeFont(false);
             }
-            ActiveSWModel.ClearSelection2(true);
-            SelectionMgr manager = ActiveSWModel.SelectionManager;
-
-            SelectData data = manager.CreateSelectData();
-            data.Mark = -1;
-            foreach (Component2 component in node.Link.SWComponents)
-            {
-                component.Select4(true, data, false);
-            }
+            SelectLinkComponents(ActiveSWModel, node.Link.SWComponents,
+                component => new DispatchWrapper(component));
             node.NodeFont = GetTreeNodeFont(true);
             node.Text = node.Text;
             FillJointPropertyBoxes(node.Link);
             previouslySelectedNode = node;
+        }
+
+        internal static void SelectLinkComponents(
+            ModelDoc2 model,
+            IList<Component2> components,
+            Func<Component2, object> prepareSelection)
+        {
+            if (components.Count == 0)
+            {
+                model.ClearSelection2(true);
+                return;
+            }
+            try
+            {
+                object[] selection = components.Select(prepareSelection).ToArray();
+                if (model.Extension.MultiSelect2(selection, false, null) == selection.Length)
+                {
+                    return;
+                }
+            }
+            catch (Exception exception)
+            {
+                logger.Warn("Bulk Link selection failed; retrying individual components.", exception);
+            }
+
+            // A partial batch must be replaced, not appended to or toggled by the fallback.
+            model.ClearSelection2(true);
+            SelectionMgr manager = model.SelectionManager;
+            SelectData data = manager.CreateSelectData();
+            data.Mark = -1;
+            foreach (Component2 component in components)
+            {
+                component.Select4(true, data, false);
+            }
         }
 
         private Font GetTreeNodeFont(bool bold)

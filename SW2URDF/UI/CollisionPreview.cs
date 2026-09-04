@@ -215,6 +215,10 @@ namespace SW2URDF.UI
 
         public void Hide()
         {
+            if (temporaryBodies.Count == 0 && displayContext == null)
+            {
+                return;
+            }
             ModelDoc2 hideTarget = displayContext == null
                 ? model
                 : displayContext.HideTarget;

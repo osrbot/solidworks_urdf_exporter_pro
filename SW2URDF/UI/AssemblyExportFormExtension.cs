@@ -37,8 +37,6 @@ namespace SW2URDF.UI
         private const string GeneralDisplayFormat = "G5";
         // The preview button saves textbox values before display, so inertia values must round-trip.
         private const string InertiaDisplayFormat = "R";
-        private List<ReferenceGeometryEntry> coordinateSystemEntryCache;
-        private List<ReferenceGeometryEntry> referenceAxisEntryCache;
 
         private void FillReferenceComboBox(
             ComboBox comboBox,
@@ -47,19 +45,23 @@ namespace SW2URDF.UI
             bool includeAutomatic,
             bool includeNone)
         {
-            comboBox.Items.Clear();
+            var choices = new List<CadFeatureReferenceChoice>();
             if (includeAutomatic)
             {
-                comboBox.Items.Add(new CadFeatureReferenceChoice(
+                choices.Add(new CadFeatureReferenceChoice(
                     CadFeatureReference.Automatic(kind),
                     ChineseUiText.Translate("Automatically generate", "自动生成")));
             }
 
-            IList<ReferenceGeometryEntry> entries = GetReferenceGeometryEntries(kind);
+            // The exporter catalog is already cached. Read its current snapshot so a
+            // deliberate catalog refresh cannot leave a second, stale UI cache behind.
+            IList<ReferenceGeometryEntry> entries = kind == ReferenceGeometryKind.CoordinateSystem
+                ? Exporter.GetRefCoordinateSystems()
+                : Exporter.GetRefAxes();
             bool selectedReferenceAvailable = false;
             foreach (ReferenceGeometryEntry entry in entries)
             {
-                comboBox.Items.Add(new CadFeatureReferenceChoice(
+                choices.Add(new CadFeatureReferenceChoice(
                     entry.Reference,
                     entry.DisplayLabel));
                 selectedReferenceAvailable = selectedReference != null &&
@@ -70,49 +72,97 @@ namespace SW2URDF.UI
                 selectedReference.IsExplicit &&
                 !selectedReferenceAvailable)
             {
-                comboBox.Items.Add(new CadFeatureReferenceChoice(
+                choices.Add(new CadFeatureReferenceChoice(
                     selectedReference,
                     ChineseUiText.Translate("Unavailable reference", "引用不可用")));
             }
             if (includeNone)
             {
-                comboBox.Items.Add(new CadFeatureReferenceChoice(
+                choices.Add(new CadFeatureReferenceChoice(
                     CadFeatureReference.None(kind),
                     ChineseUiText.Translate("None", "无")));
             }
 
-            for (int index = 0; index < comboBox.Items.Count; index++)
-            {
-                CadFeatureReferenceChoice choice =
-                    comboBox.Items[index] as CadFeatureReferenceChoice;
-                if (choice != null &&
-                    selectedReference != null &&
-                    choice.Reference.Equals(selectedReference))
-                {
-                    comboBox.SelectedIndex = index;
-                    return;
-                }
-            }
-            comboBox.SelectedIndex = comboBox.Items.Count == 0 ? -1 : 0;
+            BindReferenceChoices(comboBox, choices, selectedReference);
         }
 
-        private IList<ReferenceGeometryEntry> GetReferenceGeometryEntries(
-            ReferenceGeometryKind kind)
+        internal static void BindReferenceChoices(
+            ComboBox comboBox,
+            IList<CadFeatureReferenceChoice> choices,
+            CadFeatureReference selectedReference)
         {
-            if (kind == ReferenceGeometryKind.CoordinateSystem)
+            bool unchanged = comboBox.Items.Count == choices.Count;
+            for (int index = 0; unchanged && index < choices.Count; index++)
             {
-                if (coordinateSystemEntryCache == null)
-                {
-                    coordinateSystemEntryCache = Exporter.GetRefCoordinateSystems();
-                }
-                return coordinateSystemEntryCache;
+                var current = comboBox.Items[index] as CadFeatureReferenceChoice;
+                unchanged = current != null && current.Reference.Equals(choices[index].Reference) &&
+                    String.Equals(current.DisplayText, choices[index].DisplayText, StringComparison.Ordinal);
             }
 
-            if (referenceAxisEntryCache == null)
+            int selectedIndex = choices.Count == 0 ? -1 : 0;
+            for (int index = 0; index < choices.Count; index++)
             {
-                referenceAxisEntryCache = Exporter.GetRefAxes();
+                if (selectedReference != null && choices[index].Reference.Equals(selectedReference))
+                {
+                    selectedIndex = index;
+                    break;
+                }
             }
-            return referenceAxisEntryCache;
+            if (unchanged)
+            {
+                if (comboBox.SelectedIndex != selectedIndex) comboBox.SelectedIndex = selectedIndex;
+                return;
+            }
+            comboBox.BeginUpdate();
+            try
+            {
+                comboBox.Items.Clear();
+                var items = new object[choices.Count];
+                for (int index = 0; index < choices.Count; index++) items[index] = choices[index];
+                comboBox.Items.AddRange(items);
+                if (comboBox.SelectedIndex != selectedIndex) comboBox.SelectedIndex = selectedIndex;
+            }
+            finally
+            {
+                comboBox.EndUpdate();
+            }
+        }
+
+        private void BindPropertyControls(Control root, Action fill)
+        {
+            bool wasUpdating = AutoUpdatingForm;
+            AutoUpdatingForm = true;
+            var layouts = new List<Control>();
+            try
+            {
+                SuspendPropertyLayouts(root, layouts);
+                fill();
+            }
+            finally
+            {
+                try
+                {
+                    for (int index = layouts.Count - 1; index >= 0; index--)
+                    {
+                        layouts[index].ResumeLayout(true);
+                    }
+                }
+                finally
+                {
+                    AutoUpdatingForm = wasUpdating;
+                }
+            }
+        }
+
+        private static void SuspendPropertyLayouts(Control root, IList<Control> layouts)
+        {
+            if (root == null) return;
+            root.SuspendLayout();
+            layouts.Add(root);
+            foreach (Control child in root.Controls)
+            {
+                if (child.HasChildren) SuspendPropertyLayouts(child, layouts);
+            }
         }
 
         private static CadFeatureReference ReadReferenceComboBox(
@@ -134,8 +184,19 @@ namespace SW2URDF.UI
         //From the link, this method fills the property boxes on the Link Properties page
         public void FillLinkPropertyBoxes(Link Link)
         {
-            FillBlank(linkBoxes);
-            comboBoxLinkCoordinateSystem.Items.Clear();
+            BindPropertyControls(panelLinkProperties, () => FillLinkPropertyBoxesCore(Link));
+            UpdateInertiaMatrixMirrorBoxes();
+            ValidateMaterialColorInputs();
+            UpdateMaterialColorPreview();
+        }
+
+        private void FillLinkPropertyBoxesCore(Link Link)
+        {
+            if (Link.isFixedFrame)
+            {
+                FillBlank(linkBoxes);
+                comboBoxLinkCoordinateSystem.Items.Clear();
+            }
             comboBoxLinkCoordinateSystem.Enabled = !Link.isFixedFrame;
             if (!Link.isFixedFrame)
             {
@@ -180,7 +241,6 @@ namespace SW2URDF.UI
                                                      domainUpDownBlue,
                                                      domainUpDownAlpha,
                                                      GeneralDisplayFormat);
-                UpdateMaterialColorPreview();
 
                 radioButtonFine.Checked = Link.STLQualityFine;
                 radioButtonCourse.Checked = !Link.STLQualityFine;
@@ -196,18 +256,26 @@ namespace SW2URDF.UI
         //Fills the property boxes on the joint properties page
         public void FillJointPropertyBoxes(Link link)
         {
+            BindPropertyControls(modernJointRoot, () => FillJointPropertyBoxesCore(link));
+            ValidateJointLimitInputs();
+        }
+
+        private void FillJointPropertyBoxesCore(Link link)
+        {
             Joint joint = link == null ? null : link.Joint;
-            FillBlank(jointBoxes);
-            AutoUpdatingForm = true;
+            foreach (Control box in jointBoxes)
+            {
+                if (box != comboBoxAxis) box.Text = String.Empty;
+            }
             if (joint == null)
             {
+                comboBoxAxis.SelectedIndex = -1;
+                comboBoxOrigin.SelectedIndex = -1;
                 LimitRequiredLabel.Visible = false;
                 AxisRequiredLabel.Visible = false;
                 UpdateJointUnitLabels(string.Empty);
                 displayedJointType = string.Empty;
                 jointUnitInputsResetForCurrentChange = false;
-                AutoUpdatingForm = false;
-                ValidateJointLimitInputs();
                 return;
             }
             if (joint != null) //For the base_link or if none is selected
@@ -292,20 +360,28 @@ namespace SW2URDF.UI
             MimicCheckBox.CheckedChanged -= MimicCheckBoxCheckedChanged;
             MimicCheckBox.CheckedChanged -= ModernMimicCheckBoxCheckedChanged;
 
-            MimicJointComboBox.Items.Clear();
-            MimicJointComboBox.Items.AddRange(jointNames.ToArray());
+            MimicJointComboBox.BeginUpdate();
+            try
+            {
+                MimicJointComboBox.Items.Clear();
+                MimicJointComboBox.Items.AddRange(jointNames.ToArray());
+            }
+            finally
+            {
+                MimicJointComboBox.EndUpdate();
+            }
             if (joint.Mimic != null && joint.Mimic.AreRequiredFieldsSatisfied())
             {
-                ShowMimicControls(true);
                 MimicCheckBox.Checked = true;
+                ShowMimicControls(true);
                 MimicJointComboBox.SelectedIndex =
                     MimicJointComboBox.FindStringExact(joint.Mimic.JointName);
                 joint.Mimic.FillBoxes(textBoxMimicMultiplier, textBoxMimicOffset);
             }
             else
             {
-                ShowMimicControls(false);
                 MimicCheckBox.Checked = false;
+                ShowMimicControls(false);
             }
             if (modernUiInitialized)
             {
@@ -319,8 +395,6 @@ namespace SW2URDF.UI
 
             displayedJointType = JointConfigurationPolicy.Normalize(joint.Type);
             jointUnitInputsResetForCurrentChange = false;
-            AutoUpdatingForm = false;
-            ValidateJointLimitInputs();
         }
 
         private void UpdateJointUnitLabels(string jointType)
