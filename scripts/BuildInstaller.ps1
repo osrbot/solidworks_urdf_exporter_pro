@@ -632,11 +632,11 @@ try {
         $MuJoCoCounters = $MuJoCoTrx.SelectSingleNode(
             "/*[local-name()='TestRun']/*[local-name()='ResultSummary']/*[local-name()='Counters']")
         if ($null -eq $MuJoCoCounters -or
-            [int]$MuJoCoCounters.GetAttribute("total") -ne 2 -or
-            [int]$MuJoCoCounters.GetAttribute("executed") -ne 2 -or
-            [int]$MuJoCoCounters.GetAttribute("passed") -ne 2 -or
+            [int]$MuJoCoCounters.GetAttribute("total") -ne 6 -or
+            [int]$MuJoCoCounters.GetAttribute("executed") -ne 6 -or
+            [int]$MuJoCoCounters.GetAttribute("passed") -ne 6 -or
             [int]$MuJoCoCounters.GetAttribute("failed") -ne 0) {
-            throw "Pinned MuJoCo gate must execute and pass both the standard and large-mesh tests (2 total)."
+            throw "Pinned MuJoCo gate must pass standard, large-mesh, small-inertia and invalid-inertia tests (6 total)."
         }
     }
     finally {
