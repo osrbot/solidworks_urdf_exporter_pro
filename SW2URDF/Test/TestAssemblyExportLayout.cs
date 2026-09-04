@@ -1172,10 +1172,10 @@ namespace SW2URDF.Test
             Assert.Contains("Tools > URDF Export Tutorial", guide);
             Assert.Contains("eight-step companion tutorial", guide);
             Assert.Contains("Automatic Link tree loading", guide);
-            Assert.Contains("URDF Export Configuration (v2)", guide);
-            Assert.Contains("component-instance PID plus a reference-feature PID", guide);
-            Assert.Contains("at any assembly depth", guide);
-            Assert.Contains("Name-based v1.x configurations are not migrated automatically", guide);
+            Assert.Contains("v1.5 opens a review dialog", guide);
+            Assert.Contains("explicit selections for missing or ambiguous ones", guide);
+            Assert.Contains("retains the old one", guide);
+            Assert.Contains("cancelling changes nothing", guide);
             Assert.Contains("Link tree outline editing", guide);
             Assert.Contains("STEP, imported, or fixed assemblies", guide);
             Assert.Contains("SolidWorks Mate detection", guide);

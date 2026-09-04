@@ -45,10 +45,17 @@ namespace SW2URDF.URDFExport
         private static readonly log4net.ILog logger = Logger.GetLogger();
         private readonly ModelDoc2 rootModel;
         private readonly List<ReferenceGeometryEntry> entries;
+        private readonly bool includeComponents;
 
         public ReferenceGeometryCatalog(ModelDoc2 rootModel)
+            : this(rootModel, true)
+        {
+        }
+
+        public ReferenceGeometryCatalog(ModelDoc2 rootModel, bool includeComponents)
         {
             this.rootModel = rootModel ?? throw new ArgumentNullException("rootModel");
+            this.includeComponents = includeComponents;
             entries = new List<ReferenceGeometryEntry>();
             Refresh();
         }
@@ -92,6 +99,9 @@ namespace SW2URDF.URDFExport
             {
                 logger.Warn("Root reference geometry is temporarily unavailable.", exception);
             }
+
+            if (!includeComponents)
+                return;
 
             int documentType;
             try

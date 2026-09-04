@@ -826,8 +826,8 @@ namespace SW2URDF.UI
                     model,
                     BaseNode,
                     allowOverwrite),
-                warnUser);
-            if (saved)
+                warnUser, out bool persisted);
+            if (persisted)
             {
                 ClearExportSessionDraft();
             }

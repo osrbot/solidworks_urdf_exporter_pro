@@ -129,6 +129,12 @@ namespace SW2URDF.URDF
         /// </summary>
         /// <param name="context"></param>
         /// <param name="dictionary"></param>
+        public override void SetElement(URDFElement externalElement)
+        {
+            base.SetElement(externalElement);
+            isCustomized = ((Origin)externalElement).isCustomized;
+        }
+
         public override void SetElementFromData(List<string> context, StringDictionary dictionary)
         {
             string typeName = GetType().Name;

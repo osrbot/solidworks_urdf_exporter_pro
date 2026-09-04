@@ -388,6 +388,8 @@
     <Compile Include="Test\TestPropertyManager.cs" />
     <Compile Include="Test\TestROSFIles.cs" />
     <Compile Include="Test\TestSerialization.cs" />
+    <Compile Include="Test\TestLegacyConfigurationMigration.cs" />
+    <Compile Include="Test\TestMigrationSafety.cs" />
     <Compile Include="Test\TestStlCoordinateTransform.cs" />
     <Compile Include="Test\TestSWAttached.cs" />
     <Compile Include="Test\TestURDFAttributePrecision.cs" />
@@ -422,6 +424,7 @@
       <DependentUpon>AssemblyExportForm.cs</DependentUpon>
     </Compile>
     <Compile Include="UI\OpenUsdSettingsDialog.cs" />
+    <Compile Include="UI\LegacyConfigurationMigrationDialog.cs" />
     <Compile Include="UI\ModernWinFormsTheme.cs" />
     <Compile Include="AssemblyInfo.cs">
       <SubType>Code</SubType>
@@ -430,6 +433,7 @@
     <Compile Include="URDFExport\CSV\CSVImportExport.cs" />
     <Compile Include="URDFExport\CadFeatureReference.cs" />
     <Compile Include="URDFExport\ConfigurationSerialization.cs" />
+    <Compile Include="URDFExport\LegacyConfigurationMigration.cs" />
     <Compile Include="URDFExport\ExportSessionCloseCoordinator.cs" />
     <Compile Include="URDFExport\ExportSessionDraftStore.cs" />
     <Compile Include="URDFExport\AutomaticLinkColorScheme.cs" />

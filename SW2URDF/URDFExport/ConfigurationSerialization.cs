@@ -73,8 +73,8 @@ namespace SW2URDF.URDFExport
     /// Class to serialize URDF trees to string so they can be saved to an SW Attribute in the
     /// top-level assembly document.
     ///
-    /// Version 2 stores reference geometry by persistent identity. Name-based configurations are
-    /// deliberately not migrated because a display name cannot identify nested geometry reliably.
+    /// Version 2 stores reference geometry by persistent identity. Legacy configurations require
+    /// an explicit, reviewed migration; the normal v2 reader never guesses from display names.
     /// </summary>
     public static class ConfigurationSerialization
     {
@@ -130,7 +130,9 @@ namespace SW2URDF.URDFExport
                         logger.Warn(
                             "Ignoring an interrupted URDF configuration write. " +
                             "No committed version 2 configuration was replaced.");
-                        errorMessage = string.Empty;
+                        errorMessage = HasLegacyConfiguration(model)
+                            ? "The previous migration was not committed. The original name-based configuration is available for review."
+                            : string.Empty;
                         return null;
                     }
                     errorMessage =
@@ -142,8 +144,8 @@ namespace SW2URDF.URDFExport
                 if (HasLegacyConfiguration(model))
                 {
                     errorMessage = "This model contains a name-based URDF configuration from an older " +
-                        "exporter. Version 2 cannot identify nested reference geometry from those names. " +
-                        "Create and review a new URDF configuration.";
+                        "exporter. Use the reviewed migration to recover its links and joint settings. " +
+                        "The original configuration has not been changed.";
                     logger.Warn(errorMessage);
                     return null;
                 }
@@ -202,11 +204,9 @@ namespace SW2URDF.URDFExport
                     HasCurrentConfigurationAttribute(model);
                 if (current == null &&
                     !hasCurrentAttribute &&
-                    HasLegacyConfiguration(model))
+                    HasLegacyConfiguration(model) && !allowOverwrite)
                 {
-                    return ConfigurationSaveResult.Failed(
-                        "A name-based URDF configuration from an older exporter still exists. " +
-                        "Delete it, create and review a version 2 configuration, then save again.");
+                    return ConfigurationSaveResult.ConfirmationRequired();
                 }
                 if (current == null &&
                     hasCurrentAttribute &&
@@ -584,6 +584,37 @@ namespace SW2URDF.URDFExport
                     exception);
                 return false;
             }
+        }
+
+        public static bool TryReadLegacyConfiguration(ModelDoc2 model, out string data, out double version)
+        {
+            data = string.Empty;
+            version = 0;
+            // Never bypass a damaged or unsupported current-format configuration.
+            if (HasCurrentConfigurationAttribute(model) && !HasOnlyPreparedConfigurationSlots(model))
+                return false;
+            int count = 0;
+            foreach (Feature feature in CommonSwOperations.EnumerateComObjects<Feature>(
+                model.FeatureManager.GetFeatures(true) as object[], "reading legacy URDF configuration"))
+            {
+                if (feature.GetTypeName2() != "Attribute")
+                    continue;
+                var attribute = CommonSwOperations.TryCastComObject<SolidWorks.Interop.sldworks.Attribute>(
+                    feature.GetSpecificFeature2(), "reading legacy URDF configuration");
+                if (attribute == null)
+                    continue;
+                string featureName = feature.Name ?? string.Empty;
+                string definitionName = attribute.GetName() ?? string.Empty;
+                if (IsConfigurationSlotName(featureName) || IsConfigurationSlotName(definitionName) ||
+                    !(featureName.StartsWith(UrdfConfigurationAttributePrefix, StringComparison.Ordinal) ||
+                      definitionName.StartsWith(UrdfConfigurationAttributePrefix, StringComparison.Ordinal)))
+                    continue;
+                if (++count > 1)
+                    throw new SerializationException("Multiple legacy export configurations exist. No configuration was changed.");
+                if (!TryReadConfigurationAttribute(attribute, out data, out version))
+                    throw new SerializationException("The legacy export configuration cannot be read. No configuration was changed.");
+            }
+            return count == 1;
         }
 
         private static bool HasLegacyConfiguration(ModelDoc2 model)

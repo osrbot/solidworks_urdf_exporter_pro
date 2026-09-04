@@ -77,6 +77,13 @@ namespace SW2URDF.URDF
         [DataMember]
         public CadFeatureReference AxisReference;
 
+        // Read only during the explicit v1.5 migration; cleared before saving v2.
+        [DataMember(Name = "AxisName", IsRequired = false, EmitDefaultValue = false)]
+        internal string LegacyAxisName;
+
+        [DataMember(Name = "CoordinateSystemName", IsRequired = false, EmitDefaultValue = false)]
+        internal string LegacyCoordinateSystemName;
+
         [DataMember(IsRequired = false, EmitDefaultValue = false)]
         public string ConfigurationSource;
 

@@ -164,8 +164,8 @@ namespace SW2URDF.URDFExport
                     model,
                     BaseNode,
                     allowOverwrite),
-                warnUser);
-            if (saved)
+                warnUser, out bool persisted);
+            if (persisted)
             {
                 ClearExportSessionDraft();
             }
@@ -924,9 +924,40 @@ namespace SW2URDF.URDFExport
 
             if (!string.IsNullOrWhiteSpace(errorMessage) && !restoredDraft)
             {
+                try
+                {
+                    if (ConfigurationSerialization.TryReadLegacyConfiguration(
+                        ActiveSWModel, out string legacyData, out double legacyVersion))
+                    {
+                        var plan = new LegacyConfigurationMigration(legacyData, legacyVersion,
+                            new ReferenceGeometryCatalog(ActiveSWModel, false).Entries);
+                        if (!plan.IsResolved)
+                            plan = new LegacyConfigurationMigration(legacyData, legacyVersion,
+                                new ReferenceGeometryCatalog(ActiveSWModel).Entries);
+                        using (var dialog = new LegacyConfigurationMigrationDialog(plan))
+                        {
+                            if (dialog.ShowDialog() != DialogResult.OK)
+                                return false;
+                        }
+                        baseNode = plan.CreateReviewedTree();
+                        LegacyConfigurationMigration.EnsureComponentBindings(baseNode,
+                            pid => CommonSwOperations.LoadSWComponent(ActiveSWModel, pid) != null);
+                        errorMessage = string.Empty;
+                    }
+                }
+                catch (Exception exception)
+                {
+                    logger.Error("Legacy configuration migration failed without writing the model.", exception);
+                    errorMessage = ChineseUiText.Translate(
+                        "The old configuration could not be migrated. It has not been changed.\r\n",
+                        "旧配置暂时无法迁移，原配置未修改。\r\n") + exception.Message;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(errorMessage) && !restoredDraft)
+            {
                 MessageBox.Show(
-                    errorMessage + "\r\n\r\nEither resolve the issue or delete the configuration " +
-                    "from the feature manager.",
+                    errorMessage,
                     "SW2URDF");
                 return false;
             }

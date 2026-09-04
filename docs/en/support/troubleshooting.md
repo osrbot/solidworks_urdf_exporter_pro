@@ -11,8 +11,18 @@ than zero. For bounded joints, also check the lower and upper limits.
 - Confirm that the reference geometry was not deleted or replaced.
 - Confirm that the component is not unresolved or in a lightweight state.
 - If the assembly hierarchy changed, reopen the affected joint and select the correct reference.
-- For configurations created with very old community releases, recreate the affected settings
-  instead of relying only on old names.
+
+## An Older Export Configuration Is Detected
+
+Do not delete the old configuration first. For v1.5 configurations, a migration dialog preserves
+the Link tree, joint parameters, and component bindings while reviewing coordinate systems and axes.
+Unique matches in the original owning scope are selected automatically; unresolved references
+require an explicit selection.
+
+After confirming migration, review the normal export pages. Saving adds the current-format
+configuration and retains the old one. Cancelling does not modify the original configuration.
+Only v1.5 migration is supported currently; other versions or unreadable data are reported rather
+than guessed.
 
 ## Inertia Preview Fails
 

@@ -290,7 +290,7 @@ namespace SW2URDF.UI
             builder.AppendLine();
             builder.AppendLine("快速功能索引");
             builder.AppendLine();
-            builder.AppendLine("- 自动加载 Link 树配置: 如果装配体里存在 SolidWorks 特征 URDF Export Configuration (v2)，插件启动导出时会恢复上次保存的 Link/Joint 树、命名、父子关系和已保存属性。v2 使用组件实例 PID + 参考几何特征 PID，可区分任意装配深度中的 Unicode 或同名坐标系/参考轴。v1.x 名称型配置不会自动迁移，必须重新创建并审核。");
+            builder.AppendLine("- 自动加载 Link 树配置: 启动导出时恢复已保存的 Link/Joint 树、命名、父子关系和属性。检测到 v1.5 旧配置时，会打开迁移确认窗口；可唯一识别的坐标系和轴自动匹配，缺失或重名项需要重新选择。确认后可继续检查，正式保存时新增当前配置并保留旧配置；取消不会修改原配置。其他旧版本暂不支持迁移。");
             builder.AppendLine("- 保存配置: 导出或关闭配置页时，插件会提示是否保存变化；保存后配置写回当前装配体文件，而不是单独散落在外部目录。");
             builder.AppendLine("- PID 重连: 加载当前 v2 配置时，会分别用保存的 SolidWorks 组件实例 PID 和特征 PID 重新关联零件与参考几何；显示名称和配置名称只用于界面提示，不参与身份判断。如果对象被删除、替换或另存导致 PID 失效，会列出需要人工检查的 Link。");
             builder.AppendLine("- 编辑 Link 树...: 打开自由画布，可增加子 Link、拖拽调整父子关系、框选并复制/粘贴对称结构。画布在副本上编辑；取消不修改原树，应用后才提交。新增或粘贴的 Link 不复制 SolidWorks 组件绑定，需要回到属性页重新分配组件。");
@@ -340,7 +340,7 @@ namespace SW2URDF.UI
             builder.AppendLine();
             builder.AppendLine("Quick feature index");
             builder.AppendLine();
-            builder.AppendLine("- Automatic Link tree loading: when the assembly contains the SolidWorks feature URDF Export Configuration (v2), the exporter restores the saved Link/Joint tree, names, parent-child structure, and saved properties at startup. Version 2 binds each reference with a component-instance PID plus a reference-feature PID, so Unicode or duplicate coordinate-system and axis names remain distinct at any assembly depth. Name-based v1.x configurations are not migrated automatically; recreate and review them explicitly.");
+            builder.AppendLine("- Automatic Link tree loading: the exporter restores the saved Link/Joint tree, names, relationships, and properties. Name-based v1.x configurations are not migrated automatically: v1.5 opens a review dialog, matching unique references and requiring explicit selections for missing or ambiguous ones. Saving adds the current configuration and retains the old one; cancelling changes nothing. Other legacy versions are not supported yet.");
             builder.AppendLine("- Save configuration: when the configuration changes, the exporter prompts to save it back into the current assembly document instead of scattering separate sidecar files.");
             builder.AppendLine("- PID reconnect: when a current v2 configuration is loaded, saved SolidWorks component-instance and feature PIDs reconnect components and reference geometry independently. Display and configuration names are UI metadata, not identity. If an object was deleted, replaced, or saved as a new file, the exporter reports the Links that need inspection.");
             builder.AppendLine("- Edit Link Tree...: opens a free canvas for adding child Links, drag-to-reparent, box selection, and structure copy/paste. The canvas edits a working copy: Cancel discards changes and Apply commits them. New or pasted Links do not inherit SolidWorks component bindings and must be assigned on the property page.");

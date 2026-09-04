@@ -8,6 +8,12 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Added
 
+- Added reviewed migration of v1.5 SolidWorks export configurations. It preserves the Link tree,
+  joint parameters and component bindings, requires explicit choices for ambiguous references,
+  and retains the original configuration when the migrated configuration is saved.
+- Added migration regression coverage for interrupted saves, missing components, cancellation,
+  and preservation of user-edited origins. Declining a configuration save now retains the recovery draft.
+
 - Added two first-class, user-selectable robot-asset targets alongside the existing ROS package
   targets:
   - OpenUSD writes `USD/<package>/robot.usd`, converted geometry dependencies, retained source mesh
@@ -131,6 +137,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 ### 简体中文
 
 #### 新增
+
+- 支持审核后迁移 v1.5 导出配置，保留 Link 树、关节参数和组件绑定；不明确的坐标系与轴需手动选择，
+  保存迁移结果后仍保留旧配置，不再要求删除配置重建。
+- 补充保存中断、组件缺失、取消迁移及手动原点参数的回归测试；拒绝保存配置时保留恢复草稿。
 
 - 在现有 ROS 功能包目标之外，新增两种一等、可由用户选择的机器人资产目标：
   - OpenUSD 写出 `USD/<package>/robot.usd`、转换后的几何依赖、保留的源网格证据、

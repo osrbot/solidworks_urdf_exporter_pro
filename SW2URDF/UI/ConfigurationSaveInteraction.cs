@@ -11,8 +11,20 @@ namespace SW2URDF.UI
 
         public static bool Save(
             Func<bool, ConfigurationSaveResult> saveOperation,
-            bool confirmChanges)
+            bool confirmChanges, out bool persisted)
         {
+            return Save(saveOperation, confirmChanges,
+                () => MessageBox.Show(
+                    "The configuration has changed. Would you like to save it?",
+                    "Save Export Configuration", MessageBoxButtons.YesNo) == DialogResult.Yes,
+                error => MessageBox.Show(error, "SW2URDF"), out persisted);
+        }
+
+        internal static bool Save(
+            Func<bool, ConfigurationSaveResult> saveOperation,
+            bool confirmChanges, Func<bool> confirm, Action<string> showError, out bool persisted)
+        {
+            persisted = false;
             if (saveOperation == null)
             {
                 throw new ArgumentNullException("saveOperation");
@@ -21,11 +33,7 @@ namespace SW2URDF.UI
             ConfigurationSaveResult result = saveOperation(!confirmChanges);
             if (result.Status == ConfigurationSaveStatus.ConfirmationRequired)
             {
-                DialogResult answer = MessageBox.Show(
-                    "The configuration has changed. Would you like to save it?",
-                    "Save Export Configuration",
-                    MessageBoxButtons.YesNo);
-                if (answer != DialogResult.Yes)
+                if (!confirm())
                 {
                     return true;
                 }
@@ -34,9 +42,14 @@ namespace SW2URDF.UI
 
             if (result.Status == ConfigurationSaveStatus.Failed)
             {
-                MessageBox.Show(result.ErrorMessage, "SW2URDF");
+                showError(result.ErrorMessage);
                 return false;
             }
+
+            persisted = result.Status == ConfigurationSaveStatus.Saved ||
+                result.Status == ConfigurationSaveStatus.Unchanged;
+            if (!persisted)
+                return false;
 
             if (!string.IsNullOrWhiteSpace(result.InformationMessage))
             {
