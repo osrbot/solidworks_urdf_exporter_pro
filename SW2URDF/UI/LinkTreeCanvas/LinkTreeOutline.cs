@@ -25,11 +25,13 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
     /// <summary>
     /// Converts Link topology to and from a small Markdown heading outline.
-    /// Joint and CAD data remain owned by existing nodes matched by Link name.
+    /// Stable heading IDs own configuration; names and positions never infer a rename.
     /// </summary>
     public static class LinkTreeOutline
     {
         private static readonly Regex HeadingPattern = new Regex("^\\s*(#+)\\s*(.*?)\\s*$");
+        private static readonly Regex IdentityPattern = new Regex(
+            @"^(.*?)\s*<!--\s*link-id:([0-9a-fA-F-]+)\s*-->\s*$");
 
         public static string Serialize(LinkTreeDocument document)
         {
@@ -79,7 +81,10 @@ namespace SW2URDF.UI.LinkTreeCanvas
         {
             builder.Append(new string('#', level));
             builder.Append(' ');
-            builder.AppendLine(node.Name);
+            builder.Append(node.Name);
+            builder.Append(" <!-- link-id:");
+            builder.Append(node.Id.ToString("D"));
+            builder.AppendLine(" -->");
             foreach (LinkTreeNode child in document.ChildrenOf(node.Id))
             {
                 AppendNode(builder, document, child, level + 1);
@@ -110,8 +115,19 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
                 int level = match.Groups[1].Value.Length;
                 string name = match.Groups[2].Value.Trim();
+                Guid? identity = null;
+                Match identityMatch = IdentityPattern.Match(name);
+                if (identityMatch.Success)
+                {
+                    Guid parsedId;
+                    if (!Guid.TryParse(identityMatch.Groups[2].Value, out parsedId) || parsedId == Guid.Empty)
+                        errors.Add("Invalid Link identity on line " + (index + 1) + ".");
+                    else
+                        identity = parsedId;
+                    name = identityMatch.Groups[1].Value.Trim();
+                }
                 string nameError = LinkTreeDocument.ValidateRosName(name);
-                if (nameError != null)
+                if (nameError != null && !identity.HasValue)
                 {
                     errors.Add("第 " + (index + 1) + " 行：" + nameError);
                 }
@@ -134,7 +150,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 {
                     lastOutlineIndexAtLevel.TryGetValue(level - 1, out parentOutlineIndex);
                 }
-                result.Add(new OutlineLine(index + 1, level, name, parentOutlineIndex));
+                result.Add(new OutlineLine(index + 1, level, name, parentOutlineIndex, identity));
                 lastOutlineIndexAtLevel[level] = result.Count - 1;
                 foreach (int deeperLevel in lastOutlineIndexAtLevel.Keys
                     .Where(item => item > level)
@@ -150,6 +166,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 errors.Add("Link 树大纲不能为空。");
             }
             foreach (IGrouping<string, OutlineLine> duplicate in result
+                .Where(line => !string.IsNullOrWhiteSpace(line.Name))
                 .GroupBy(line => line.Name, StringComparer.OrdinalIgnoreCase)
                 .Where(group => group.Count() > 1))
             {
@@ -169,19 +186,17 @@ namespace SW2URDF.UI.LinkTreeCanvas
             }
 
             Dictionary<string, LinkTreeNode> sourceByName = source.Nodes
+                .Where(node => !string.IsNullOrWhiteSpace(node.Name))
                 .GroupBy(node => node.Name, StringComparer.OrdinalIgnoreCase)
                 .Where(group => group.Count() == 1)
                 .ToDictionary(group => group.Key, group => group.Single(), StringComparer.OrdinalIgnoreCase);
             IDictionary<int, LinkTreeNode> matchedOriginals = MatchOriginalNodes(
                 outline,
                 source,
-                sourceByName);
-            HashSet<string> outlineNames = new HashSet<string>(
-                outline.Select(line => line.Name),
-                StringComparer.OrdinalIgnoreCase);
-            Dictionary<string, Guid> reservedJointOwners = source.Nodes
+                sourceByName, errors);
+            if (errors.Count > 0) return null;
+            Dictionary<string, Guid> reservedJointOwners = matchedOriginals.Values
                 .Where(node => node.ParentId.HasValue &&
-                    outlineNames.Contains(node.Name) &&
                     !string.IsNullOrWhiteSpace(node.JointName))
                 .GroupBy(node => node.JointName, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(
@@ -248,7 +263,8 @@ namespace SW2URDF.UI.LinkTreeCanvas
         private static IDictionary<int, LinkTreeNode> MatchOriginalNodes(
             IList<OutlineLine> outline,
             LinkTreeDocument source,
-            IDictionary<string, LinkTreeNode> sourceByName)
+            IDictionary<string, LinkTreeNode> sourceByName,
+            IList<string> errors)
         {
             Dictionary<int, LinkTreeNode> matches = new Dictionary<int, LinkTreeNode>();
             HashSet<Guid> usedIds = new HashSet<Guid>();
@@ -257,58 +273,43 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 return matches;
             }
 
-            matches[0] = source.Root;
-            usedIds.Add(source.Root.Id);
-
+            for (int index = 0; index < outline.Count; index++)
+            {
+                if (!outline[index].Identity.HasValue) continue;
+                LinkTreeNode original = source.Find(outline[index].Identity.Value);
+                if (original == null || !usedIds.Add(original.Id))
+                {
+                    errors.Add("Unknown or duplicate Link identity on line " + outline[index].LineNumber +
+                        ". Reset the outline; keep each existing link-id once and omit it only for a new Link.");
+                    continue;
+                }
+                matches[index] = original;
+            }
+            if (matches.ContainsKey(0) && matches[0].Id != source.Root.Id)
+                errors.Add("The root Link identity cannot be changed.");
+            if (!matches.ContainsKey(0))
+            {
+                LinkTreeNode namedRoot;
+                if (sourceByName.TryGetValue(outline[0].Name, out namedRoot) && namedRoot.Id != source.Root.Id)
+                    errors.Add("The root Link cannot be replaced by an existing child. Keep the root link-id when renaming it.");
+                matches[0] = source.Root;
+                if (!usedIds.Add(source.Root.Id)) errors.Add("The root Link cannot become a child.");
+            }
             for (int index = 1; index < outline.Count; index++)
             {
-                LinkTreeNode exactMatch;
-                if (sourceByName.TryGetValue(outline[index].Name, out exactMatch) &&
-                    usedIds.Add(exactMatch.Id))
+                if (matches.ContainsKey(index)) continue;
+                LinkTreeNode original;
+                if (sourceByName.TryGetValue(outline[index].Name, out original) &&
+                    !usedIds.Contains(original.Id))
                 {
-                    matches[index] = exactMatch;
+                    matches[index] = original;
+                    usedIds.Add(original.Id);
                 }
             }
-
-            int maximumLevel = outline.Max(line => line.Level);
-            for (int parentLevel = 1; parentLevel < maximumLevel; parentLevel++)
+            if (matches.Count < outline.Count && usedIds.Count < source.Nodes.Count)
             {
-                for (int parentIndex = 0; parentIndex < outline.Count; parentIndex++)
-                {
-                    if (outline[parentIndex].Level != parentLevel)
-                    {
-                        continue;
-                    }
-
-                    LinkTreeNode originalParent;
-                    if (!matches.TryGetValue(parentIndex, out originalParent))
-                    {
-                        continue;
-                    }
-
-                    List<int> unmatchedChildren = Enumerable.Range(0, outline.Count)
-                        .Where(index => outline[index].ParentOutlineIndex == parentIndex &&
-                            !matches.ContainsKey(index))
-                        .ToList();
-                    List<LinkTreeNode> unmatchedOriginalChildren = source
-                        .ChildrenOf(originalParent.Id)
-                        .Where(node => !usedIds.Contains(node.Id))
-                        .ToList();
-
-                    // Equal unmatched counts are the only unambiguous plain-text rename case.
-                    if (unmatchedChildren.Count == 0 ||
-                        unmatchedChildren.Count != unmatchedOriginalChildren.Count)
-                    {
-                        continue;
-                    }
-
-                    for (int childIndex = 0; childIndex < unmatchedChildren.Count; childIndex++)
-                    {
-                        LinkTreeNode original = unmatchedOriginalChildren[childIndex];
-                        matches[unmatchedChildren[childIndex]] = original;
-                        usedIds.Add(original.Id);
-                    }
-                }
+                errors.Add("Ambiguous Link rename/add/delete. Reset the outline and keep the link-id comments " +
+                    "when renaming or moving existing Links. Apply deletions separately before adding new Links.");
             }
             return matches;
         }
@@ -338,13 +339,15 @@ namespace SW2URDF.UI.LinkTreeCanvas
             public int Level { get; private set; }
             public string Name { get; private set; }
             public int ParentOutlineIndex { get; private set; }
+            public Guid? Identity { get; private set; }
 
-            public OutlineLine(int lineNumber, int level, string name, int parentOutlineIndex)
+            public OutlineLine(int lineNumber, int level, string name, int parentOutlineIndex, Guid? identity)
             {
                 LineNumber = lineNumber;
                 Level = level;
                 Name = name;
                 ParentOutlineIndex = parentOutlineIndex;
+                Identity = identity;
             }
         }
     }

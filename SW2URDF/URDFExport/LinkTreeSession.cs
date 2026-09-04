@@ -10,7 +10,7 @@ namespace SW2URDF.URDFExport
     /// Coordinates topology transactions. URDF configuration and CAD bindings are owned by
     /// separate stores and are combined only when a legacy/export projection is requested.
     /// </summary>
-    public sealed class LinkTreeSession : ILinkTreeCanvasHost
+    public sealed class LinkTreeSession : ILinkTreeCanvasHost, ILinkTreeCandidateValidator
     {
         private const double ColumnGap = 300;
         private const double RowGap = 118;
@@ -53,6 +53,46 @@ namespace SW2URDF.URDFExport
             return currentDocument.Clone();
         }
 
+        public IList<string> DraftDiagnostics { get { return currentDocument.Validate(); } }
+
+        private LinkTreeSession(LinkTreeSession source)
+        {
+            currentDocument = source.currentDocument.Clone();
+            configurations = source.configurations.Clone();
+            cadBindings = source.cadBindings.Clone();
+            projectionIds = new Dictionary<Link, Guid>(source.projectionIds);
+            Revision = source.Revision;
+            AppliedRoot = source.AppliedRoot;
+        }
+
+        public void ValidateTree(LinkTreeDocument document)
+        {
+            new LinkTreeSession(this).ApplyTree(document);
+        }
+
+        // Publish only a fully prepared candidate. A rejected/failed publisher leaves this
+        // session untouched; the UI publisher is responsible for restoring its own view.
+        public bool EditTree(LinkNode projection, Action<LinkTreeDocument> edit,
+            Func<LinkTreeDocument, bool> confirm = null, Action<LinkTreeSession> publish = null)
+        {
+            if (edit == null) throw new ArgumentNullException(nameof(edit));
+            LinkTreeSession candidate = new LinkTreeSession(this);
+            if (projection != null) candidate.CaptureTree(projection);
+            LinkTreeDocument document = candidate.LoadTree();
+            edit(document);
+            candidate.ApplyTree(document);
+            if (confirm != null && !confirm(document.Clone())) return false;
+            if (publish != null) publish(candidate);
+            currentDocument = candidate.currentDocument;
+            configurations = candidate.configurations;
+            cadBindings = candidate.cadBindings;
+            projectionIds = candidate.projectionIds;
+            computationProjectionIds = null;
+            AppliedRoot = candidate.AppliedRoot;
+            Revision++;
+            return true;
+        }
+
         public void ApplyTree(LinkTreeDocument document)
         {
             if (document == null)
@@ -60,13 +100,17 @@ namespace SW2URDF.URDFExport
                 throw new ArgumentNullException(nameof(document));
             }
 
-            IList<string> errors = document.Validate();
+            IList<string> errors = document.ValidateDraft();
             if (errors.Count > 0)
             {
                 throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
             }
 
             LinkTreeDocument candidateDocument = document.Clone();
+            if (currentDocument.Root.Id != candidateDocument.Root.Id)
+            {
+                throw new InvalidOperationException("The root Link identity cannot be replaced by a topology edit.");
+            }
             LinkConfigurationStore candidateConfigurations = configurations.Clone();
             CadBindingStore candidateBindings = cadBindings.Clone();
 
@@ -146,6 +190,8 @@ namespace SW2URDF.URDFExport
 
             if (previousDocument != null)
             {
+                if (validateCandidate && capturedDocument.Root.Id != previousDocument.Root.Id)
+                    throw new InvalidOperationException("The root Link identity cannot change during projection capture.");
                 MigrateStableMimicReferences(
                     previousDocument,
                     configurations,
@@ -569,6 +615,13 @@ namespace SW2URDF.URDFExport
                         sourceReference));
                 }
 
+                if (!candidateTarget.ParentId.HasValue ||
+                    string.IsNullOrWhiteSpace(candidateTarget.JointName))
+                {
+                    throw new InvalidOperationException(
+                        "A referenced Mimic target must keep a non-empty Joint name.");
+                }
+
                 candidateConfigurations.SetMimicReference(
                     sourceOwner.Id,
                     candidateTarget.JointName);
@@ -649,8 +702,7 @@ namespace SW2URDF.URDFExport
             LinkTreeDocument document,
             LinkConfigurationStore capturedConfigurations)
         {
-            // The legacy PropertyManager can hold an incomplete draft while the user fills in
-            // a newly created Link. The canvas Apply action still uses strict validation.
+            // Configuration completeness is an export concern, not a topology-edit gate.
             List<string> errors = document.ValidateDraft().ToList();
             errors.AddRange(capturedConfigurations.ValidateMimicReferences(
                 document.Nodes

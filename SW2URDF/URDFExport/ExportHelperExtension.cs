@@ -370,14 +370,12 @@ namespace SW2URDF.URDFExport
                 throw new Exception("Cannot compute mass properties because Link frame " +
                     GetReferenceDisplayLabel(link.FrameReference) + " was not found");
             }
-            List<Body2> bodies = GetBodies(link.SWComponents);
-
             logger.Info("Computing inertial properties for link " + link.Name +
-                " from " + bodies.Count + " solid bodies in the document frame, then " +
+                " from effective SolidWorks component properties in the document frame, then " +
                 "explicitly transforming COM and tensor to Link coordinate system " +
                 GetReferenceDisplayLabel(link.FrameReference));
-            MassPropertySnapshot massProperty = ReadLinkLocalMassProperty(
-                bodies,
+            MassPropertySnapshot massProperty = ReadEffectiveLinkMassProperty(
+                link,
                 linkTransform);
 
             ApplyMassPropertyToLink(link, massProperty);
@@ -388,6 +386,12 @@ namespace SW2URDF.URDFExport
                 out InertiaEllipsoid ellipsoid,
                 out string error))
             {
+                if (BuildPhysicalInertiaValidationRows(link).All(row => row.Passed))
+                {
+                    logger.Warn("Inertia is physically valid but its equivalent cuboid is degenerate for " +
+                        link.Name + ": " + error);
+                    return;
+                }
                 double[] urdfMoment = link.Inertial.Inertia.GetMoment();
                 throw new Exception(string.Format(
                     CultureInfo.InvariantCulture,
@@ -444,9 +448,14 @@ namespace SW2URDF.URDFExport
                     !record.Row.Passed)
                 .Select(record => String.Format(
                     CultureInfo.InvariantCulture,
-                    "{0} ({1})",
+                    "{0} ({1}){2}",
                     record.LinkName,
-                    record.Row.Quantity))
+                    record.Row.Quantity,
+                    record.Row.HasNumericComparison
+                        ? String.Format(CultureInfo.InvariantCulture,
+                            " [expected={0:G9}, actual={1:G9} {2}]", record.Row.SolidWorksExpected,
+                            record.Row.UrdfValue, record.Row.Unit)
+                        : ": " + record.Row.Message))
                 .Where(value => !String.IsNullOrWhiteSpace(value))
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(value => value, StringComparer.Ordinal)
@@ -505,6 +514,14 @@ namespace SW2URDF.URDFExport
 
             try
             {
+                MathTransform previousFrame = GetCoordinateSystemTransform(node.Link.FrameReference);
+                var edits = node.Link.InertialEditing;
+                bool needsPreviousFrame = edits != null && (edits.OriginEdited || edits.TensorEdited);
+                if (previousFrame == null && needsPreviousFrame)
+                    throw new InvalidOperationException("The previous Link frame could not be resolved; inertia edits cannot be transformed safely.");
+                if (previousFrame != null)
+                    InertialEditingPolicy.ReexpressEdits(node.Link,
+                        MathOps.GetTransformation(previousFrame), MathOps.GetTransformation(selectedFrame));
                 node.Link.FrameReference = frameReference.Clone();
                 LinkNode parentNode = node.Parent as LinkNode;
                 if (parentNode != null && !CreateJoint(parentNode.Link, node.Link))
@@ -552,7 +569,7 @@ namespace SW2URDF.URDFExport
 
             try
             {
-                LogSingleLinkInertialValidation(link, records);
+                if (!link.isFixedFrame) LogSingleLinkInertialValidation(link, records);
             }
             catch (Exception e)
             {
@@ -678,12 +695,25 @@ namespace SW2URDF.URDFExport
             Link link,
             MathTransform jointTransform)
         {
-            List<Body2> bodies = GetBodies(link.SWComponents);
-            MassPropertySnapshot massProperty = ReadLinkLocalMassProperty(
-                bodies,
+            MassPropertySnapshot massProperty = ReadEffectiveLinkMassProperty(
+                link,
                 jointTransform);
-            double[] expectedMoment = ConvertSolidWorksMomentToUrdfConvention(
-                massProperty.Moment);
+            return BuildEffectiveInertiaComparisonRows(link, massProperty);
+        }
+
+        internal static List<InertialValidationRow> BuildEffectiveInertiaComparisonRows(
+            Link link, MassPropertySnapshot massProperty)
+        {
+            Inertial source = CreateInertial(massProperty);
+            Inertial expected = source;
+            if (link.InertialEditing != null && link.InertialEditing.Source != null)
+            {
+                var policy = link.InertialEditing.Clone();
+                policy.SourceHasInertiaOverride = massProperty.HasInertiaOverride;
+                expected = InertialEditingPolicy.Resolve(policy, link.Inertial, source);
+            }
+            double[] expectedMoment = ConvertSolidWorksMomentToUrdfConvention(expected.Inertia.GetMoment());
+            double[] expectedOrigin = expected.Origin.GetXYZ();
 
             double[] urdfOrigin = link.Inertial.Origin.GetXYZ();
             double[] urdfMoment = new double[]
@@ -696,12 +726,12 @@ namespace SW2URDF.URDFExport
                 link.Inertial.Inertia.Izz
             };
 
-            return new List<InertialValidationRow>
+            var rows = new List<InertialValidationRow>
             {
-                new InertialValidationRow("mass", "kg", massProperty.Mass, link.Inertial.Mass.Value),
-                new InertialValidationRow("origin.x", "m", massProperty.CenterOfMass[0], urdfOrigin[0]),
-                new InertialValidationRow("origin.y", "m", massProperty.CenterOfMass[1], urdfOrigin[1]),
-                new InertialValidationRow("origin.z", "m", massProperty.CenterOfMass[2], urdfOrigin[2]),
+                new InertialValidationRow("mass", "kg", expected.Mass.Value, link.Inertial.Mass.Value),
+                new InertialValidationRow("origin.x", "m", expectedOrigin[0], urdfOrigin[0]),
+                new InertialValidationRow("origin.y", "m", expectedOrigin[1], urdfOrigin[1]),
+                new InertialValidationRow("origin.z", "m", expectedOrigin[2], urdfOrigin[2]),
                 new InertialValidationRow("ixx", "kg*m^2", expectedMoment[0], urdfMoment[0]),
                 new InertialValidationRow("ixy", "kg*m^2", expectedMoment[1], urdfMoment[1]),
                 new InertialValidationRow("ixz", "kg*m^2", expectedMoment[2], urdfMoment[2]),
@@ -709,6 +739,16 @@ namespace SW2URDF.URDFExport
                 new InertialValidationRow("iyz", "kg*m^2", expectedMoment[4], urdfMoment[4]),
                 new InertialValidationRow("izz", "kg*m^2", expectedMoment[5], urdfMoment[5])
             };
+            var state = link.InertialEditing;
+            rows.Add(InertialValidationRow.Diagnostic("inertial.source", "source", "PASS",
+                String.Format(CultureInfo.InvariantCulture,
+                    "SW effective mass={0:R} kg; export mass={1:R} kg; measured mass={2}; manual origin={3}; manual tensor={4}; SW inertia override={5}; proportional calibration={6}. Numeric checks compare the resolved export values, not raw CAD values for edited fields.",
+                    massProperty.Mass, link.Inertial.Mass.Value,
+                    state != null && state.MassEdited, state != null && state.OriginEdited,
+                    state != null && state.TensorEdited, massProperty.HasInertiaOverride,
+                    state != null && state.MassEdited && !state.CalibrationDisabled &&
+                    !state.TensorEdited && !massProperty.HasInertiaOverride)));
+            return rows;
         }
 
         private InertialValidationRow BuildCenterOfMassBoundsValidationRow(Link link)
@@ -734,7 +774,7 @@ namespace SW2URDF.URDFExport
             return InertialValidationRow.Diagnostic(
                 "origin.within_selected_geometry_bounds",
                 "geometry",
-                inside ? "PASS" : "FAIL",
+                inside ? "PASS" : "WARN",
                 string.Format(
                     CultureInfo.InvariantCulture,
                     "COM=({0:G9},{1:G9},{2:G9}); bounds=[{3:G9},{4:G9}]x[{5:G9},{6:G9}]x[{7:G9},{8:G9}] m.",
@@ -776,6 +816,10 @@ namespace SW2URDF.URDFExport
                     ? "COM origin is finite: " + FormatDiagnosticVector(origin)
                     : "COM origin must contain three finite values."));
             rows.Add(BuildOriginMagnitudeDiagnostic(origin));
+            double[] orientation = link.Inertial.Origin == null ? null : link.Inertial.Origin.GetRPY();
+            rows.Add(InertialValidationRow.Diagnostic("origin.rpy_finite", "physical",
+                orientation != null && orientation.Length == 3 && orientation.All(IsFinite) ? "PASS" : "FAIL",
+                "Inertial orientation must contain three finite angles."));
 
             double[] moment = link.Inertial.Inertia == null ? null : link.Inertial.Inertia.GetMoment();
             double[] principalMoments;
@@ -1514,6 +1558,7 @@ namespace SW2URDF.URDFExport
             ModelDoc2 model,
             IList<Body2> bodies)
         {
+            if (bodies == null) return SolidWorksMassPropertyReader.Read(model, null);
             // SW2023 invalidates one cached result depending on whether CenterOfMass or
             // GetMomentOfInertia is read first. Keep those reads on separate COM objects.
             // SolidWorks owns their COM lifetime; explicitly releasing either RCW can terminate
@@ -1557,10 +1602,37 @@ namespace SW2URDF.URDFExport
                 throw new ArgumentNullException("link");
             }
 
-            link.Inertial.Mass.Value = massProperty.Mass;
-            link.Inertial.Origin.SetXYZ(massProperty.CenterOfMass);
-            link.Inertial.Origin.SetRPY(new double[] { 0, 0, 0 });
-            link.Inertial.Inertia.SetSolidWorksMomentMatrix(massProperty.Moment);
+            InertialEditingPolicy.ApplySource(link, CreateInertial(massProperty),
+                massProperty.HasInertiaOverride);
+        }
+
+        internal static List<InertialValidationRecord> BuildPhysicalInertialValidationRecords(Link root)
+        {
+            var records = new List<InertialValidationRecord>();
+            if (root == null) return records;
+            if (!root.isFixedFrame)
+                records.AddRange(BuildPhysicalInertiaValidationRows(root).Select(row =>
+                    new InertialValidationRecord(root.Name, "Link frame", row)));
+            foreach (Link child in root.Children)
+                records.AddRange(BuildPhysicalInertialValidationRecords(child));
+            return records;
+        }
+
+        private static Inertial CreateInertial(MassPropertySnapshot massProperty)
+        {
+            var value = new Inertial();
+            value.Mass.Value = massProperty.Mass;
+            value.Origin.SetXYZ(massProperty.CenterOfMass);
+            value.Origin.SetRPY(new double[] { 0, 0, 0 });
+            value.Inertia.SetSolidWorksMomentMatrix(massProperty.Moment);
+            return value;
+        }
+
+        private MassPropertySnapshot ReadEffectiveLinkMassProperty(Link link, MathTransform linkFrameToDocument)
+        {
+            var source = SolidWorksMassPropertyReader.Read(ActiveSWModel, link.SWComponents);
+            return MassPropertyFrameConverter.Convert(source,
+                Matrix<double>.Build.DenseIdentity(4), MathOps.GetTransformation(linkFrameToDocument));
         }
 
         private static void ComputeVisualCollisionProperties(Link link)

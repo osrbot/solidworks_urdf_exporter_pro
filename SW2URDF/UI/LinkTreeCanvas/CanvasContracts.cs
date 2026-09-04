@@ -9,4 +9,9 @@ namespace SW2URDF.UI.LinkTreeCanvas
         void ApplyTree(LinkTreeDocument document);
     }
 
+    public interface ILinkTreeCandidateValidator
+    {
+        void ValidateTree(LinkTreeDocument document);
+    }
+
 }

@@ -1457,6 +1457,8 @@ namespace SW2URDF.UI
                 return;
             }
 
+            bool refreshPreview = inertiaPreview != null && inertiaPreview.IsVisible;
+            if (refreshPreview) ClearInertiaPreview();
             try
             {
                 SaveLinkDataFromPropertyBoxes(node.Link);
@@ -1467,6 +1469,7 @@ namespace SW2URDF.UI
                     node,
                     selectedCoordinateSystem);
                 FillLinkPropertyBoxes(node.Link);
+                if (refreshPreview) ButtonShowInertiaPreviewClick(this, EventArgs.Empty);
                 logger.Info("Changed Link coordinate system for " + node.Link.Name +
                     " from " + Exporter.GetReferenceDisplayLabel(previousCoordinateSystem) +
                     " to " + Exporter.GetReferenceDisplayLabel(selectedCoordinateSystem));

@@ -5,7 +5,13 @@ namespace SW2URDF.URDFExport
 {
     internal sealed class MassPropertySnapshot
     {
-        public MassPropertySnapshot(double mass, double[] centerOfMass, double[] moment)
+        public MassPropertySnapshot(
+            double mass,
+            double[] centerOfMass,
+            double[] moment,
+            bool hasMassOverride = false,
+            bool hasCenterOfMassOverride = false,
+            bool hasInertiaOverride = false)
         {
             if (centerOfMass == null || centerOfMass.Length != 3)
             {
@@ -23,11 +29,17 @@ namespace SW2URDF.URDFExport
             Mass = mass;
             CenterOfMass = (double[])centerOfMass.Clone();
             Moment = (double[])moment.Clone();
+            HasMassOverride = hasMassOverride;
+            HasCenterOfMassOverride = hasCenterOfMassOverride;
+            HasInertiaOverride = hasInertiaOverride;
         }
 
         public double Mass { get; private set; }
         public double[] CenterOfMass { get; private set; }
         public double[] Moment { get; private set; }
+        public bool HasMassOverride { get; private set; }
+        public bool HasCenterOfMassOverride { get; private set; }
+        public bool HasInertiaOverride { get; private set; }
     }
 
     internal static class MassPropertyFrameConverter
@@ -50,7 +62,9 @@ namespace SW2URDF.URDFExport
                 sourceToTarget,
                 source.CenterOfMass);
             double[] moment = RotateTensor(sourceToTarget, source.Moment);
-            return new MassPropertySnapshot(source.Mass, centerOfMass, moment);
+            return new MassPropertySnapshot(
+                source.Mass, centerOfMass, moment,
+                source.HasMassOverride, source.HasCenterOfMassOverride, source.HasInertiaOverride);
         }
 
         private static double[] TransformPoint(Matrix<double> transform, double[] point)

@@ -44,6 +44,9 @@ namespace SW2URDF.URDF
         [DataMember]
         public Inertial Inertial;
 
+        [DataMember(EmitDefaultValue = false)]
+        public InertialEditingState InertialEditing;
+
         [DataMember]
         public Visual Visual;
 
@@ -286,6 +289,8 @@ namespace SW2URDF.URDF
 
         private void SetExportSettings(Link externalLink)
         {
+            InertialEditing = externalLink.InertialEditing == null
+                ? null : externalLink.InertialEditing.Clone();
             STLQualityFine = externalLink.STLQualityFine;
             MeshReductionRatio = externalLink.MeshReductionRatio;
             CollisionMeshStrategy = externalLink.CollisionMeshStrategy;

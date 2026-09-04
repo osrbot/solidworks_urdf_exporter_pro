@@ -10,6 +10,8 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization;
+using System.Runtime.ExceptionServices;
+using System.Threading;
 using System.Windows.Forms;
 using Xunit;
 using UrdfJoint = SW2URDF.URDF.Joint;
@@ -425,6 +427,202 @@ namespace SW2URDF.Test
 
     public class TestAssemblyExportLayout
     {
+        [Theory]
+        [InlineData(96)]
+        [InlineData(120)]
+        [InlineData(144)]
+        [InlineData(192)]
+        public void FooterMetricsDiscardLegacyWidthsAndAreIdempotent(int dpi)
+        {
+            using (var button = new Button { Text = "Previous", Width = 900, Height = 200 })
+            {
+                ModernWinFormsTheme.StyleSecondaryButton(button);
+                ModernWinFormsTheme.SetFont(button, 9F * dpi / button.DeviceDpi, FontStyle.Regular);
+                var margin = new Padding(0, 0, 8, 0);
+                ModernWinFormsTheme.ApplyFooterButtonMetrics(button, 92, margin, dpi);
+                Size expected = button.Size;
+                Assert.InRange(button.Width, (int)Math.Round(92 * dpi / 96D),
+                    (int)Math.Ceiling(120 * dpi / 96D));
+                Assert.Equal((int)Math.Round(36 * dpi / 96D), button.Height);
+                for (int pass = 0; pass < 20; pass++)
+                {
+                    ModernWinFormsTheme.ApplyFooterButtonMetrics(button, 92, margin, 192);
+                    button.Size = new Size(1600, 400);
+                    ModernWinFormsTheme.ApplyFooterButtonMetrics(button, 92, margin, dpi);
+                    Assert.Equal(expected, button.Size);
+                    Assert.Equal((int)Math.Round(8 * dpi / 96D), button.Margin.Right);
+                    Assert.True(button.GetPreferredSize(Size.Empty).Width <= button.Width);
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(96)]
+        [InlineData(120)]
+        [InlineData(144)]
+        [InlineData(192)]
+        public void ModelFooterKeepsEveryActionVisibleWithoutWidthAccumulation(int dpi)
+        {
+            RunDpiLayoutOnSta(() => VerifyModelFooterAtLogicalDpi(dpi));
+        }
+
+        private static void RunDpiLayoutOnSta(Action test)
+        {
+            Exception failure = null;
+            CultureInfo culture = CultureInfo.CurrentCulture;
+            CultureInfo uiCulture = CultureInfo.CurrentUICulture;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    Thread.CurrentThread.CurrentCulture = culture;
+                    Thread.CurrentThread.CurrentUICulture = uiCulture;
+                    // Fail the test instead of opening a hidden exception dialog.
+                    Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException, true);
+                    test();
+                }
+                catch (Exception error)
+                {
+                    failure = error;
+                }
+            });
+            thread.IsBackground = true;
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            Assert.True(thread.Join(TimeSpan.FromSeconds(60)),
+                "DPI layout did not finish within 60 seconds on its STA thread.");
+            if (failure != null) ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+
+        private static void VerifyModelFooterAtLogicalDpi(int dpi)
+        {
+            // This is a logical-DPI test, not a native monitor transition.
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                // Show real HWNDs without running the SolidWorks-dependent Load handler.
+                form.Load -= (EventHandler)Delegate.CreateDelegate(typeof(EventHandler), form,
+                    "AssemblyExportFormLoad");
+                form.ShowInTaskbar = false;
+                form.StartPosition = FormStartPosition.Manual;
+                form.Location = new Point(-32000, -32000);
+                form.Show();
+                float factor = dpi / form.CurrentAutoScaleDimensions.Width;
+                form.Scale(new SizeF(factor, factor));
+                form.MinimumSize = Size.Empty;
+                string[] names = { "modernModelCancelButton", "modernModelPreviousButton",
+                    "modernUsdSettingsButton", "buttonLinksExportUrdfOnly", "buttonLinksFinish" };
+                int[] minima = { 92, 92, 140, 150, 176 };
+                var buttons = names.Select(name => GetControl<Button>(form, name)).ToArray();
+                foreach (Button button in buttons)
+                    ModernWinFormsTheme.SetFont(button, 9F * factor, FontStyle.Regular);
+                InvokePrivate(form, "RefreshModernFooterMetrics", dpi);
+                Size[] sizes = buttons.Select(button => button.Size).ToArray();
+                for (int cycle = 0; cycle < 6; cycle++)
+                {
+                    form.ClientSize = new Size((cycle % 2 == 0 ? 1040 : 1120) * dpi / 96,
+                        700 * dpi / 96);
+                    foreach (string page in new[] { "Joint", "Link", "Model" })
+                    {
+                        ShowModernAssemblyPage(form, page);
+                        string footerName = page == "Joint" ? "modernJointFooter" :
+                            page == "Link" ? "modernLinkFooter" : "modernModelFooter";
+                        Control pageFooter = GetControl<Control>(form, footerName);
+                        if (page == "Link")
+                        {
+                            var actions = GetControl<FlowLayoutPanel>(form, "inertialEditingActions");
+                            var calibrate = GetControl<CheckBox>(form, "checkBoxCalibrateInertia");
+                            var reset = GetControl<Button>(form, "buttonResetInertia");
+                            Assert.True(actions.AutoSize);
+                            Assert.True(actions.WrapContents);
+                            Assert.Equal(FlatStyle.Flat, reset.FlatStyle);
+                            AssertContainedIn(actions, actions.Parent);
+                            AssertContainedIn(calibrate, actions);
+                            AssertContainedIn(reset, actions);
+                            Assert.False(calibrate.Bounds.IntersectsWith(reset.Bounds));
+                            Assert.True(TextRenderer.MeasureText(reset.Text, reset.Font).Width +
+                                reset.Padding.Horizontal <= reset.Width);
+                        }
+                        foreach (Button action in Descendants(pageFooter).OfType<Button>())
+                        {
+                            Assert.True(action.Visible, action.Name);
+                            AssertContainedIn(action, pageFooter);
+                            AssertContainedIn(action, action.Parent);
+                            Assert.True(action.GetPreferredSize(Size.Empty).Width <= action.Width);
+                        }
+                    }
+                    InvokePrivate(form, "RefreshModernFooterMetrics", dpi);
+                    InvokePrivate(form, "RefreshModernInputMetrics", dpi);
+                    form.PerformLayout();
+                    Control footer = GetControl<Control>(form, "modernModelFooter");
+                    footer.PerformLayout();
+                    for (int index = 0; index < buttons.Length; index++)
+                    {
+                        Button button = buttons[index];
+                        Assert.True(button.Visible, button.Name);
+                        Assert.Equal(sizes[index], button.Size);
+                        Size text = TextRenderer.MeasureText(button.Text, button.Font);
+                        int minimum = (int)Math.Round(minima[index] * dpi / 96D);
+                        Size content = MeasureFreshFooterButton(button);
+                        Assert.Equal(new Size(Math.Max(minimum, content.Width),
+                            Math.Max((int)Math.Round(36 * dpi / 96D), content.Height)), button.Size);
+                        Assert.True(text.Width + button.Padding.Horizontal <= button.Width);
+                        Assert.True(text.Height + button.Padding.Vertical <= button.Height);
+                        AssertContainedIn(button, footer);
+                        AssertContainedIn(button, button.Parent);
+                        if (index > 0) Assert.True(buttons[index - 1].Right <= button.Left);
+                    }
+                    var input = GetControl<TextBox>(form, "textBoxRosPackageName");
+                    Assert.Equal(Math.Max((int)Math.Round(28 * dpi / 96D), input.PreferredHeight),
+                        input.Height);
+                }
+            }
+        }
+
+        [Fact]
+        public void InfoBannerRepaintsItsWholeSurfaceWhenResized()
+        {
+            using (var banner = new ModernInfoPanel())
+            {
+                MethodInfo getStyle = typeof(Control).GetMethod("GetStyle",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.True((bool)getStyle.Invoke(banner, new object[] { ControlStyles.ResizeRedraw }));
+                Assert.True((bool)getStyle.Invoke(banner, new object[] { ControlStyles.OptimizedDoubleBuffer }));
+                banner.BackColor = ModernWinFormsTheme.AccentTint;
+                banner.Paint += ModernWinFormsTheme.DrawCardBorder;
+                banner.Size = new Size(500, 54);
+                Assert.NotEqual(IntPtr.Zero, banner.Handle);
+                Rectangle invalidated = Rectangle.Empty;
+                banner.Invalidated += (sender, args) => invalidated = args.InvalidRect;
+                banner.Width = 700;
+                Assert.True(invalidated.Contains(banner.ClientRectangle));
+                using (var bitmap = new Bitmap(700, 54))
+                {
+                    banner.DrawToBitmap(bitmap, banner.ClientRectangle);
+                    Assert.Equal(banner.BackColor.ToArgb(), bitmap.GetPixel(499, 27).ToArgb());
+                    Assert.NotEqual(banner.BackColor.ToArgb(), bitmap.GetPixel(699, 27).ToArgb());
+                }
+            }
+        }
+
+        private static Size MeasureFreshFooterButton(Button source)
+        {
+            // A separate control has no legacy bounds or cached minimum size.
+            using (var measure = new Button
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlatStyle = source.FlatStyle,
+                Font = source.Font,
+                Padding = source.Padding,
+                Text = source.Text,
+                UseCompatibleTextRendering = source.UseCompatibleTextRendering
+            })
+            {
+                measure.FlatAppearance.BorderSize = source.FlatAppearance.BorderSize;
+                return measure.GetPreferredSize(Size.Empty);
+            }
+        }
+
         [Theory]
         [InlineData("", "请选择 Joint 类型（必填）", "Select joint type (required)")]
         [InlineData(
@@ -2716,13 +2914,14 @@ namespace SW2URDF.Test
 
         private static object InvokePrivate(
             AssemblyExportForm form,
-            string methodName)
+            string methodName,
+            params object[] arguments)
         {
             MethodInfo method = typeof(AssemblyExportForm).GetMethod(
                 methodName,
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(method);
-            return method.Invoke(form, null);
+            return method.Invoke(form, arguments);
         }
 
         private static void ShowModernAssemblyPage(
@@ -3152,7 +3351,11 @@ namespace SW2URDF.Test
 
             foreach (Button button in buttons)
             {
-                Size preferred = button.GetPreferredSize(Size.Empty);
+                // A non-AutoSize Button can report its existing bounds as its
+                // preferred size. Measure glyphs instead of accepting that tautology.
+                Size text = TextRenderer.MeasureText(button.Text ?? String.Empty, button.Font);
+                Size preferred = new Size(text.Width + button.Padding.Horizontal,
+                    text.Height + button.Padding.Vertical);
                 Assert.True(
                     preferred.Width <= button.Width,
                     String.Format("{0} text is clipped horizontally: preferred {1}, actual {2}.",

@@ -255,7 +255,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void CanvasApplyRejectsAnUnconfiguredJointWithoutMutatingTheSession()
+        public void CanvasApplyAcceptsAnUnconfiguredJointButExportRemainsBlocked()
         {
             LinkTreeSession host = new LinkTreeSession(CreateTree());
             LinkTreeDocument document = host.LoadTree();
@@ -265,11 +265,11 @@ namespace SW2URDF.Test
                 500,
                 300));
 
-            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-                () => host.ApplyTree(document));
+            host.ApplyTree(document);
 
-            Assert.Contains("尚未选择", error.Message);
-            Assert.Equal(2, host.LoadTree().Nodes.Count);
+            Assert.Contains("尚未选择", string.Join(" ", host.DraftDiagnostics));
+            Assert.Equal(3, host.LoadTree().Nodes.Count);
+            Assert.Equal(string.Empty, host.LoadTree().Nodes.Last().JointType);
         }
 
         [Fact]

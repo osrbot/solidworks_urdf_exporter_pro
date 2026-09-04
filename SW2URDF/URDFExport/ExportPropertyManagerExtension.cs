@@ -30,6 +30,7 @@ using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace SW2URDF.URDFExport
@@ -58,11 +59,33 @@ namespace SW2URDF.URDFExport
 
             try
             {
-                LinkTreeCanvasWindow window = new LinkTreeCanvasWindow(linkTreeSession);
+                PendingCanvasEdit pending = new PendingCanvasEdit(linkTreeSession);
+                LinkTreeCanvasWindow window = new LinkTreeCanvasWindow(pending);
                 bool? accepted = window.ShowDialog();
-                if (accepted != true)
+                if (accepted != true || pending.Document == null)
                 {
                     return;
+                }
+
+                using (treeSelectionUpdateGuard.Suppress())
+                {
+                    linkTreeSession.EditTree(null, document =>
+                    {
+                        document.Nodes.Clear();
+                        document.Nodes.AddRange(pending.Document.Clone().Nodes);
+                    }, publish: candidate =>
+                    {
+                        SaveExportSessionDraft(candidate.CreateProjection());
+                        try
+                        {
+                            PublishLinkTree(candidate, selectedNodeId);
+                        }
+                        catch
+                        {
+                            SaveExportSessionDraft(linkTreeSession.CreateProjection());
+                            throw;
+                        }
+                    });
                 }
 
                 if (linkTreeSession.RequiresJointKinematicsRecompute)
@@ -75,8 +98,6 @@ namespace SW2URDF.URDFExport
                     PMComputeJointLimits.Checked = true;
                     logger.Info("Joint configuration changed; joint limit recomputation was enabled.");
                 }
-                SaveExportSessionDraft(linkTreeSession.CreateProjection());
-                RefreshLinkTreeProjection(selectedNodeId);
             }
             catch (Exception exception)
             {
@@ -84,6 +105,22 @@ namespace SW2URDF.URDFExport
                 MessageBox.Show(
                     "The Link tree editor could not be opened:\r\n" + exception.Message,
                     "SW2URDF");
+            }
+        }
+
+        private sealed class PendingCanvasEdit : ILinkTreeCanvasHost, ILinkTreeCandidateValidator
+        {
+            private readonly LinkTreeSession source;
+
+            public PendingCanvasEdit(LinkTreeSession source) { this.source = source; }
+
+            public LinkTreeDocument Document { get; private set; }
+            public LinkTreeDocument LoadTree() { return source.LoadTree(); }
+            public void ValidateTree(LinkTreeDocument document) { source.ValidateTree(document); }
+            public void ApplyTree(LinkTreeDocument document)
+            {
+                ValidateTree(document);
+                Document = document.Clone();
             }
         }
 
@@ -124,15 +161,82 @@ namespace SW2URDF.URDFExport
 
             LinkNode root = linkTreeSession.CreateActiveProjection();
             AddDocMenu(root);
-            previouslySelectedNode = null;
-            previouslySelectedLink = null;
-            Tree.Nodes.Clear();
-            Tree.Nodes.Add(root);
-            Tree.ExpandAll();
-
             LinkNode selectedNode = FindNodeById(root, selectedNodeId) ?? root;
-            Tree.SelectedNode = selectedNode;
+            using (treeSelectionUpdateGuard.Suppress())
+            {
+                previouslySelectedNode = null;
+                previouslySelectedLink = null;
+                rightClickedNode = null;
+                Tree.Nodes.Clear();
+                Tree.Nodes.Add(root);
+                Tree.ExpandAll();
+                Tree.SelectedNode = selectedNode;
+            }
+            SwitchActiveNodes(selectedNode);
             selectedNode.EnsureVisible();
+        }
+
+        private bool EditLinkTree(LinkNode node, Action<LinkTreeDocument, Guid> edit,
+            bool confirmRemoval = false)
+        {
+            if (treeSelectionUpdateGuard.IsSuppressed || node == null || node.TreeView != Tree)
+                return false;
+            SaveActiveNode();
+            if (linkTreeSession == null) CommitLinkTreeProjection();
+            Guid? id = linkTreeSession.GetProjectionNodeId(node.Link);
+            if (!id.HasValue) throw new InvalidOperationException("The selected Link is stale; reopen the tree.");
+            using (treeSelectionUpdateGuard.Suppress())
+            {
+                try
+                {
+                    return linkTreeSession.EditTree((LinkNode)Tree.Nodes[0],
+                        document => edit(document, id.Value),
+                        confirmRemoval ? (Func<LinkTreeDocument, bool>)(document => MessageBox.Show(
+                            "Remove the selected Links and their entire branches?", "SW2URDF",
+                            MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes) : null,
+                        candidate => PublishLinkTree(candidate, id));
+                }
+                finally
+                {
+                    LinkNode selected = Tree.SelectedNode as LinkNode;
+                    if (selected != null) PMNumberBoxChildCount.Value = selected.Nodes.Count;
+                }
+            }
+        }
+
+        private void PublishLinkTree(LinkTreeSession candidate, Guid? selectedId)
+        {
+            LinkTreeSession originalSession = linkTreeSession;
+            LinkNode originalRoot = (LinkNode)Tree.Nodes[0];
+            LinkNode originalSelected = Tree.SelectedNode as LinkNode;
+            LinkNode originalActive = previouslySelectedNode;
+            Link originalLink = previouslySelectedLink;
+            LinkNode originalRightClick = rightClickedNode;
+            int originalHeight = Tree.Height;
+            try
+            {
+                linkTreeSession = candidate;
+                RefreshLinkTreeProjection(selectedId);
+                int height = MathOps.Envelope(1 + CommonSwOperations.GetCount(Tree.Nodes) * Tree.ItemHeight, 163, 600);
+                Tree.Height = height;
+                PMTree.Height = height;
+            }
+            catch
+            {
+                Tree.Nodes.Clear();
+                Tree.Nodes.Add(originalRoot);
+                Tree.SelectedNode = originalSelected;
+                previouslySelectedNode = originalActive;
+                previouslySelectedLink = originalLink;
+                rightClickedNode = originalRightClick;
+                Tree.Height = originalHeight;
+                if (originalActive != null) FillPropertyManager(originalActive);
+                throw;
+            }
+            finally
+            {
+                linkTreeSession = originalSession;
+            }
         }
 
         private LinkNode FindNodeById(LinkNode node, Guid? nodeId)
@@ -351,6 +455,7 @@ namespace SW2URDF.URDFExport
         // Determines how many nodes need to be built, and they are added to the current node
         private void CreateNewNodes(LinkNode CurrentlySelectedNode)
         {
+            if (CurrentlySelectedNode == null || treeSelectionUpdateGuard.IsSuppressed) return;
             int nodesToBuild = (int)PMNumberBoxChildCount.Value - CurrentlySelectedNode.Nodes.Count;
             CreateNewNodes(CurrentlySelectedNode, nodesToBuild);
         }
@@ -358,25 +463,9 @@ namespace SW2URDF.URDFExport
         // Adds the number of empty nodes to the currently active node
         private void CreateNewNodes(LinkNode currentNode, int number)
         {
-            for (int i = 0; i < number; i++)
-            {
-                LinkNode node = CreateEmptyNode(currentNode);
-                currentNode.Nodes.Add(node);
-            }
-            for (int i = 0; i < -number; i++)
-            {
-                currentNode.Nodes.RemoveAt(currentNode.Nodes.Count - 1);
-            }
-            int itemsCount = CommonSwOperations.GetCount(Tree.Nodes);
-            int itemHeight = 1 + itemsCount * Tree.ItemHeight;
-            int min = 163;
-            int max = 600;
-
-            int height = MathOps.Envelope(itemHeight, min, max);
-            Tree.Height = height;
-            PMTree.Height = height;
-            currentNode.ExpandAll();
-            CommitLinkTreeProjection();
+            if (number == 0 || currentNode == null) return;
+            int count = currentNode.Nodes.Count + number;
+            EditLinkTree(currentNode, (document, id) => document.SetChildCount(id, count), number < 0);
         }
 
         // When a new node is selected or another node is found that needs to be visited, this
@@ -586,7 +675,7 @@ namespace SW2URDF.URDFExport
         // When the selected node is changed, the previously active node needs to be saved
         public void SaveActiveNode()
         {
-            if (previouslySelectedNode == null)
+            if (treeSelectionUpdateGuard.IsSuppressed || previouslySelectedNode == null)
             {
                 return;
             }
@@ -598,6 +687,8 @@ namespace SW2URDF.URDFExport
         private void SaveActiveNodeFields(LinkNode node)
         {
             node.Link.Name = PMTextBoxLinkName.Text;
+            node.Name = node.Link.Name;
+            node.Text = node.Link.Name;
             if (!node.IsBaseNode)
             {
                 node.Link.Joint.Name = PMTextBoxJointName.Text;
@@ -664,6 +755,7 @@ namespace SW2URDF.URDFExport
 
         private void UpdateSelectedNodeCadBindings()
         {
+            if (treeSelectionUpdateGuard.IsSuppressed) return;
             LinkNode selectedNode = Tree == null ? null : Tree.SelectedNode as LinkNode;
             if (selectedNode == null ||
                 !ReferenceEquals(selectedNode, previouslySelectedNode))
@@ -707,7 +799,12 @@ namespace SW2URDF.URDFExport
             else
             {
                 node.IsBaseNode = false;
-                node.Link.Name = "Empty_Link";
+                LinkNode root = Parent;
+                while (root.Parent != null) root = (LinkNode)root.Parent;
+                LinkTreeDocument names = new LinkTreeSession(root).LoadTree();
+                node.Link.Name = LinkTreeDocument.UniqueName("new_link", names.Nodes.Select(item => item.Name));
+                node.Link.Joint.Name = LinkTreeDocument.UniqueName(
+                    LinkTreeDocument.BuildDefaultJointName(node.Link.Name), names.Nodes.Select(item => item.JointName));
                 node.Link.FrameReference = CadFeatureReference.Automatic(
                     ReferenceGeometryKind.CoordinateSystem);
                 node.Link.Joint.AxisReference = CadFeatureReference.Automatic(
@@ -725,6 +822,11 @@ namespace SW2URDF.URDFExport
 
         //Sets all the controls in the Property Manager from the Selected Node
         public void FillPropertyManager(LinkNode node)
+        {
+            using (treeSelectionUpdateGuard.Suppress()) FillPropertyManagerFields(node);
+        }
+
+        private void FillPropertyManagerFields(LinkNode node)
         {
             PMTextBoxLinkName.Text = node.Link.Name;
             PMNumberBoxChildCount.Value = node.Nodes.Count;

@@ -7,6 +7,7 @@ using SW2URDF.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Runtime.InteropServices;
 using DrawingColor = System.Drawing.Color;
 
@@ -60,10 +61,22 @@ namespace SW2URDF.UI
             Hide();
             failureKind = InertiaPreviewFailureKind.None;
             if (link == null || link.Inertial == null || link.Inertial.Mass == null ||
-                link.Inertial.Inertia == null)
+                link.Inertial.Inertia == null || link.Inertial.Origin == null ||
+                !link.Inertial.Mass.AreRequiredFieldsSatisfied() ||
+                !link.Inertial.Origin.AreRequiredFieldsSatisfied() ||
+                !link.Inertial.Inertia.AreRequiredFieldsSatisfied())
             {
                 ellipsoid = null;
                 error = "The link has no complete inertial element.";
+                failureKind = InertiaPreviewFailureKind.InvalidPhysicalInertia;
+                return false;
+            }
+
+            if (link.Inertial.Origin.GetXYZ().Concat(link.Inertial.Origin.GetRPY())
+                .Any(value => Double.IsNaN(value) || Double.IsInfinity(value)))
+            {
+                ellipsoid = null;
+                error = "COM and inertial orientation must contain finite values.";
                 failureKind = InertiaPreviewFailureKind.InvalidPhysicalInertia;
                 return false;
             }

@@ -228,6 +228,13 @@ namespace SW2URDF.URDFExport
 
             CommitLinkTreeProjection();
 
+            IList<string> treeErrors = linkTreeSession.LoadTree().Validate();
+            if (treeErrors.Count > 0)
+            {
+                MessageBox.Show(string.Join(System.Environment.NewLine, treeErrors), "SW2URDF");
+                return;
+            }
+
             if (linkTreeSession.RequiresJointKinematicsRecompute)
             {
                 PMComputeJointKinematics.Checked = true;
@@ -597,10 +604,20 @@ namespace SW2URDF.URDFExport
 
         void IPropertyManagerPage2Handler9.OnNumberboxChanged(int Id, double Value)
         {
-            if (Id == NumBoxChildCountID)
+            if (Id == NumBoxChildCountID && !treeSelectionUpdateGuard.IsSuppressed)
             {
-                LinkNode node = (LinkNode)Tree.SelectedNode;
-                CreateNewNodes(node);
+                LinkNode node = Tree == null ? null : Tree.SelectedNode as LinkNode;
+                if (node == null || !ReferenceEquals(node, previouslySelectedNode) ||
+                    double.IsNaN(Value) || double.IsInfinity(Value) || Value < 0 || Value > int.MaxValue ||
+                    Value != Math.Truncate(Value) || (int)Value == node.Nodes.Count) return;
+                try
+                {
+                    CreateNewNodes(node, (int)Value - node.Nodes.Count);
+                }
+                catch (Exception exception)
+                {
+                    ShowPropertyManagerError("The Link tree was not changed.", "Link 树未更改。", exception);
+                }
             }
         }
 
@@ -629,6 +646,7 @@ namespace SW2URDF.URDFExport
 
         void IPropertyManagerPage2Handler9.OnTextboxChanged(int Id, string Text)
         {
+            if (treeSelectionUpdateGuard.IsSuppressed) return;
             LinkNode node = Tree == null ? null : Tree.SelectedNode as LinkNode;
             if (node == null)
             {
@@ -686,7 +704,7 @@ namespace SW2URDF.URDFExport
         //When a keyboard key is pressed on the tree
         private void TreeKeyDown(object sender, KeyEventArgs e)
         {
-            if (rightClickedNode.IsEditing)
+            if (rightClickedNode != null && rightClickedNode.IsEditing)
             {
                 if (e.KeyCode == Keys.Enter)
                 {
@@ -721,9 +739,7 @@ namespace SW2URDF.URDFExport
         {
             try
             {
-                LinkNode parent = (LinkNode)rightClickedNode.Parent;
-                parent.Nodes.Remove(rightClickedNode);
-                CommitLinkTreeProjection();
+                EditLinkTree(rightClickedNode, (document, id) => document.DeleteBranch(id), true);
             }
             catch (Exception ex)
             {
@@ -742,6 +758,7 @@ namespace SW2URDF.URDFExport
         {
             try
             {
+                if (rightClickedNode == null || rightClickedNode.TreeView != Tree) return;
                 Tree.SelectedNode = rightClickedNode;
                 Tree.LabelEdit = true;
                 rightClickedNode.BeginEdit();
@@ -761,7 +778,9 @@ namespace SW2URDF.URDFExport
         {
             try
             {
-                Tree.DoDragDrop(e.Item, DragDropEffects.Move);
+                LinkNode node = e.Item as LinkNode;
+                if (node != null && node.Parent != null && node.TreeView == Tree)
+                    Tree.DoDragDrop(e.Item, DragDropEffects.Move);
             }
             catch (Exception ex)
             {
@@ -780,9 +799,8 @@ namespace SW2URDF.URDFExport
                 // Retrieve the client coordinates of the mouse position.
                 Point targetPoint = Tree.PointToClient(new Point(e.X, e.Y));
 
-                // Select the node at the mouse position.
-                Tree.SelectedNode = Tree.GetNodeAt(targetPoint);
-                e.Effect = DragDropEffects.Move;
+                e.Effect = IsValidTreeDrop(e, Tree.GetNodeAt(targetPoint) as LinkNode)
+                    ? DragDropEffects.Move : DragDropEffects.None;
             }
             catch (Exception ex)
             {
@@ -801,9 +819,8 @@ namespace SW2URDF.URDFExport
                 // Retrieve the client coordinates of the mouse position.
                 Point targetPoint = Tree.PointToClient(new Point(e.X, e.Y));
 
-                // Select the node at the mouse position.
-                Tree.SelectedNode = Tree.GetNodeAt(targetPoint);
-                e.Effect = DragDropEffects.Move;
+                e.Effect = IsValidTreeDrop(e, Tree.GetNodeAt(targetPoint) as LinkNode)
+                    ? DragDropEffects.Move : DragDropEffects.None;
             }
             catch (Exception ex)
             {
@@ -823,21 +840,43 @@ namespace SW2URDF.URDFExport
             // Retrieve the node at the drop location.
             LinkNode targetNode = (LinkNode)Tree.GetNodeAt(point);
 
-            LinkNode draggedNode = (LinkNode)e.Data.GetData(typeof(LinkNode));
+            LinkNode draggedNode = e.Data == null ? null : e.Data.GetData(typeof(LinkNode)) as LinkNode;
 
             // Check if the move is valid, if not then we won't do anything
-            if (draggedNode == null || draggedNode == targetNode || draggedNode.TreeView != Tree)
+            if (!IsValidTreeDrop(e, targetNode))
             {
                 return;
             }
 
-            // If the it was dropped into the box itself, but not onto an actual node
-            targetNode = targetNode ?? (LinkNode)Tree.TopNode;
+            if (draggedNode.Parent == targetNode) return;
+            if (linkTreeSession == null) return;
+            Guid? targetId = linkTreeSession.GetProjectionNodeId(targetNode.Link);
+            if (!targetId.HasValue) return;
+            EditLinkTree(draggedNode, (document, id) => document.Reparent(id, targetId.Value));
+        }
 
-            draggedNode.Remove();
-            targetNode.Nodes.Add(draggedNode);
-            targetNode.ExpandAll();
-            CommitLinkTreeProjection();
+        private bool IsValidTreeDrop(DragEventArgs e, LinkNode target)
+        {
+            LinkNode dragged = e.Data == null ? null : e.Data.GetData(typeof(LinkNode)) as LinkNode;
+            if (dragged == null || target == null || dragged.Parent == null ||
+                dragged.TreeView != Tree || target.TreeView != Tree) return false;
+            for (TreeNode ancestor = target; ancestor != null; ancestor = ancestor.Parent)
+                if (ReferenceEquals(ancestor, dragged)) return false;
+            return true;
+        }
+
+        private void TreeAfterLabelEdit(object sender, NodeLabelEditEventArgs e)
+        {
+            e.CancelEdit = true;
+            if (e.Label == null || treeSelectionUpdateGuard.IsSuppressed) return;
+            try
+            {
+                EditLinkTree(e.Node as LinkNode, (document, id) => document.Find(id).Name = e.Label);
+            }
+            catch (Exception exception)
+            {
+                ShowPropertyManagerError("The Link name was not changed.", "Link 名称未更改。", exception);
+            }
         }
 
         private void TreeDragDrop(object sender, DragEventArgs e)
@@ -1235,6 +1274,7 @@ namespace SW2URDF.URDFExport
             };
 
             Tree.AfterSelect += new TreeViewEventHandler(TreeAfterSelect);
+            Tree.AfterLabelEdit += TreeAfterLabelEdit;
             Tree.NodeMouseClick += new TreeNodeMouseClickEventHandler(TreeNodeMouseClick);
             Tree.KeyDown += new KeyEventHandler(TreeKeyDown);
             Tree.DragDrop += new DragEventHandler(TreeDragDrop);

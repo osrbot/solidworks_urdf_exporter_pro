@@ -30,6 +30,16 @@ using System.Windows.Forms;
 
 namespace SW2URDF.UI
 {
+    internal sealed class ModernInfoPanel : Panel
+    {
+        internal ModernInfoPanel()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
+                ControlStyles.UserPaint, true);
+        }
+    }
+
     internal sealed class ModernCardPanel : TableLayoutPanel
     {
         internal const int CornerRadius = 6;
@@ -424,6 +434,44 @@ namespace SW2URDF.UI
 
     internal static class ModernWinFormsTheme
     {
+        internal static int ScaleLogical(int value, int dpi)
+        {
+            return (int)Math.Round(value * Math.Max(96, dpi) / 96D,
+                MidpointRounding.AwayFromZero);
+        }
+
+        internal static void ApplyFooterButtonMetrics(
+            Button button, int minimumWidth, Padding margin, int dpi)
+        {
+            int height = ScaleLogical(36, dpi);
+            int width = ScaleLogical(minimumWidth, dpi);
+            button.Padding = new Padding(ScaleLogical(10, dpi), 0, ScaleLogical(10, dpi), 0);
+            button.Margin = new Padding(
+                ScaleLogical(margin.Left, dpi), ScaleLogical(margin.Top, dpi),
+                ScaleLogical(margin.Right, dpi), ScaleLogical(margin.Bottom, dpi));
+            // Clear the previous monitor's minimum before measuring text.
+            // Neither the old bounds nor designer widths are inputs.
+            Control parent = button.Parent;
+            if (parent != null) parent.SuspendLayout();
+            try
+            {
+                button.MinimumSize = Size.Empty;
+                // Button's non-AutoSize preferred size is its current size.
+                button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                button.AutoSize = true;
+                Size preferred = button.GetPreferredSize(Size.Empty);
+                button.AutoSize = false;
+                button.MinimumSize = new Size(width, height);
+                button.Size = new Size(Math.Max(width, preferred.Width),
+                    Math.Max(height, preferred.Height));
+            }
+            finally
+            {
+                button.AutoSize = false;
+                if (parent != null) parent.ResumeLayout(true);
+            }
+        }
+
         internal static readonly Color Background = Color.FromArgb(242, 248, 251);
         internal static readonly Color Surface = Color.White;
         internal static readonly Color SurfaceAlt = Color.FromArgb(237, 247, 251);

@@ -378,6 +378,11 @@
     <Compile Include="Test\TestExportProgressTheme.cs" />
     <Compile Include="Test\TestInstallerScript.cs" />
     <Compile Include="Test\TestInertiaEllipsoid.cs" />
+    <Compile Include="Test\TestInertialEditing.cs" />
+    <Compile Include="Test\TestInertialEditingUi.cs" />
+    <Compile Include="Test\TestSolidWorksEffectiveMass.cs" />
+    <Compile Include="Test\TestLinkTreeTransactions.cs" />
+    <Compile Include="Test\TestLinkTreeDocumentTransactions.cs" />
     <Compile Include="Test\TestInertiaConvention.cs" />
     <Compile Include="Test\TestMassPropertyFrameConverter.cs" />
     <Compile Include="Test\TestSolidWorksInertiaApiIntegration.cs" />
@@ -449,6 +454,10 @@
     <Compile Include="URDFExport\IndependentTargetExport.cs" />
     <Compile Include="URDFExport\V2TargetProfiles.cs" />
     <Compile Include="URDFExport\InertiaEllipsoid.cs" />
+    <Compile Include="URDFExport\InertialEditingPolicy.cs" />
+    <Compile Include="URDFExport\SolidWorksMassPropertyReader.cs" />
+    <Compile Include="URDF\InertialEditingState.cs" />
+    <Compile Include="UI\AssemblyExportForm.InertialEditing.cs" />
     <Compile Include="URDFExport\LinkTreeStores.cs" />
     <Compile Include="URDFExport\LinkTreeValidation.cs" />
     <Compile Include="URDFExport\MassPropertyFrameConverter.cs" />

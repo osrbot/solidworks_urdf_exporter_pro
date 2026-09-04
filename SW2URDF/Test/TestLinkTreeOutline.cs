@@ -129,14 +129,14 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void PlainTextRenamePreservesNodeIdentityAndCadOwnershipBoundary()
+        public void HeadingIdentityRenamePreservesNodeIdentityAndCadOwnershipBoundary()
         {
             LinkTreeDocument source = CreateDocument();
             LinkTreeNode camera = source.Nodes.Single(node => node.Name == "camera_link");
             Guid originalId = camera.Id;
 
             LinkTreeOutlineParseResult result = LinkTreeOutline.Parse(
-                "# base_link\n## vision_link\n## left_wheel_link",
+                LinkTreeOutline.Serialize(source).Replace("camera_link", "vision_link"),
                 source);
 
             Assert.True(result.IsValid, string.Join(Environment.NewLine, result.Errors));

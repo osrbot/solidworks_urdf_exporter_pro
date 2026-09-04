@@ -279,10 +279,12 @@ namespace SW2URDF.URDFExport
                 }
                 else
                 {
+                    inertialRecords = BuildPhysicalInertialValidationRecords(URDFRobot.BaseLink);
                     WriteInertialValidationCsv(
                         windowsInertialValidationCsvFileName,
                         inertialRecords);
-                    logger.Info("Skipped inertial API validation because inertial computation is disabled");
+                    EnsureNoBlockingInertialFailures(inertialRecords);
+                    logger.Info("Skipped only the SW comparison; explicitly supplied inertial values still passed physical checks.");
                 }
 
                 logger.Info("Saving existing STL preferences");
@@ -2950,6 +2952,7 @@ namespace SW2URDF.URDFExport
                 null,
                 coordSysTransform);
             ApplyMassPropertyToLink(URDFRobot.BaseLink, massProperty);
+            EnsureNoBlockingInertialFailures(BuildPhysicalInertialValidationRecords(URDFRobot.BaseLink));
 
             //Creating package directories
             PackageName = URDFPackage.SanitizePackageName(PackageName);

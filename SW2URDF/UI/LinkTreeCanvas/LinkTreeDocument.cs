@@ -56,8 +56,13 @@ namespace SW2URDF.UI.LinkTreeCanvas
         public bool IsDescendant(Guid candidateId, Guid ancestorId)
         {
             LinkTreeNode current = Find(candidateId);
+            HashSet<Guid> visited = new HashSet<Guid>();
             while (current != null && current.ParentId.HasValue)
             {
+                if (!visited.Add(current.Id))
+                {
+                    throw new InvalidOperationException("The Link tree contains a cycle.");
+                }
                 if (current.ParentId.Value == ancestorId)
                 {
                     return true;
@@ -72,6 +77,61 @@ namespace SW2URDF.UI.LinkTreeCanvas
             LinkTreeDocument clone = new LinkTreeDocument();
             clone.Nodes.AddRange(Nodes.Select(node => node.Clone()));
             return clone;
+        }
+
+        public LinkTreeNode AddChild(Guid parentId)
+        {
+            LinkTreeNode parent = Find(parentId);
+            if (parent == null) throw new InvalidOperationException("The parent Link no longer exists.");
+            string name = UniqueName("new_link", Nodes.Select(node => node.Name));
+            LinkTreeNode child = NewNode(name, parentId, parent.X + 300,
+                parent.Y + ChildrenOf(parentId).Count() * 118);
+            child.JointName = UniqueName(BuildDefaultJointName(name),
+                Nodes.Where(node => node.ParentId.HasValue).Select(node => node.JointName));
+            Nodes.Add(child);
+            return child;
+        }
+
+        public void SetChildCount(Guid parentId, int count)
+        {
+            if (count < 0 || Find(parentId) == null)
+                throw new InvalidOperationException("Invalid child count or parent Link.");
+            List<LinkTreeNode> children = ChildrenOf(parentId).ToList();
+            foreach (LinkTreeNode child in children.Skip(count)) DeleteBranch(child.Id);
+            for (int index = children.Count; index < count; index++) AddChild(parentId);
+        }
+
+        public void DeleteBranch(Guid id)
+        {
+            LinkTreeNode node = Find(id);
+            if (node == null || !node.ParentId.HasValue)
+                throw new InvalidOperationException("The root Link cannot be deleted.");
+            HashSet<Guid> removed = new HashSet<Guid>(Nodes
+                .Where(item => item.Id == id || IsDescendant(item.Id, id)).Select(item => item.Id));
+            Nodes.RemoveAll(item => removed.Contains(item.Id));
+        }
+
+        public bool CanReparent(Guid id, Guid parentId)
+        {
+            LinkTreeNode node = Find(id);
+            return node != null && node.ParentId.HasValue && Find(parentId) != null &&
+                id != parentId && !IsDescendant(parentId, id);
+        }
+
+        public void Reparent(Guid id, Guid parentId)
+        {
+            if (!CanReparent(id, parentId))
+                throw new InvalidOperationException("Cannot move the root Link or move a Link into its own branch.");
+            Find(id).ParentId = parentId;
+        }
+
+        internal static string UniqueName(string baseName, IEnumerable<string> names)
+        {
+            HashSet<string> reserved = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            string name = baseName;
+            int suffix = 1;
+            while (reserved.Contains(name)) name = baseName + "_" + suffix++;
+            return name;
         }
 
         public IList<LinkTreeNode> CreateBranchClipboard(IEnumerable<Guid> selectedNodeIds)
@@ -142,7 +202,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
             return Validate(true);
         }
 
-        private IList<string> Validate(bool allowUnconfiguredJointTypes)
+        private IList<string> Validate(bool allowIncompleteFields)
         {
             List<string> errors = new List<string>();
             if (Nodes.Count == 0)
@@ -150,7 +210,8 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 errors.Add("Link 树不能为空。");
                 return errors;
             }
-            if (Nodes.GroupBy(node => node.Id).Any(group => group.Count() > 1))
+            if (Nodes.Any(node => node == null || node.Id == Guid.Empty) ||
+                Nodes.GroupBy(node => node.Id).Any(group => group.Count() > 1))
             {
                 errors.Add("Link 节点标识不能重复。");
                 return errors;
@@ -165,7 +226,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
             foreach (LinkTreeNode node in Nodes)
             {
                 string nameError = ValidateRosName(node.Name);
-                if (nameError != null)
+                if (nameError != null && !allowIncompleteFields)
                 {
                     errors.Add(node.Name + ": " + nameError);
                 }
@@ -173,13 +234,14 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 {
                     errors.Add(node.Name + " 的父 Link 不存在。");
                 }
-                if (node.ParentId.HasValue && ValidateRosName(node.JointName) != null)
+                if (node.ParentId.HasValue && ValidateRosName(node.JointName) != null &&
+                    !allowIncompleteFields)
                 {
                     errors.Add(node.Name + " 的 Joint 名称无效。");
                 }
                 if (node.ParentId.HasValue &&
                     string.IsNullOrWhiteSpace(node.JointType) &&
-                    !allowUnconfiguredJointTypes)
+                    !allowIncompleteFields)
                 {
                     errors.Add(node.Name + " 的 Joint 类型尚未选择。");
                 }
@@ -191,11 +253,13 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 }
             }
 
-            if (Nodes.GroupBy(node => node.Name, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+            if (Nodes.Where(node => !allowIncompleteFields || !string.IsNullOrWhiteSpace(node.Name))
+                .GroupBy(node => node.Name, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
             {
                 errors.Add("Link 名称不能重复。");
             }
             if (Nodes.Where(node => node.ParentId.HasValue)
+                .Where(node => !allowIncompleteFields || !string.IsNullOrWhiteSpace(node.JointName))
                 .GroupBy(node => node.JointName, StringComparer.OrdinalIgnoreCase)
                 .Any(group => group.Count() > 1))
             {

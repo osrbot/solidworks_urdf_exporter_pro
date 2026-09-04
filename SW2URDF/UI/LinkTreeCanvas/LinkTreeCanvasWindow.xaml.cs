@@ -354,17 +354,30 @@ namespace SW2URDF.UI.LinkTreeCanvas
                             dragged.JointName,
                             previousParent.Name,
                             dragged.Name);
-                    dragged.ParentId = target.Id;
+                    LinkTreeDocument candidate = document.Clone();
+                    LinkTreeNode moved = candidate.Find(dragged.Id);
+                    candidate.Reparent(dragged.Id, target.Id);
                     if (updateGeneratedJointName)
                     {
-                        dragged.JointName = MakeUniqueJointName(
+                        moved.JointName = MakeUniqueJointName(
                             LinkTreeDocument.BuildDefaultJointName(dragged.Name),
                             dragged.Id);
                     }
                     int siblingIndex = document.ChildrenOf(target.Id).Count(node => node.Id != dragged.Id);
-                    dragged.X = target.X + LayoutColumnGap;
-                    dragged.Y = target.Y + siblingIndex * LayoutRowGap;
-                    UpdateStatus(dragged.Name + " 已移动到 " + target.Name + " 下");
+                    moved.X = target.X + LayoutColumnGap;
+                    moved.Y = target.Y + siblingIndex * LayoutRowGap;
+                    if (TrySetDocument(candidate))
+                        UpdateStatus(dragged.Name + " 已移动到 " + target.Name + " 下");
+                    else
+                    {
+                        dragged.X = dragStartNode.X;
+                        dragged.Y = dragStartNode.Y;
+                    }
+                }
+                else if (target != null && target.Id != dragged.ParentId)
+                {
+                    dragged.X = dragStartNode.X;
+                    dragged.Y = dragStartNode.Y;
                 }
             }
             draggingNodeId = null;
@@ -548,34 +561,14 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         private void AddChild(Guid parentId)
         {
-            LinkTreeNode parent = document.Find(parentId);
-            string name = MakeUniqueLinkName("new_link");
-            int siblingCount = document.ChildrenOf(parentId).Count();
-            LinkTreeNode child = LinkTreeDocument.NewNode(
-                name,
-                parentId,
-                parent.X + LayoutColumnGap,
-                parent.Y + siblingCount * LayoutRowGap);
-            child.JointName = MakeUniqueJointName(
-                LinkTreeDocument.BuildDefaultJointName(child.Name),
-                child.Id);
-            document.Nodes.Add(child);
+            LinkTreeDocument candidate = document.Clone();
+            LinkTreeNode child = candidate.AddChild(parentId);
+            if (!TrySetDocument(candidate)) return;
             RenderDocument();
             SelectNode(child.Id);
             LinkNameTextBox.Focus();
             LinkNameTextBox.SelectAll();
             UpdateStatus("已添加子 Link，请输入名称并选择 Joint 类型");
-        }
-
-        private string MakeUniqueLinkName(string baseName)
-        {
-            string candidate = baseName;
-            int suffix = 1;
-            while (document.Nodes.Any(node => string.Equals(node.Name, candidate, StringComparison.OrdinalIgnoreCase)))
-            {
-                candidate = baseName + "_" + suffix++;
-            }
-            return candidate;
         }
 
         private string MakeUniqueJointName(string baseName, Guid editingNodeId)
@@ -596,6 +589,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         private bool CommitLinkName()
         {
+            if (suppressPropertyEvents) return true;
             if (!selectedNodeId.HasValue)
             {
                 return false;
@@ -607,15 +601,15 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 error = "Link 名称不能重复。";
             }
             NameValidationText.Text = error ?? string.Empty;
-            if (error != null)
-            {
-                return false;
-            }
-
             LinkTreeNode selectedNode = document.Find(selectedNodeId.Value);
+            if (selectedNode == null) return false;
+            if (selectedNode.Name == value) return true;
+            LinkTreeDocument candidate = document.Clone();
+            selectedNode = candidate.Find(selectedNode.Id);
             string oldName = selectedNode.Name;
             selectedNode.Name = value;
-            if (selectedNode.ParentId.HasValue && !string.IsNullOrEmpty(oldName))
+            if (selectedNode.ParentId.HasValue && !string.IsNullOrEmpty(oldName) &&
+                LinkTreeDocument.ValidateRosName(value) == null)
             {
                 LinkTreeNode parentNode = document.Find(selectedNode.ParentId.Value);
                 if (LinkTreeDocument.UsesDefaultJointName(
@@ -625,9 +619,12 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 {
                     string nextDefaultJointName = LinkTreeDocument.BuildDefaultJointName(value);
                     selectedNode.JointName = MakeUniqueJointName(nextDefaultJointName, selectedNode.Id);
-                    JointNameTextBox.Text = selectedNode.JointName;
                 }
             }
+            if (!TrySetDocument(candidate)) return false;
+            suppressPropertyEvents = true;
+            JointNameTextBox.Text = selectedNode.JointName;
+            suppressPropertyEvents = false;
             RenderDocument();
             SelectionText.Text = "当前：" + selectedNode.Name;
             return true;
@@ -635,9 +632,14 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         private void JointNameCommit(object sender, RoutedEventArgs e)
         {
-            if (!selectedNodeId.HasValue)
+            CommitJointName();
+        }
+
+        private bool CommitJointName()
+        {
+            if (suppressPropertyEvents || !selectedNodeId.HasValue)
             {
-                return;
+                return true;
             }
             LinkTreeNode node = document.Find(selectedNodeId.Value);
             if (node == null)
@@ -645,26 +647,25 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 selectedNodeIds.Clear();
                 selectedNodeId = null;
                 RefreshSelectionPanel();
-                return;
+                return false;
             }
             if (!node.ParentId.HasValue)
             {
-                return;
+                return true;
             }
             string value = JointNameTextBox.Text.Trim();
-            string error = LinkTreeDocument.ValidateRosName(value);
-            if (error == null && document.Nodes.Any(item => item.Id != node.Id && string.Equals(item.JointName, value, StringComparison.OrdinalIgnoreCase)))
+            if (value == node.JointName) return true;
+            LinkTreeDocument candidate = document.Clone();
+            candidate.Find(node.Id).JointName = value;
+            if (!TrySetDocument(candidate))
             {
-                error = "Joint 名称不能重复。";
-            }
-            if (error != null)
-            {
-                UpdateStatus(error);
+                suppressPropertyEvents = true;
                 JointNameTextBox.Text = node.JointName;
-                return;
+                suppressPropertyEvents = false;
+                return false;
             }
-            node.JointName = value;
             RenderDocument();
+            return true;
         }
 
         private void PropertyTextBoxKeyDown(object sender, KeyEventArgs e)
@@ -695,7 +696,13 @@ namespace SW2URDF.UI.LinkTreeCanvas
             {
                 return;
             }
-            node.JointType = ChineseUiText.JointTypeValue(selectedDisplay);
+            LinkTreeDocument candidate = document.Clone();
+            candidate.Find(node.Id).JointType = ChineseUiText.JointTypeValue(selectedDisplay);
+            if (!TrySetDocument(candidate))
+            {
+                RefreshSelectedProperties();
+                return;
+            }
             RenderDocument();
         }
 
@@ -738,9 +745,9 @@ namespace SW2URDF.UI.LinkTreeCanvas
             {
                 return;
             }
-            HashSet<Guid> ids = new HashSet<Guid> { node.Id };
-            CollectDescendants(node.Id, ids);
-            document.Nodes.RemoveAll(item => ids.Contains(item.Id));
+            LinkTreeDocument candidate = document.Clone();
+            candidate.DeleteBranch(node.Id);
+            if (!TrySetDocument(candidate)) return;
             SelectNode(document.Root.Id);
             UpdateStatus("已删除分支");
         }
@@ -748,15 +755,6 @@ namespace SW2URDF.UI.LinkTreeCanvas
         private int CountDescendants(Guid parentId)
         {
             return document.ChildrenOf(parentId).Sum(child => 1 + CountDescendants(child.Id));
-        }
-
-        private void CollectDescendants(Guid parentId, ISet<Guid> ids)
-        {
-            foreach (LinkTreeNode child in document.ChildrenOf(parentId).ToList())
-            {
-                ids.Add(child.Id);
-                CollectDescendants(child.Id, ids);
-            }
         }
 
         private void AutoLayoutClick(object sender, RoutedEventArgs e)
@@ -774,7 +772,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                     UpdateStatus("请先修正节点名称");
                     return;
                 }
-                JointNameCommit(null, new RoutedEventArgs());
+                if (!CommitJointName()) return;
             }
 
             LinkTreeOutlineWindow outlineWindow = new LinkTreeOutlineWindow(document)
@@ -786,7 +784,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 return;
             }
 
-            document = outlineWindow.ResultDocument;
+            if (!TrySetDocument(outlineWindow.ResultDocument)) return;
             selectedNodeIds.Clear();
             selectedNodeId = null;
             AutoLayoutDocument();
@@ -831,7 +829,8 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 UpdateStatus("请先修正节点名称");
                 return;
             }
-            IList<string> errors = document.Validate();
+            if (!CommitJointName()) return;
+            IList<string> errors = document.ValidateDraft();
             if (errors.Count > 0)
             {
                 MessageBox.Show(
@@ -1110,6 +1109,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
             }
 
             HashSet<Guid> copiedIds = new HashSet<Guid>(copiedNodes.Select(node => node.Id));
+            LinkTreeDocument candidate = document.Clone();
             Dictionary<Guid, LinkTreeNode> copies = new Dictionary<Guid, LinkTreeNode>();
             Guid copyBatchId = Guid.NewGuid();
             foreach (LinkTreeNode source in copiedNodes)
@@ -1118,7 +1118,8 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 copy.Id = Guid.NewGuid();
                 copy.CopySourceId = source.Id;
                 copy.CopyBatchId = copyBatchId;
-                copy.Name = MakeUniqueLinkName(source.Name + "_copy");
+                copy.Name = LinkTreeDocument.UniqueName(source.Name + "_copy",
+                    candidate.Nodes.Select(node => node.Name).Concat(copies.Values.Select(node => node.Name)));
                 copy.X = source.X + 70;
                 copy.Y = source.Y + 70;
                 copies[source.Id] = copy;
@@ -1138,14 +1139,14 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
                 if (copy.ParentId.HasValue)
                 {
-                    LinkTreeNode parent = document.Find(copy.ParentId.Value) ?? copies.Values.FirstOrDefault(node => node.Id == copy.ParentId.Value);
-                    string parentName = parent == null ? "link" : parent.Name;
-                    copy.JointName = MakeUniqueJointName(
+                    copy.JointName = LinkTreeDocument.UniqueName(
                         LinkTreeDocument.BuildDefaultJointName(copy.Name),
-                        copy.Id);
+                        candidate.Nodes.Select(node => node.JointName));
                 }
-                document.Nodes.Add(copy);
+                candidate.Nodes.Add(copy);
             }
+
+            if (!TrySetDocument(candidate)) return;
 
             selectedNodeIds.Clear();
             foreach (LinkTreeNode copy in copies.Values)
@@ -1159,6 +1160,24 @@ namespace SW2URDF.UI.LinkTreeCanvas
             RenderDocument();
             FitDocumentToViewport();
             UpdateStatus("已粘贴 " + copies.Count + " 个 Link，名称已自动去重并整理布局");
+        }
+
+        private bool TrySetDocument(LinkTreeDocument candidate)
+        {
+            try
+            {
+                IList<string> errors = candidate.ValidateDraft();
+                if (errors.Count > 0) throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
+                ILinkTreeCandidateValidator validator = host as ILinkTreeCandidateValidator;
+                if (validator != null) validator.ValidateTree(candidate);
+                document = candidate;
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                UpdateStatus(exception.Message);
+                return false;
+            }
         }
 
         private void UpdateStatus(string message)

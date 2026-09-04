@@ -711,22 +711,33 @@ namespace SW2URDF.Test
                 "private void OpenLinkTreeCanvas()",
                 StringComparison.Ordinal);
             int openCanvasEnd = extension.IndexOf(
-                "private void ReplaceLinkTreeRoot",
+                "private sealed class PendingCanvasEdit",
                 openCanvas,
                 StringComparison.Ordinal);
 
             Assert.True(openCanvas >= 0);
             Assert.True(openCanvasEnd > openCanvas);
             string openCanvasBody = extension.Substring(openCanvas, openCanvasEnd - openCanvas);
+            int acceptedEdit = openCanvasBody.IndexOf("linkTreeSession.EditTree(", StringComparison.Ordinal);
             int refreshProjection = openCanvasBody.IndexOf(
-                "RefreshLinkTreeProjection(selectedNodeId)",
+                "PublishLinkTree(candidate, selectedNodeId)",
                 StringComparison.Ordinal);
             int recoveryCheckpoint = openCanvasBody.IndexOf(
-                "SaveExportSessionDraft(linkTreeSession.CreateProjection())",
+                "SaveExportSessionDraft(candidate.CreateProjection())",
                 StringComparison.Ordinal);
 
-            Assert.True(recoveryCheckpoint >= 0);
+            Assert.True(acceptedEdit >= 0);
+            Assert.True(recoveryCheckpoint > acceptedEdit);
             Assert.True(refreshProjection > recoveryCheckpoint);
+            Assert.True(openCanvasBody.IndexOf(
+                "SaveExportSessionDraft(linkTreeSession.CreateProjection())",
+                StringComparison.Ordinal) > refreshProjection);
+
+            int publish = extension.IndexOf("private void PublishLinkTree(", StringComparison.Ordinal);
+            int publishEnd = extension.IndexOf("private LinkNode FindNodeById", publish, StringComparison.Ordinal);
+            Assert.True(publish >= 0);
+            Assert.True(publishEnd > publish);
+            Assert.Contains("RefreshLinkTreeProjection(selectedId)", extension.Substring(publish, publishEnd - publish));
         }
 
         [Fact]

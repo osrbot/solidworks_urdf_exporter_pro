@@ -83,6 +83,9 @@ namespace SW2URDF.UI
         private readonly List<TableLayoutPanel> modernModelFrozenLayouts =
             new List<TableLayoutPanel>();
         private bool loadingModernExportTargets;
+        private readonly Dictionary<Button, Tuple<int, Padding>> modernFooterDesigns =
+            new Dictionary<Button, Tuple<int, Padding>>();
+        private readonly List<TextBox> modernFixedHeightInputs = new List<TextBox>();
 
         internal void InitializeModernUi()
         {
@@ -151,6 +154,8 @@ namespace SW2URDF.UI
             ClientSize = ConstrainModernSize(
                 modernClientSizeAfterInitialScale,
                 maximumClientSize);
+            RefreshModernFooterMetrics((int)Math.Round(CurrentAutoScaleDimensions.Width));
+            RefreshModernInputMetrics((int)Math.Round(CurrentAutoScaleDimensions.Width));
             PrimeModernPageLayouts();
         }
 
@@ -640,7 +645,7 @@ namespace SW2URDF.UI
 
         private Control CreateModernInfoBanner(Label messageLabel)
         {
-            Panel banner = new Panel
+            Panel banner = new ModernInfoPanel
             {
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
@@ -654,7 +659,7 @@ namespace SW2URDF.UI
             banner.Paint += ModernWinFormsTheme.DrawCardBorder;
             messageLabel.AutoSize = true;
             messageLabel.Dock = DockStyle.Fill;
-            messageLabel.MaximumSize = new Size(900, 0);
+            messageLabel.MaximumSize = Size.Empty;
             ModernWinFormsTheme.SetFont(messageLabel, 8.75F, FontStyle.Regular);
             messageLabel.ForeColor = ModernWinFormsTheme.Text;
             messageLabel.TextAlign = ContentAlignment.MiddleLeft;
@@ -1091,9 +1096,10 @@ namespace SW2URDF.UI
                     Dock = DockStyle.Fill,
                     Margin = new Padding(0),
                     Padding = new Padding(0),
-                    RowCount = 3
+                    RowCount = 4
                 };
                 root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+                root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
                 root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -1241,6 +1247,20 @@ namespace SW2URDF.UI
                 root.Controls.Add(frame, 0, 0);
                 root.Controls.Add(body, 0, 1);
                 root.Controls.Add(actions, 0, 2);
+                Control inertialEditingActions = InitializeInertialEditingControls();
+                inertialEditingActions.AutoSize = true;
+                inertialEditingActions.Dock = DockStyle.Top;
+                inertialEditingActions.Margin = new Padding(0, 4, 0, 0);
+                ModernWinFormsTheme.ApplyControlTree(inertialEditingActions);
+                foreach (Control action in inertialEditingActions.Controls)
+                {
+                    Button actionButton = action as Button;
+                    if (actionButton == null) continue;
+                    actionButton.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                    actionButton.AutoSize = true;
+                    actionButton.MinimumSize = new Size(0, 28);
+                }
+                root.Controls.Add(inertialEditingActions, 0, 3);
                 groupBox5.Controls.Add(root);
                 groupBox5.Controls.Add(label15);
                 label15.Visible = false;
@@ -2063,7 +2083,7 @@ namespace SW2URDF.UI
             return footer;
         }
 
-        private static void ConfigureModernFooterButton(
+        private void ConfigureModernFooterButton(
             Button button,
             int minimumWidth,
             int tabIndex,
@@ -2073,8 +2093,50 @@ namespace SW2URDF.UI
             button.AutoSize = false;
             button.Margin = margin;
             button.MinimumSize = new Size(minimumWidth, 36);
-            button.Size = new Size(Math.Max(button.Width, minimumWidth), 36);
+            button.Size = new Size(minimumWidth, 36);
             button.TabIndex = tabIndex;
+            modernFooterDesigns.Add(button, Tuple.Create(minimumWidth, margin));
+        }
+
+        private void RefreshModernFooterMetrics(int dpi)
+        {
+            foreach (var entry in modernFooterDesigns)
+            {
+                ModernWinFormsTheme.ApplyFooterButtonMetrics(entry.Key, entry.Value.Item1,
+                    entry.Value.Item2, dpi);
+            }
+        }
+
+        private void RefreshModernInputMetrics(int dpi)
+        {
+            foreach (TextBox input in modernFixedHeightInputs)
+            {
+                int height = Math.Max(ModernWinFormsTheme.ScaleLogical(28, dpi),
+                    input.PreferredHeight);
+                input.MinimumSize = new Size(input.MinimumSize.Width, height);
+                input.Height = height;
+            }
+        }
+
+        protected override void OnDpiChanged(DpiChangedEventArgs e)
+        {
+            if (modernUiInitialized)
+            {
+                RestoreModernModelAutoSizeLayouts();
+                modernJointSections.ReleaseCachedPageLayouts();
+                modernLinkSections.ReleaseCachedPageLayouts();
+                modernJointExplicitLayoutSize = Size.Empty;
+                modernLinkExplicitLayoutSize = Size.Empty;
+                modernModelExplicitLayoutSize = Size.Empty;
+            }
+            base.OnDpiChanged(e);
+            if (modernUiInitialized && !e.Cancel)
+            {
+                RefreshModernFooterMetrics(e.DeviceDpiNew);
+                RefreshModernInputMetrics(e.DeviceDpiNew);
+                PrimeModernPageLayouts();
+                Invalidate(true);
+            }
         }
 
         private Control CreateModernTwoColumnFieldCard(
@@ -2149,7 +2211,7 @@ namespace SW2URDF.UI
             return header;
         }
 
-        private static void AddModernField(
+        private void AddModernField(
             TableLayoutPanel grid,
             Label label,
             Control control,
@@ -2167,7 +2229,8 @@ namespace SW2URDF.UI
                 // height while TableLayoutPanel measures the requested 28 px.
                 // That mismatch is what lets the last row paint past the grid.
                 textBox.AutoSize = false;
-                textBox.Height = Math.Max(textBox.Height, 28);
+                textBox.Height = 28;
+                modernFixedHeightInputs.Add(textBox);
             }
             control.Dock = DockStyle.Fill;
             // Reparented designer controls retain their legacy absolute-page
@@ -2178,7 +2241,7 @@ namespace SW2URDF.UI
             grid.Controls.Add(control, controlColumn, row);
         }
 
-        private static void AddModernValueRow(
+        private void AddModernValueRow(
             TableLayoutPanel grid,
             Label leftLabel,
             Control leftControl,
@@ -2215,16 +2278,7 @@ namespace SW2URDF.UI
             ModernWinFormsTheme.StyleSecondaryButton(modernUsdSettingsButton);
             ModernWinFormsTheme.StyleSecondaryButton(buttonLinksExportUrdfOnly);
             ModernWinFormsTheme.StylePrimaryButton(buttonLinksFinish);
-            ResizeButtonToText(buttonJointCancel);
-            ResizeButtonToText(buttonJointNext);
-            ResizeButtonToText(buttonLinksCancel);
-            ResizeButtonToText(buttonLinksPrevious);
-            ResizeButtonToText(modernLinkNextButton);
-            ResizeButtonToText(modernModelCancelButton);
-            ResizeButtonToText(modernModelPreviousButton);
-            ResizeButtonToText(modernUsdSettingsButton);
-            ResizeButtonToText(buttonLinksExportUrdfOnly);
-            ResizeButtonToText(buttonLinksFinish);
+            RefreshModernFooterMetrics(96);
 
             label1.ForeColor = ModernWinFormsTheme.Accent;
             AxisRequiredLabel.ForeColor = ModernWinFormsTheme.Accent;

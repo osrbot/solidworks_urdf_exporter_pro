@@ -185,6 +185,9 @@ namespace SW2URDF.UI
         public void FillLinkPropertyBoxes(Link Link)
         {
             BindPropertyControls(panelLinkProperties, () => FillLinkPropertyBoxesCore(Link));
+            refreshInertiaAfterEdit = false;
+            inertialInputErrors?.Clear();
+            UpdateInertialEditingControls(Link);
             UpdateInertiaMatrixMirrorBoxes();
             ValidateMaterialColorInputs();
             UpdateMaterialColorPreview();
@@ -487,12 +490,7 @@ namespace SW2URDF.UI
                 string previousMaterialName = Link.Visual.Material.Name;
                 double[] previousColor = Link.Visual.Material.Color.GetColor();
 
-                Link.Inertial.Origin.Update(textBoxInertialOriginX,
-                                            textBoxInertialOriginY,
-                                            textBoxInertialOriginZ,
-                                            textBoxInertialOriginRoll,
-                                            textBoxInertialOriginPitch,
-                                            textBoxInertialOriginYaw);
+                CommitInertialInputs(Link);
 
                 Link.Visual.Origin.Update(textBoxVisualOriginX,
                                           textBoxVisualOriginY,
@@ -500,15 +498,6 @@ namespace SW2URDF.UI
                                           textBoxVisualOriginRoll,
                                           textBoxVisualOriginPitch,
                                           textBoxVisualOriginYaw);
-
-                Link.Inertial.Mass.Update(textBoxMass);
-
-                Link.Inertial.Inertia.Update(textBoxIxx,
-                                             textBoxIxy,
-                                             textBoxIxz,
-                                             textBoxIyy,
-                                             textBoxIyz,
-                                             textBoxIzz);
 
                 if (TryReadMaterialRgba(out double[] rgba))
                 {

@@ -81,7 +81,7 @@ namespace SW2URDF.URDFExport.URDFMerge
 
             if (UseCSVInertial)
             {
-                mergedLink.Inertial.SetElement(csvLink.Inertial);
+                InertialEditingPolicy.ApplyExplicitValues(mergedLink, csvLink.Inertial);
             }
 
             if (UseCSVVisualCollision)
