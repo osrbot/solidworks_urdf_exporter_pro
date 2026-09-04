@@ -234,6 +234,7 @@ namespace SW2URDF.UI
         private readonly Label labelStage;
         private readonly Label labelElapsed;
         private readonly Label labelStageElapsed;
+        private readonly ProgressBar progressBar;
         private bool finishing;
 
         public ExportProgressForm()
@@ -244,7 +245,9 @@ namespace SW2URDF.UI
             ControlBox = false;
             ShowInTaskbar = false;
             TopMost = true;
-            ClientSize = new Size(480, 156);
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            ClientSize = new Size(480, 204);
 
             labelStage = new Label
             {
@@ -258,32 +261,55 @@ namespace SW2URDF.UI
             labelElapsed = new Label
             {
                 Name = "elapsed",
-                Location = new Point(16, 60),
+                Location = new Point(16, 92),
                 Size = new Size(448, 20),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
             labelStageElapsed = new Label
             {
                 Name = "stageElapsed",
-                Location = new Point(16, 84),
+                Location = new Point(16, 116),
                 Size = new Size(448, 20),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
             Label labelWaiting = new Label
             {
                 Name = "waiting",
-                Location = new Point(16, 112),
-                Size = new Size(448, 32),
+                Location = new Point(16, 148),
+                Size = new Size(448, 40),
+                Padding = new Padding(0, 8, 0, 0),
+                TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 Text = ChineseUiText.Translate(
                     "Still waiting for the current step to finish.", "仍在等待当前步骤完成。")
+            };
+            // Keep the original native marquee; its messages run on this window's independent STA.
+            progressBar = new ProgressBar
+            {
+                Name = "activity",
+                Location = new Point(16, 60),
+                Size = new Size(448, 20),
+                Style = ProgressBarStyle.Marquee,
+                MarqueeAnimationSpeed = 24,
+                TabStop = false,
+                AccessibleRole = AccessibleRole.ProgressBar,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                AccessibleName = ChineseUiText.Translate("Export in progress", "正在导出"),
+                AccessibleDescription = labelWaiting.Text
             };
 
             Controls.Add(labelStage);
             Controls.Add(labelElapsed);
             Controls.Add(labelStageElapsed);
             Controls.Add(labelWaiting);
-            ChineseUiText.Apply(this);
+            Controls.Add(progressBar);
+            ModernWinFormsTheme.Apply(this);
+            ModernWinFormsTheme.SetFont(labelStage, 10F, FontStyle.Bold);
+            ModernWinFormsTheme.SetFont(labelElapsed, 9F, FontStyle.Regular);
+            ModernWinFormsTheme.SetFont(labelStageElapsed, 9F, FontStyle.Regular);
+            ModernWinFormsTheme.SetFont(labelWaiting, 9F, FontStyle.Regular);
+            labelWaiting.ForeColor = ModernWinFormsTheme.MutedText;
+            labelWaiting.Paint += ModernWinFormsTheme.DrawTopBorder;
             UpdateProgress(labelStage.Text, TimeSpan.Zero, TimeSpan.Zero);
         }
 

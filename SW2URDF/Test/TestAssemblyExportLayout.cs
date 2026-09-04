@@ -2135,6 +2135,23 @@ namespace SW2URDF.Test
             Assert.Contains("velocity", failureReport);
         }
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void ComponentVisibilityFailureHasSpecificGuidanceWithoutInventingADataPath(bool chinese)
+        {
+            string report = ExportDiagnosticsDialog.FormatFailure(
+                "URDF export failed: ERROR COMPONENT_VISIBILITY: Could not show components: chassis/wheel-1.",
+                chinese, @"C:\logs\sw2urdf.log");
+            Assert.Contains("COMPONENT_VISIBILITY", report);
+            Assert.DoesNotContain("EXPORT_FAILED", report);
+            Assert.Contains("chassis/wheel-1", report);
+            Assert.Contains("URDF", report);
+            Assert.Contains(chinese ? "无需删除" : "do not delete", report);
+            Assert.DoesNotContain(chinese ? "数据位置:" : "Data path:", report);
+            Assert.Contains(@"C:\logs\sw2urdf.log", report);
+        }
+
         private static object InvokePrivate(
             AssemblyExportForm form,
             string methodName)

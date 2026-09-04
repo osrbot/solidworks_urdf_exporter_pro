@@ -242,7 +242,7 @@ namespace SW2URDF.UI
     internal sealed class ExportDiagnosticsDialog : Form
     {
         private static readonly Regex ValidationError = new Regex(
-            "\\b(?:ERROR|WARNING)\\s+(?<code>[A-Z][A-Z0-9_]+)\\s+(?<path>\\$[^:]+):",
+            "\\b(?:ERROR|WARNING)\\s+(?<code>[A-Z][A-Z0-9_]+)(?:\\s+(?<path>\\$[^:]+))?:",
             RegexOptions.CultureInvariant);
 
         private readonly string report;
@@ -464,6 +464,10 @@ namespace SW2URDF.UI
         {
             switch (code ?? string.Empty)
             {
+                case "COMPONENT_VISIBILITY":
+                    return chinese
+                        ? "SolidWorks 未能完成组件显示状态或选择集操作。为避免导出缺件，已停止网格导出。请检查列出的组件和装配体显示状态，退出正在编辑的命令后重试，并保留完整日志；无需删除参考几何或 URDF 配置。"
+                        : "SolidWorks could not complete a component visibility or selection operation. Mesh export was stopped to avoid missing geometry. Check the listed components and assembly visibility, finish any active editing command, and retry. Keep the full log; do not delete reference geometry or the URDF configuration.";
                 case "V2_BUNDLE_REQUIRED":
                     return chinese
                         ? "内部模型包配置异常；重新打开导出器后再试。"

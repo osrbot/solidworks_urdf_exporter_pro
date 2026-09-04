@@ -207,7 +207,7 @@ namespace SW2URDF.URDFExport
             bool progressStarted = false;
             bool preferencesSaved = false;
             bool visibilityMayHaveChanged = false;
-            List<string> hiddenComponents = null;
+            List<ComponentVisibilityState> assemblyVisibility = null;
             List<MeshExportRecord> meshRecords = new List<MeshExportRecord>();
             URDFPackage exportedPackage = null;
             ExportOutputSnapshot outputBeforeExport = null;
@@ -297,13 +297,15 @@ namespace SW2URDF.URDFExport
                 {
                     throw new InvalidOperationException("The active SolidWorks document is not an assembly.");
                 }
-                hiddenComponents = CommonSwOperations.FindHiddenComponents(assyDoc.GetComponents(false));
-                logger.Info("Found " + hiddenComponents.Count + " hidden components " + String.Join(", ", hiddenComponents));
+                assemblyVisibility = CaptureComponentVisibility(
+                    CommonSwOperations.EnumerateComObjects<Component2>(assyDoc.GetComponents(false),
+                        "capturing assembly visibility before export"));
+                logger.Info("Captured local visibility for " + assemblyVisibility.Count + " assembly components.");
                 logger.Info("Hiding all components");
                 UpdateProgressTitle("Preparing SolidWorks components", "\u6b63\u5728\u51c6\u5907 SolidWorks \u7ec4\u4ef6");
                 visibilityMayHaveChanged = true;
-                ActiveSWModel.Extension.SelectAll();
-                ActiveSWModel.HideComponent2();
+                CommonSwOperations.SetComponentVisibility(ActiveSWModel,
+                    assemblyVisibility.Select(state => state.Component), false);
 
                 logger.Info("Beginning individual files export");
                 ExportFiles(URDFRobot.BaseLink, package, exportSTL, meshFormat, meshRecords);
@@ -371,7 +373,7 @@ namespace SW2URDF.URDFExport
             finally
             {
                 bool environmentRestored = RestoreExportEnvironment(
-                    hiddenComponents,
+                    assemblyVisibility,
                     visibilityMayHaveChanged,
                     preferencesSaved,
                     progressStarted);
@@ -498,7 +500,7 @@ namespace SW2URDF.URDFExport
         }
 
         private bool RestoreExportEnvironment(
-            List<string> hiddenComponents,
+            List<ComponentVisibilityState> assemblyVisibility,
             bool restoreVisibility,
             bool restorePreferences,
             bool endProgress)
@@ -519,13 +521,15 @@ namespace SW2URDF.URDFExport
 
                 try
                 {
-                    logger.Info("Showing all components except previously hidden components");
-                    CommonSwOperations.ShowAllComponents(ActiveSWModel, hiddenComponents);
+                    logger.Info("Restoring the original local visibility of all assembly components");
+                    RestoreComponentVisibility(ActiveSWModel, assemblyVisibility);
                 }
                 catch (Exception e)
                 {
                     restored = false;
                     logger.Error("Restoring SolidWorks component visibility failed", e);
+                    ExportErrorWhy = (String.IsNullOrWhiteSpace(ExportErrorWhy) ? String.Empty : ExportErrorWhy + System.Environment.NewLine) +
+                        "ERROR COMPONENT_VISIBILITY: The original assembly visibility could not be restored. " + e.Message;
                 }
             }
 
@@ -2677,7 +2681,10 @@ namespace SW2URDF.URDFExport
             UpdateProgressTitle("Reading component visibility: " + link.Name,
                 "\u6b63\u5728\u8bfb\u53d6\u7ec4\u4ef6\u663e\u793a\u72b6\u6001: " + link.Name);
             List<ComponentVisibilityState> visibilityBeforeExport =
-                CaptureComponentVisibility(link.SWComponents);
+                CaptureComponentVisibility(CommonSwOperations.EnumerateComObjects<Component2>(
+                    ((AssemblyDoc)ActiveSWModel).GetComponents(false), "capturing mesh isolation visibility"));
+            List<ComponentVisibilityState> meshVisibility =
+                CreateIsolatedVisibilityPlan(visibilityBeforeExport, link.SWComponents);
             bool visibilityMayHaveChanged = false;
             Exception operationFailure = null;
             try
@@ -2685,8 +2692,7 @@ namespace SW2URDF.URDFExport
                 visibilityMayHaveChanged = true;
                 UpdateProgressTitle("Showing mesh components: " + link.Name,
                     "\u6b63\u5728\u663e\u793a\u7f51\u683c\u7ec4\u4ef6: " + link.Name);
-                CommonSwOperations.SetComponentVisibility(ActiveSWModel,
-                    visibilityBeforeExport.Select(state => state.Component), true);
+                RestoreComponentVisibility(ActiveSWModel, meshVisibility);
                 return operation();
             }
             catch (Exception exception)
@@ -2723,12 +2729,57 @@ namespace SW2URDF.URDFExport
                         else
                         {
                             throw new InvalidOperationException(
-                                "SolidWorks component visibility could not be restored after mesh export.",
+                                "ERROR COMPONENT_VISIBILITY: SolidWorks component visibility could not be restored after mesh export. " + cleanupException.Message,
                                 cleanupException);
                         }
                     }
                 }
             }
+        }
+
+        internal static List<ComponentVisibilityState> CreateIsolatedVisibilityPlan(
+            IList<ComponentVisibilityState> assemblyStates, IEnumerable<Component2> requested)
+        {
+            List<Component2> requestedRoots = (requested ?? Enumerable.Empty<Component2>())
+                .Where(component => component != null).ToList();
+            foreach (Component2 component in requestedRoots)
+            {
+                if (component.IsSuppressed())
+                    throw new InvalidOperationException(
+                        "ERROR COMPONENT_VISIBILITY: A component selected for this Link is suppressed: " + component.Name2 + ".");
+            }
+            Dictionary<string, Component2> assembly = assemblyStates.ToDictionary(
+                state => state.Component.Name2, state => state.Component, StringComparer.OrdinalIgnoreCase);
+            HashSet<string> visible = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> resolvedAncestors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ComponentVisibilityState requestedState in CaptureComponentVisibility(requestedRoots))
+            {
+                Component2 current = requestedState.Component;
+                if (current.IsSuppressed()) continue;
+                HashSet<string> chain = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                while (current != null)
+                {
+                    string identity = current.Name2;
+                    if (String.IsNullOrWhiteSpace(identity) || !assembly.ContainsKey(identity))
+                        throw new InvalidOperationException(
+                            "ERROR COMPONENT_VISIBILITY: Link component or ancestor is not in the active assembly: " + identity + ".");
+                    if (!chain.Add(identity))
+                        throw new InvalidOperationException(
+                            "ERROR COMPONENT_VISIBILITY: Cyclic component parent reference: " + identity + ".");
+                    if (current.IsSuppressed())
+                        throw new InvalidOperationException(
+                            "ERROR COMPONENT_VISIBILITY: A required Link ancestor is suppressed: " + identity + ".");
+                    visible.Add(identity);
+                    if (resolvedAncestors.Contains(identity)) break;
+                    current = current.GetParent();
+                }
+                resolvedAncestors.UnionWith(chain);
+            }
+            // Ancestors provide the path to a nested Link, not ownership of their other children.
+            return assemblyStates.Select(state => new ComponentVisibilityState(state.Component,
+                visible.Contains(state.Component.Name2)
+                    ? (int)swComponentVisibilityState_e.swComponentVisible
+                    : (int)swComponentVisibilityState_e.swComponentHidden)).ToList();
         }
 
         internal static List<ComponentVisibilityState> CaptureComponentVisibility(
@@ -2785,6 +2836,7 @@ namespace SW2URDF.URDFExport
             {
                 return;
             }
+            Exception operationFailure = null;
             try
             {
                 List<Component2> visibleComponents = states
@@ -2808,15 +2860,63 @@ namespace SW2URDF.URDFExport
                     try { CommonSwOperations.SetComponentVisibility(model, hiddenComponents, false, prepareSelection); }
                     catch (Exception exception) { failures.Add(exception); }
                 }
+                // Showing a child can unhide its parent. Restore descendants first and
+                // parent states last, then verify the entire snapshot before discarding it.
+                List<ComponentVisibilityState> orderedStates = states.OrderByDescending(state =>
+                    state.Component.Name2.Count(character => character == '/')).ToList();
+                foreach (ComponentVisibilityState state in orderedStates)
+                {
+                    try
+                    {
+                        if (!state.Component.IsSuppressed() && state.Component.Visible != state.Visibility)
+                            state.Component.Visible = state.Visibility;
+                    }
+                    catch (Exception exception)
+                    {
+                        failures.Add(new InvalidOperationException(
+                            "Could not restore component " + state.Component.Name2 + ".", exception));
+                    }
+                }
+                foreach (ComponentVisibilityState state in orderedStates)
+                {
+                    try
+                    {
+                        if (!state.Component.IsSuppressed() && state.Component.Visible != state.Visibility)
+                            throw new InvalidOperationException("Component visibility was not restored: " + state.Component.Name2 + ".");
+                    }
+                    catch (Exception exception) { failures.Add(exception); }
+                }
+                // State-only failures may have been repaired above; cleanup and unexpected
+                // API failures still block, even when visibility now matches.
+                foreach (CommonSwOperations.ComponentVisibilityException recovered in failures
+                    .OfType<CommonSwOperations.ComponentVisibilityException>()
+                    .Where(failure => !failure.SelectionCleanupFailed).ToList())
+                {
+                    logger.Warn("A visibility group required the final snapshot repair.", recovered);
+                    failures.Remove(recovered);
+                }
                 if (failures.Count > 0)
-                    throw new AggregateException("Restoring component visibility failed.", failures);
+                    throw new AggregateException("ERROR COMPONENT_VISIBILITY: Restoring component visibility failed. " +
+                        String.Join(" ", failures.Select(failure => failure.Message)), failures);
+            }
+            catch (Exception exception)
+            {
+                operationFailure = exception;
+                throw;
             }
             finally
             {
                 try { model.ClearSelection2(true); }
-                catch (COMException) { }
-                states.Clear();
+                catch (Exception cleanupException)
+                {
+                    if (operationFailure == null)
+                        throw new InvalidOperationException(
+                            "ERROR COMPONENT_VISIBILITY: Component states were applied, but the final selection could not be cleared.",
+                            cleanupException);
+                    logger.Error("Clearing the selection after visibility restoration also failed.", cleanupException);
+                }
             }
+            states.Clear();
         }
 
         internal sealed class ComponentVisibilityState

@@ -375,6 +375,7 @@
     <Compile Include="Test\TestUrdfExportTutorial.cs" />
     <Compile Include="Test\TestExportHelper.cs" />
     <Compile Include="Test\TestExportProgress.cs" />
+    <Compile Include="Test\TestExportProgressTheme.cs" />
     <Compile Include="Test\TestInstallerScript.cs" />
     <Compile Include="Test\TestInertiaEllipsoid.cs" />
     <Compile Include="Test\TestInertiaConvention.cs" />

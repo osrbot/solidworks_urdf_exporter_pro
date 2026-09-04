@@ -91,6 +91,11 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### Fixed
 
+- Restored the familiar progress-bar appearance and shared dialog theme while preserving the
+  independent progress window, elapsed times, and responsive status updates.
+- Recover incomplete SolidWorks component selections through verified visibility updates.
+  Mesh export now includes required ancestors without showing unrelated siblings, restores the
+  complete original visibility snapshot, and stops with component-specific guidance if verification fails.
 - Removed repeated descendant expansion and per-component selection from mesh visibility changes.
   Export progress now keeps its own responsive window while SolidWorks completes a blocking call.
 - Converted oversized STL meshes to lossless OBJ assets for MuJoCo, avoiding its 200,000-face STL
@@ -195,6 +200,10 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 #### 修复
 
+- 恢复原有进度条样式和统一的窗口配色，保留独立刷新的进度窗口、当前步骤与用时。
+- 修复 SolidWorks 只选中部分组件时导出失败的问题。批量选择不完整时，改为直接设置并核验显示状态；
+  嵌套零件会同时处理必要的父级，避免漏件或混入同级零件，导出后恢复完整的原始显示状态。
+  无法核验时停止导出，并提示具体组件，不再只显示笼统的导出失败。
 - 网格导出时，组件显示/隐藏改为去重后批量处理，避免反复展开和逐个选中组件。
   进度窗口会持续显示当前步骤和用时，不再随 SolidWorks 的耗时调用一起停止刷新。
 - MuJoCo 遇到超过 20 万个三角面的 STL 时，自动转换为保留全部三角面的 OBJ。

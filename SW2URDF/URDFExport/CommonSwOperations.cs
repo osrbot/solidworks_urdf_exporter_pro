@@ -181,47 +181,110 @@ namespace SW2URDF.URDFExport
         {
             // Snapshot restoration is already flat. Do not expand it a second time.
             HashSet<string> visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            object[] objects = (components ?? Enumerable.Empty<Component2>())
+            List<Component2> targets = (components ?? Enumerable.Empty<Component2>())
                 .Where(component => component != null && visited.Add(component.Name2) &&
                     !component.IsSuppressed())
-                .Select(prepareSelection)
-                .ToArray();
-            if (objects.Length == 0)
+                .ToList();
+            int desiredState = visible
+                ? (int)swComponentVisibilityState_e.swComponentVisible
+                : (int)swComponentVisibilityState_e.swComponentHidden;
+            List<Component2> changed = targets.Where(component => component.Visible != desiredState).ToList();
+            if (changed.Count == 0)
             {
                 return;
             }
-            Exception operationFailure = null;
+            Exception cleanupFailure = null;
             try
             {
+                object[] objects = changed.Select(prepareSelection).ToArray();
                 int selected = model.Extension.MultiSelect2(objects, false, null);
-                if (selected != objects.Length)
+                if (selected == objects.Length)
                 {
-                    throw new InvalidOperationException(String.Format(
-                        "Only {0} of {1} components could be selected to {2}.",
-                        selected, objects.Length, visible ? "show" : "hide"));
-                }
-                if (visible)
-                {
-                    model.ShowComponent2();
+                    if (visible) model.ShowComponent2();
+                    else model.HideComponent2();
                 }
                 else
                 {
-                    model.HideComponent2();
+                    logger.Warn(String.Format(
+                        "Selected {0}/{1} visibility changes; using direct component visibility to {2}.",
+                        selected, objects.Length, visible ? "show" : "hide"));
                 }
             }
             catch (Exception exception)
             {
-                operationFailure = exception;
-                throw;
+                logger.Warn("Bulk visibility update failed; verifying direct component visibility.", exception);
             }
             finally
             {
                 try { model.ClearSelection2(true); }
                 catch (Exception cleanupException)
                 {
-                    if (operationFailure == null) throw;
-                    logger.Error("Clearing a failed visibility selection also failed.", cleanupException);
+                    cleanupFailure = cleanupException;
+                    logger.Error("Clearing the visibility selection failed.", cleanupException);
                 }
+            }
+
+            // Hidden descendants need not be selectable. Verify states, not selection counts.
+            // Parent-first showing and child-first hiding avoid changing a subtree repeatedly.
+            IEnumerable<Component2> ordered = visible
+                ? targets.OrderBy(component => component.Name2.Count(character => character == '/'))
+                : targets.OrderByDescending(component => component.Name2.Count(character => character == '/'));
+            List<Exception> failures = new List<Exception>();
+            List<string> failedNames = new List<string>();
+            foreach (Component2 component in ordered)
+            {
+                try
+                {
+                    if (component.Visible != desiredState) component.Visible = desiredState;
+                    if (component.Visible != desiredState)
+                    {
+                        throw new InvalidOperationException("SolidWorks did not apply the requested visibility.");
+                    }
+                }
+                catch (Exception exception)
+                {
+                    failedNames.Add(component.Name2);
+                    failures.Add(exception);
+                }
+            }
+            foreach (Component2 component in targets)
+            {
+                if (failedNames.Contains(component.Name2)) continue;
+                try
+                {
+                    if (component.Visible != desiredState)
+                        throw new InvalidOperationException("A later visibility change altered this component.");
+                }
+                catch (Exception exception)
+                {
+                    failedNames.Add(component.Name2);
+                    failures.Add(exception);
+                }
+            }
+            if (failedNames.Count > 0)
+            {
+                if (cleanupFailure != null) failures.Add(cleanupFailure);
+                throw new ComponentVisibilityException(
+                    "ERROR COMPONENT_VISIBILITY: Could not " + (visible ? "show" : "hide") +
+                    " components: " + String.Join(", ", failedNames) + ". No partial mesh will be exported.",
+                    new AggregateException(failures), cleanupFailure != null);
+            }
+            if (cleanupFailure != null)
+            {
+                throw new ComponentVisibilityException(
+                    "ERROR COMPONENT_VISIBILITY: Component states were applied, but the SolidWorks selection could not be cleared.",
+                    cleanupFailure, true);
+            }
+        }
+
+        internal sealed class ComponentVisibilityException : InvalidOperationException
+        {
+            internal bool SelectionCleanupFailed { get; private set; }
+
+            internal ComponentVisibilityException(string message, Exception inner, bool selectionCleanupFailed)
+                : base(message, inner)
+            {
+                SelectionCleanupFailed = selectionCleanupFailed;
             }
         }
 
