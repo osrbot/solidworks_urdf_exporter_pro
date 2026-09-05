@@ -2648,11 +2648,24 @@ namespace SW2URDF.URDFExport
             StlExportStats stlStats = CreateStlExportStats(link, meshSettings);
 
             logger.Info("Saving STL to " + windowsMeshFilename);
+            logger.Info(String.Format(
+                "{0}: SolidWorks STL preferences before SaveAs: quality={1}, binary={2}, units={3}, oneFile={4}, interference={5}, deviation={6:R}, angle={7:R}",
+                link.Name,
+                iSwApp.GetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality),
+                iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLBinaryFormat),
+                iSwApp.GetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swExportStlUnits),
+                iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLComponentsIntoOneFile),
+                iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLCheckForInterference),
+                iSwApp.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation),
+                iSwApp.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance)));
             UpdateProgressTitle("SolidWorks is saving STL: " + link.Name,
                 "SolidWorks \u6b63\u5728\u4fdd\u5b58 STL: " + link.Name);
+            Stopwatch saveTimer = Stopwatch.StartNew();
             bool saved = activeDoc.Extension.SaveAs(windowsMeshFilename,
                 (int)swSaveAsVersion_e.swSaveAsCurrentVersion, saveOptions, null,
                 ref errors, ref warnings);
+            logger.Info(String.Format("{0}: SolidWorks SaveAs returned after {1:F3} seconds; saved={2}, errors={3}, warnings={4}",
+                link.Name, saveTimer.Elapsed.TotalSeconds, saved, errors, warnings));
             if (!saved || errors != 0 || !File.Exists(windowsMeshFilename))
             {
                 throw new InvalidOperationException(

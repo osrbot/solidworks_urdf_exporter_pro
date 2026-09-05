@@ -13,6 +13,171 @@ namespace SW2URDF.Test
 {
     public class TestSolidWorksEffectiveMass
     {
+        [Theory]
+        [InlineData(true, true, true)]
+        [InlineData(false, false, false)]
+        [InlineData(false, true, false)]
+        [InlineData(true, false, true)]
+        public void ReadSuspendsRefreshAndRestoresExactOriginalStates(bool window, bool tree, bool graphics)
+        {
+            var fixture = new Fixture();
+            fixture.FeatureManager.Object.EnableFeatureTreeWindow = window;
+            fixture.FeatureManager.Object.EnableFeatureTree = tree;
+            fixture.View.Object.EnableGraphicsUpdate = graphics;
+            fixture.BeforeOverridesRead = scope => fixture.AssertRefreshSuspended();
+
+            Assert.Equal(3.0, fixture.Read(fixture.Component("part-1", 3.0).Object).Mass);
+
+            Assert.Equal(window, fixture.FeatureManager.Object.EnableFeatureTreeWindow);
+            Assert.Equal(tree, fixture.FeatureManager.Object.EnableFeatureTree);
+            Assert.Equal(graphics, fixture.View.Object.EnableGraphicsUpdate);
+            // Initial assignment, suspension, and restoration, including initial false.
+            fixture.FeatureManager.VerifySet(value => value.EnableFeatureTreeWindow = It.IsAny<bool>(), Times.Exactly(3));
+            fixture.FeatureManager.VerifySet(value => value.EnableFeatureTree = It.IsAny<bool>(), Times.Exactly(3));
+            fixture.View.VerifySet(value => value.EnableGraphicsUpdate = It.IsAny<bool>(), Times.Exactly(3));
+            Assert.Equal(3, fixture.NumericReads);
+            Assert.False(fixture.SelectionSuspended);
+        }
+
+        [Fact]
+        public void CalculationFailureRestoresRefreshAndPreservesOriginalException()
+        {
+            var fixture = new Fixture();
+            var cause = new InvalidOperationException("calculation failed");
+            fixture.ConfigureProperty = (property, index) => property.Setup(value => value.Recalculate()).Throws(cause);
+
+            Assert.Same(cause, Assert.Throws<InvalidOperationException>(() =>
+                fixture.Read(fixture.Component("part-1", 3.0).Object)));
+
+            fixture.AssertRefreshRestored();
+            Assert.False(fixture.SelectionSuspended);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(1)]
+        [InlineData(2)]
+        public void PartialDisableFailureStillRestoresEveryCapturedState(int failingSetting)
+        {
+            var fixture = new Fixture();
+            var cause = new InvalidOperationException("disable failed after mutation");
+            bool changedState = true;
+            if (failingSetting == 0)
+            {
+                fixture.FeatureManager.SetupGet(value => value.EnableFeatureTreeWindow).Returns(() => changedState);
+                fixture.FeatureManager.SetupSet(value => value.EnableFeatureTreeWindow = It.IsAny<bool>())
+                    .Callback<bool>(value => { changedState = value; if (!value) throw cause; });
+            }
+            if (failingSetting == 1)
+            {
+                fixture.FeatureManager.SetupGet(value => value.EnableFeatureTree).Returns(() => changedState);
+                fixture.FeatureManager.SetupSet(value => value.EnableFeatureTree = It.IsAny<bool>())
+                    .Callback<bool>(value => { changedState = value; if (!value) throw cause; });
+            }
+            if (failingSetting == 2)
+            {
+                fixture.View.SetupGet(value => value.EnableGraphicsUpdate).Returns(() => changedState);
+                fixture.View.SetupSet(value => value.EnableGraphicsUpdate = It.IsAny<bool>())
+                    .Callback<bool>(value => { changedState = value; if (!value) throw cause; });
+            }
+
+            Assert.Same(cause, Assert.Throws<InvalidOperationException>(() =>
+                fixture.Read(fixture.Component("part-1", 3.0).Object)));
+
+            fixture.AssertRefreshRestored();
+            fixture.VerifyAllRefreshRestoreAttempts();
+            Assert.Empty(fixture.Properties);
+        }
+
+        [Theory]
+        [InlineData(0, false)]
+        [InlineData(1, false)]
+        [InlineData(2, false)]
+        [InlineData(0, true)]
+        [InlineData(1, true)]
+        [InlineData(2, true)]
+        public void RefreshRestoreFailureAttemptsOtherSettingsAndPreservesReadFailure(int failingSetting, bool failRead)
+        {
+            var fixture = new Fixture();
+            var restoreFailure = new COMException("refresh restore failed");
+            var readFailure = new InvalidOperationException("calculation failed");
+            if (failRead)
+                fixture.ConfigureProperty = (property, index) => property.Setup(value => value.Recalculate()).Throws(readFailure);
+            if (failingSetting == 0)
+                fixture.View.SetupSet(value => value.EnableGraphicsUpdate = true).Throws(restoreFailure);
+            if (failingSetting == 1)
+                fixture.FeatureManager.SetupSet(value => value.EnableFeatureTree = true).Throws(restoreFailure);
+            if (failingSetting == 2)
+                fixture.FeatureManager.SetupSet(value => value.EnableFeatureTreeWindow = true).Throws(restoreFailure);
+
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Read(fixture.Component("part-1", 3.0).Object));
+
+            var causes = Assert.IsType<AggregateException>(error.InnerException);
+            Assert.Equal(failRead ? 2 : 1, causes.InnerExceptions.Count);
+            if (failRead) Assert.Same(readFailure, causes.InnerExceptions[0]);
+            Assert.Same(restoreFailure, causes.InnerExceptions.Last());
+            fixture.VerifyAllRefreshRestoreAttempts();
+            if (failingSetting != 0) Assert.True(fixture.View.Object.EnableGraphicsUpdate);
+            if (failingSetting != 1) Assert.True(fixture.FeatureManager.Object.EnableFeatureTree);
+            if (failingSetting != 2) Assert.True(fixture.FeatureManager.Object.EnableFeatureTreeWindow);
+            Assert.False(fixture.SelectionSuspended);
+        }
+
+        [Fact]
+        public void SelectionRestoreFailureStillRestoresRefresh()
+        {
+            var fixture = new Fixture();
+            var cause = new COMException("selection restore failed");
+            fixture.SelectionManager.Setup(value => value.ResumeSelectionList2(false)).Throws(cause);
+
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Read(fixture.Component("part-1", 3.0).Object));
+
+            Assert.Same(cause, error.InnerException);
+            fixture.AssertRefreshRestored();
+        }
+
+        [Fact]
+        public void CaptureFailureDoesNotChangeAnyRefreshState()
+        {
+            var fixture = new Fixture();
+            var cause = new COMException("graphics getter failed");
+            fixture.View.SetupGet(value => value.EnableGraphicsUpdate).Throws(cause);
+
+            Assert.Same(cause, Assert.Throws<COMException>(() => fixture.Read(fixture.Component("part-1", 3.0).Object)));
+
+            fixture.FeatureManager.VerifySet(value => value.EnableFeatureTreeWindow = It.IsAny<bool>(), Times.Never);
+            fixture.FeatureManager.VerifySet(value => value.EnableFeatureTree = It.IsAny<bool>(), Times.Never);
+            fixture.View.VerifySet(value => value.EnableGraphicsUpdate = It.IsAny<bool>(), Times.Never);
+            Assert.Empty(fixture.Properties);
+        }
+
+        [Fact]
+        public void MultipleRestoreFailuresRetainCalculationAndSelectionFailures()
+        {
+            var fixture = new Fixture();
+            var calculationFailure = new InvalidOperationException("calculation failed");
+            var selectionFailure = new COMException("selection restore failed");
+            var graphicsFailure = new COMException("graphics restore failed");
+            var treeFailure = new COMException("tree restore failed");
+            fixture.ConfigureProperty = (property, index) => property.Setup(value => value.Recalculate()).Throws(calculationFailure);
+            fixture.SelectionManager.Setup(value => value.ResumeSelectionList2(false)).Throws(selectionFailure);
+            fixture.View.SetupSet(value => value.EnableGraphicsUpdate = true).Throws(graphicsFailure);
+            fixture.FeatureManager.SetupSet(value => value.EnableFeatureTree = true).Throws(treeFailure);
+
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Read(fixture.Component("part-1", 3.0).Object));
+
+            var refreshCauses = Assert.IsType<AggregateException>(error.InnerException);
+            Assert.Equal(3, refreshCauses.InnerExceptions.Count);
+            var selectionError = Assert.IsType<InvalidOperationException>(refreshCauses.InnerExceptions[0]);
+            var readCauses = Assert.IsType<AggregateException>(selectionError.InnerException);
+            Assert.Same(calculationFailure, readCauses.InnerExceptions[0]);
+            Assert.Same(selectionFailure, readCauses.InnerExceptions[1]);
+            Assert.Same(graphicsFailure, refreshCauses.InnerExceptions[1]);
+            Assert.Same(treeFailure, refreshCauses.InnerExceptions[2]);
+            fixture.VerifyAllRefreshRestoreAttempts();
+            Assert.True(fixture.FeatureManager.Object.EnableFeatureTreeWindow);
+        }
+
         [Fact]
         public void SelectedPartUsesEffectiveSiValuesAndSeparateComAndInertiaObjects()
         {
@@ -540,6 +705,8 @@ namespace SW2URDF.Test
             public readonly Mock<ModelDocExtension> Extension = new Mock<ModelDocExtension>(MockBehavior.Strict);
             public readonly Mock<Configuration> Configuration = new Mock<Configuration>();
             public readonly Mock<SelectionMgr> SelectionManager = new Mock<SelectionMgr>(MockBehavior.Strict);
+            public readonly Mock<FeatureManager> FeatureManager = new Mock<FeatureManager>(MockBehavior.Strict);
+            public readonly Mock<ModelView> View = new Mock<ModelView>(MockBehavior.Strict);
             public object[] Selection = new object[0];
             public bool SelectionSuspended;
             private object[] savedSelection;
@@ -556,6 +723,11 @@ namespace SW2URDF.Test
 
             public Fixture()
             {
+                FeatureManager.SetupProperty(value => value.EnableFeatureTreeWindow, true);
+                FeatureManager.SetupProperty(value => value.EnableFeatureTree, true);
+                View.SetupProperty(value => value.EnableGraphicsUpdate, true);
+                Assembly.SetupGet(value => value.FeatureManager).Returns(FeatureManager.Object);
+                Assembly.SetupGet(value => value.ActiveView).Returns(View.Object);
                 Configuration.SetupGet(value => value.Name).Returns("Export configuration");
                 var manager = new Mock<ConfigurationManager>();
                 manager.SetupGet(value => value.ActiveConfiguration).Returns(Configuration.Object);
@@ -624,8 +796,30 @@ namespace SW2URDF.Test
                 return SolidWorksMassPropertyReader.Read(Assembly.Object, components);
             }
 
+            public void AssertRefreshSuspended()
+            {
+                Assert.False(FeatureManager.Object.EnableFeatureTreeWindow);
+                Assert.False(FeatureManager.Object.EnableFeatureTree);
+                Assert.False(View.Object.EnableGraphicsUpdate);
+            }
+
+            public void AssertRefreshRestored()
+            {
+                Assert.True(FeatureManager.Object.EnableFeatureTreeWindow);
+                Assert.True(FeatureManager.Object.EnableFeatureTree);
+                Assert.True(View.Object.EnableGraphicsUpdate);
+            }
+
+            public void VerifyAllRefreshRestoreAttempts()
+            {
+                FeatureManager.VerifySet(value => value.EnableFeatureTreeWindow = true, Times.AtLeastOnce);
+                FeatureManager.VerifySet(value => value.EnableFeatureTree = true, Times.AtLeastOnce);
+                View.VerifySet(value => value.EnableGraphicsUpdate = true, Times.AtLeastOnce);
+            }
+
             private Mock<IMassProperty2> CreateProperty()
             {
+                AssertRefreshSuspended();
                 Assert.True(SelectionSuspended);
                 Assert.Empty(Selection);
                 var property = new Mock<IMassProperty2>(MockBehavior.Strict);
@@ -655,6 +849,7 @@ namespace SW2URDF.Test
                 property.SetupGet(value => value.SelectedItems).Returns(() => scope.Cast<object>().ToArray());
                 property.Setup(value => value.Recalculate()).Returns(() =>
                 {
+                    AssertRefreshSuspended();
                     Assert.True(property.Object.UseSystemUnits);
                     Assert.True(property.Object.IncludeHiddenBodiesOrComponents);
                     recalculated = true;
@@ -671,6 +866,7 @@ namespace SW2URDF.Test
                 });
                 property.SetupGet(value => value.CenterOfMass).Returns(() =>
                 {
+                    AssertRefreshSuspended();
                     Assert.True(AllowWholeDocument || scope.Length > 0);
                     Assert.True(recalculated);
                     readCenter = true;
@@ -679,6 +875,7 @@ namespace SW2URDF.Test
                 });
                 property.SetupGet(value => value.Mass).Returns(() =>
                 {
+                    AssertRefreshSuspended();
                     Assert.True(AllowWholeDocument || scope.Length > 0);
                     Assert.True(recalculated);
                     NumericReads++;
@@ -686,6 +883,7 @@ namespace SW2URDF.Test
                 });
                 property.Setup(value => value.GetMomentOfInertia((int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass)).Returns(() =>
                 {
+                    AssertRefreshSuspended();
                     Assert.True(AllowWholeDocument || scope.Length > 0);
                     Assert.True(recalculated);
                     Assert.False(readCenter);

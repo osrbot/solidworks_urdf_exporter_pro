@@ -22,6 +22,87 @@ namespace SW2URDF.URDFExport
         public static MassPropertySnapshot Read(ModelDoc2 assembly, IList<Component2> selectedComponents)
         {
             if (assembly == null) throw new ArgumentNullException("assembly");
+            if (selectedComponents != null && selectedComponents.Count == 0)
+                throw new ArgumentException("Select at least one component; an empty Link must not read the whole assembly.", "selectedComponents");
+
+            var refresh = new MassPropertyRefreshScope(assembly);
+            Exception readFailure = null;
+            try
+            {
+                refresh.Suspend();
+                return ReadWithRefreshSuspended(assembly, selectedComponents);
+            }
+            catch (Exception error)
+            {
+                readFailure = error;
+                throw;
+            }
+            finally
+            {
+                refresh.Restore(readFailure);
+            }
+        }
+
+        private sealed class MassPropertyRefreshScope
+        {
+            private readonly FeatureManager featureManager;
+            private readonly ModelView view;
+            private readonly bool featureTreeWindowEnabled;
+            private readonly bool featureTreeEnabled;
+            private readonly bool graphicsEnabled;
+
+            public MassPropertyRefreshScope(ModelDoc2 document)
+            {
+                featureManager = document.FeatureManager;
+                view = document.ActiveView as ModelView;
+                // Capture everything before any setter; a failed capture changes nothing.
+                if (featureManager != null)
+                {
+                    featureTreeWindowEnabled = featureManager.EnableFeatureTreeWindow;
+                    featureTreeEnabled = featureManager.EnableFeatureTree;
+                }
+                if (view != null) graphicsEnabled = view.EnableGraphicsUpdate;
+            }
+
+            public void Suspend()
+            {
+                if (featureManager != null)
+                {
+                    featureManager.EnableFeatureTreeWindow = false;
+                    featureManager.EnableFeatureTree = false;
+                }
+                if (view != null) view.EnableGraphicsUpdate = false;
+            }
+
+            public void Restore(Exception readFailure)
+            {
+                // A setter may mutate then throw. Restore every captured state independently.
+                var failures = new List<Exception>();
+                if (view != null)
+                {
+                    try { view.EnableGraphicsUpdate = graphicsEnabled; }
+                    catch (Exception error) { failures.Add(error); }
+                }
+                if (featureManager != null)
+                {
+                    try { featureManager.EnableFeatureTree = featureTreeEnabled; }
+                    catch (Exception error) { failures.Add(error); }
+                    try { featureManager.EnableFeatureTreeWindow = featureTreeWindowEnabled; }
+                    catch (Exception error) { failures.Add(error); }
+                }
+                if (failures.Count > 0)
+                {
+                    if (readFailure != null) failures.Insert(0, readFailure);
+                    throw new InvalidOperationException(
+                        "SolidWorks could not restore refresh states after reading mass properties.",
+                        new AggregateException(failures));
+                }
+            }
+        }
+
+        private static MassPropertySnapshot ReadWithRefreshSuspended(ModelDoc2 assembly, IList<Component2> selectedComponents)
+        {
+            if (assembly == null) throw new ArgumentNullException("assembly");
             bool wholeDocument = selectedComponents == null;
             if (!wholeDocument && selectedComponents.Count == 0)
                 throw new ArgumentException("Select at least one component; an empty Link must not read the whole assembly.", "selectedComponents");
