@@ -363,6 +363,7 @@ namespace SW2URDF.URDFExport
 
         internal void ComputeInertialProperties(Link link)
         {
+            ResolvePendingInertialFrameChange(link);
             MathTransform linkTransform = GetCoordinateSystemTransform(
                 link.FrameReference);
             if (linkTransform == null)
@@ -514,15 +515,8 @@ namespace SW2URDF.URDFExport
 
             try
             {
-                MathTransform previousFrame = GetCoordinateSystemTransform(node.Link.FrameReference);
-                var edits = node.Link.InertialEditing;
-                bool needsPreviousFrame = edits != null && (edits.OriginEdited || edits.TensorEdited);
-                if (previousFrame == null && needsPreviousFrame)
-                    throw new InvalidOperationException("The previous Link frame could not be resolved; inertia edits cannot be transformed safely.");
-                if (previousFrame != null)
-                    InertialEditingPolicy.ReexpressEdits(node.Link,
-                        MathOps.GetTransformation(previousFrame), MathOps.GetTransformation(selectedFrame));
-                node.Link.FrameReference = frameReference.Clone();
+                InertialEditingPolicy.QueueFrameChange(node.Link, frameReference);
+                ResolvePendingInertialFrameChange(node.Link);
                 LinkNode parentNode = node.Parent as LinkNode;
                 if (parentNode != null && !CreateJoint(parentNode.Link, node.Link))
                 {
@@ -558,6 +552,15 @@ namespace SW2URDF.URDFExport
             snapshot.SetElement(source);
             snapshot.SetSWComponents(source);
             return snapshot;
+        }
+
+        private void ResolvePendingInertialFrameChange(Link link)
+        {
+            InertialEditingPolicy.ResolvePendingFrameChange(link, reference =>
+            {
+                MathTransform transform = GetCoordinateSystemTransform(reference);
+                return transform == null ? null : MathOps.GetTransformation(transform);
+            });
         }
 
         private void LogLinkInertialValidation(Link link, List<InertialValidationRecord> records)
@@ -1679,6 +1682,11 @@ namespace SW2URDF.URDFExport
             if (ComputeInertialValues)
             {
                 ComputeInertialProperties(node.Link);
+            }
+            else
+            {
+                // Disabling CAD mass refresh must not export values in the previous frame.
+                ResolvePendingInertialFrameChange(node.Link);
             }
 
             if (ComputeVisualCollision)

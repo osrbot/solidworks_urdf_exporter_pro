@@ -68,6 +68,10 @@ namespace SW2URDF.URDFExport
         private double mSTLDeviation;
         private double mSTLAngleTolerance;
         private double mHideTransitionSpeed;
+        private ModelDocExtension mExportCoordinateDocument;
+        private string mExportCoordinateSystem;
+        private string mLegacyExportCoordinateSystem;
+        private readonly List<string> meshPreferenceWarnings = new List<string>();
 
         private UserProgressBar progressBar;
         private Stopwatch exportStopwatch;
@@ -188,6 +192,7 @@ namespace SW2URDF.URDFExport
         {
             ExportErrorWhy = "";
             LastExportSummary = null;
+            meshPreferenceWarnings.Clear();
             exportStopwatch = Stopwatch.StartNew();
             exportStageNumber = 0;
             logger.Info("Beginning the export process");
@@ -371,6 +376,21 @@ namespace SW2URDF.URDFExport
                 ExportErrorWhy = "URDF export failed: " + e.Message +
                     ". See the UTF-8 export log at " + Logger.GetFileName();
                 logger.Error("An exception was thrown attempting to export the URDF", e);
+                try
+                {
+                    string diagnostics = PreserveFailedExportDiagnostics(stagingDirectory,
+                        Path.Combine(Path.GetDirectoryName(Logger.GetFileName()), "failed-exports"));
+                    if (diagnostics != null)
+                    {
+                        ExportErrorWhy += System.Environment.NewLine +
+                            ChineseUiText.Translate("Diagnostic CSV directory: ", "校验 CSV 目录：") + diagnostics;
+                        logger.Info("Preserved failed export diagnostics at " + diagnostics);
+                    }
+                }
+                catch (Exception diagnosticError)
+                {
+                    logger.Warn("Could not preserve diagnostic CSV files; the original export error is unchanged.", diagnosticError);
+                }
             }
             finally
             {
@@ -399,6 +419,7 @@ namespace SW2URDF.URDFExport
 
             if (v2Result != null)
             {
+                foreach (string warning in meshPreferenceWarnings) v2Result.Warnings.Add(warning);
                 success = v2Result.Targets.Any(target => target.Succeeded);
                 TryWriteIndependentExportReport(exportedPackage, v2Result, exportStopwatch.Elapsed);
                 try
@@ -442,7 +463,7 @@ namespace SW2URDF.URDFExport
                 LastExportSummary = ExportResultSummary.Create(
                     exportedPackage,
                     outputBeforeExport,
-                    exportStopwatch.Elapsed);
+                    exportStopwatch.Elapsed, warnings: meshPreferenceWarnings);
             }
             catch (Exception summaryException)
             {
@@ -501,6 +522,29 @@ namespace SW2URDF.URDFExport
             return false;
         }
 
+        internal static string PreserveFailedExportDiagnostics(string stagingDirectory, string diagnosticRoot)
+        {
+            if (String.IsNullOrWhiteSpace(stagingDirectory) || !Directory.Exists(stagingDirectory))
+                return null;
+            string[] files = new[] { "inertial_validation.csv", "mesh_manifest.csv" }
+                .SelectMany(name => Directory.EnumerateFiles(stagingDirectory, name, SearchOption.AllDirectories))
+                .ToArray();
+            if (files.Length == 0) return null;
+            string destination = Path.Combine(diagnosticRoot,
+                DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N"));
+            string prefix = Path.GetFullPath(stagingDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            foreach (string file in files)
+            {
+                string fullPath = Path.GetFullPath(file);
+                if (!fullPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("Diagnostic file is outside export staging.");
+                string target = Path.Combine(destination, fullPath.Substring(prefix.Length));
+                Directory.CreateDirectory(Path.GetDirectoryName(target));
+                File.Copy(fullPath, target, false);
+            }
+            return destination;
+        }
+
         private bool RestoreExportEnvironment(
             List<ComponentVisibilityState> assemblyVisibility,
             bool restoreVisibility,
@@ -546,6 +590,8 @@ namespace SW2URDF.URDFExport
                 {
                     restored = false;
                     logger.Error("Restoring STL preferences failed", e);
+                    ExportErrorWhy = (String.IsNullOrWhiteSpace(ExportErrorWhy) ? String.Empty : ExportErrorWhy + System.Environment.NewLine) +
+                        "ERROR EXPORT_PREFERENCES: The original SolidWorks export settings could not all be restored. " + e.Message;
                 }
             }
 
@@ -2574,7 +2620,7 @@ namespace SW2URDF.URDFExport
 
             int saveOptions = (int)swSaveAsOptions_e.swSaveAsOptions_Silent |
                 (int)swSaveAsOptions_e.swSaveAsOptions_Copy;
-            SetLinkSpecificSTLPreferences(link, ActiveSWModel);
+            ResetMeshExportCoordinateSystem(ActiveSWModel);
 
             logger.Info("Saving 3dxml to " + windowsMeshFilename);
 
@@ -3289,7 +3335,7 @@ namespace SW2URDF.URDFExport
         #region STL Preference shuffling
 
         //Saves the preferences that the user had setup so that I can change them and revert back to their configuration
-        private void SaveUserPreferences()
+        internal void SaveUserPreferences()
         {
             logger.Info("Saving users preferences");
             mBinary = iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLBinaryFormat);
@@ -3302,6 +3348,12 @@ namespace SW2URDF.URDFExport
             mSTLPreview = iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLPreview);
             mHideTransitionSpeed = iSwApp.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent);
             mSaveComponentsIntoOneFile = iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLComponentsIntoOneFile);
+            mExportCoordinateDocument = ActiveSWModel.Extension;
+            mExportCoordinateSystem = iSwApp.GetUserPreferenceStringValue(
+                (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem) ?? String.Empty;
+            mLegacyExportCoordinateSystem = mExportCoordinateDocument.GetUserPreferenceString(
+                (int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem,
+                (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified) ?? String.Empty;
         }
 
         //This is how the STL export preferences need to be to properly export
@@ -3321,19 +3373,62 @@ namespace SW2URDF.URDFExport
         }
 
         //This resets the user preferences back to what they were.
-        private void ResetUserPreferences()
+        internal void ResetUserPreferences()
         {
             logger.Info("Returning STL preferences to user preferences");
-            iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLBinaryFormat, mBinary);
-            iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLDontTranslateToPositive, mTranslateToPositive);
-            iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swExportStlUnits, mSTLUnits);
-            iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, mSTLQuality);
-            iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation, mSTLDeviation);
-            iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance, mSTLAngleTolerance);
-            iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLShowInfoOnSave, mshowInfo);
-            iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLPreview, mSTLPreview);
-            iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent, mHideTransitionSpeed);
-            iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLComponentsIntoOneFile, mSaveComponentsIntoOneFile);
+            var actions = new Action[]
+            {
+                () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLBinaryFormat, mBinary),
+                () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLDontTranslateToPositive, mTranslateToPositive),
+                () => iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swExportStlUnits, mSTLUnits),
+                () => iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, mSTLQuality),
+                () => iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation, mSTLDeviation),
+                () => iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance, mSTLAngleTolerance),
+                () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLShowInfoOnSave, mshowInfo),
+                () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLPreview, mSTLPreview),
+                () => iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent, mHideTransitionSpeed),
+                () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLComponentsIntoOneFile, mSaveComponentsIntoOneFile),
+                () => RestoreGlobalExportCoordinateSystem(mExportCoordinateSystem),
+                () => RestoreExportCoordinateSystem((int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem, mLegacyExportCoordinateSystem)
+            };
+            var failures = new List<Exception>();
+            foreach (Action action in actions)
+            {
+                try { action(); }
+                catch (Exception error) { failures.Add(error); }
+            }
+            if (failures.Count > 0)
+                throw new AggregateException("SolidWorks export preferences could not all be restored.", failures);
+        }
+
+        private void RestoreExportCoordinateSystem(int preference, string value)
+        {
+            bool accepted = mExportCoordinateDocument.SetUserPreferenceString(preference,
+                (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified, value);
+            string actual = mExportCoordinateDocument.GetUserPreferenceString(preference,
+                (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified) ?? String.Empty;
+            if (!String.Equals(actual, value, StringComparison.Ordinal))
+                throw new InvalidOperationException("SolidWorks did not restore export coordinate system " + preference +
+                    "; setter accepted=" + accepted + ".");
+        }
+
+        private void RestoreGlobalExportCoordinateSystem(string value)
+        {
+            int preference = (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem;
+            bool accepted = iSwApp.SetUserPreferenceStringValue(preference, value);
+            string actual = iSwApp.GetUserPreferenceStringValue(preference) ?? String.Empty;
+            if (!String.Equals(actual, value, StringComparison.Ordinal))
+                throw new InvalidOperationException("SolidWorks did not restore the global export coordinate system; setter accepted=" + accepted + ".");
+        }
+
+        internal void ResetMeshExportCoordinateSystem(ModelDoc2 doc)
+        {
+            RestoreGlobalExportCoordinateSystem(String.Empty);
+            int preference = (int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem;
+            int option = (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified;
+            doc.Extension.SetUserPreferenceString(preference, option, String.Empty);
+            if (!String.IsNullOrEmpty(doc.Extension.GetUserPreferenceString(preference, option)))
+                throw new InvalidOperationException("SolidWorks refused to reset the document mesh export coordinate system to the assembly frame.");
         }
 
         //If the user selected something specific for a particular link, that is handled here.
@@ -3348,39 +3443,18 @@ namespace SW2URDF.URDFExport
             ModelDoc2 doc,
             double? reductionRatioOverride)
         {
-            bool modernPreferenceSet = doc.Extension.SetUserPreferenceString(
-                (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem,
-                (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified,
-                string.Empty);
-            bool legacyPreferenceSet = doc.Extension.SetUserPreferenceString(
-                (int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem,
-                (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified,
-                string.Empty);
-            if (!modernPreferenceSet && !legacyPreferenceSet)
-            {
-                throw new InvalidOperationException(
-                    "SolidWorks refused to reset the mesh export coordinate system to the assembly frame.");
-            }
+            ResetMeshExportCoordinateSystem(doc);
             double reductionRatio = reductionRatioOverride.HasValue
                 ? reductionRatioOverride.Value
                 : link.MeshReductionRatio;
             StlMeshSettings settings = CreateStlMeshSettings(link.STLQualityFine, reductionRatio);
-            if (settings.UseCustom)
+            string adjustment;
+            settings = ApplyStlMeshSettings(iSwApp, settings, out adjustment);
+            if (adjustment != null)
             {
-                iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality,
-                    (int)swSTLQuality_e.swSTLQuality_Custom);
-                iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation,
-                    settings.Deviation);
-                iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance,
-                    settings.AngleTolerance);
-            }
-            else if (link.STLQualityFine)
-            {
-                iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, (int)swSTLQuality_e.swSTLQuality_Fine);
-            }
-            else
-            {
-                iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, (int)swSTLQuality_e.swSTLQuality_Coarse);
+                string warning = link.Name + ": " + adjustment;
+                logger.Warn(warning);
+                meshPreferenceWarnings.Add(warning);
             }
 
             logger.Info(string.Format(
@@ -3392,6 +3466,45 @@ namespace SW2URDF.URDFExport
                 settings.Deviation,
                 settings.AngleTolerance));
             return settings;
+        }
+
+        internal static StlMeshSettings ApplyStlMeshSettings(ISldWorks app, StlMeshSettings requested, out string warning)
+        {
+            int requestedQuality = requested.UseCustom ? (int)swSTLQuality_e.swSTLQuality_Custom :
+                (requested.QualityLabel == "fine" ? (int)swSTLQuality_e.swSTLQuality_Fine : (int)swSTLQuality_e.swSTLQuality_Coarse);
+            bool qualityAccepted = app.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, requestedQuality);
+            bool deviationAccepted = true;
+            bool angleAccepted = true;
+            if (requested.UseCustom)
+            {
+                deviationAccepted = app.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation, requested.Deviation);
+                angleAccepted = app.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance, requested.AngleTolerance);
+            }
+            int quality = app.GetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality);
+            double deviation = app.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation);
+            double angle = app.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance);
+            if ((quality != (int)swSTLQuality_e.swSTLQuality_Custom && quality != (int)swSTLQuality_e.swSTLQuality_Fine &&
+                quality != (int)swSTLQuality_e.swSTLQuality_Coarse) || !InertialEditingPolicy.IsPositiveFinite(deviation) ||
+                !InertialEditingPolicy.IsPositiveFinite(angle))
+                throw new InvalidOperationException("SolidWorks returned invalid effective STL settings; mesh export was not started.");
+            var effective = new StlMeshSettings
+            {
+                UseCustom = quality == (int)swSTLQuality_e.swSTLQuality_Custom,
+                QualityLabel = quality == (int)swSTLQuality_e.swSTLQuality_Custom ? "custom" :
+                    (quality == (int)swSTLQuality_e.swSTLQuality_Fine ? "fine" : "coarse"),
+                ReductionRatio = requested.ReductionRatio,
+                Deviation = deviation,
+                AngleTolerance = angle
+            };
+            bool changed = !qualityAccepted || !deviationAccepted || !angleAccepted || quality != requestedQuality ||
+                (requested.UseCustom && (!InertialEditingPolicy.Same(requested.Deviation, deviation) ||
+                    !InertialEditingPolicy.Same(requested.AngleTolerance, angle)));
+            warning = changed ? String.Format(CultureInfo.InvariantCulture,
+                ChineseUiText.Translate(
+                    "SolidWorks adjusted or rejected STL settings. Requested quality={0}, deviation={1:R}, angle={2:R}; effective quality={3}, deviation={4:R}, angle={5:R}. Export and estimates use the effective settings.",
+                    "SolidWorks 调整或拒绝了 STL 参数。请求 quality={0}, deviation={1:R}, angle={2:R}；实际 quality={3}, deviation={4:R}, angle={5:R}。导出和估算使用实际参数。"),
+                requested.QualityLabel, requested.Deviation, requested.AngleTolerance, effective.QualityLabel, deviation, angle) : null;
+            return effective;
         }
 
         internal static StlMeshSettings CreateStlMeshSettings(bool qualityFine, double reductionRatio)
@@ -3413,18 +3526,23 @@ namespace SW2URDF.URDFExport
 
         private StlExportStats CreateStlExportStats(Link link, StlMeshSettings settings)
         {
+            return CreateStlExportStats(link, settings, candidate => EstimateStlTriangleCount(link, candidate));
+        }
+
+        internal static StlExportStats CreateStlExportStats(Link link, StlMeshSettings settings, Func<StlMeshSettings, int> estimate)
+        {
             StlExportStats stats = StlExportStats.FromSettings(settings);
             try
             {
-                StlMeshSettings baselineSettings = CreateStlMeshSettings(link.STLQualityFine, 0.0);
-                int baselineTriangleCount = EstimateStlTriangleCount(link, baselineSettings);
+                StlMeshSettings baselineSettings = settings.ReductionRatio == 0.0 ? settings : CreateStlMeshSettings(link.STLQualityFine, 0.0);
+                int baselineTriangleCount = estimate(baselineSettings);
                 if (baselineTriangleCount > 0)
                 {
                     stats.BaselineEstimatedTriangles = baselineTriangleCount;
                     stats.BaselineEstimatedBytes = EstimateBinaryStlSizeBytes(baselineTriangleCount);
                 }
 
-                int triangleCount = EstimateStlTriangleCount(link, settings);
+                int triangleCount = settings.ReductionRatio == 0.0 ? baselineTriangleCount : estimate(settings);
                 if (triangleCount <= 0)
                 {
                     logger.Info(link.Name + ": STL size estimate unavailable because tessellation returned no facets");

@@ -589,7 +589,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         private bool CommitLinkName()
         {
-            if (suppressPropertyEvents) return true;
+            if (suppressPropertyEvents || selectedNodeIds.Count != 1) return true;
             if (!selectedNodeId.HasValue)
             {
                 return false;
@@ -637,7 +637,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
 
         private bool CommitJointName()
         {
-            if (suppressPropertyEvents || !selectedNodeId.HasValue)
+            if (suppressPropertyEvents || selectedNodeIds.Count != 1 || !selectedNodeId.HasValue)
             {
                 return true;
             }
@@ -680,7 +680,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
         private void JointTypeChanged(object sender, SelectionChangedEventArgs e)
         {
             string selectedDisplay = JointTypeComboBox.SelectedItem as string;
-            if (suppressPropertyEvents || !selectedNodeId.HasValue || selectedDisplay == null)
+            if (suppressPropertyEvents || selectedNodeIds.Count != 1 || !selectedNodeId.HasValue || selectedDisplay == null)
             {
                 return;
             }

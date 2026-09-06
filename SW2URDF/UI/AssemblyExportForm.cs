@@ -1038,8 +1038,7 @@ namespace SW2URDF.UI
 
         private void FinishExport(bool exportSTL)
         {
-            ClearInertiaPreview();
-            ClearCollisionPreview();
+            ClearPreviews();
             logger.Info("Completing URDF export");
             Exporter.RosPackageName = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
             textBoxRosPackageName.Text = Exporter.RosPackageName;
@@ -1524,8 +1523,7 @@ namespace SW2URDF.UI
 
         private void DisplayLinkNode(LinkNode node)
         {
-            ClearInertiaPreview();
-            ClearCollisionPreview();
+            ClearPreviews();
             if (previouslySelectedNode != null)
             {
                 SaveLinkDataFromPropertyBoxes(previouslySelectedNode.Link);
@@ -2163,12 +2161,43 @@ namespace SW2URDF.UI
             }
         }
 
-        private void ClearCollisionPreview()
+        private void ClearPreviews()
+        {
+            bool needsRedraw = (inertiaPreview != null && inertiaPreview.IsVisible) ||
+                (collisionPreview != null && collisionPreview.IsVisible);
+            ClearPreviews(needsRedraw,
+                () => ClearInertiaPreview(false),
+                () => ClearCollisionPreview(false),
+                () => { if (ActiveSWModel != null) ActiveSWModel.GraphicsRedraw2(); });
+        }
+
+        internal static void ClearPreviews(bool needsRedraw,
+            Action clearInertia, Action clearCollision, Action redraw)
+        {
+            // Always attempt both cleanups before the shared redraw, even on failure.
+            try
+            {
+                clearInertia();
+            }
+            finally
+            {
+                try
+                {
+                    clearCollision();
+                }
+                finally
+                {
+                    if (needsRedraw) redraw();
+                }
+            }
+        }
+
+        private void ClearCollisionPreview(bool redraw = true)
         {
             collisionPreviewEnabled = false;
             if (collisionPreview != null)
             {
-                collisionPreview.Hide();
+                collisionPreview.Hide(redraw);
             }
             if (buttonShowCollisionPreview != null)
             {
@@ -2186,9 +2215,9 @@ namespace SW2URDF.UI
             }
         }
 
-        private void ClearInertiaPreview()
+        private void ClearInertiaPreview(bool redraw = true)
         {
-            inertiaPreview.Hide();
+            inertiaPreview.Hide(redraw);
             buttonShowInertiaPreview.Text = ChineseUiText.Translate(
                 "Show equivalent inertia cuboid",
                 "显示惯性等效长方体");

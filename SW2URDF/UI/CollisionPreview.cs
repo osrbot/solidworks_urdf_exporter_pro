@@ -215,6 +215,11 @@ namespace SW2URDF.UI
 
         public void Hide()
         {
+            Hide(true);
+        }
+
+        internal void Hide(bool redraw)
+        {
             if (temporaryBodies.Count == 0 && displayContext == null)
             {
                 return;
@@ -234,7 +239,7 @@ namespace SW2URDF.UI
                 displayContext.Dispose();
                 displayContext = null;
             }
-            if (model != null)
+            if (redraw && model != null)
             {
                 try { model.GraphicsRedraw2(); }
                 catch { }

@@ -78,6 +78,8 @@ namespace SW2URDF.URDFExport
         internal static void ApplySource(Link link, Inertial source, bool explicitInertia)
         {
             var state = link.InertialEditing;
+            if (state != null && state.FrameChangePending)
+                throw new InvalidOperationException("Resolve the pending Link frame change before applying a new inertial source.");
             if (state == null || state.Source == null)
                 state = HasExistingMass(link) ? EnsureSource(link) : new InertialEditingState();
             state.Source = Copy(source);
@@ -134,6 +136,59 @@ namespace SW2URDF.URDFExport
                 var tensor = Matrix<double>.Build.DenseOfRowMajor(3, 3, link.Inertial.Inertia.GetMoment());
                 link.Inertial.Inertia.SetUrdfMomentMatrix((rotation * tensor * rotation.Transpose()).ToRowMajorArray());
             }
+        }
+
+        // Draft events retain the frame owning the values, even across multiple selections/saves.
+        internal static void QueueFrameChange(Link link, CadFeatureReference frameReference)
+        {
+            if (link == null) throw new ArgumentNullException("link");
+            if (frameReference == null || !frameReference.IsValidFor(ReferenceGeometryKind.CoordinateSystem, false))
+                throw new ArgumentException("A Link coordinate-system reference must be selected.", "frameReference");
+            if (frameReference.Equals(link.FrameReference)) return;
+
+            var state = link.InertialEditing;
+            if ((state != null && state.Source != null) || HasExistingMass(link))
+            {
+                state = EnsureSource(link);
+                if (!state.FrameChangePending)
+                    state.InertialFrameReference = link.FrameReference == null ? null : link.FrameReference.Clone();
+                state.FrameChangePending = !frameReference.Equals(state.InertialFrameReference);
+                if (!state.FrameChangePending) state.InertialFrameReference = null;
+            }
+            link.FrameReference = frameReference.Clone();
+        }
+
+        internal static void ResolvePendingFrameChange(Link link,
+            Func<CadFeatureReference, Matrix<double>> resolveFrame)
+        {
+            var state = link.InertialEditing;
+            if (state == null || !state.FrameChangePending) return;
+
+            Matrix<double> oldFrame = state.InertialFrameReference == null
+                ? null : resolveFrame(state.InertialFrameReference);
+            if (oldFrame == null)
+                throw new InvalidOperationException("The previous Link frame could not be resolved; inertia edits cannot be transformed safely.");
+            Matrix<double> newFrame = resolveFrame(link.FrameReference);
+            if (newFrame == null)
+                throw new InvalidOperationException("The selected Link frame could not be resolved; inertia edits cannot be transformed safely.");
+
+            // Work on detached values: resolution or matrix failures must leave the draft retryable.
+            var candidate = new Link { InertialEditing = state.Clone() };
+            candidate.Inertial.SetElement(link.Inertial);
+            ReexpressEdits(candidate, oldFrame, newFrame);
+            var source = candidate.InertialEditing.Source;
+            var sourcePose = newFrame.Inverse() * oldFrame *
+                MathOps.GetTransformation(source.Origin.GetXYZ(), source.Origin.GetRPY());
+            var rotation = sourcePose.SubMatrix(0, 3, 0, 3);
+            var tensor = Matrix<double>.Build.DenseOfRowMajor(3, 3, source.Inertia.GetMoment());
+            source.Origin.SetXYZ(MathOps.GetXYZ(sourcePose));
+            source.Origin.SetRPY(new double[3]);
+            source.Inertia.SetUrdfMomentMatrix((rotation * tensor * rotation.Transpose()).ToRowMajorArray());
+            candidate.Inertial.SetElement(Resolve(candidate.InertialEditing, candidate.Inertial, source));
+            candidate.InertialEditing.FrameChangePending = false;
+            candidate.InertialEditing.InertialFrameReference = null;
+            link.Inertial.SetElement(candidate.Inertial);
+            link.InertialEditing = candidate.InertialEditing;
         }
 
         internal static void Reset(Link link)

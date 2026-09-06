@@ -210,11 +210,15 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 errors.Add("Link 树不能为空。");
                 return errors;
             }
-            if (Nodes.Any(node => node == null || node.Id == Guid.Empty) ||
-                Nodes.GroupBy(node => node.Id).Any(group => group.Count() > 1))
+            Dictionary<Guid, LinkTreeNode> nodesById = new Dictionary<Guid, LinkTreeNode>();
+            foreach (LinkTreeNode node in Nodes)
             {
-                errors.Add("Link 节点标识不能重复。");
-                return errors;
+                if (node == null || node.Id == Guid.Empty || nodesById.ContainsKey(node.Id))
+                {
+                    errors.Add("Link 节点标识不能重复。");
+                    return errors;
+                }
+                nodesById.Add(node.Id, node);
             }
 
             List<LinkTreeNode> roots = Nodes.Where(node => !node.ParentId.HasValue).ToList();
@@ -230,7 +234,7 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 {
                     errors.Add(node.Name + ": " + nameError);
                 }
-                if (node.ParentId.HasValue && Find(node.ParentId.Value) == null)
+                if (node.ParentId.HasValue && !nodesById.ContainsKey(node.ParentId.Value))
                 {
                     errors.Add(node.Name + " 的父 Link 不存在。");
                 }
@@ -266,21 +270,38 @@ namespace SW2URDF.UI.LinkTreeCanvas
                 errors.Add("Joint 名称不能重复。");
             }
 
-            foreach (LinkTreeNode node in Nodes)
+            if (HasParentCycle(nodesById))
             {
-                HashSet<Guid> visited = new HashSet<Guid>();
-                LinkTreeNode current = node;
-                while (current != null && current.ParentId.HasValue)
-                {
-                    if (!visited.Add(current.Id))
-                    {
-                        errors.Add("Link 树中存在循环关系。");
-                        return errors.Distinct().ToList();
-                    }
-                    current = Find(current.ParentId.Value);
-                }
+                errors.Add("Link 树中存在循环关系。");
             }
             return errors.Distinct().ToList();
+        }
+
+        internal static bool HasParentCycle(IDictionary<Guid, LinkTreeNode> nodesById)
+        {
+            Dictionary<Guid, bool> completed = new Dictionary<Guid, bool>();
+            List<Guid> path = new List<Guid>();
+            foreach (LinkTreeNode node in nodesById.Values)
+            {
+                path.Clear();
+                LinkTreeNode current = node;
+                // Each parent edge is followed at most once, without recursive stack growth.
+                while (current != null)
+                {
+                    bool isComplete;
+                    if (completed.TryGetValue(current.Id, out isComplete))
+                    {
+                        if (!isComplete) return true;
+                        break;
+                    }
+                    completed.Add(current.Id, false);
+                    path.Add(current.Id);
+                    if (!current.ParentId.HasValue) break;
+                    nodesById.TryGetValue(current.ParentId.Value, out current);
+                }
+                foreach (Guid id in path) completed[id] = true;
+            }
+            return false;
         }
 
         public static string ValidateRosName(string value)

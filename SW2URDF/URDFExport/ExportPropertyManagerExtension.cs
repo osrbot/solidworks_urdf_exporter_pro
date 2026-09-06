@@ -697,21 +697,21 @@ namespace SW2URDF.URDFExport
                     pmAxisReferences,
                     node.Link.Joint.AxisReference,
                     ReferenceGeometryKind.Axis);
-                node.Link.FrameReference = ReadReferenceComboBox(
+                InertialEditingPolicy.QueueFrameChange(node.Link, ReadReferenceComboBox(
                     PMComboBoxCoordSys,
                     pmLinkFrameReferences,
                     node.Link.FrameReference,
-                    ReferenceGeometryKind.CoordinateSystem);
+                    ReferenceGeometryKind.CoordinateSystem));
                 node.Link.Joint.Type = ChineseUiText.JointTypeValue(
                     PMComboBoxJointType.get_ItemText(-1));
                 return;
             }
 
-            node.Link.FrameReference = ReadReferenceComboBox(
+            InertialEditingPolicy.QueueFrameChange(node.Link, ReadReferenceComboBox(
                 PMComboBoxGlobalCoordsys,
                 pmGlobalFrameReferences,
                 node.Link.FrameReference,
-                ReferenceGeometryKind.CoordinateSystem);
+                ReferenceGeometryKind.CoordinateSystem));
         }
 
         private void UpdateSelectedNodeComboValue(int controlId, int item)
@@ -731,11 +731,11 @@ namespace SW2URDF.URDFExport
             {
                 if (controlId == IDGlobalCoordsys && node.IsBaseNode)
                 {
-                    node.Link.FrameReference = pmGlobalFrameReferences[item].Clone();
+                    InertialEditingPolicy.QueueFrameChange(node.Link, pmGlobalFrameReferences[item]);
                 }
                 else if (!node.IsBaseNode && controlId == ComboBoxCoordSysID)
                 {
-                    node.Link.FrameReference = pmLinkFrameReferences[item].Clone();
+                    InertialEditingPolicy.QueueFrameChange(node.Link, pmLinkFrameReferences[item]);
                 }
                 else if (!node.IsBaseNode && controlId == ComboBoxAxesID)
                 {

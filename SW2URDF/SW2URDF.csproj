@@ -381,6 +381,11 @@
     <Compile Include="Test\TestInertialEditing.cs" />
     <Compile Include="Test\TestInertialEditingUi.cs" />
     <Compile Include="Test\TestSolidWorksEffectiveMass.cs" />
+    <Compile Include="Test\TestExportSafetyReview.cs" />
+    <Compile Include="Test\TestCanvasReviewRegressions.cs" />
+    <Compile Include="Test\TestMimicCaptureRegressions.cs" />
+    <Compile Include="Test\TestPreviewBatchCleanup.cs" />
+    <Compile Include="Test\TestPropertyManagerInertiaFrames.cs" />
     <Compile Include="Test\TestLinkTreeTransactions.cs" />
     <Compile Include="Test\TestLinkTreeDocumentTransactions.cs" />
     <Compile Include="Test\TestInertiaConvention.cs" />

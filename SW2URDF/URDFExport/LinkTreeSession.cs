@@ -77,7 +77,9 @@ namespace SW2URDF.URDFExport
         {
             if (edit == null) throw new ArgumentNullException(nameof(edit));
             LinkTreeSession candidate = new LinkTreeSession(this);
-            if (projection != null) candidate.CaptureTree(projection);
+            // Candidate capture must not mutate the caller's projection before publication.
+            if (projection != null)
+                candidate.CaptureTree(projection, candidate.projectionIds, null, true, true, false);
             LinkTreeDocument document = candidate.LoadTree();
             edit(document);
             candidate.ApplyTree(document);
@@ -160,7 +162,8 @@ namespace SW2URDF.URDFExport
             IDictionary<Link, Guid> sourceLinkIds,
             IDictionary<LinkNode, Guid> sourceNodeIds,
             bool validateCandidate,
-            bool trackChanges)
+            bool trackChanges,
+            bool synchronizeProjection = true)
         {
             if (baseNode == null)
             {
@@ -172,6 +175,7 @@ namespace SW2URDF.URDFExport
             LinkConfigurationStore capturedConfigurations = new LinkConfigurationStore();
             CadBindingStore capturedBindings = new CadBindingStore();
             Dictionary<Link, Guid> capturedProjectionIds = new Dictionary<Link, Guid>();
+            Dictionary<Guid, string> migratedMimicReferences = new Dictionary<Guid, string>();
             int leafRow = 0;
             BuildDocument(
                 baseNode,
@@ -196,12 +200,25 @@ namespace SW2URDF.URDFExport
                     previousDocument,
                     configurations,
                     capturedDocument,
-                    capturedConfigurations);
+                    capturedConfigurations,
+                    migratedMimicReferences);
             }
 
             if (validateCandidate)
             {
                 ValidateCapturedTree(capturedDocument, capturedConfigurations);
+            }
+
+            // Only publish validated migrations, leaving explicit Mimic edits and all
+            // other projection fields intact. Candidate transactions publish a new tree.
+            if (synchronizeProjection)
+            {
+                foreach (KeyValuePair<Link, Guid> entry in capturedProjectionIds)
+                {
+                    string reference;
+                    if (migratedMimicReferences.TryGetValue(entry.Value, out reference))
+                        entry.Key.Joint.Mimic.JointName = reference;
+                }
             }
 
             currentDocument = capturedDocument;
@@ -573,7 +590,8 @@ namespace SW2URDF.URDFExport
             LinkTreeDocument sourceDocument,
             LinkConfigurationStore sourceConfigurations,
             LinkTreeDocument candidateDocument,
-            LinkConfigurationStore candidateConfigurations)
+            LinkConfigurationStore candidateConfigurations,
+            IDictionary<Guid, string> migratedReferences = null)
         {
             if (sourceDocument == null || sourceConfigurations == null)
             {
@@ -625,6 +643,11 @@ namespace SW2URDF.URDFExport
                 candidateConfigurations.SetMimicReference(
                     sourceOwner.Id,
                     candidateTarget.JointName);
+                if (migratedReferences != null && !string.Equals(
+                    candidateReference, candidateTarget.JointName, StringComparison.Ordinal))
+                {
+                    migratedReferences[sourceOwner.Id] = candidateTarget.JointName;
+                }
             }
         }
 

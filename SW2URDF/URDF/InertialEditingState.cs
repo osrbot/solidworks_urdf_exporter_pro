@@ -1,4 +1,5 @@
 using System.Runtime.Serialization;
+using SW2URDF.URDFExport;
 
 namespace SW2URDF.URDF
 {
@@ -14,10 +15,14 @@ namespace SW2URDF.URDF
         [DataMember] public bool TensorEdited;
         [DataMember] public bool CalibrationDisabled;
         [DataMember] public bool LegacyValuesPreserved;
+        [DataMember(EmitDefaultValue = false)] public bool FrameChangePending;
+        [DataMember(EmitDefaultValue = false)] public CadFeatureReference InertialFrameReference;
 
         public InertialEditingState Clone()
         {
             var copy = (InertialEditingState)MemberwiseClone();
+            copy.InertialFrameReference = InertialFrameReference == null
+                ? null : InertialFrameReference.Clone();
             if (Source != null)
             {
                 copy.Source = new Inertial();
