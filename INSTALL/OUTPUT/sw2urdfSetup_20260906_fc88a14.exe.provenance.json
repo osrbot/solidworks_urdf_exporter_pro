@@ -1,0 +1,1265 @@
+{
+  "schemaVersion": 2,
+  "trustModel": "local-build-from-immutable-git-worktree",
+  "evidenceModel": "traceable-build-inputs-not-bit-reproducible",
+  "sourceCommit": "fc88a146747ec5de444add4b57c6d2b4705ef82d",
+  "sourceTree": "f6fa1a36f26c5f2e100683693a1ad2f5f9682a0c",
+  "sourceCommitShort": "fc88a14",
+  "installerDate": "20260906",
+  "installerFile": "sw2urdfSetup_20260906_fc88a14.exe",
+  "installerSha256": "da18423ec7087fa775c2b65d2d48b72f557005aa88377e95f4c31b04f5ed3334",
+  "configuration": "Release",
+  "platform": "x64",
+  "tools": {
+    "nuget": {
+      "version": "6.11.1",
+      "sha256": "c0ddc9cb0633c4607da7e8028eb4f91248c8b74e45a68b0c79fcfa7d78c2a481"
+    },
+    "msbuild": {
+      "fileVersion": "17.14.51.32402",
+      "sha256": "ba9e8c83c25f4ca9ab1f66290be2ce429d8563efb99b9eb699487d0d5aef8db7"
+    },
+    "innoSetup": {
+      "version": "6.3.3",
+      "sha256": "bf65156e415096b4b524ea7a8646d1e5b4ff7817fe8ba5dfc142a637640ae7d3"
+    },
+    "dotnet": {
+      "version": "8.0.424",
+      "sha256": "76e6472063f53379b86fe8370203ab6c46c75d27f405b722845f0e495d8f5fd0"
+    }
+  },
+  "nugetSource": "https://api.nuget.org/v3/index.json",
+  "packageInputs": [
+    {
+      "id": "CsvHelper",
+      "version": "7.1.1",
+      "sha256": "9c4344ce14c6a988f11e29252ab2270d0da227792beac2185253c551014c37aa"
+    },
+    {
+      "id": "log4net",
+      "version": "3.4.0",
+      "sha256": "8e03eab8ca3da1e2a45e094763a3c15c58f39438ecfb5fa891abcad6282d8e7c"
+    },
+    {
+      "id": "MathNet.Numerics.Signed",
+      "version": "4.7.0",
+      "sha256": "82a429b5da0b00fde7de73224cb70081f0cd5b55ae6e0f0e305d47508276776b"
+    },
+    {
+      "id": "Microsoft.Net.Compilers",
+      "version": "3.11.0",
+      "sha256": "e4a540a9cb41d15e6e1cc05fa2cadb847454df9ebe49d683cded2780506ef880"
+    },
+    {
+      "id": "Newtonsoft.Json",
+      "version": "13.0.3",
+      "sha256": "872fc189e638ab1056555b03aaa38f68bcb54286e221aa646eb1129babf63c77"
+    },
+    {
+      "id": "System.Runtime.CompilerServices.Unsafe",
+      "version": "4.5.0",
+      "sha256": "83d8c8750b57480858f9ecd0b583601c4528411dc7cf39c7b3724ccc3f5b8a9e"
+    },
+    {
+      "id": "System.Threading.Tasks.Extensions",
+      "version": "4.5.1",
+      "sha256": "dcd7810beafb793573ddff9c126d4d9158714abecbad8197fcd754c237bd79c6"
+    }
+  ],
+  "sdkPackageLocks": [
+    {
+      "path": "src/OSURDF.Core/packages.lock.json",
+      "sha256": "76e46e11a868c501dcef862bba9a2bd44476d17e5586592e7aacc2578ff7ed2b"
+    },
+    {
+      "path": "tests/OSURDF.Core.Tests/packages.lock.json",
+      "sha256": "e478bb6f4c3adb9e7cae8d4181b957a8ac12a9c83500d006f6be95d04dd483f0"
+    },
+    {
+      "path": "TestRunner/packages.lock.json",
+      "sha256": "833c6b0da66cffbb60402f5b83bcb178417970093ac872c2b2203ca1e778cb70"
+    }
+  ],
+  "legacyTestPackageLock": {
+    "path": "scripts/legacy-test-packages.lock.json",
+    "sha256": "f7125f87d7a9c6069ff6a2ddf54833eeef28103ad851fbd1bbb9a1d5e0db67c7",
+    "packagesConfigPath": "SW2URDF/packages.config",
+    "packagesConfigSha256": "cb2988f98cfa8b8abe60f8a07f714d6ffe2736aaeb5da0dd3d5ba132192acc94"
+  },
+  "legacyTestPackageInputs": [
+    {
+      "id": "Castle.Core",
+      "version": "4.3.1",
+      "sha256": "c08048ebdf1eae74ac11733e8e9d2020bf0e69ab04f1ef6649aad92ccf176450"
+    },
+    {
+      "id": "CsvHelper",
+      "version": "7.1.1",
+      "sha256": "9c4344ce14c6a988f11e29252ab2270d0da227792beac2185253c551014c37aa"
+    },
+    {
+      "id": "log4net",
+      "version": "3.4.0",
+      "sha256": "8e03eab8ca3da1e2a45e094763a3c15c58f39438ecfb5fa891abcad6282d8e7c"
+    },
+    {
+      "id": "MathNet.Numerics.Signed",
+      "version": "4.7.0",
+      "sha256": "82a429b5da0b00fde7de73224cb70081f0cd5b55ae6e0f0e305d47508276776b"
+    },
+    {
+      "id": "Microsoft.CodeAnalysis.FxCopAnalyzers",
+      "version": "2.9.6",
+      "sha256": "e932282c9389e477b5c5b0947206d0dccc20bf45bb09503346c5b3c5d3465bf4"
+    },
+    {
+      "id": "Microsoft.CodeAnalysis.VersionCheckAnalyzer",
+      "version": "2.9.6",
+      "sha256": "d0b1e4151c4f8cbcd58a09696801310f77a6d4ec43e4ed5b66a0fe3f3a7089ad"
+    },
+    {
+      "id": "Microsoft.CodeQuality.Analyzers",
+      "version": "2.9.6",
+      "sha256": "3094a2e50dd103c91ed004a7126e4f10271e735372d2a327df33378b9f11a1dd"
+    },
+    {
+      "id": "Microsoft.Net.Compilers",
+      "version": "3.11.0",
+      "sha256": "e4a540a9cb41d15e6e1cc05fa2cadb847454df9ebe49d683cded2780506ef880"
+    },
+    {
+      "id": "Microsoft.NetCore.Analyzers",
+      "version": "2.9.6",
+      "sha256": "4e4c108414498635d152418e9d50381eefbaee06647c7eeed1898edb3fff08e6"
+    },
+    {
+      "id": "Microsoft.NetFramework.Analyzers",
+      "version": "2.9.6",
+      "sha256": "61545dae6f3d52f72e49e803505c279e76f677842af02a0a62cb74bd21c452f5"
+    },
+    {
+      "id": "Microsoft.VisualStudio.TestPlatform",
+      "version": "14.0.0.0",
+      "sha256": "c498df5d2a99cccfef38e889a4333fde9c51aa1e7db5d89175b10732d908591f"
+    },
+    {
+      "id": "Moq",
+      "version": "4.10.1",
+      "sha256": "93dd451f77271cdff1b65de011ee0ebd9cf78979994eac952e71b88f95d39270"
+    },
+    {
+      "id": "Newtonsoft.Json",
+      "version": "13.0.3",
+      "sha256": "872fc189e638ab1056555b03aaa38f68bcb54286e221aa646eb1129babf63c77"
+    },
+    {
+      "id": "System.Runtime.CompilerServices.Unsafe",
+      "version": "4.5.0",
+      "sha256": "83d8c8750b57480858f9ecd0b583601c4528411dc7cf39c7b3724ccc3f5b8a9e"
+    },
+    {
+      "id": "System.Threading.Tasks.Extensions",
+      "version": "4.5.1",
+      "sha256": "dcd7810beafb793573ddff9c126d4d9158714abecbad8197fcd754c237bd79c6"
+    },
+    {
+      "id": "xunit",
+      "version": "2.4.1",
+      "sha256": "4060ee134667b31c8424e34ff06709f343e63de6fe39ac307525bccbbd9ac375"
+    },
+    {
+      "id": "xunit.abstractions",
+      "version": "2.0.3",
+      "sha256": "d03d72fc2df8880448f7a81bddb00e1bcb5c18f323c7e7cc69b4cfa727469403"
+    },
+    {
+      "id": "xunit.analyzers",
+      "version": "0.10.0",
+      "sha256": "f254598688171d892c6bd0a19e4157a419d33252e5608beedc0bfba90616c096"
+    },
+    {
+      "id": "xunit.assert",
+      "version": "2.4.1",
+      "sha256": "865d5c3126a4025c24a4511c87108d31dbd089ee8f309d6e16b87380e0b7bec6"
+    },
+    {
+      "id": "xunit.core",
+      "version": "2.4.1",
+      "sha256": "2a05200082483c7439550e05881fa2e6ed895d26319af30257ccd73f891ccbda"
+    },
+    {
+      "id": "xunit.extensibility.core",
+      "version": "2.4.1",
+      "sha256": "a000953abbc5e1798a16bfbc66a3d5a636e8a5981e470697bde2465b65d47880"
+    },
+    {
+      "id": "xunit.extensibility.execution",
+      "version": "2.4.1",
+      "sha256": "2a6284760b14ab8cee409dac689034613d42219d80ba164be55edc1760a771dd"
+    },
+    {
+      "id": "xunit.runner.utility",
+      "version": "2.4.1",
+      "sha256": "bad17c7ff07272389565d8cbaed448a6dafb474098726bdfd1a51e80a3bc0b6c"
+    },
+    {
+      "id": "xunit.runner.visualstudio",
+      "version": "2.4.1",
+      "sha256": "166e438c55d92734c9b80a626f4b613c6503d30d1e6af7c17d287d14e62d963a"
+    }
+  ],
+  "solidWorksInputs": [
+    {
+      "file": "SolidWorks.Interop.sldworks.dll",
+      "sha256": "0070bc76ee293ec45aaee75c213064acaa4e4a1e3f501530d4b80dd509c620b1",
+      "fileVersion": "31.1.0.106"
+    },
+    {
+      "file": "SolidWorks.Interop.swconst.dll",
+      "sha256": "fec39f087bb158a857b6ea9d6797883fc2d2e22ec64a66f7e889e79d204b2c73",
+      "fileVersion": "31.1.0.106"
+    },
+    {
+      "file": "SolidWorks.Interop.swpublished.dll",
+      "sha256": "d495a27cac7cd98cc1dda069ef2c16e495ea9eb3f6dd433de76f5b9463f3ec91",
+      "fileVersion": "31.1.0.106"
+    },
+    {
+      "file": "solidworkstools.dll",
+      "sha256": "3d84174f61c58bb1327281c73495934233080a9bf0ea71b777b304f6c6ca14c3",
+      "fileVersion": "2.0.0.0"
+    }
+  ],
+  "assetRuntimeInputs": [
+    {
+      "id": "python-embed",
+      "version": "3.11.9",
+      "sha256": "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b"
+    },
+    {
+      "id": "usd-core",
+      "version": "26.8",
+      "sha256": "d39cef20efdfc29473e92887487bb8c10c45e966c492b5356d32a52724c3578f"
+    },
+    {
+      "id": "mujoco",
+      "version": "3.12.0",
+      "sha256": "ffe071c2747dd9513a1c59e7d2428bb678d887f9edec9eb9674b4288a248a8e9"
+    }
+  ],
+  "coreTests": {
+    "configuration": "Release",
+    "framework": "net8.0",
+    "result": "passed",
+    "bundledOpenUsdIntegration": "passed",
+    "bundledMuJoCoIntegration": "passed"
+  },
+  "pluginTests": {
+    "configuration": "Test",
+    "platform": "x64",
+    "testAssemblySha256": "35279d2984106258302f9b1495a93c5d27df474785312c11fb0977149fd80dc3",
+    "runner": "TestRunner/bin/Release/net48/TestRunner.exe",
+    "selection": "exclude-live-solidworks",
+    "result": "passed",
+    "deepReferenceLiveApi": "not_requested",
+    "crossVersionSolidWorks": "not_run"
+  },
+  "payloadInputs": [
+    {
+      "path": "CsvHelper.dll",
+      "sha256": "dffad53f0349e00a1444f71465d7c66aa8758644879d9f628677d5ba8307322a"
+    },
+    {
+      "path": "images/ros_logo_128x128.png",
+      "sha256": "9dac36b20d2de00c9114015385a6944509c26074acb098acf2915ca55af30882"
+    },
+    {
+      "path": "images/ros_logo_16x16.png",
+      "sha256": "b7653293ac62a8fb70adc438438b8b13673d0992c82ac87f2b5f6be7f882d5b8"
+    },
+    {
+      "path": "images/ros_logo_20x20.png",
+      "sha256": "41b16836f29f9e9b24d9dd274a239b2e86162ec3e98444183245306b83d16123"
+    },
+    {
+      "path": "images/ros_logo_32x32.png",
+      "sha256": "0298b25c52db7b0e629c08e6942ed7a26be246dcd3ac4c61b166422906bc2516"
+    },
+    {
+      "path": "images/ros_logo_40x40.png",
+      "sha256": "1cefd1f6abf4f15cdd3a67fa5e8b48cc168d17876f4c4918a5d1d07c3a416daf"
+    },
+    {
+      "path": "images/ros_logo_64x64.png",
+      "sha256": "d6923dad0983de47962f772ecbc1d7f4c8a0caa42d109c3fe476f86c8657498f"
+    },
+    {
+      "path": "images/ros_logo_96x96.png",
+      "sha256": "e5a7a56ef8c2a437ddea75f7deb3e0a7a4d6e5c3e9b0ca325ae6971016e1c8cb"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "60231769a62a20bc7644f2753b5835448b8afdbd2724560c19d363360e148842"
+    },
+    {
+      "path": "log4net.dll",
+      "sha256": "6adacc487aee3845ef9bf0b3b7c7f143a6d2a1c690c9eceb3e234bf7e0cd7899"
+    },
+    {
+      "path": "MathNet.Numerics.dll",
+      "sha256": "ec0be467d4ae975b6856ab88e25531f6d8768de2ec297d3d43ae72c1a7a2466a"
+    },
+    {
+      "path": "Newtonsoft.Json.dll",
+      "sha256": "e1e27af7b07eeedf5ce71a9255f0422816a6fc5849a483c6714e1b472044fa9d"
+    },
+    {
+      "path": "OSURDF.Core.dll",
+      "sha256": "a49b29d0ed3eca22cc13c0e586ba0799102ec35b4d52583ce572fd0fd71a4e45"
+    },
+    {
+      "path": "schemas/README.md",
+      "sha256": "f2a60dfaa2099aabb851900c7548641b570aa28f3811f90e1af60683850ee59d"
+    },
+    {
+      "path": "schemas/robot-bundle-manifest.schema.v1.json",
+      "sha256": "6f7b75d0b05088f01de197cda7d40216d04446fa555b585661391211b0e58f53"
+    },
+    {
+      "path": "schemas/robot.schema.v2.json",
+      "sha256": "775e79c90d6493c3f493358cac28ed14682bfdf22571617462929280e41f6383"
+    },
+    {
+      "path": "schemas/robot.schema.v3.json",
+      "sha256": "af64babd3bdef9143d3c27fe311d3be6ee803161b2617bbc0b3ce3384b721188"
+    },
+    {
+      "path": "schemas/ros2-control-profile.example.json",
+      "sha256": "e829c1ee09179b6007e6b01245df1714bad1d51b2b7f1b6c51f00b550be61238"
+    },
+    {
+      "path": "schemas/ros2-control-profile.schema.v1.json",
+      "sha256": "d264c4b547a5b0df420689359b2e99f43662245c341acebe75fda28bf745f396"
+    },
+    {
+      "path": "solidworkstools.dll",
+      "sha256": "3d84174f61c58bb1327281c73495934233080a9bf0ea71b777b304f6c6ca14c3"
+    },
+    {
+      "path": "SW2URDF.dll",
+      "sha256": "70ed4b7268466636b46a0bb8c5b851cad060bb9851c95af3267814e68428a922"
+    },
+    {
+      "path": "SW2URDF.png",
+      "sha256": "b7653293ac62a8fb70adc438438b8b13673d0992c82ac87f2b5f6be7f882d5b8"
+    },
+    {
+      "path": "System.Runtime.CompilerServices.Unsafe.dll",
+      "sha256": "44a0fbbd2c314095feb0d9307abd31b20fa9d7d7f259829eb434d4afb2630709"
+    },
+    {
+      "path": "System.Threading.Tasks.Extensions.dll",
+      "sha256": "4200adf125dc0c91fa3e1b0fc6eb7e91fb7b625c75dbfdd8031398f52e9d9ec5"
+    },
+    {
+      "path": "THIRD_PARTY_LICENSES/APACHE-2.0.txt",
+      "sha256": "0a96e8975979865afe471c9f380eb234451e841bf3d332041d67552ad086ac5d"
+    },
+    {
+      "path": "THIRD_PARTY_LICENSES/MIT.txt",
+      "sha256": "bfb343e34c63e02e28df2901dbf9c501e881146c3dd67d2254e49ada3c087bd6"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "cd92622b5710ce451fb307c58fec4d5a5fbfcf1989c1b91bdb771451e72f62c8"
+    },
+    {
+      "path": "tools/mujoco_runtime.lock.json",
+      "sha256": "230cb119540695a521af091f3794f983f650199183855113b4495eecfd0bc125"
+    },
+    {
+      "path": "tools/mujoco_runtime/compile.exe",
+      "sha256": "cc27361124d78ce8fce91f75ac935897c6c2424d1c518e2919407be0d4e79e80"
+    },
+    {
+      "path": "tools/mujoco_runtime/LICENSE",
+      "sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"
+    },
+    {
+      "path": "tools/mujoco_runtime/mujoco.dll",
+      "sha256": "79b61d22b4d230a00bd31930fc6943f8ea8c6174a1bf4a6bf90f2459dbf8df1b"
+    },
+    {
+      "path": "tools/mujoco_runtime/testspeed.exe",
+      "sha256": "5661533cf914a07abd79a82dbb772e3c2f61f04ebc7a8e28d07f2c546423f8fa"
+    },
+    {
+      "path": "tools/mujoco_runtime/THIRD_PARTY_NOTICES.txt",
+      "sha256": "b298d7577719dd1cefd5d666ea28e43f0406bd5502c7d802108012a31280bd90"
+    },
+    {
+      "path": "tools/openusd_runtime.lock.json",
+      "sha256": "9b086335037bb891a07ec15682fcbdb39376bf5be1a81718eee3bee1f199dd3a"
+    },
+    {
+      "path": "tools/openusd_runtime/_asyncio.pyd",
+      "sha256": "746bc8fa88282afe19dc60e426cc0a75bea3bd137cca06a0b57a30bd31459403"
+    },
+    {
+      "path": "tools/openusd_runtime/_bz2.pyd",
+      "sha256": "00b8ca9a338d2b47285c9e56d6d893db2a999b47216756f18439997fb80a56e3"
+    },
+    {
+      "path": "tools/openusd_runtime/_ctypes.pyd",
+      "sha256": "c148292328f0aab7863af82f54f613961e7cb95b7215f7a81cafaf45bd4c42b7"
+    },
+    {
+      "path": "tools/openusd_runtime/_decimal.pyd",
+      "sha256": "980a63f2b39cf16910f44384398e25f24482346a482addb00de42555b17d4278"
+    },
+    {
+      "path": "tools/openusd_runtime/_elementtree.pyd",
+      "sha256": "02e30b6a2bee5be5336e40a9c89575603051bde86f9c9cdc78b7fa7d9b7bd1f0"
+    },
+    {
+      "path": "tools/openusd_runtime/_hashlib.pyd",
+      "sha256": "87dd0c858620287454fd6d31d52b6a48eddbb2a08e09e8b2d9fdb0b92200d766"
+    },
+    {
+      "path": "tools/openusd_runtime/_lzma.pyd",
+      "sha256": "f5e01b516c2c23035f7703e23569dec26c5616c05a929b2580ae474a5c6722c5"
+    },
+    {
+      "path": "tools/openusd_runtime/_msi.pyd",
+      "sha256": "0f876c25188d1dde26eb852251439a6ec8edc1bc921be026f819eeb8686db2af"
+    },
+    {
+      "path": "tools/openusd_runtime/_multiprocessing.pyd",
+      "sha256": "975c1947798e3c39898c86675ca1eb68249f77361f41f172f9800275227213b9"
+    },
+    {
+      "path": "tools/openusd_runtime/_overlapped.pyd",
+      "sha256": "ca106e4dfdeafeabf9e98956d3d8d0cb73e109f1a96f1a7e35bc47dbd7c7e164"
+    },
+    {
+      "path": "tools/openusd_runtime/_queue.pyd",
+      "sha256": "3f8e7e6aa13b417acc78b63434fb1144e6319a010a9fc376c54d6e69b638fe4c"
+    },
+    {
+      "path": "tools/openusd_runtime/_socket.pyd",
+      "sha256": "a19e3c7c03ef1b5625790b1c9c42594909311ab6df540fbf43c6aa93300ab166"
+    },
+    {
+      "path": "tools/openusd_runtime/_sqlite3.pyd",
+      "sha256": "ff6a2a2f38b21b7784f97d604c99961d8c07ef455f7908110a4e893835d42b76"
+    },
+    {
+      "path": "tools/openusd_runtime/_ssl.pyd",
+      "sha256": "ba5388d6a6557d431e086734a3323621dc447f63ba299b0a815e5837cf869678"
+    },
+    {
+      "path": "tools/openusd_runtime/_uuid.pyd",
+      "sha256": "e6aa7f1637e211251c9d6f467203b2b6d85e5bc2d901699f2a55af637fa89250"
+    },
+    {
+      "path": "tools/openusd_runtime/_zoneinfo.pyd",
+      "sha256": "7e7b4157e401f8281fd85b68f2e21c828bf739c91416b2824dd22cb385eef819"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/__init__.py",
+      "sha256": "81ec42b9d674fcf7eb4a6f3af1eb37b4c02f74f16fb6a48414d796fd1e1b6c41"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Ar/__init__.py",
+      "sha256": "dd1e84f4fe581ab26884a3dffb38b08450892e0c27f2d06b0da60f7e40adf598"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Ar/_ar.pyd",
+      "sha256": "4ec22be81c85f880574d6bbb80a96813563efdf37d1917bb175af804fd63303d"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Gf/__init__.py",
+      "sha256": "55c462b8314806f2bf5188bf841bd76f740aa04f2699bd7f276055b7dbef0c61"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Gf/_gf.pyd",
+      "sha256": "ab72950bd586ec32521221f3ff14240dcb87f067060fb7029e610652eacef98d"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Kind/__init__.py",
+      "sha256": "4dc3c9f400f93822b918dceb21ee1c95857a88ecadb1701c3829ce6077b07204"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Kind/_kind.pyd",
+      "sha256": "7b695e29618c622b8a223906b11e8c33062f761e608231361a546a74442ddeda"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Pcp/__init__.py",
+      "sha256": "d7c77374d4f195dd10c8d253570b7098f9da5f666c1ab4bb5b72e6b3b0092bee"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Pcp/_pcp.pyd",
+      "sha256": "3fc5cdc74f3d6c65cfcda705691c35680c3cbba3d6b78d7647080a72cd91f0eb"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Plug/__init__.py",
+      "sha256": "43bc7ab0c82ce9d4c5a2edd93e1833ae72c465564ee268191a7882f30ee74f81"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Plug/_plug.pyd",
+      "sha256": "b1e9451ab0206c9fb62c4e44c4679b5ec2c66c1e6ec9a135c2b184ff60089b8f"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/ar/resources/plugInfo.json",
+      "sha256": "b37fc05c907b7756bec87a500893a325731b9c39ef0ad0f73c4d9b6351183ba2"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/plugInfo.json",
+      "sha256": "c285a05d159154e3ae201fa383c61766bc57c58aae6d5a70b7463b49e2dcbb2d"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/sdf/resources/plugInfo.json",
+      "sha256": "73d500266d66794ebdd1ee9a486cd75adca2665e61f436d0f448900ca7dacd2b"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/sdr/resources/plugInfo.json",
+      "sha256": "4ba1ae6604f9783e880bca5b6cb1fdff14b5511a1b9a80582a20fffcc96b852d"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/__init__.py",
+      "sha256": "f457d6323fd7a0c9f46a4bfe3198a1fb3a3326ab57c41c47d9cd0df26187f929"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/api.h",
+      "sha256": "f8946eb7696fa95a23d50a32ffa422369012256e9a79b872a05920fa6a88c582"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/CMakeLists.txt",
+      "sha256": "743f0f421be48b7b0bef45fb31e966803ae52624b3ab5d25d1c7611f3d4b9c97"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/generatedSchema.classes.txt",
+      "sha256": "8e26576a2450b43f259b593fe62df7133ef052009db52786887557cbaeed96ce"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/generatedSchema.module.h",
+      "sha256": "6b0d530ffd28a498e2331e5bc1eb645dd8e19214901c64ca30568db88c5cbeff"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/module.cpp",
+      "sha256": "7cc98c781f950c17138ce6c0ff6b8d7bc9553f0f46713cbeda706253c1d8a4ac"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/moduleDeps.cpp",
+      "sha256": "f4342c7d89fc41b3c7e34f461660ef702147ec8c2e53c06228317dafd7430bf2"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/plugInfo.json",
+      "sha256": "4a3704b9a0037edd2fc916117aca8e7230b7d685e361b1a6addd8740eeb19878"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/schema.usda",
+      "sha256": "b6cf979e06bf2881f4d3d3622d54393d497ec6ab683b7c6c6d6d46840e2aa69f"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/schemaClass.cpp",
+      "sha256": "2ee1a5606b79a8595f40eb8c5292f06cd5b0f28275efadfb626a07dbd459933e"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/schemaClass.h",
+      "sha256": "743bf030306f36827988a22edf02167e27e288fea590f136e23122f1920a6f30"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/schemaUserDoc.usda",
+      "sha256": "a1257ecf4c158d21147656058c81eaaa2a615e54fd55b87dec727d7e94d7a0cf"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/tokens.cpp",
+      "sha256": "c26a874ac4357ba8c7d189f252b6e9956711b0e884e0cea248a81b6beedd56bd"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/tokens.h",
+      "sha256": "df6d318523c6cc7d4824b1643712d85db1e8ffef0bb6b0efc776e17e88373cb9"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/wrapSchemaClass.cpp",
+      "sha256": "50969f88325d8089b05b33fc5c582d2c06bb75102a72605b215d1cd5407995a8"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/codegenTemplates/wrapTokens.cpp",
+      "sha256": "1928432cb6cb0183b5ecfcb41e940735134e893c7ebc82e50ac5bb74d5af64c8"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/generatedSchema.usda",
+      "sha256": "a09ceab63ab5491e33054cb2a9394af35c391cba2633fa60c3ef373addddaa4c"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/plugInfo.json",
+      "sha256": "dbfc3fc05484155e5a552e5a002ea57f4407be1ed379a8fc165c4c5d49231721"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usd/resources/usd/schema.usda",
+      "sha256": "53706dd717cad34c05a567c320c1ecbc99acf327f65fcf703b5409e4c07c8e63"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdGeom/resources/generatedSchema.usda",
+      "sha256": "f5732dad7c7128bae308383820fea109e08affb6abd2a65fa7d4bde8fa09ca94"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdGeom/resources/plugInfo.json",
+      "sha256": "ecf2ce5596a544af2bfe3628eac1f9233947b42091f80e271aff51844e98ac4c"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdGeom/resources/usdGeom/schema.usda",
+      "sha256": "cf1f4615b7196d59a78f49b490a15bfe0c49c78d96f7bc5620075341263ca251"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdGeomValidators/resources/plugInfo.json",
+      "sha256": "514e8e049ad86c2ec9eafaa45d06049809302f74779636bd7ad6999a345fde37"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdHydra/resources/generatedSchema.usda",
+      "sha256": "b7f07463f395592b547cc07bb9e97a816cbc2aab0c48638f7ec2a9a37e60d3be"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdHydra/resources/plugInfo.json",
+      "sha256": "25fc91bf3578049671ac5dd23860e76cc1f05f6a6f977442adf553ec21617b38"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdHydra/resources/shaders/empty.glslfx",
+      "sha256": "2a1de94dfa6754eefd6ffdf1041f3babd4a743654e04f4e68697d1c93c95dd58"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdHydra/resources/shaders/shaderDefs.usda",
+      "sha256": "1ac9ccb54418938f986bec36a85d0d5f2a3f625c28a8896cd6207d52ad47c609"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdHydra/resources/usdHydra/schema.usda",
+      "sha256": "4a1372ffe84772a8d8a874184dd0e151fd2ac757aa144fb2bc5edb048a92c472"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdLod/resources/generatedSchema.usda",
+      "sha256": "da98b30a9e51d9940b4f4c1c6ac9dd9adee450a0f9556f5a784b8d583bc83be9"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdLod/resources/plugInfo.json",
+      "sha256": "c41592a86af4427a6bce595a94357010013d1ade85e58889db15cbddb1f0f25e"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdLod/resources/usdLod/schema.usda",
+      "sha256": "808b13d684476a796d1a92bfe11178587b5325b4bd7caf78fdd46dd2ee70f213"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdLux/resources/generatedSchema.usda",
+      "sha256": "79c9feb33072156def2b625e84a3f2455b26bf1ee93a44afc45a32aedd4750e9"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdLux/resources/plugInfo.json",
+      "sha256": "532574c9b1e23bb22674fd3ebcc5d2a80ec16f3372017ad2f90d92d9d1681efc"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdLux/resources/usdLux/schema.usda",
+      "sha256": "d478b546f11ac45ba3bdfce83f16b88e8d55fcaa6fccdd87957ab3017775f884"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdLuxValidators/resources/plugInfo.json",
+      "sha256": "066f909ee2f964d217e6518c9ef1e455deb594e4bc4e6c0502920b3b739ae069"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdMedia/resources/generatedSchema.usda",
+      "sha256": "7a2889e99f19c717846d165fa86a7a97726b15de07dce6ad4eaa6d33d76423bb"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdMedia/resources/plugInfo.json",
+      "sha256": "cf4c4a1f195b3bce111759a26ca0a0d358278c944d026c41c47b615609cdc807"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdMedia/resources/usdMedia/schema.usda",
+      "sha256": "47df02acd2cbf2ee89e5c4ab9d871e09e51e4db8e95c21888fb3ad07f508247e"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdPhysics/resources/generatedSchema.usda",
+      "sha256": "681cac0463546c032ba903ae77e0dd245265bbb75d2db4719fe6696debe9bf47"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdPhysics/resources/plugInfo.json",
+      "sha256": "e2a47ceaa14d115410a9e84e94fb7ff28034e06ad13e3d54675efddc384f0b64"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdPhysics/resources/usdPhysics/schema.usda",
+      "sha256": "0cb5d91828fe6a8f042d1e27899c713957162d5545370e2fb8f99cf1a4df60c9"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdPhysicsValidators/resources/plugInfo.json",
+      "sha256": "e1714b8971487ed7c75777e5742ebb109b59ab440f6790b656699625719e0df9"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdProc/resources/generatedSchema.usda",
+      "sha256": "4488dc6a9a7be63a46928a28b86cc826a074a4c6e5c2833626fb87aed0259b28"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdProc/resources/plugInfo.json",
+      "sha256": "eacc20983e66a7046877c1a6920eb18cae351e63540c4ac3e6642f2dc972dcdb"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdProc/resources/usdProc/schema.usda",
+      "sha256": "14a45dbf085f796ab94c15e5d8e67eba29daffa3f5950003da00e258dc141e28"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdProfiles/resources/generatedSchema.usda",
+      "sha256": "b7495e2eac5e0f3da857ddbab9a740e16c19bd151e00e906f4cecbf602204cc1"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdProfiles/resources/plugInfo.json",
+      "sha256": "82599523f56e047db83d549c649590ebf310725a854e33102a693bd9c255fec4"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdProfiles/resources/UsdProfiles/schema.usda",
+      "sha256": "0214042ac0b024582722d1de67ab5c768f2422df4a391c01761dffd95a01dc03"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdRender/resources/generatedSchema.usda",
+      "sha256": "d16cc289e3186f7fb595cf69399b3acd7ec4ede9367eb31f877e49b5ff834dc5"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdRender/resources/plugInfo.json",
+      "sha256": "5c9541a2e95db250de622c4520fa66afb82aba9a488474cc2d0363472a13d6f1"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdRender/resources/usdRender/schema.usda",
+      "sha256": "a3b9e5994c9aa51c11ca220c7239c37c740c4fbaca9e215c6ad263d80dbb0b4d"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdRi/resources/generatedSchema.usda",
+      "sha256": "35afd0fc35ce5607188aa16ae8e2bd8f843bdafa0f4a334358a212fd8d5824e0"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdRi/resources/plugInfo.json",
+      "sha256": "9f62bdaf006ad59152c6b201bc7a49d5134d45b980093e8f545ceb4a4a0f5121"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdRi/resources/usdRi/schema.usda",
+      "sha256": "24580136e1939878f94ecd5b2b9fdfc5d141dc4c9e0e283ae68a4847a2d9572b"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdSemantics/resources/generatedSchema.usda",
+      "sha256": "0184b76290a4120d06f8cd7170bb496cb70cebf966fa5f43feaf93349043a7ff"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdSemantics/resources/plugInfo.json",
+      "sha256": "be8859b0ba256b0f1cb8aac23bc2a4d63c5b511f750700be858296b0a0e03b0f"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdSemantics/resources/usdSemantics/schema.usda",
+      "sha256": "7e7b307703900ef30c756bd050ffb85b44e447a2aeebeecace1ddd575986838d"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdShade/resources/generatedSchema.usda",
+      "sha256": "aef8c58040043e586bcf7f3b8dec116d0b5c0e5e224abc058235f33b6d77bbda"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdShade/resources/plugInfo.json",
+      "sha256": "76e44cccb791be06ef6de8967d11cbdfd9538ef0dde0e43dfacd72f39faf9747"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdShade/resources/usdShade/schema.usda",
+      "sha256": "7f8ec41517c2f1bba669ca0fcd50f0435071a8bae18ba8af80e1d2ce1d428039"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdShaders/resources/plugInfo.json",
+      "sha256": "1cefaeea46671325398881ebbcabe0fb65110c455706914025fd052f0a137f70"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdShaders/resources/shaders/previewSurface.glslfx",
+      "sha256": "d2782ba0ffc9b690ec3ae0c22c56d12436eae4592425b921f318596530d500cd"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdShaders/resources/shaders/primvarReader.glslfx",
+      "sha256": "2a1de94dfa6754eefd6ffdf1041f3babd4a743654e04f4e68697d1c93c95dd58"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdShaders/resources/shaders/shaderDefs.usda",
+      "sha256": "db9ae851fea7181aaf9bf296be8f0e6d894fa0fbc06a4c837a01985a5d0f5e70"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdShaders/resources/shaders/transform2d.glslfx",
+      "sha256": "e59c49bf9d916b5c97f025285768df9c0d78a0ef959600103dd4a087a2e9f6a3"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdShaders/resources/shaders/uvTexture.glslfx",
+      "sha256": "2a1de94dfa6754eefd6ffdf1041f3babd4a743654e04f4e68697d1c93c95dd58"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdShadeValidators/resources/plugInfo.json",
+      "sha256": "fbd09ec5f312d4d5b495a59bd44c406c5465058229fde73cd49ab7d9a63643ed"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdSkel/resources/generatedSchema.usda",
+      "sha256": "43fc5e5b73ea3b6362b26e813acbe6f0c1c450dafa4313a6f3e6c0ab04a0c7a7"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdSkel/resources/plugInfo.json",
+      "sha256": "3494940b1b95957fbdb04949ecfccf060a7c73f1fd2b381fc5eae3b79126dfa5"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdSkel/resources/usdSkel/schema.usda",
+      "sha256": "27ebe73d46b072c49e4705e3771fc0268892e746a9f9cac75a23c64e728dcde9"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdSkelValidators/resources/plugInfo.json",
+      "sha256": "e79025c1d87353ace655a778a138c67145d5cd13643f5ac6aae79445d9342767"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdUI/resources/generatedSchema.usda",
+      "sha256": "619c0fd66ecdd82c60a86150736ac68701b0ec035b5c69898ad8c9a34e87f38b"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdUI/resources/plugInfo.json",
+      "sha256": "00f3355aa86c0c0027bf6bebae7ca2cb605dda1951cc113c4cca9c7577d0cc36"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdUI/resources/usdUI/schema.usda",
+      "sha256": "7875347ae2e035b602bd93e1ddea6a91423f1abac352985b171c4281d0e25782"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdUtilsValidators/resources/plugInfo.json",
+      "sha256": "357ce32047a756948fc2f81d19e57b8b0fbbd1bfdd65b99aea66d3d64dc2775b"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdValidation/resources/plugInfo.json",
+      "sha256": "24ad464aa0d08d5b41bf97ad723e1fee549d7dca3ae4234654ba625341810e0c"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdVol/resources/generatedSchema.usda",
+      "sha256": "50777f52292b86a69aeffbd3df7b0e795e0edb2346ae7a954df5daaf329392a8"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdVol/resources/plugInfo.json",
+      "sha256": "2aea8fcb0c0bfb12f58a06a6a400f7afdd236c48b8189dc9927cb77092bc4bc3"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/pluginfo/usdVol/resources/usdVol/schema.usda",
+      "sha256": "e1ad6c11b3f7866754dd6d4ccc49e42efc7d5864b658ffb71f4a2739a9c15397"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Sdf/__init__.py",
+      "sha256": "0e2eeeeec7f745b6e472d6867de6ec0ebdb1dd8429628e9d09f58ae055e1e80d"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Sdf/_sdf.pyd",
+      "sha256": "ed5c93e98cbcd3888f779e679b30927b870988762b9641dcaa9986dd10cca7a9"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Sdr/__init__.py",
+      "sha256": "5b96221e4806db267e619a8afba49a9c8f93cb96529b1776d435fa6b74f6b57b"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Sdr/_sdr.pyd",
+      "sha256": "41bd04bf82b84452e98e0982d9c9fc9e52fce949022e2ed2ffdaf12cbe45d5fe"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Sdr/shaderParserTestUtils.py",
+      "sha256": "bc73d316ca1dd08e287638e844ee526ea4ec3d57296c9a1a899f92a07d880df4"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/tbb_debug.dll",
+      "sha256": "7c1e7f4938c6233c40d8cf8a0ba9d70aa71128bd08b0eb5248b6cd9d1b238061"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/tbb_preview_debug.dll",
+      "sha256": "8b7432817b6a1b70497e75645e530230c593efebc9f3d3f752573bf3bc1f5edb"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/tbb_preview.dll",
+      "sha256": "5a0fcd5ce16ab526d7bf160c9f2d40ba888a8ff289bbbfde6dda5ef1df70ebf1"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/tbb.dll",
+      "sha256": "692380cecd03181d7fd536e4402783e7f38ea0765b35bb52a3236256959b40cd"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/tbbbind_debug.dll",
+      "sha256": "838cf57672bc9f8f55e4becfc66c8949dda2b4abbfcd1119a0e9fc8d33bba6b6"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/tbbbind.dll",
+      "sha256": "0477ad4cff4c3bcd5d3d8783e7856da1118429146500c99f2ef77002f0f02ec2"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/tbbmalloc_debug.dll",
+      "sha256": "e24355c9e7feb6c123e11d1d29bb53343f193d66646db39397033449070482bb"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/tbbmalloc_proxy_debug.dll",
+      "sha256": "b2780056837b086bdb7a1d45c5415f617f777e462c7e212decfc0552a5babce7"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/tbbmalloc_proxy.dll",
+      "sha256": "5442186a8b4c938ac66f84b2e5890e72f62fb36c61c178a11203aca183efb6a3"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/tbbmalloc.dll",
+      "sha256": "c6f86e3fd7c43e67f96949a0a0012a989cdea3364524faee4e115263250fb787"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/__init__.py",
+      "sha256": "2b6a26a25f169c6f99ee9d1251d4806dbff63bbf51589e0ba071b50599c31451"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/_tf.pyd",
+      "sha256": "5f80de6f0c2fed898d4ac6a351ff2a780e36ca6d5b6511a374116935735ab35a"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/testenv/__init__.py",
+      "sha256": "ad56d8f4f382822c990cc6dac4a0f80a03ee0f0c8b71fb3f3305cf3c7faa3498"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/testenv/testTfPyInvoke_callees.py",
+      "sha256": "c033a23045b1b92ee1d5b3f699a3a0943e09eedc14ca248188954c26ef88874b"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/testenv/testTfScriptModuleLoader_AAA_RaisesError.py",
+      "sha256": "8030bcb9139f7d675f13b22c912f53245ef653720db59d915cc940caec0ba731"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/testenv/testTfScriptModuleLoader_DepLoadsAll.py",
+      "sha256": "94b7e1cbd09a68faf92d3fb5acdd07b6a55d29428987bd454fe4f58d9ef3b237"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/testenv/testTfScriptModuleLoader_LoadsAll.py",
+      "sha256": "92137c9457ab0875990fc9ba59438a622bd8f0f995b0a3532a9f95e2eea49eed"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/testenv/testTfScriptModuleLoader_LoadsUnknown.py",
+      "sha256": "6df6fcc5a221c37fe92382968c979b841168a66f759414a773e3550611da1bd5"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/testenv/testTfScriptModuleLoader_Other.py",
+      "sha256": "3be66f72afd8590cb45e7ee42a5fbd4e607ec064b8d8828b3179c679ec496ada"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/testenv/testTfScriptModuleLoader_Test.py",
+      "sha256": "35809a4482f468b8129df9702699ba4f30a74581021071f5772cf94d2982ae6b"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Tf/testenv/testTfScriptModuleLoader_Unknown.py",
+      "sha256": "c1f68762a96af457d321f11130790d34c0f95d753d1b0b17ef3e458f40c68b95"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Trace/__init__.py",
+      "sha256": "8cc9ae424c5bf03d62c5178155e7c3f3cf05515851647c481b85daa274409365"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Trace/__main__.py",
+      "sha256": "b0aee617601835e9b254178247ff4b4d4bbc0290fca4ac7c1f491a43daaaa543"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Trace/_trace.pyd",
+      "sha256": "a5772b9d2c8d1b1f7f5953f7f7a926776162a0a85624d6270551ae501d71a99a"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Ts/__init__.py",
+      "sha256": "1416b117d8ba531d25bd1a409a7906cd3308547bfb35db65bcf3a0fa498b53d9"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Ts/_ts.pyd",
+      "sha256": "4337d6560d7a383bea5ee5906087e4afcca4247887f9b36c5fa57d1ba8476ae3"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/usd_ms.dll",
+      "sha256": "18c064c67c895c28b800370d75e8ace5f7f19758ff00bf5ad34066ec2821e26e"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Usd/__init__.py",
+      "sha256": "dd1e84f4fe581ab26884a3dffb38b08450892e0c27f2d06b0da60f7e40adf598"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Usd/_usd.pyd",
+      "sha256": "7ff94f9f4e4a2ec98553258898f3fc62cb9b4de8d385705e6096f8dd696304ac"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Usd/usdGenSchema.py",
+      "sha256": "f5dbc75985f0bc190ae02bdd579ca0af9ac27763f392c9746c053e5bf2f40278"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Usd/usdInitSchema.py",
+      "sha256": "0195eca572735b088c8952d8a1f6968a72025343983de9dca72b7e90848afe5a"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdGeom/__init__.py",
+      "sha256": "dd1e84f4fe581ab26884a3dffb38b08450892e0c27f2d06b0da60f7e40adf598"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdGeom/_usdGeom.pyd",
+      "sha256": "c93ff4c48997d793aa6dd1e6c5dabdd7a39eb6a9eb02173ba3349ccc22ff25d1"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdHydra/__init__.py",
+      "sha256": "4a0f9d40545664170019428ccebb9c59f61d37f9f1a409ae708a9d0be2f898e2"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdHydra/_usdHydra.pyd",
+      "sha256": "311fb58d6260bc69cb7a66c292be762c468a199e7d0b3eba41dba586a16e6868"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdLod/__init__.py",
+      "sha256": "fbcf91d145e6be44b1d35cdd7e606ad4860a884d3e4f0cbc7336a12caedfd9e2"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdLod/_usdLod.pyd",
+      "sha256": "feaff7704649b28d4f2089e4d2b9b40f8714bdd350b661ace62ed925de170f8f"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdLux/__init__.py",
+      "sha256": "4a0f9d40545664170019428ccebb9c59f61d37f9f1a409ae708a9d0be2f898e2"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdLux/_usdLux.pyd",
+      "sha256": "8516fbb62f53a77d42fa53ff1717dae93f76480114e55102b51d2a0609aec7ea"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdMedia/__init__.py",
+      "sha256": "7888ebaa837148d4b91632141cfc6dac36d35e685624d6c76686978cdd12c35a"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdMedia/_usdMedia.pyd",
+      "sha256": "31d942264cc9d0fd57c23c6e5980edda2e275ac2317d557000e5256928d407b0"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdPhysics/__init__.py",
+      "sha256": "13a36ac79396077f2466d35eb24ad949cc4d969ab5c9bff5c53165ad43b40a3d"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdPhysics/_usdPhysics.pyd",
+      "sha256": "81316f8b2b93cd7f1328bfef2d907375f71fef9f51ae5e356496ece4ceda8d5f"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdProc/__init__.py",
+      "sha256": "34749ec3278c4669ac70403c103abc900babf7fad28be7f3006313d58ac738ae"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdProc/_usdProc.pyd",
+      "sha256": "19c64e2d4363e44c6b4fb8faac7732e0a7e9519e03c875607eb7608c77fd2f78"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdProfiles/__init__.py",
+      "sha256": "f457d6323fd7a0c9f46a4bfe3198a1fb3a3326ab57c41c47d9cd0df26187f929"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdProfiles/_usdProfiles.pyd",
+      "sha256": "ba56cff204ae74986783d214b5d5cf201272bed7983a85da5e9a36166dfac12c"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdRender/__init__.py",
+      "sha256": "dd1e84f4fe581ab26884a3dffb38b08450892e0c27f2d06b0da60f7e40adf598"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdRender/_usdRender.pyd",
+      "sha256": "730dd89b41c2d37830bbaa22f19e94252bd574b35dbf08ae0855eec3f7799207"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdRi/__init__.py",
+      "sha256": "dd1e84f4fe581ab26884a3dffb38b08450892e0c27f2d06b0da60f7e40adf598"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdRi/_usdRi.pyd",
+      "sha256": "f863c9a7991de4a74e55d417deaeecde7f3dee5cada6498f9a7ea5aa88ab946f"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdSemantics/__init__.py",
+      "sha256": "e56d6eab0ecfed38133017e8e25bc851a469780842cd1f01cf60d553b57cebcb"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdSemantics/_usdSemantics.pyd",
+      "sha256": "18bc0365c46378de4c6f352a7b3527428ad63e2db3490764a9026b7c43e31efd"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdShade/__init__.py",
+      "sha256": "dd1e84f4fe581ab26884a3dffb38b08450892e0c27f2d06b0da60f7e40adf598"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdShade/_usdShade.pyd",
+      "sha256": "81b9fb7fc2b1f47e8a0bc8221d64020af1652132a204e127164013b1076670ea"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdShaders/__init__.py",
+      "sha256": "1c5e932dd60837e29d2c5b6ee1039db9b4c66f29bd2ac555e2e0f7a97c64822e"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdSkel/__init__.py",
+      "sha256": "dd1e84f4fe581ab26884a3dffb38b08450892e0c27f2d06b0da60f7e40adf598"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdSkel/_usdSkel.pyd",
+      "sha256": "8e612ed877183aa9cff1ae101530f574aa0e4d5b0e5d2af14ea8f440cb92c69c"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdUI/__init__.py",
+      "sha256": "dd1e84f4fe581ab26884a3dffb38b08450892e0c27f2d06b0da60f7e40adf598"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdUI/_usdUI.pyd",
+      "sha256": "b87d65dfa9eafc87c61f7cfc1be9ba31bfbde3439ec373c93c1bfcb529dc078f"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdUtils/__init__.py",
+      "sha256": "de14c419d044cea394aa764d3f213c9f4368adc4a81cd9c975c03f6cf8307295"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdUtils/_usdUtils.pyd",
+      "sha256": "81ae7b0e3f27a31552c77ad90267e05956fa054993520e0316f06ff549a28759"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdUtils/constantsGroup.py",
+      "sha256": "25fefbdaace5793a0b3266fb472868a549f50b052e76bc3abed7ede3d09e3540"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdUtils/fixBrokenPixarSchemas.py",
+      "sha256": "3ec76f46ee75d7f5bf934a11e27d38729a922702b5ae2285cef6ba3f9adc9d3c"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdUtils/toolPaths.py",
+      "sha256": "199f3d5d3f974763c323f9d07864e2da7a0c32cf029c5727bba6f33507dfdfd3"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdUtils/updateSchemaWithSdrNode.py",
+      "sha256": "15a207c01e039c7e353ff57bbe860301082bf9f3f10a963ba6a612aa0e839b53"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdUtils/usdzUtils.py",
+      "sha256": "6f27c9bbeb97a603620a2e5a014f9f6b21d7c82c7310bb20fc3a0cee6dbd0458"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdValidation/__init__.py",
+      "sha256": "386c725896e1fe2c32fc01f81523fd1cad72d1065701194624b2003ee121a0d1"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdValidation/_usdValidation.pyd",
+      "sha256": "7744de96a59664912814f5b7c167c4b4cfc70d8efc18107efb181958ddee78dc"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdVol/__init__.py",
+      "sha256": "40f149cbe88c62afc04457610ac8dea40d5fe082bbb06a430769e060bffd93e0"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/UsdVol/_usdVol.pyd",
+      "sha256": "74efc84f5a50cf1c0ac574f17a2d1145ffb9886c42eaf692b1923c5c2a5251f0"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Vt/__init__.py",
+      "sha256": "dfec60041025ff0f5c54f3b50f84c81396189edb7db5d06ddc3b5f7842133c01"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Vt/_vt.pyd",
+      "sha256": "78fa46726f71a0e8415bc42b8f0bf8e4913cb54c66f426f79c381d242f9b2e58"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Work/__init__.py",
+      "sha256": "792bbf026d9fc0135a996ff9c6bf68a9aa61055bc66aa25183eff34a3c333791"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/pxr/Work/_work.pyd",
+      "sha256": "0a8d64fcd261f4883dd05e72591454f3d438b0782ec04529445bd725e3395925"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/usd_core-26.8.dist-info/LICENSE.txt",
+      "sha256": "2d31950bd9589c55acf1540d35985ff914d86ef500379e1fa366204846ed63e2"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/usd_core-26.8.dist-info/METADATA",
+      "sha256": "5f95bee960d9d3c4f7be9bcbd0dc78d147c8ecbec7d1a3609d60ced3111981f7"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/usd_core-26.8.dist-info/RECORD",
+      "sha256": "6f6597fa5834881ee97148e1e0eb112d69c5297d86e76966a950c70dadb8448d"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/usd_core-26.8.dist-info/top_level.txt",
+      "sha256": "7d5529d27d0ef431cd5d29288148bbf391afbf2b33d01ee0a7b4e13e4dbcd0b2"
+    },
+    {
+      "path": "tools/openusd_runtime/Lib/site-packages/usd_core-26.8.dist-info/WHEEL",
+      "sha256": "426efecb90d4b1e378612148a654e084c92538eafbe1d736308b4d89aad912b1"
+    },
+    {
+      "path": "tools/openusd_runtime/libcrypto-3.dll",
+      "sha256": "05fe080eab7fc535c51e10c1bd76a2f3e6217f9c91a25034774588881c3f99de"
+    },
+    {
+      "path": "tools/openusd_runtime/libffi-8.dll",
+      "sha256": "eff52743773eb550fcc6ce3efc37c85724502233b6b002a35496d828bd7b280a"
+    },
+    {
+      "path": "tools/openusd_runtime/libssl-3.dll",
+      "sha256": "2e9fbcd8f7fdc13a5179533239811456554f2b3aa2fb10e1b17be0df81c79006"
+    },
+    {
+      "path": "tools/openusd_runtime/LICENSE.txt",
+      "sha256": "e502c6b880ff58d614901495a9009c136539cd0b1e2a2abb8fc00b934c203419"
+    },
+    {
+      "path": "tools/openusd_runtime/pyexpat.pyd",
+      "sha256": "c7c7564f7f874fb660a46384980a2cf28bc3e245ca83628a197ccf861eab5560"
+    },
+    {
+      "path": "tools/openusd_runtime/python.cat",
+      "sha256": "aa9bcfe5c4d8d1285eeb997539899da49987640e4de2fe300d8c1422381cfa27"
+    },
+    {
+      "path": "tools/openusd_runtime/python.exe",
+      "sha256": "5f7b89a612c9b8af1d6456cdfcd1dbe5ca630849e79aebced9bee9a6694952ec"
+    },
+    {
+      "path": "tools/openusd_runtime/python3.dll",
+      "sha256": "db84bc052cfb121fe4db36242ba5f1d2c031b600ef5d8d752cf25b7c02b6bac6"
+    },
+    {
+      "path": "tools/openusd_runtime/python311._pth",
+      "sha256": "6486ffaea9b3ccb7dc25095d9c21feaca212cbe4928eb48c626b7573e38338b7"
+    },
+    {
+      "path": "tools/openusd_runtime/python311.dll",
+      "sha256": "0817a2a657a24c0d5fbb60df56960f42fc66b3039d522ec952dab83e2d869364"
+    },
+    {
+      "path": "tools/openusd_runtime/python311.zip",
+      "sha256": "7d0f59c930e7d3d9352399ea3c95c0272489b3c09a8e95faaedfa8a23e20e5b1"
+    },
+    {
+      "path": "tools/openusd_runtime/pythonw.exe",
+      "sha256": "d5355e1de2a5195dccb1ba524b146aa7705be71af18d876819756838251b37b3"
+    },
+    {
+      "path": "tools/openusd_runtime/select.pyd",
+      "sha256": "bae0974390945520eb99ab32486c6a964691f8f4a028ac408d98fa8fb0db7d90"
+    },
+    {
+      "path": "tools/openusd_runtime/sqlite3.dll",
+      "sha256": "314bba62f4a1628b986afc94c09dc29cdaf08210eae469440fbf46bcdb86d3fd"
+    },
+    {
+      "path": "tools/openusd_runtime/unicodedata.pyd",
+      "sha256": "37c68617fa02a2cadced17ef724e2d450ef12a8a37215da789a4679fde1c5c02"
+    },
+    {
+      "path": "tools/openusd_runtime/vcruntime140_1.dll",
+      "sha256": "a113f192195f245f17389e6ecbed8005990bcb2476ddad33f7c4c6c86327afe5"
+    },
+    {
+      "path": "tools/openusd_runtime/vcruntime140.dll",
+      "sha256": "4d292623516f65c80482081e62d5dadb759dc16e851de5db24c3cbb57b87db83"
+    },
+    {
+      "path": "tools/openusd_runtime/winsound.pyd",
+      "sha256": "b79c9bd9114b7f243f5a80ffd2de5c5942fc64ceec4a52a048bb4a07848b9239"
+    },
+    {
+      "path": "tools/usd_adapter/osurdf_usd_adapter.py",
+      "sha256": "3c2f73669cac70d9210f595f9e63ffbc69ad2ee2926cfb9a8930eb1f13bded6a"
+    },
+    {
+      "path": "tools/usd_adapter/README.md",
+      "sha256": "d90edee0b129c78d895e29c5377b34d998653a0f4fe5581ef8eea97b57ebd8b7"
+    }
+  ]
+}
