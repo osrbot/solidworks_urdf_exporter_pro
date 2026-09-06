@@ -35,6 +35,10 @@
 SolidWorks COM/RPC failures can break Live API tests or previews. Restart SolidWorks and retry. A
 graphics-layer failure neither proves nor disproves numerical validity.
 
+If inertia validation fails before the output directory is published, follow the diagnostic CSV path
+in the error message. Failed-export diagnostics are retained under
+`%USERPROFILE%\sw2urdf_logs\failed-exports`; the temporary export directory may already be removed.
+
 ## Inertia or Collision Preview Is Invisible
 
 - Current previews display through the active root assembly document and apply the selected Link's

@@ -10,7 +10,7 @@ When a robot has already been designed in SolidWorks and the next step requires 
 - Builds Links and Joints from your configuration.
 - Generates visual meshes and collision geometry separately.
 - Exports ROS 1, ROS 2, OpenUSD, or MuJoCo files together with validation reports.
-- Validates new output before replacing existing files, preserving the previous result if export fails.
+- Validates and replaces output per target. A failed format does not discard other successful results, and reports distinguish unchanged old output from directories requiring recovery.
 
 ## What must you still decide?
 

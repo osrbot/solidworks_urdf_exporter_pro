@@ -18,8 +18,16 @@ The current version keeps the familiar SolidWorks export workflow while addressi
 - Joint basic information, reference geometry, origin, and axis are shown in separate sections, so long paths remain readable.
 - The Limits page supplies the smallest valid default for missing required positive values. A valid user value always takes precedence.
 - The Link page is divided into Inertia, Visual/Collision, and Appearance tabs.
-- Input fields and buttons keep complete borders, and common window sizes do not require extra scrollbars for data entry.
+- At the retested window size, the Joint Basic and Limits and Safety pages keep complete input borders without extra scrollbars. This does not verify every DPI or multi-monitor combination.
 - OpenUSD settings open only when needed and do not occupy space on the main page.
+
+## Editing Links
+
+- Adding or removing Links, changing direct child counts, and dragging to a new parent are validated before being applied. Cancellation or validation failure does not leave partial tree changes.
+- Use multi-selection for bulk operations; select one node before editing individual Link or Joint properties. Applying a multi-selection does not clear Joint names with placeholder text.
+- After a Joint rename passes validation, existing Mimic references are updated. Explicit user changes to references, multipliers, and offsets are retained.
+- After changing a Link frame, manual COM and inertia values are transformed into the new frame during preview or export preparation. Repeated saves do not repeat the transformation. If the previous frame cannot be resolved, the draft is retained and an error is shown; resolve the reference before continuing.
+- Switching Links clears inertia and collision previews while retaining the entered mass. Initial preview preparation can still take time; see [Quick Start](/en/guide/getting-started).
 
 ## New export targets
 

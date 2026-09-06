@@ -7,6 +7,13 @@ frame, mass, collision, and appearance data into files that ROS, OpenUSD, or MuJ
 
 Project: <https://github.com/osrbot/solidworks_urdf_exporter_pro>
 
+## Latest update
+
+The latest update adds reviewed legacy-configuration migration and measured-mass calibration,
+fixes Link/Joint edits and inertia-frame changes, and preserves successful outputs when another
+target fails. See [Releases](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases).
+Initial preview and inertia validation can still take considerable time on large assemblies.
+
 ## Why use it
 
 - Reduce repeated manual work on hierarchy, frames, mesh paths, mass, and inertia.

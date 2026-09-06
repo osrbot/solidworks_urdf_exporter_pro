@@ -2,7 +2,43 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
-## Unreleased / 未发布
+## 2026-09-06 / v20260906
+
+Published on 2026-09-07 using the unchanged, tested `fc88a14` installer built on 2026-09-06.
+于 2026-09-07 发布，沿用 2026-09-06 构建并完成实测的 `fc88a14` 安装包，不重新打包。
+
+### 简体中文
+
+- 支持核对引用后迁移旧版配置；保存新配置时保留旧配置。
+- Link 增删、子节点数量和拖拽修改使用事务验证；修复多选清空 Joint 名称、重命名后 Mimic 引用失效的问题。
+- 使用 SW 有效质量、质心和惯性覆盖值；支持实测质量校准。更改 Link 坐标系时正确转换已有惯性和手动值。
+- 输出目标默认全部勾选，取消勾选不再重建整个页面；改善 DPI 布局、输入边框和预览清理的重复重绘。
+- ROS1、ROS2、OpenUSD、MJCF 分别报告成功或失败；目标特有错误不再撤销其他成功目标，共享模型错误仍会阻止导出。
+- 改进大网格的 MuJoCo 输出和官方校验路径，避免有损惯性往返转换；恢复统一的独立进度窗口。
+- STL 参数使用 SW 实际读回值；恢复导出坐标系和相关设置。惯性校验失败时保留诊断 CSV，并显示保存位置。
+- 已安装版本在 SW2023 完成四目标导出；889 项插件回归和 82 项 Core 测试通过。完整验证范围见安装复测记录。
+- 已知限制：首次预览和导出前惯性校验仍耗时较长。没有引入按需加载、跨阶段缓存或试验性预选择优化；不宣称已覆盖全部 DPI、SW 版本或仿真环境。
+
+### English
+
+- Review references before migrating legacy configurations, retaining the old configuration when saving the new one.
+- Make Link count and hierarchy edits transactional; fix Joint names cleared by multi-selection and stale Mimic references after renaming.
+- Read effective SW mass, COM, and inertia overrides; support measured-mass calibration and correct frame changes for existing/manual inertia values.
+- Select all targets by default without rebuilding the page when toggled; improve DPI layout, input borders, and redundant preview redraws.
+- Report target results independently and retain successful ROS1, ROS2, OpenUSD, or MJCF outputs. Shared model errors still stop export.
+- Improve large-mesh MuJoCo output and official validation without lossy inertia roundtrips; restore the consistent independent progress window.
+- Report actual STL settings read back from SW, restore export preferences, and retain diagnostic CSV files when inertia validation fails.
+- The installed build completed a four-target SW2023 export; 889 plug-in regressions and 82 Core tests passed. See the installed-build report for scope.
+- Known limits: initial preview and pre-export inertia checks remain slow. No lazy loading, cross-stage cache, or experimental preselection optimization is included. Not all DPI, SW versions, or simulation environments have been validated.
+
+Evidence: [installed build](docs/reviews/2026-09-06-installed-fc88a14-retest.md),
+[review fixes](docs/reviews/2026-09-06-review-fixes.md),
+[latency investigation](docs/reviews/2026-09-06-preview-latency-investigation.md).
+
+## Development History / 开发记录
+
+The following detailed notes include work already delivered across earlier releases; they are not an unreleased feature list.
+以下详细记录包含此前版本已交付的工作，不代表尚未发布的功能清单。
 
 ### 预览崩溃修复 / Preview Crash Fix
 
@@ -168,8 +204,9 @@ All notable OSRBot-maintained changes to this fork are documented here.
   standard model and large-mesh tests to execute and pass, with no missing-runtime skips.
 - Isolated generation, validation, reports, and directory replacement for each selected target.
   A failed ROS, OpenUSD, or MJCF export no longer discards other successful outputs. Each target
-  retains atomic replacement, an output-root lock, and recovery journals. Failed targets preserve
-  their previous valid directory; common model preparation failures still stop the whole export.
+  retains atomic replacement, an output-root lock, and recovery journals. Failed targets restore
+  their previous directory when recovery succeeds; recovery failures require inspecting the reported
+  paths and journal rather than assuming the directory is usable. Common model preparation failures still stop the whole export.
 - Added a bilingual results window with per-target status, errors, output-directory actions, and
   explicit labels for old results not updated this run. Partial failures keep the export form open.
 
@@ -281,7 +318,8 @@ All notable OSRBot-maintained changes to this fork are documented here.
 - MuJoCo 运行时 CI 与安装包构建必须执行并通过普通模型和大网格两项验证，不允许缺少运行时
   时跳过测试或以零测试通过。
 - ROS、OpenUSD、MJCF 现在分别生成、校验、写报告并替换目录。某一项失败，不再丢弃其他格式的
-  成功结果。每个目标仍保留完整替换、输出目录锁和中断恢复机制；失败项保留原有有效目录。
+  成功结果。每个目标仍保留完整替换、输出目录锁和中断恢复机制；恢复成功时保留原有目录，
+  恢复失败时需按提示检查目录和恢复记录，不能假定目录可用。
   公共模型读取或基础校验失败时，仍整体停止。
 - 新增中英文结果窗口，逐项显示成功、失败、错误和输出目录；旧文件明确标注“本次未更新”，
   不计入本次成功结果。部分失败时保留导出页面，便于只重试失败格式。

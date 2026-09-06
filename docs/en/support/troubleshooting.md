@@ -30,6 +30,12 @@ Distinguish between a numerical validation failure and a temporary SolidWorks di
 Check the mass, center of mass, inertia values, and log. A display failure does not necessarily mean
 that the values are incorrect.
 
+For inertia validation failures, the error details give the retained diagnostic CSV path under the log directory's `failed-exports` subdirectory. Keep that file for troubleshooting; large meshes are not copied there.
+
+## Initial Preview Preparation Is Slow
+
+Mass calculations during initial **Preview and Export** preparation and pre-export inertia validation can still take a long time, temporarily leaving SolidWorks unresponsive. This remains a known limitation. Do not click repeatedly. Record assembly size, elapsed time, and logs, then follow [How to ask for help](/en/support/help-and-contribute).
+
 ## USD Opens Without Geometry
 
 Confirm that you copied the complete `USD/<package>` directory, not only `robot.usd`. Check that

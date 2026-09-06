@@ -22,3 +22,15 @@ self-collision, or Joint drive intent needs adjustment; the defaults can be expo
 Export URDF Without Meshes is useful for a quick structure and value check. Export URDF and Meshes
 creates the deliverable directory and is required for OpenUSD and MJCF. Read the export report before
 opening the target output.
+
+New configurations select all four targets by default; existing explicit choices are retained.
+Toggling targets only changes the relevant controls and output hints.
+
+## Partial completion
+
+Each target has its own result. A target-specific MJCF failure, for example, does not remove successful
+ROS1, ROS2, or OpenUSD outputs. Check the completion summary and retry only the failed target after
+correcting the cause. Errors in shared Link/Joint data or inertia may still stop the whole export.
+
+The progress window shows the current stage and elapsed time. First preview preparation and inertia
+validation remain slow on some large assemblies; the animated indicator is not a percentage estimate.

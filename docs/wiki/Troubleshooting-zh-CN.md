@@ -33,6 +33,9 @@
 SolidWorks COM/RPC 异常可能使 Live API 测试或预览失败。重启 SolidWorks 后重试；不要把显示层
 故障等同于数值层通过或失败。
 
+如果惯性校验在正式输出前失败，按错误窗口给出的路径查看诊断 CSV。失败记录保留在
+`%USERPROFILE%\sw2urdf_logs\failed-exports`，不要只在已经清理的临时导出目录中寻找。
+
 ## 惯性预览或碰撞预览不可见
 
 - 当前预览通过活动根装配文档显示，并应用所选 Link 的完整组件变换。Link 可以位于深层或已隐藏；

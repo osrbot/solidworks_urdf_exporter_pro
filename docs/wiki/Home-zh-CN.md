@@ -7,6 +7,12 @@ SW2URDF 是社区维护的 SolidWorks 机器人模型导出插件。它把装配
 
 项目地址：<https://github.com/osrbot/solidworks_urdf_exporter_pro>
 
+## 本次更新
+
+本次支持核对旧配置后迁移和实测质量校准，修复 Link/Joint 编辑及惯性坐标系转换问题，
+并在单个目标失败时保留其他成功输出。安装包见[发布页](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases)。
+大型装配体首次预览和惯性校验仍可能等待较长时间。
+
 ## 为什么使用
 
 - 减少手工整理层级、坐标系、网格路径、质量和惯性的重复工作。

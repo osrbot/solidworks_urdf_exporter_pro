@@ -37,6 +37,11 @@ changed.
 
 ## Common mistakes
 
+Changing the direct child count affects only the next level. New Links may remain incomplete drafts;
+set their Joint names and required references before export. Invalid edits leave the original tree
+intact. Multi-selection does not write placeholder text into individual Joint names, and renaming a
+Joint updates its existing Mimic references after validation.
+
 - Splitting components that move as one rigid body into separate Links.
 - Putting components from both sides of a Joint into one Link.
 - Reusing old assignments after restructuring the assembly.

@@ -30,6 +30,10 @@ Changing the Link frame recomputes and persists:
 
 Mass and principal moments must remain invariant under a pure frame change.
 
+Manual COM/tensor values and their source baseline are transformed during preview/export preparation.
+Repeated saves do not apply the conversion twice. If the previous frame is unavailable, the draft
+is retained and the reference must be repaired before continuing.
+
 ## SolidWorks API Path
 
 The maintained implementation enables system units and separates two reads:
@@ -53,6 +57,10 @@ distribution in SW when that assumption is wrong.
 Explicit manual tensors and SW inertia overrides are not automatically scaled. **Restore SW values**
 rereads current components and discards exporter edits. The final values are shared by the page,
 preview, and export; calibration choices are saved with the configuration.
+
+Restoring SW values does not remove overrides stored in SolidWorks. An explicit SW inertia override
+still prevents automatic tensor scaling. On older configurations with unknown inertia provenance,
+review the retained values or restore SW values before enabling calibration.
 
 ## Sign Convention
 

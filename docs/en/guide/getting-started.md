@@ -23,6 +23,14 @@ For every non-root Link, confirm the parent and child Links, Joint name, type, r
 
 Confirm that mass, center of mass, inertia tensor units, and directions are correct. The equivalent inertia body can help with inspection, but the values and export report remain the final reference.
 
+The exporter reads effective SolidWorks mass properties, including mass, center of mass, and inertia overrides. A whole-subassembly override cannot be split across Links; assign the complete subassembly to one Link to use it.
+
+Enter measured mass in kg and enable **Calibrate inertia with measured mass** to scale the full tensor by `measured mass / source mass`, preserving COM, principal directions, and equivalent cuboid dimensions. This assumes the source model's relative mass distribution is credible. Manually entered tensors and explicit SolidWorks inertia overrides are not automatically scaled.
+
+Older configurations without inertia source metadata keep their existing values without enabling calibration. To use SW properties as the source again, click **Restore SW values**, then enter measured mass. This discards edits made in the exporter but does not clear overrides in SolidWorks. Preview and all targets use the same final values; non-positive mass and physically invalid inertia still block export.
+
+Initial **Preview and Export** preparation and pre-export inertia validation can still be slow. SolidWorks may temporarily stop responding during mass calculations. This remains a known limitation; temporary unresponsiveness alone does not establish that export has failed.
+
 [View the inertia page](/en/features/inertia)
 
 ## 5. Set collision and appearance
@@ -33,13 +41,17 @@ Visual geometry is for display; Collision geometry is for contact. Prefer collis
 
 ## 6. Select output
 
-Select at least one target: ROS 1, ROS 2, OpenUSD, or MuJoCo MJCF. Selecting only the formats you need reduces export time and keeps the output directory uncluttered.
+New export configurations select all four targets by default: ROS 1, ROS 2, OpenUSD, and MuJoCo MJCF. Existing explicit selections and the URDF-only legacy path retain their choices. Keep at least one target selected; clearing formats you do not need reduces export time and keeps the output directory uncluttered.
 
 [View the Model and Export page](/en/features/export-page)
 
 ## 7. Review the reports
 
-Start with `export_report.md` in the output root, then review the reports and name mappings inside the relevant target directory. Error messages identify the affected location and suggest the next step.
+Start with the completion summary. ROS packages contain `config/export_report.md`; OpenUSD and MJCF contain `export_report.json` inside their target directories. Review the corresponding name maps as well. Error messages identify the affected location and suggest the next step.
+
+Multi-target export shows success or failure for each format. A failed format does not discard other successful outputs. Any retained old output for a failed target is marked as not updated in this run; do not count it as a new successful result. If recovery is required, inspect the directories as directed by the error details rather than assuming the old output is intact.
+
+After a partial failure, the export form stays open so you can select only failed formats and retry. Assembly-reading or common model-validation failures still stop the whole export; cancellation or serious errors may also interrupt remaining targets. For inertia validation failures, use the path in the error message to locate the retained diagnostic CSV.
 
 ## 8. Verify in the target tool
 

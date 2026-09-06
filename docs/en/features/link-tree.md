@@ -22,6 +22,8 @@ The Link tree defines the robot's rigid bodies and their parent-child relationsh
 New Links can remain incomplete while you organize the tree; required Joint fields are still checked
 before export. Failed or cancelled edits leave the previous tree intact.
 
+Applying a multi-selection does not clear Joint names. Select a single node before editing its Link or Joint properties. After a Joint rename passes validation, existing Mimic references are updated; explicit user changes to references, multipliers, and offsets are retained.
+
 Keep the generated end-of-line marker when renaming or moving an existing Link in the outline.
 It preserves that Link's parameters and component bindings. Add a heading line to create a new Link.
 

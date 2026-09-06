@@ -14,6 +14,16 @@ OpenUSD, or MuJoCo workflows.
 > This is a community-maintained project, not an official Dassault Systemes, ROS, NVIDIA, or MuJoCo
 > distribution.
 
+## This update
+
+- Migrate older configurations after reviewing components, frames, and axes; retain the original configuration.
+- Use SolidWorks mass-property overrides and measured-mass calibration consistently in inertia preview and export.
+- Preserve data through Link multi-selection, hierarchy edits, Joint renaming, and inertia-frame changes.
+- Retain successful outputs when an individual target fails, with separate results and diagnostics.
+- Improve display scaling, page repainting, and STL export feedback. Initial preview can still take considerable time on large assemblies.
+
+See the [changelog](CHANGELOG.md) and [installer downloads](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases).
+
 ## Why use it
 
 Turning CAD into a robot description by hand means repeatedly managing hierarchy, frames, mesh

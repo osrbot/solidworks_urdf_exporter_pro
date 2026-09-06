@@ -32,6 +32,12 @@ an error; non-positive mass and physically invalid inertia still block export.
 Older configurations without source metadata keep their existing mass and tensor unchanged. Use
 **Restore SW values**, then enter measured mass, to opt into calibration from SW mass distribution.
 
+**Restore SW values** does not clear overrides in SolidWorks. An explicit SW inertia override still prevents automatic scaling after restoring.
+
+## Change the Link frame
+
+After a frame change, manual COM and inertia values are transformed into the new frame during preview or export preparation. Repeated saves do not repeat the transformation. If the previous frame cannot be resolved, the draft is retained and an error is shown rather than assuming it matches the assembly frame. Resolve the reference, then check the transformed values and preview. Switching Links clears inertia and collision previews while retaining the entered mass.
+
 ## Show the equivalent inertia body
 
 Click **Show Equivalent Inertia Box** to inspect its position and orientation in SolidWorks. This preview helps reveal obvious coordinate or unit errors; it does not replace the original geometry.

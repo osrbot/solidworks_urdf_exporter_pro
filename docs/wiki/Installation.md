@@ -19,8 +19,10 @@ workstation.
 
 - Close SolidWorks before upgrading.
 - The installer remembers a previously selected install directory.
-- Very old community configurations identify objects only by name. Recreate the configuration after
-  upgrading and review deep components, coordinate systems, and axes.
+- Supported legacy configurations open a migration review. Check component bindings, coordinate
+  systems, and axes; explicitly resolve missing or ambiguous references before confirming.
+- Migration keeps the original configuration. The new configuration is written only when saved;
+  unsupported or unresolvable data still needs manual correction or a new configuration.
 - Validate Link Tree, frames, inertia, and collision previews on a non-production assembly before
   upgrading production workflows.
 
