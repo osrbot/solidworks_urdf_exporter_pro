@@ -86,6 +86,8 @@ namespace SW2URDF.UI
         private readonly Dictionary<Button, Tuple<int, Padding>> modernFooterDesigns =
             new Dictionary<Button, Tuple<int, Padding>>();
         private readonly List<TextBox> modernFixedHeightInputs = new List<TextBox>();
+        private readonly Dictionary<TableLayoutPanel, HashSet<int>> modernFieldRows =
+            new Dictionary<TableLayoutPanel, HashSet<int>>();
 
         internal void InitializeModernUi()
         {
@@ -97,6 +99,7 @@ namespace SW2URDF.UI
             modernUiInitialized = true;
             enableLayoutFixes = false;
             SizeF initialScaleFactor = AutoScaleFactor;
+            SizeF designScaleDimensions = AutoScaleDimensions;
             modernMinimumSizeAfterInitialScale = ScaleModernSize(
                 new Size(1040, 680),
                 initialScaleFactor);
@@ -106,6 +109,9 @@ namespace SW2URDF.UI
             SuspendLayout();
             try
             {
+                // Build every runtime control in design units. Reparenting into
+                // a DPI-scaled page must not scale it before the form's pass.
+                AutoScaleMode = AutoScaleMode.None;
                 ModernWinFormsTheme.Apply(this);
                 MinimumSize = new Size(1040, 680);
                 ClientSize = new Size(
@@ -123,6 +129,8 @@ namespace SW2URDF.UI
             }
             finally
             {
+                AutoScaleMode = AutoScaleMode.Dpi;
+                AutoScaleDimensions = designScaleDimensions;
                 ResumeLayout(true);
             }
 
@@ -154,6 +162,14 @@ namespace SW2URDF.UI
             ClientSize = ConstrainModernSize(
                 modernClientSizeAfterInitialScale,
                 maximumClientSize);
+            // Initial autoscaling may have populated the tab caches before the
+            // native input heights and the final client bounds were settled.
+            modernJointSections.ReleaseCachedPageLayouts();
+            modernLinkSections.ReleaseCachedPageLayouts();
+            RestoreModernModelAutoSizeLayouts();
+            modernJointExplicitLayoutSize = Size.Empty;
+            modernLinkExplicitLayoutSize = Size.Empty;
+            modernModelExplicitLayoutSize = Size.Empty;
             RefreshModernFooterMetrics((int)Math.Round(CurrentAutoScaleDimensions.Width));
             RefreshModernInputMetrics((int)Math.Round(CurrentAutoScaleDimensions.Width));
             PrimeModernPageLayouts();
@@ -696,7 +712,7 @@ namespace SW2URDF.UI
         private Control CreateModernJointIdentityCard()
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernJointIdentityCard");
-            card.Padding = new Padding(16, 8, 16, 8);
+            card.Padding = new Padding(16, 6, 16, 6);
             card.Controls.Add(CreateModernCardTitle(
                 ChineseUiText.Translate("Joint identity", "Joint 基本信息"),
                 null));
@@ -714,13 +730,16 @@ namespace SW2URDF.UI
             relationship.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
             relationship.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42F));
             relationship.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            relationship.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            relationship.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            relationship.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
+            relationship.RowStyles.Add(new RowStyle(SizeType.Absolute, 32F));
 
             ModernWinFormsTheme.StyleFieldLabel(label64);
             ModernWinFormsTheme.StyleFieldLabel(label65);
             ModernWinFormsTheme.StyleReadoutLabel(labelParent);
             ModernWinFormsTheme.StyleReadoutLabel(labelChild);
+            labelParent.Dock = DockStyle.Top;
+            labelChild.Dock = DockStyle.Top;
+            labelParent.Height = labelChild.Height = 30;
             label64.Margin = new Padding(0, 0, 0, 2);
             label65.Margin = new Padding(0, 0, 0, 2);
             labelParent.Margin = new Padding(0, 0, 0, 2);
@@ -770,7 +789,7 @@ namespace SW2URDF.UI
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernReferenceGeometryCard");
             card.Margin = new Padding(0);
-            card.Padding = new Padding(16, 8, 16, 8);
+            card.Padding = new Padding(16, 6, 16, 6);
             Control title = CreateModernCardTitle(
                 ChineseUiText.Translate("Reference geometry", "参考几何"),
                 null);
@@ -907,7 +926,7 @@ namespace SW2URDF.UI
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernOriginCard");
             card.Margin = new Padding(0);
-            card.Padding = new Padding(16, 10, 16, 12);
+            card.Padding = new Padding(16, 8, 16, 8);
             card.Controls.Add(CreateModernCardTitle(label54, label1));
 
             TableLayoutPanel grid = new TableLayoutPanel
@@ -942,7 +961,7 @@ namespace SW2URDF.UI
         {
             TableLayoutPanel card = ModernWinFormsTheme.CreateCard("modernAxisCard");
             card.Margin = new Padding(0);
-            card.Padding = new Padding(16, 10, 16, 12);
+            card.Padding = new Padding(16, 8, 16, 8);
             card.Controls.Add(CreateModernCardTitle(label60, AxisRequiredLabel));
 
             TableLayoutPanel grid = new TableLayoutPanel
@@ -1563,6 +1582,7 @@ namespace SW2URDF.UI
 
             TableLayoutPanel rgbaGrid = new TableLayoutPanel
             {
+                Name = "modernRgbaFields",
                 AutoSize = true,
                 ColumnCount = 4,
                 Dock = DockStyle.Top,
@@ -2109,12 +2129,49 @@ namespace SW2URDF.UI
 
         private void RefreshModernInputMetrics(int dpi)
         {
+            TableLayoutPanel relationship = (TableLayoutPanel)labelParent.Parent;
+            int readoutHeight = Math.Max(ModernWinFormsTheme.ScaleLogical(30, dpi),
+                labelParent.Font.Height + labelParent.Padding.Vertical + 2);
+            foreach (Label readout in new[] { labelParent, labelChild })
+            {
+                readout.MinimumSize = new Size(0, readoutHeight);
+                readout.Height = readoutHeight;
+            }
+            relationship.RowStyles[0].Height = Math.Max(
+                ModernWinFormsTheme.ScaleLogical(22, dpi), label64.Font.Height + label64.Margin.Vertical);
+            relationship.RowStyles[1].Height = readoutHeight + labelParent.Margin.Vertical;
             foreach (TextBox input in modernFixedHeightInputs)
             {
                 int height = Math.Max(ModernWinFormsTheme.ScaleLogical(28, dpi),
                     input.PreferredHeight);
                 input.MinimumSize = new Size(input.MinimumSize.Width, height);
                 input.Height = height;
+            }
+            foreach (var entry in modernFieldRows)
+            {
+                TableLayoutPanel grid = entry.Key;
+                grid.SuspendLayout();
+                try
+                {
+                    foreach (int row in entry.Value)
+                    {
+                        int height = ModernWinFormsTheme.ScaleLogical(34, dpi);
+                        foreach (Control control in grid.Controls)
+                        {
+                            if (grid.GetRow(control) != row) continue;
+                            Label label = control as Label;
+                            int contentHeight = label == null ? control.GetPreferredSize(new Size(control.Width, 0)).Height :
+                                label.Font.Height + label.Padding.Vertical;
+                            height = Math.Max(height, contentHeight + control.Margin.Vertical);
+                        }
+                        grid.RowStyles[row].SizeType = SizeType.Absolute;
+                        grid.RowStyles[row].Height = height;
+                    }
+                }
+                finally
+                {
+                    grid.ResumeLayout(true);
+                }
             }
         }
 
@@ -2221,6 +2278,24 @@ namespace SW2URDF.UI
         {
             ModernWinFormsTheme.StyleFieldLabel(label);
             ModernWinFormsTheme.StyleInput(control);
+            label.Margin = new Padding(0, 3, 8, 3);
+            control.Margin = new Padding(0, 3, 0, 3);
+            // A single-line field must not derive its next preferred height
+            // from a Fill-stretched row left by initial DPI scaling or caching.
+            grid.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            HashSet<int> rows;
+            if (!modernFieldRows.TryGetValue(grid, out rows))
+            {
+                rows = new HashSet<int>();
+                modernFieldRows.Add(grid, rows);
+            }
+            rows.Add(row);
+            while (grid.RowStyles.Count <= row)
+            {
+                grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            }
+            grid.RowStyles[row].SizeType = SizeType.Absolute;
+            grid.RowStyles[row].Height = 34F;
             control.MinimumSize = new Size(control.MinimumSize.Width, 28);
             TextBox textBox = control as TextBox;
             if (textBox != null && !textBox.Multiline)
@@ -2232,7 +2307,7 @@ namespace SW2URDF.UI
                 textBox.Height = 28;
                 modernFixedHeightInputs.Add(textBox);
             }
-            control.Dock = DockStyle.Fill;
+            control.Dock = DockStyle.Top;
             // Reparented designer controls retain their legacy absolute-page
             // TabIndex values. Derive the order from the new grid so keyboard
             // navigation follows the same left-to-right, top-to-bottom flow.

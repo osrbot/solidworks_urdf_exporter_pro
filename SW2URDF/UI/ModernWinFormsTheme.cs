@@ -536,6 +536,8 @@ namespace SW2URDF.UI
             // children. Stabilize the content before caching a fixed height.
             layout.PerformLayout();
             Size preferred = layout.GetPreferredSize(new Size(layout.Width, 0));
+            // A previous cached height is not a content requirement. Do not
+            // resize here: doing so recursively reflows all AutoSize ancestors.
             int requiredHeight = layout.Padding.Vertical;
             foreach (Control child in layout.Controls)
             {
@@ -549,7 +551,7 @@ namespace SW2URDF.UI
 
             return new Size(
                 layout.Width,
-                Math.Max(layout.Height, Math.Max(preferred.Height, requiredHeight)));
+                Math.Max(preferred.Height, requiredHeight));
         }
 
         internal static IDisposable SuspendRedraw(Control control)

@@ -427,6 +427,99 @@ namespace SW2URDF.Test
 
     public class TestAssemblyExportLayout
     {
+        [Fact]
+        public void InitialDpiDialogUsesTheDesignBaselineBeforeItsFirstHandle()
+        {
+            RunDpiLayoutOnSta(() =>
+            {
+                using (var dialog = new OpenUsdSettingsDialog())
+                {
+                    int dpi = (int)dialog.CurrentAutoScaleDimensions.Width;
+                    Assert.Equal(AutoScaleMode.Dpi, dialog.AutoScaleMode);
+                    Assert.Equal(new Size(900 * dpi / 96, 560 * dpi / 96), dialog.ClientSize);
+                    var root = (TableLayoutPanel)FindDescendant(dialog, "openUsdRoot");
+                    Assert.Equal(18 * dpi / 96, root.Padding.Top);
+                    AssertContainedIn(FindDescendant(dialog, "openUsdFooter"), root);
+                }
+            });
+        }
+
+        [Fact]
+        public void AutoSizeCacheDiscardsHistoricalHeight()
+        {
+            RunDpiLayoutOnSta(() =>
+            {
+                using (var layout = new TableLayoutPanel
+                {
+                    AutoSize = true,
+                    Dock = DockStyle.Top,
+                    Size = new Size(400, 600),
+                    ColumnCount = 1,
+                    RowCount = 1
+                })
+                {
+                    layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                    layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                    layout.Controls.Add(new TextBox { AutoSize = false, Height = 28, Dock = DockStyle.Top });
+                    Size measured = ModernWinFormsTheme.GetStableAutoSizeLayoutSize(layout);
+                    Assert.InRange(measured.Height, 28, 40);
+                }
+            });
+        }
+
+        [Fact]
+        public void InitialDpiFieldRowsStayCompactAfterResizeAndTabCycles()
+        {
+            RunDpiLayoutOnSta(() =>
+            {
+                using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+                {
+                    // Exercise the constructor's automatic DPI pass before any HWND or manual Scale.
+                    // The standalone harness can supply 96/144/192 DPI before constructing controls.
+                    int dpi = (int)form.CurrentAutoScaleDimensions.Width;
+                    var identity = (TableLayoutPanel)FindDescendant(form, "modernJointIdentityCard");
+                    var identityFields = (TableLayoutPanel)FindDescendant(form, "modernJointIdentityFields");
+                    Assert.Equal(16 * dpi / 96, identity.Padding.Left);
+                    Assert.Equal(76 * dpi / 96, (int)identityFields.ColumnStyles[0].Width);
+                    form.MinimumSize = Size.Empty;
+                    foreach (int width in new[] { 1120, 1040, 1344, 1120 })
+                    {
+                        form.ClientSize = new Size(width * dpi / 96, 700 * dpi / 96);
+                        foreach (string pageName in new[] { "Joint", "Link", "Model", "Joint", "Link" })
+                        {
+                            ShowModernAssemblyPage(form, pageName);
+                            if (pageName == "Model") continue;
+                            var sections = GetControl<TabControl>(form,
+                                pageName == "Joint" ? "modernJointSections" : "modernLinkSections");
+                            for (int index = 0; index < sections.TabPages.Count; index++)
+                            {
+                                sections.SelectedIndex = index;
+                                sections.PerformLayout();
+                                TabPage page = sections.TabPages[index];
+                                if (page.Name == "modernJointMimicPage") continue;
+                                foreach (Control input in Descendants(page).Where(item =>
+                                    item is TextBox || item is ComboBox || item is UpDownBase))
+                                {
+                                    Assert.InRange(input.Height, 1, 40 * dpi / 96);
+                                    AssertControlBottomBorderStaysInside(input, input.Parent);
+                                }
+                                if (page.Name == "modernJointBasicsPage" ||
+                                    page.Name == "modernJointConstraintsPage" ||
+                                    page.Name == "modernLinkAppearancePage")
+                                {
+                                    foreach (Control input in Descendants(page).Where(item =>
+                                        item is TextBox || item is ComboBox || item is UpDownBase))
+                                    {
+                                        AssertContainedIn(input, page);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         [Theory]
         [InlineData(96)]
         [InlineData(120)]

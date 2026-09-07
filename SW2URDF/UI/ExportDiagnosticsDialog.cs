@@ -157,6 +157,7 @@ namespace SW2URDF.UI
             FlowLayoutPanel commands = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill, AutoSize = true, WrapContents = true,
+                MinimumSize = new Size(0, 50),
                 Margin = new Padding(0), Padding = new Padding(0, 10, 0, 0)
             };
             commands.Controls.AddRange(new Control[] { openDirectoryButton, openLogButton, copyButton, closeButton });

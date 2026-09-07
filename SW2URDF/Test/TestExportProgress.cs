@@ -713,6 +713,8 @@ namespace SW2URDF.Test
                     foreach (string name in new[] { "exportResultsOpenDirectory", "exportResultsOpenLog", "exportResultsCopy", "exportResultsClose" })
                     {
                         Button button = (Button)dialog.Controls.Find(name, true).Single();
+                        Assert.True(button.Parent.MinimumSize.Height >=
+                            button.MinimumSize.Height + button.Margin.Vertical + button.Parent.Padding.Vertical);
                         Assert.True(button.Parent.ClientRectangle.Contains(button.Bounds),
                             name + ": bounds=" + button.Bounds + "; parent=" + button.Parent.ClientRectangle +
                             "; form=" + dialog.ClientSize + "; font=" + button.Font);

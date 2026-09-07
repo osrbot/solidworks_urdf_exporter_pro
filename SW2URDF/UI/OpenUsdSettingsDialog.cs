@@ -46,10 +46,12 @@ namespace SW2URDF.UI
 
         internal OpenUsdSettingsDialog()
         {
+            SuspendLayout();
             Name = "openUsdSettingsDialog";
             Text = ChineseUiText.Translate(
                 "OpenUSD simulation settings",
                 "OpenUSD 仿真设置");
+            AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
             ClientSize = new Size(900, 560);
             MinimumSize = new Size(900, 500);
@@ -207,6 +209,7 @@ namespace SW2URDF.UI
             ModernWinFormsTheme.Apply(this);
             ModernWinFormsTheme.StylePrimaryButton(confirmButton);
             Settings = new UsdSimulationProfile();
+            ResumeLayout(true);
         }
 
         internal UsdSimulationProfile Settings { get; private set; }
