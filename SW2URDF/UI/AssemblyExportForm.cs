@@ -1437,7 +1437,7 @@ namespace SW2URDF.UI
             try
             {
                 ExportTargetOptions.RestoreSimulationSettings(
-                    Exporter.Links == null ? null : Exporter.Links.FirstOrDefault(link => link.Parent == null), options);
+                    BaseNode == null ? null : BaseNode.Link, options);
                 modernUsdSimulationRestoreError = modernUsdSimulationRestoreError ?? options.UsdSimulationRestoreError;
                 modernMjcfSimulationRestoreError = modernMjcfSimulationRestoreError ?? options.MjcfSimulationRestoreError;
                 error = null;
@@ -1458,8 +1458,7 @@ namespace SW2URDF.UI
                 UsdSimulation = ExportTargetOptions.CloneUsdSimulation(usd),
                 Simulation = ExportTargetOptions.CloneSimulation(simulation)
             };
-            captured.SaveSimulationSettings(Exporter.Links == null ? null :
-                Exporter.Links.FirstOrDefault(link => link.Parent == null));
+            captured.SaveSimulationSettings(BaseNode == null ? null : BaseNode.Link);
             modernUsdSimulationProfile = captured.UsdSimulation;
             modernSimulationProfile = captured.Simulation;
             modernSimulationRestoreFailed = false;

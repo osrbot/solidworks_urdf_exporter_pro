@@ -2367,7 +2367,8 @@ namespace SW2URDF.Test
                 saved.SaveSimulationSettings(root);
                 string json = root.SimulationSettingsJson;
                 form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
-                typeof(ExportHelper).GetField("Links").SetValue(form.Exporter, new List<SW2URDF.URDF.Link> { root });
+                typeof(AssemblyExportForm).GetField("BaseNode", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(form, new SW2URDF.URDF.LinkNode(root));
                 form.Exporter.RosPackageName = "rover_description";
                 InvokePrivate(form, "InitializeExportTargetControls");
                 var captured = (ExportTargetOptions)InvokePrivate(form, "CaptureExportTargetOptions");
@@ -2393,7 +2394,8 @@ namespace SW2URDF.Test
             {
                 var root = new SW2URDF.URDF.Link { SimulationSettingsJson = "{broken" };
                 form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
-                typeof(ExportHelper).GetField("Links").SetValue(form.Exporter, new List<SW2URDF.URDF.Link> { root });
+                typeof(AssemblyExportForm).GetField("BaseNode", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(form, new SW2URDF.URDF.LinkNode(root));
                 string error;
                 Assert.False(form.TryRestoreSimulationSettings(new ExportTargetOptions(), out error));
                 Assert.NotEmpty(error);

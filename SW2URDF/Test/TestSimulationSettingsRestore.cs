@@ -78,7 +78,7 @@ namespace SW2URDF.Test
         {
             using (var form = CreateForm(SavedRoot(usdDamage)))
             {
-                string original = form.Exporter.Links[0].SimulationSettingsJson;
+                string original = Root(form).SimulationSettingsJson;
                 var restored = ExportTargetOptions.RecommendedDefaults("robot");
                 string error;
                 Assert.True(form.TryRestoreSimulationSettings(restored, out error));
@@ -91,10 +91,10 @@ namespace SW2URDF.Test
                 SetTarget(form, "modernUsdAssetCheckBox", true);
                 SetTarget(form, "modernMjcfAssetCheckBox", true);
                 Assert.Single(Capture(form).ValidateFindings().Where(IsRestoreError));
-                Assert.Equal(original, form.Exporter.Links[0].SimulationSettingsJson);
+                Assert.Equal(original, Root(form).SimulationSettingsJson);
 
                 // A later successful read must not act as explicit repair confirmation.
-                form.Exporter.Links[0].SimulationSettingsJson = ValidEnvelope().ToString();
+                Root(form).SimulationSettingsJson = ValidEnvelope().ToString();
                 Assert.True(form.TryRestoreSimulationSettings(new ExportTargetOptions(), out error));
                 Assert.Single(Capture(form).ValidateFindings().Where(IsRestoreError));
                 form.ApplySimulationSettings(new UsdSimulationProfile(), new SimulationProfile());
@@ -118,7 +118,7 @@ namespace SW2URDF.Test
                 string error;
                 Assert.False(form.TryRestoreSimulationSettings(new ExportTargetOptions(), out error));
                 Assert.NotEmpty(error);
-                Assert.Equal(json, form.Exporter.Links[0].SimulationSettingsJson);
+                Assert.Equal(json, Root(form).SimulationSettingsJson);
                 SetTarget(form, "modernUsdAssetCheckBox", true);
                 SetTarget(form, "modernMjcfAssetCheckBox", true);
                 Assert.True(form.IsSimulationExportBlocked(true));
@@ -149,8 +149,32 @@ namespace SW2URDF.Test
         {
             var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true);
             form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
-            typeof(ExportHelper).GetField("Links").SetValue(form.Exporter, new List<SW2URDF.URDF.Link> { root });
+            // The real exporter leaves its legacy Links field uninitialized.
+            typeof(AssemblyExportForm).GetField("BaseNode", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(form, new SW2URDF.URDF.LinkNode(root));
             return form;
+        }
+
+        private static SW2URDF.URDF.Link Root(AssemblyExportForm form) =>
+            ((SW2URDF.URDF.LinkNode)typeof(AssemblyExportForm).GetField("BaseNode",
+                BindingFlags.Instance | BindingFlags.NonPublic).GetValue(form)).Link;
+
+        [Fact]
+        public void ApplyAndRestoreUseEditableRootWithoutLegacyExporterLinks()
+        {
+            var root = new SW2URDF.URDF.Link();
+            using (var form = CreateForm(root))
+            {
+                Assert.Null(form.Exporter.Links);
+                form.ApplySimulationSettings(new UsdSimulationProfile(),
+                    new SimulationProfile { BaseMode = "floating" });
+                Assert.NotEmpty(root.SimulationSettingsJson);
+                var restored = new ExportTargetOptions();
+                string error;
+                Assert.True(form.TryRestoreSimulationSettings(restored, out error));
+                Assert.Null(error);
+                Assert.Equal("floating", restored.Simulation.BaseMode);
+            }
         }
 
         private static ExportTargetOptions Capture(AssemblyExportForm form) =>
