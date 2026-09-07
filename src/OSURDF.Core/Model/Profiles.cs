@@ -22,6 +22,38 @@ namespace OSURDF.Core.Model
 
         [JsonProperty("usdSimulation", Order = 5)]
         public UsdSimulationProfile UsdSimulation { get; set; } = new UsdSimulationProfile();
+
+        [JsonProperty("simulation", Order = 6, NullValueHandling = NullValueHandling.Ignore)]
+        public SimulationProfile Simulation { get; set; }
+    }
+
+    // Shared intent uses SI units (angular gains per radian), independent of target tuning.
+    public sealed class SimulationProfile
+    {
+        [JsonProperty("baseMode", Order = 0)] public string BaseMode { get; set; } = "source";
+        [JsonProperty("jointDrives", Order = 1)] public List<JointDriveIntent> JointDrives { get; set; } = new List<JointDriveIntent>();
+        // Null excludes MJCF-specific validation for exports targeting other simulators.
+        [JsonProperty("mjcf", Order = 2, NullValueHandling = NullValueHandling.Include)] public MjcfSimulationProfile Mjcf { get; set; } = new MjcfSimulationProfile();
+    }
+
+    public sealed class JointDriveIntent
+    {
+        [JsonProperty("joint", Order = 0)] public string Joint { get; set; } = string.Empty;
+        [JsonProperty("mode", Order = 1)] public string Mode { get; set; } = "passive";
+    }
+
+    // MVP supports only direct joint transmission (gear = 1); no implicit gain conversion.
+    public sealed class MjcfSimulationProfile
+    {
+        [JsonProperty("jointDrives", Order = 0)] public List<MjcfJointDriveProfile> JointDrives { get; set; } = new List<MjcfJointDriveProfile>();
+    }
+
+    public sealed class MjcfJointDriveProfile
+    {
+        [JsonProperty("joint", Order = 0)] public string Joint { get; set; } = string.Empty;
+        [JsonProperty("stiffness", Order = 1)] public double? Stiffness { get; set; }
+        [JsonProperty("damping", Order = 2)] public double? Damping { get; set; }
+        [JsonProperty("maxForce", Order = 3)] public double? MaxForce { get; set; }
     }
 
     public sealed class PackageMetadataProfile

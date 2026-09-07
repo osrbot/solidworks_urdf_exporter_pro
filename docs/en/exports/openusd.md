@@ -27,9 +27,13 @@ dependencies behind.
 
 ## OpenUSD Settings
 
-The settings page lets you choose the base behavior, enable or disable self-collision, and set each
-movable joint to passive, position, velocity, or force control intent. Stiffness and damping use
-only values entered by the user; the plugin does not infer control parameters from CAD geometry.
+Common simulation settings select base behavior and passive, position, velocity, or effort intent for single-DOF joints. The separate OpenUSD tab stores stiffness, damping, self-collision and robot type. MJCF gains are not used by USD.
+
+Absent or `null` common settings preserve legacy USD behavior. A common `source` base preserves the previous USD choice; `fixed` / `floating` overrides it. When common settings are present, their joint list is authoritative: unlisted joints are passive and an empty list clears all drives. Legacy USD entries supply gains only. Active mimic intents are rejected. `fixed` adds a world-fixed joint; `floating` does not inject one and does not remove internal source joints.
+
+Defaults create no active drives. Position/velocity modes author USD DriveAPI; velocity stiffness is zero. Gains use SI units: angular gains entered per radian are multiplied by `pi/180` when authored to USD, while linear gains remain unchanged. Switching to passive/effort removes gains and DriveAPI from the resolved output. Effort is runtime intent plus an effort limit, reported in `export_report.json`, not an authored force actuator; a downstream controller must apply force.
+
+Invalid types, duplicate or missing joints, and non-finite gains fail explicitly. The plugin does not infer control parameters, generate a training world, or claim Isaac Sim runtime validation.
 
 ![OpenUSD settings](/screenshots/openusd-settings.png)
 

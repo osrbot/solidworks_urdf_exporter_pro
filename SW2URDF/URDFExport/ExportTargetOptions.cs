@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using OSURDF.Core.Model;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace SW2URDF.URDFExport
 {
@@ -48,6 +50,79 @@ namespace SW2URDF.URDFExport
         public string GazeboDistribution { get; set; }
         public string Ros2ControlProfileFile { get; set; }
         public UsdSimulationProfile UsdSimulation { get; set; }
+        public SimulationProfile Simulation { get; set; }
+        public string UsdSimulationRestoreError { get; set; }
+        public string MjcfSimulationRestoreError { get; set; }
+
+        public static SimulationProfile CloneSimulation(SimulationProfile source)
+        {
+            return source == null ? null : JsonConvert.DeserializeObject<SimulationProfile>(
+                JsonConvert.SerializeObject(source));
+        }
+
+        public void SaveSimulationSettings(SW2URDF.URDF.Link root)
+        {
+            if (root == null || root.Parent != null)
+                throw new ArgumentException("Simulation settings belong to the root Link.");
+            root.SimulationSettingsJson = JsonConvert.SerializeObject(new
+            {
+                version = 1,
+                simulation = Simulation,
+                usdSimulation = UsdSimulation
+            });
+        }
+
+        public static void RestoreSimulationSettings(SW2URDF.URDF.Link root, ExportTargetOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            if (root == null || string.IsNullOrWhiteSpace(root.SimulationSettingsJson)) return;
+            JObject stored = JObject.Parse(root.SimulationSettingsJson);
+            if ((int?)stored["version"] != 1)
+                throw new InvalidDataException("Unsupported saved simulation settings version.");
+            SimulationProfile simulation = null;
+            JToken mjcfToken = null;
+            JToken commonToken = stored["simulation"];
+            if (commonToken != null && commonToken.Type != JTokenType.Null)
+            {
+                if (commonToken.Type != JTokenType.Object)
+                    throw new InvalidDataException("Saved common simulation settings must be an object.");
+                // Target tuning must not prevent restoration of shared intent or the other target.
+                JObject common = (JObject)commonToken.DeepClone();
+                mjcfToken = common["mjcf"];
+                common.Remove("mjcf");
+                simulation = common.ToObject<SimulationProfile>();
+            }
+
+            string usdError;
+            UsdSimulationProfile usd = RestoreTargetSimulation<UsdSimulationProfile>(
+                stored["usdSimulation"], "OpenUSD", out usdError);
+            string mjcfError = null;
+            if (simulation != null && mjcfToken != null)
+                simulation.Mjcf = mjcfToken.Type == JTokenType.Null ? null :
+                    RestoreTargetSimulation<MjcfSimulationProfile>(mjcfToken, "MuJoCo MJCF", out mjcfError);
+            options.UsdSimulation = usd;
+            options.Simulation = simulation;
+            options.UsdSimulationRestoreError = options.UsdSimulationRestoreError ?? usdError;
+            options.MjcfSimulationRestoreError = options.MjcfSimulationRestoreError ?? mjcfError;
+        }
+
+        private static T RestoreTargetSimulation<T>(JToken token, string target, out string error)
+            where T : class
+        {
+            try
+            {
+                if (token == null || token.Type != JTokenType.Object)
+                    throw new InvalidDataException("Saved " + target + " simulation settings must be an object.");
+                T profile = token.ToObject<T>();
+                error = null;
+                return profile;
+            }
+            catch (Exception exception) when (exception is JsonException || exception is InvalidDataException)
+            {
+                error = "Saved " + target + " simulation settings require explicit repair: " + exception.Message;
+                return null;
+            }
+        }
 
         public ExportTargetOptions()
         {
@@ -126,6 +201,10 @@ namespace SW2URDF.URDFExport
         {
             var errors = new List<ExportTargetValidationFinding>(ValidateSharedFindings());
             if (!UseV2Pipeline) return errors;
+            if (ExportUsdAsset && !string.IsNullOrEmpty(UsdSimulationRestoreError))
+                Add(errors, "USD_SIMULATION_RESTORE", "UsdSimulation", UsdSimulationRestoreError);
+            if (ExportMjcfAsset && !string.IsNullOrEmpty(MjcfSimulationRestoreError))
+                Add(errors, "MJCF_SIMULATION_RESTORE", "Simulation.Mjcf", MjcfSimulationRestoreError);
             if (ExportRos1Legacy || ExportRos2)
             {
                 if (!ExactVersion.IsMatch(PackageVersion ?? string.Empty))

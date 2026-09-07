@@ -1076,6 +1076,16 @@ namespace SW2URDF.UI
 
         private void FinishExport(bool exportSTL)
         {
+            if (IsSimulationExportBlocked(exportSTL))
+            {
+                MessageBox.Show(this,
+                    ChineseUiText.Translate(
+                        "Saved simulation settings could not be restored. Open Simulation settings and apply repaired settings, or deselect OpenUSD and MuJoCo before exporting.",
+                        "已保存的仿真设置无法恢复。请打开仿真设置并应用修复后的配置，或取消选择 OpenUSD 和 MuJoCo 后导出。"),
+                    ChineseUiText.Translate("Simulation settings", "仿真设置"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             ClearPreviews();
             logger.Info("Completing URDF export");
             Exporter.RosPackageName = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
@@ -1336,6 +1346,18 @@ namespace SW2URDF.UI
             ExportTargetOptions options = restore
                 ? existing
                 : ExportTargetOptions.RecommendedDefaults(Exporter.RosPackageName);
+            if (!restore)
+            {
+                string restoreError;
+                if (!TryRestoreSimulationSettings(options, out restoreError))
+                {
+                    MessageBox.Show(this,
+                        ChineseUiText.Translate("Could not restore simulation settings. Saved data is unchanged. OpenUSD and MuJoCo exports require explicitly applying repaired settings.\n",
+                            "无法恢复仿真设置。已保存的数据未被修改。OpenUSD 和 MuJoCo 导出前须明确应用修复后的设置。\n") + restoreError,
+                        ChineseUiText.Translate("Simulation settings", "仿真设置"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
             loadingModernExportTargets = true;
             try
             {
@@ -1345,9 +1367,12 @@ namespace SW2URDF.UI
                 modernMjcfAssetCheckBox.Checked = options.ExportMjcfAsset;
                 modernUsdSimulationProfile =
                     ExportTargetOptions.CloneUsdSimulation(options.UsdSimulation);
+                modernSimulationProfile = ExportTargetOptions.CloneSimulation(options.Simulation);
+                modernUsdSimulationRestoreError = modernUsdSimulationRestoreError ?? options.UsdSimulationRestoreError;
+                modernMjcfSimulationRestoreError = modernMjcfSimulationRestoreError ?? options.MjcfSimulationRestoreError;
                 if (modernUsdSettingsButton != null)
                 {
-                    modernUsdSettingsButton.Enabled = options.ExportUsdAsset;
+                    modernUsdSettingsButton.Enabled = options.ExportUsdAsset || options.ExportMjcfAsset;
                 }
                 modernPackageVersionTextBox.Text = options.PackageVersion;
                 modernPackageDescriptionTextBox.Text = options.Description;
@@ -1365,8 +1390,8 @@ namespace SW2URDF.UI
                 packagePathToolTip.SetToolTip(
                     modernUsdSettingsButton,
                     ChineseUiText.Translate(
-                        "Configure base semantics, self-collision, robot type, and explicit one-DOF Joint drive intent. No Isaac Sim version is required.",
-                        "配置基座语义、自碰撞、机器人类型及单自由度 Joint 的显式驱动意图；无需填写 Isaac Sim 版本。"));
+                        "Configure shared base and Joint intent, with separate OpenUSD and MuJoCo gains.",
+                        "配置公共基座与 Joint 驱动意图，以及独立的 OpenUSD 和 MuJoCo 增益。"));
             }
             packagePathToolTip.SetToolTip(
                 modernModelLicenseTextBox,
@@ -1393,9 +1418,60 @@ namespace SW2URDF.UI
                 ModelLicense = modernModelLicenseTextBox.Text.Trim(),
                 ModelAuthor = modernModelAuthorTextBox.Text.Trim(),
                 UsdSimulation = ExportTargetOptions.CloneUsdSimulation(
-                    modernUsdSimulationProfile)
+                    modernUsdSimulationProfile),
+                Simulation = ExportTargetOptions.CloneSimulation(modernSimulationProfile),
+                UsdSimulationRestoreError = modernUsdSimulationRestoreError,
+                MjcfSimulationRestoreError = modernMjcfSimulationRestoreError
             };
             return options;
+        }
+
+        internal bool IsSimulationExportBlocked(bool exportMeshes)
+        {
+            return exportMeshes && modernSimulationRestoreFailed &&
+                (modernUsdAssetCheckBox.Checked || modernMjcfAssetCheckBox.Checked);
+        }
+
+        internal bool TryRestoreSimulationSettings(ExportTargetOptions options, out string error)
+        {
+            try
+            {
+                ExportTargetOptions.RestoreSimulationSettings(
+                    Exporter.Links == null ? null : Exporter.Links.FirstOrDefault(link => link.Parent == null), options);
+                modernUsdSimulationRestoreError = modernUsdSimulationRestoreError ?? options.UsdSimulationRestoreError;
+                modernMjcfSimulationRestoreError = modernMjcfSimulationRestoreError ?? options.MjcfSimulationRestoreError;
+                error = null;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                modernSimulationRestoreFailed = true;
+                error = exception.Message;
+                return false;
+            }
+        }
+
+        internal void ApplySimulationSettings(UsdSimulationProfile usd, SimulationProfile simulation)
+        {
+            ExportTargetOptions captured = new ExportTargetOptions
+            {
+                UsdSimulation = ExportTargetOptions.CloneUsdSimulation(usd),
+                Simulation = ExportTargetOptions.CloneSimulation(simulation)
+            };
+            captured.SaveSimulationSettings(Exporter.Links == null ? null :
+                Exporter.Links.FirstOrDefault(link => link.Parent == null));
+            modernUsdSimulationProfile = captured.UsdSimulation;
+            modernSimulationProfile = captured.Simulation;
+            modernSimulationRestoreFailed = false;
+            modernUsdSimulationRestoreError = null;
+            modernMjcfSimulationRestoreError = null;
+            if (Exporter.ExportTargets != null)
+            {
+                Exporter.ExportTargets.UsdSimulation = ExportTargetOptions.CloneUsdSimulation(captured.UsdSimulation);
+                Exporter.ExportTargets.Simulation = ExportTargetOptions.CloneSimulation(captured.Simulation);
+                Exporter.ExportTargets.UsdSimulationRestoreError = null;
+                Exporter.ExportTargets.MjcfSimulationRestoreError = null;
+            }
         }
 
         private void ModernUsdSettingsButtonClick(object sender, EventArgs e)
@@ -1406,12 +1482,21 @@ namespace SW2URDF.UI
             }
             openUsdSettingsDialog.LoadSettings(
                 modernUsdSimulationProfile,
-                BuildOpenUsdJointDescriptors(BaseNode));
+                BuildOpenUsdJointDescriptors(BaseNode), modernSimulationProfile);
             openUsdSettingsDialog.PrepareForOwner(this);
             if (openUsdSettingsDialog.ShowDialog(this) == DialogResult.OK)
             {
-                modernUsdSimulationProfile = ExportTargetOptions.CloneUsdSimulation(
-                    openUsdSettingsDialog.Settings);
+                try
+                {
+                    ApplySimulationSettings(openUsdSettingsDialog.Settings, openUsdSettingsDialog.SimulationSettings);
+                }
+                catch (Exception exception)
+                {
+                    MessageBox.Show(this,
+                        ChineseUiText.Translate("Could not apply simulation settings.\n", "无法应用仿真设置。\n") + exception.Message,
+                        ChineseUiText.Translate("Simulation settings", "仿真设置"),
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
             }
         }
 
@@ -1441,7 +1526,8 @@ namespace SW2URDF.UI
                 Joint joint = node.Link.Joint;
                 if (!(String.Equals(joint.Type, "continuous", StringComparison.Ordinal) ||
                       String.Equals(joint.Type, "revolute", StringComparison.Ordinal) ||
-                      String.Equals(joint.Type, "prismatic", StringComparison.Ordinal)))
+                      String.Equals(joint.Type, "prismatic", StringComparison.Ordinal) ||
+                      String.Equals(joint.Type, "fixed", StringComparison.Ordinal)))
                 {
                     continue;
                 }
@@ -1449,6 +1535,7 @@ namespace SW2URDF.UI
                 {
                     Name = joint.Name,
                     Type = joint.Type,
+                    IsMimic = joint.Mimic != null && !String.IsNullOrWhiteSpace(joint.Mimic.JointName),
                     EffortLimit = ReadPositiveJointLimit(
                         delegate { return joint.Limit.Effort; }),
                     VelocityLimit = ReadPositiveJointLimit(

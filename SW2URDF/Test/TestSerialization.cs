@@ -10,6 +10,74 @@ namespace SW2URDF.Test
 {
     public class TestSerialization
     {
+        private const string SimulationEnvelope =
+            "{\"version\":1,\"simulation\":{\"baseMode\":\"fixed\"},\"usdSimulation\":{}}";
+
+        [Fact]
+        public void SimulationSettingsRoundTripPreservesOnlyRootEnvelope()
+        {
+            LinkNode root = new LinkNode { IsBaseNode = true };
+            root.Link.Name = "base_link";
+            root.Link.SimulationSettingsJson = SimulationEnvelope;
+            root.Nodes.Add(new LinkNode());
+
+            string payload = ConfigurationSerialization.SerializeDraftPayload(root);
+            LinkNode restored = ConfigurationSerialization.DeserializeDraftPayload(payload);
+
+            Assert.NotNull(restored);
+            Assert.Equal(SimulationEnvelope, restored.Link.SimulationSettingsJson);
+            Assert.Null(((LinkNode)restored.Nodes[0]).Link.SimulationSettingsJson);
+            Assert.Single(XDocument.Parse(payload).Descendants()
+                .Where(element => element.Name.LocalName == "SimulationSettingsJson"));
+        }
+
+        [Fact]
+        public void OlderPayloadWithoutSimulationSettingsRemainsNull()
+        {
+            LinkNode root = new LinkNode { IsBaseNode = true };
+            root.Link.Name = "base_link";
+            root.Link.SimulationSettingsJson = SimulationEnvelope;
+            XDocument document = XDocument.Parse(
+                ConfigurationSerialization.SerializeDraftPayload(root));
+            document.Descendants().Single(element =>
+                element.Name.LocalName == "SimulationSettingsJson").Remove();
+
+            LinkNode restored = ConfigurationSerialization.DeserializeDraftPayload(
+                document.ToString(SaveOptions.DisableFormatting));
+
+            Assert.NotNull(restored);
+            Assert.Null(restored.Link.SimulationSettingsJson);
+            Assert.DoesNotContain("SimulationSettingsJson",
+                ConfigurationSerialization.SerializeDraftPayload(restored));
+        }
+
+        [Fact]
+        public void SimulationSettingsSurviveCloneAndTreeReparentWithoutChildInheritance()
+        {
+            Link rootLink = new Link { Name = "base_link", SimulationSettingsJson = SimulationEnvelope };
+            Link childLink = new Link(rootLink) { Name = "child_link" };
+            rootLink.Children.Add(childLink);
+            Link clone = rootLink.Clone();
+            Assert.Equal(SimulationEnvelope, clone.SimulationSettingsJson);
+            Assert.Null(clone.Children[0].SimulationSettingsJson);
+            Link childCopy = new Link(rootLink);
+            childCopy.SetElement(rootLink);
+            Assert.Null(childCopy.SimulationSettingsJson);
+
+            LinkTreeSession session = new LinkTreeSession(new LinkNode(clone));
+            var document = session.LoadTree();
+            var sibling = document.AddChild(document.Root.Id);
+            document.Reparent(document.Nodes.Single(node => node.Name == "child_link").Id, sibling.Id);
+            session.ApplyTree(document);
+            LinkNode projection = session.CreateActiveProjection();
+
+            Assert.Equal(SimulationEnvelope, projection.Link.SimulationSettingsJson);
+            LinkNode parent = (LinkNode)projection.Nodes[0];
+            Assert.Null(parent.Link.SimulationSettingsJson);
+            Assert.Null(((LinkNode)parent.Nodes[0]).Link.SimulationSettingsJson);
+            Assert.Equal(SimulationEnvelope, rootLink.SimulationSettingsJson);
+        }
+
         [Fact]
         public void VersionTwoRoundTripPreservesPersistentReferencesAndUnicodeConfiguration()
         {

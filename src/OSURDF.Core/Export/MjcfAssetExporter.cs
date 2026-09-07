@@ -45,6 +45,8 @@ namespace OSURDF.Core.Export
 
             RobotDocument robot = RobotJson.Read(Path.Combine(bundleRoot, RobotBundleLayout.RobotJsonFile));
             ValidationReport validation = new RobotValidator().Validate(robot);
+            if (robot.Profiles?.Simulation?.Mjcf == null)
+                validation.Findings.AddRange(new RobotValidator().ValidateMjcfSimulation(robot).Findings);
             if (!validation.IsValid)
             {
                 throw new InvalidDataException(
@@ -198,7 +200,37 @@ namespace OSURDF.Core.Export
                     new XAttribute("inertiafromgeom", "false")),
                 context.Asset.HasElements ? context.Asset : null,
                 worldBody);
+            XElement actuators = BuildActuators(context);
+            if (actuators.HasElements) rootElement.Add(actuators);
             return new XDocument(new XDeclaration("1.0", "utf-8", null), rootElement);
+        }
+
+        private static XElement BuildActuators(ExportBuildContext context)
+        {
+            XElement result = new XElement("actuator");
+            SimulationProfile simulation = context.Robot.Profiles?.Simulation;
+            foreach (JointDriveIntent intent in simulation?.JointDrives ?? Enumerable.Empty<JointDriveIntent>())
+            {
+                if (intent.Mode == "passive") continue;
+                JointDocument joint = context.Robot.Joints.Single(item => item.Name == intent.Joint);
+                if (joint.Type == "fixed") continue;
+                MjcfJointDriveProfile tuning = simulation.Mjcf.JointDrives.FirstOrDefault(item => item.Joint == intent.Joint);
+                double maxForce = (tuning?.MaxForce ?? joint.Limit?.Effort).Value;
+                string mapped = context.Names.JointNames[joint.Name][0];
+                XElement actuator = new XElement(intent.Mode == "effort" ? "motor" : intent.Mode,
+                    new XAttribute("name", mapped + "_drive"),
+                    new XAttribute("joint", mapped),
+                    new XAttribute("gear", "1"),
+                    new XAttribute("forcelimited", "true"),
+                    new XAttribute("forcerange", Numbers(-maxForce, maxForce)));
+                if (intent.Mode == "position")
+                    actuator.Add(new XAttribute("kp", Number(tuning.Stiffness.Value)));
+                if (intent.Mode == "position" || intent.Mode == "velocity")
+                    actuator.Add(new XAttribute("kv", Number(tuning.Damping.Value)));
+                result.Add(actuator);
+                context.ActuatorCount++;
+            }
+            return result;
         }
 
         private static XElement BuildBody(
@@ -219,6 +251,10 @@ namespace OSURDF.Core.Export
                 {
                     body.Add(jointElement);
                 }
+            }
+            else if (context.Names.RootFreeJointName != null)
+            {
+                body.Add(new XElement("freejoint", new XAttribute("name", context.Names.RootFreeJointName)));
             }
 
             int visualIndex = 0;
@@ -264,6 +300,7 @@ namespace OSURDF.Core.Export
             JointDocument joint)
         {
             IReadOnlyList<string> mappedNames = context.Names.JointNames[joint.Name];
+            if (mappedNames.Count == 0) yield break;
             switch (joint.Type)
             {
                 case "fixed":
@@ -506,7 +543,7 @@ namespace OSURDF.Core.Export
                 mappingCounts[type] = (robot.Joints ?? new List<JointDocument>())
                     .Count(joint => joint != null && string.Equals(joint.Type, type, StringComparison.Ordinal));
             }
-            return new JObject
+            JObject report = new JObject
             {
                 ["schemaVersion"] = 1,
                 ["format"] = "osurdf-mjcf-export-report",
@@ -593,6 +630,24 @@ namespace OSURDF.Core.Export
                 },
                 ["intentionallyNotGenerated"] = new JArray("actuators", "PID gains", "RL task definitions")
             };
+            if (robot.Profiles?.Simulation != null)
+            {
+                report["counts"]["actuators"] = context.ActuatorCount;
+                report["simulation"] = new JObject
+                {
+                    ["baseMode"] = robot.Profiles.Simulation.BaseMode,
+                    ["rootFreeJoint"] = context.Names.RootFreeJointName != null,
+                    ["gainUnits"] = "SI",
+                    ["gear"] = 1
+                };
+            }
+            if (context.ActuatorCount > 0)
+            {
+                report["notGeneratedCapabilities"]["en"][0] = "Custom transmissions, automatic gain tuning, controllers, or control policies.";
+                report["notGeneratedCapabilities"]["zh-CN"][0] = "自定义传动、自动增益整定、控制器或控制策略。";
+                report["intentionallyNotGenerated"] = new JArray("automatic gain tuning", "control policies", "RL task definitions");
+            }
+            return report;
         }
 
         private static OfficialCompilationReport ValidateOfficialCompiler(
@@ -846,7 +901,9 @@ namespace OSURDF.Core.Export
                 CollisionCount = robot.Links.Sum(link => (link.Collisions ?? new List<CollisionDocument>()).Count);
                 foreach (JointDocument joint in robot.Joints ?? new List<JointDocument>())
                 {
-                    if (joint.Limit?.Effort.HasValue == true || joint.Limit?.Velocity.HasValue == true)
+                    bool hasIntent = robot.Profiles?.Simulation?.JointDrives?.Any(
+                        intent => intent.Joint == joint.Name) == true;
+                    if (!hasIntent && (joint.Limit?.Effort.HasValue == true || joint.Limit?.Velocity.HasValue == true))
                     {
                         Warnings.Add(
                             "Joint '" + joint.Name +
@@ -870,6 +927,8 @@ namespace OSURDF.Core.Export
             public int VisualCount { get; }
 
             public int CollisionCount { get; }
+
+            public int ActuatorCount { get; set; }
 
             public int MeshAssetCount => meshNames.Count;
 
@@ -1076,6 +1135,8 @@ namespace OSURDF.Core.Export
 
             public string RobotName { get; private set; }
 
+            public string RootFreeJointName { get; private set; }
+
             public IDictionary<string, string> LinkNames { get; } =
                 new Dictionary<string, string>(StringComparer.Ordinal);
 
@@ -1104,6 +1165,7 @@ namespace OSURDF.Core.Export
                 NameAllocator joints = new NameAllocator();
                 NameAllocator visuals = new NameAllocator();
                 NameAllocator collisions = new NameAllocator();
+                ISet<string> replacedBaseJoints = FindReplacedBaseJoints(robot);
                 foreach (LinkDocument link in robot.Links ?? new List<LinkDocument>())
                 {
                     result.LinkNames.Add(link.Name, bodies.Allocate(link.Name, link.Id ?? link.Name));
@@ -1111,6 +1173,11 @@ namespace OSURDF.Core.Export
                 foreach (JointDocument joint in robot.Joints ?? new List<JointDocument>())
                 {
                     List<string> mapped = new List<string>();
+                    if (replacedBaseJoints.Contains(joint.Name))
+                    {
+                        result.JointNames.Add(joint.Name, mapped);
+                        continue;
+                    }
                     if (string.Equals(joint.Type, "floating", StringComparison.Ordinal))
                     {
                         foreach (string suffix in new[] { "tx", "ty", "tz", "rotation" })
@@ -1126,6 +1193,8 @@ namespace OSURDF.Core.Export
                     }
                     result.JointNames.Add(joint.Name, mapped);
                 }
+                if (robot.Profiles?.Simulation?.BaseMode == "floating")
+                    result.RootFreeJointName = joints.Allocate("root_freejoint", "simulation.baseMode.floating");
                 foreach (LinkDocument link in robot.Links ?? new List<LinkDocument>())
                 {
                     int index = 0;
@@ -1154,6 +1223,28 @@ namespace OSURDF.Core.Export
                     }
                 }
                 return result;
+            }
+
+            private static ISet<string> FindReplacedBaseJoints(RobotDocument robot)
+            {
+                HashSet<string> replaced = new HashSet<string>(StringComparer.Ordinal);
+                string mode = robot.Profiles?.Simulation?.BaseMode;
+                if (mode != "fixed" && mode != "floating") return replaced;
+                // Base freedoms are floating edges reached from the root through fixed edges only.
+                // Internal floating joints below a moving edge retain their source semantics.
+                HashSet<string> children = new HashSet<string>(robot.Joints.Select(joint => joint.Child), StringComparer.Ordinal);
+                Queue<string> pending = new Queue<string>();
+                pending.Enqueue(robot.Links.Single(link => !children.Contains(link.Name)).Name);
+                while (pending.Count > 0)
+                {
+                    string parent = pending.Dequeue();
+                    foreach (JointDocument joint in robot.Joints.Where(item => item.Parent == parent))
+                    {
+                        if (joint.Type == "fixed") pending.Enqueue(joint.Child);
+                        else if (joint.Type == "floating") replaced.Add(joint.Name);
+                    }
+                }
+                return replaced;
             }
         }
 

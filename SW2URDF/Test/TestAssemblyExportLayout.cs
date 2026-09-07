@@ -436,7 +436,7 @@ namespace SW2URDF.Test
                 {
                     int dpi = (int)dialog.CurrentAutoScaleDimensions.Width;
                     Assert.Equal(AutoScaleMode.Dpi, dialog.AutoScaleMode);
-                    Assert.Equal(new Size(900 * dpi / 96, 560 * dpi / 96), dialog.ClientSize);
+                    Assert.Equal(new Size(960 * dpi / 96, 720 * dpi / 96), dialog.ClientSize);
                     var root = (TableLayoutPanel)FindDescendant(dialog, "openUsdRoot");
                     Assert.Equal(18 * dpi / 96, root.Padding.Top);
                     AssertContainedIn(FindDescendant(dialog, "openUsdFooter"), root);
@@ -585,6 +585,149 @@ namespace SW2URDF.Test
             Assert.True(thread.Join(TimeSpan.FromSeconds(60)),
                 "DPI layout did not finish within 60 seconds on its STA thread.");
             if (failure != null) ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+
+        [Theory]
+        [InlineData("en-US", 96)]
+        [InlineData("zh-CN", 96)]
+        [InlineData("en-US", 144)]
+        [InlineData("zh-CN", 144)]
+        public void SimulationDialogBitmapFitsCommonIntentAndTargetTabs(string cultureName, int dpi)
+        {
+            RunDpiLayoutOnSta(() =>
+            {
+                Thread.CurrentThread.CurrentCulture = CultureInfo.GetCultureInfo(cultureName);
+                Thread.CurrentThread.CurrentUICulture = CultureInfo.GetCultureInfo(cultureName);
+                using (var dialog = new OpenUsdSettingsDialog())
+                {
+                    var joints = new[]
+                    {
+                        new OpenUsdJointDescriptor { Name = "shoulder_joint", Type = "revolute", EffortLimit = 40, VelocityLimit = 2 },
+                        new OpenUsdJointDescriptor { Name = "elbow_joint", Type = "revolute", EffortLimit = 20, VelocityLimit = 3 },
+                        new OpenUsdJointDescriptor { Name = "wheel_joint", Type = "continuous", EffortLimit = 8, VelocityLimit = 10 },
+                        new OpenUsdJointDescriptor { Name = "slider_joint", Type = "prismatic", EffortLimit = 60, VelocityLimit = 0.5 },
+                        new OpenUsdJointDescriptor { Name = "tool_mount", Type = "fixed" },
+                        new OpenUsdJointDescriptor { Name = "finger_mimic", Type = "prismatic", IsMimic = true }
+                    };
+                    var usd = new UsdSimulationProfile { RobotType = "manipulator" };
+                    var simulation = new SimulationProfile();
+                    foreach (var joint in joints.Take(4))
+                    {
+                        simulation.JointDrives.Add(new JointDriveIntent { Joint = joint.Name, Mode = "position" });
+                        usd.JointDrives.Add(new UsdJointDriveProfile { Joint = joint.Name, Mode = "position", Stiffness = 80, Damping = 4 });
+                        simulation.Mjcf.JointDrives.Add(new MjcfJointDriveProfile { Joint = joint.Name, Stiffness = 25, Damping = 2, MaxForce = joint.EffortLimit });
+                    }
+                    dialog.LoadSettings(usd, joints, simulation);
+                    // Owned WinForms rendering only; logical DPI scaling, not desktop automation.
+                    dialog.Opacity = 0;
+                    dialog.Show();
+                    float factor = dpi / dialog.CurrentAutoScaleDimensions.Width;
+                    Control[] controls = Descendants(dialog).ToArray();
+                    Font[] fonts = controls.Select(control => control.Font).ToArray();
+                    dialog.Scale(new SizeF(factor, factor));
+                    for (int index = 0; index < controls.Length; index++)
+                    {
+                        ModernWinFormsTheme.SetFont(controls[index], fonts[index].Size * factor, fonts[index].Style);
+                    }
+                    dialog.ClientSize = new Size(960 * dpi / 96, 720 * dpi / 96);
+                    Rectangle workingArea = new Rectangle(0, 0, 1920, 1040);
+                    dialog.ConstrainToWorkingArea(workingArea);
+                    var tabs = (TabControl)FindDescendant(dialog, "simulationTargetTabs");
+                    var intent = (DataGridView)FindDescendant(dialog, "simulationJointIntentGrid");
+                    var root = FindDescendant(dialog, "openUsdRoot");
+                    var footer = FindDescendant(dialog, "openUsdFooter");
+                    string output = SimulationPreviewDirectory();
+                    System.IO.Directory.CreateDirectory(output);
+                    for (int tab = 0; tab < tabs.TabCount; tab++)
+                    {
+                        tabs.SelectedIndex = tab;
+                        dialog.PerformLayout();
+                        Application.DoEvents();
+                        var gains = (DataGridView)FindDescendant(dialog, tab == 0 ? "openUsdJointDriveGrid" : "mjcfJointDriveGrid");
+                        using (var bitmap = new Bitmap(dialog.Width, dialog.Height))
+                        {
+                            bitmap.SetResolution(dpi, dpi);
+                            dialog.DrawToBitmap(bitmap, new Rectangle(Point.Empty, dialog.Size));
+                            bitmap.Save(System.IO.Path.Combine(output, String.Format(CultureInfo.InvariantCulture,
+                                "preview{0}-{1}-{2}.png", dpi * 100 / 96, cultureName, tab == 0 ? "openusd" : "mjcf")),
+                                System.Drawing.Imaging.ImageFormat.Png);
+                        }
+                        Assert.True(workingArea.Contains(dialog.Bounds),
+                            String.Format("Dialog {0} exceeds working area {1} at {2} DPI.", dialog.Bounds, workingArea, dpi));
+                        AssertContainedIn(intent, root);
+                        AssertContainedIn(tabs, root);
+                        AssertContainedIn(footer, root);
+                        AssertContainedIn(FindDescendant(dialog, "openUsdConfirmButton"), footer);
+                        AssertContainedIn(FindDescendant(dialog, "openUsdCancelButton"), footer);
+                        AssertContainedIn(gains, tabs.SelectedTab);
+                        Assert.True(intent.Height >= intent.ColumnHeadersHeight + 4 * intent.RowTemplate.Height);
+                        Assert.True(gains.Height >= gains.ColumnHeadersHeight + 4 * gains.RowTemplate.Height);
+                        Assert.True(intent.Columns.Cast<DataGridViewColumn>().Where(column => column.Visible).Sum(column => column.Width) <= intent.ClientSize.Width);
+                        Assert.True(gains.Columns.Cast<DataGridViewColumn>().Where(column => column.Visible).Sum(column => column.Width) <= gains.ClientSize.Width);
+                        Assert.False(BoundsRelativeTo(intent, root).IntersectsWith(BoundsRelativeTo(tabs, root)));
+                        Assert.False(BoundsRelativeTo(tabs, root).IntersectsWith(BoundsRelativeTo(footer, root)));
+                        foreach (Control control in Descendants(dialog).Where(control => control.Visible &&
+                            (control is Label || control is Button || control is CheckBox)))
+                        {
+                            AssertContainedIn(control, control.Parent);
+                            using (Graphics graphics = control.CreateGraphics())
+                            {
+                                // AutoSize controls account for their own rendering flags and checkbox glyph.
+                                Size text = control is Label || control is CheckBox ? control.GetPreferredSize(Size.Empty) :
+                                    TextRenderer.MeasureText(graphics, control.Text, control.Font,
+                                        new Size(control.ClientSize.Width - control.Padding.Horizontal, Int32.MaxValue),
+                                        TextFormatFlags.WordBreak);
+                                Assert.True(text.Width + control.Padding.Horizontal <= control.ClientSize.Width &&
+                                    text.Height + control.Padding.Vertical <= control.ClientSize.Height,
+                                    String.Format("Text clipped in {0}: '{1}', measured={2}, client={3}.",
+                                        control.Name, control.Text, text, control.ClientSize));
+                            }
+                        }
+                        AssertSimulationGridContentFits(intent);
+                        AssertSimulationGridContentFits(gains);
+                    }
+                    dialog.Close();
+                }
+            });
+        }
+
+        private static void AssertSimulationGridContentFits(DataGridView grid)
+        {
+            using (Graphics graphics = grid.CreateGraphics())
+            {
+                foreach (DataGridViewColumn column in grid.Columns.Cast<DataGridViewColumn>().Where(column => column.Visible))
+                {
+                    Size header = TextRenderer.MeasureText(graphics, column.HeaderText, grid.ColumnHeadersDefaultCellStyle.Font ?? grid.Font);
+                    Assert.True(header.Width + 4 <= column.Width && header.Height + 4 <= grid.ColumnHeadersHeight,
+                        String.Format("Header clipped in {0}.{1}: text={2}, column={3}x{4}.",
+                            grid.Name, column.Name, header, column.Width, grid.ColumnHeadersHeight));
+                    foreach (DataGridViewRow row in grid.Rows)
+                    {
+                        DataGridViewCell cell = row.Cells[column.Index];
+                        Size text = TextRenderer.MeasureText(graphics, Convert.ToString(cell.FormattedValue), cell.InheritedStyle.Font);
+                        int dropDownWidth = cell is DataGridViewComboBoxCell ? SystemInformation.VerticalScrollBarWidth : 0;
+                        Assert.True(text.Width + dropDownWidth + 4 <= column.Width && text.Height + 4 <= row.Height,
+                            String.Format("Cell clipped in {0}.{1}, row {2}: text={3}, cell={4}x{5}.",
+                                grid.Name, column.Name, row.Index, text, column.Width, row.Height));
+                    }
+                }
+            }
+            int firstRow = grid.FirstDisplayedScrollingRowIndex;
+            grid.FirstDisplayedScrollingRowIndex = grid.RowCount - 1;
+            Application.DoEvents();
+            Rectangle lastRow = grid.GetRowDisplayRectangle(grid.RowCount - 1, false);
+            Assert.True(lastRow.Top >= grid.ColumnHeadersHeight && lastRow.Bottom <= grid.ClientSize.Height,
+                String.Format("Last row is not fully reachable in {0}: row={1}, client={2}.",
+                    grid.Name, lastRow, grid.ClientRectangle));
+            grid.FirstDisplayedScrollingRowIndex = firstRow;
+        }
+
+        private static string SimulationPreviewDirectory(
+            [System.Runtime.CompilerServices.CallerFilePath] string sourceFile = null)
+        {
+            // The test runner shadow-copies assemblies outside the checkout.
+            return System.IO.Path.GetFullPath(System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(sourceFile), "..", "..", ".codex-build", "simulation-ui-acceptance"));
         }
 
         private static void VerifyModelFooterAtLogicalDpi(int dpi)
@@ -781,7 +924,7 @@ namespace SW2URDF.Test
                     ChineseUiText.Translate("MuJoCo MJCF asset", "MuJoCo MJCF 资产"),
                     mjcf.Text);
                 Assert.Equal(
-                    ChineseUiText.Translate("OpenUSD settings...", "OpenUSD 设置..."),
+                    ChineseUiText.Translate("Simulation settings...", "仿真设置..."),
                     usdSettings.Text);
                 Assert.Same(targetRow, ros1.Parent);
                 Assert.Same(targetRow, ros2.Parent);
@@ -885,7 +1028,7 @@ namespace SW2URDF.Test
                 }
                 Assert.Same(existing, form.Exporter.ExportTargets);
                 Assert.Equal("Saved description", GetControl<TextBox>(form, "modernPackageDescriptionTextBox").Text);
-                Assert.Equal((mask & 4) != 0, GetControl<Button>(form, "modernUsdSettingsButton").Enabled);
+                Assert.Equal((mask & 12) != 0, GetControl<Button>(form, "modernUsdSettingsButton").Enabled);
                 Assert.Equal((mask & 12) == 0, GetControl<RadioButton>(form, "radioButton3dxml").Enabled);
                 var captured = (ExportTargetOptions)InvokePrivate(form, "CaptureExportTargetOptions");
                 Assert.Equal(existing.ExportRos1Legacy, captured.ExportRos1Legacy);
@@ -963,7 +1106,7 @@ namespace SW2URDF.Test
                             ? ChineseUiText.Translate("Select an output target to see its destination.",
                                 "\u8bf7\u9009\u62e9\u8f93\u51fa\u76ee\u6807\u4ee5\u67e5\u770b\u5bf9\u5e94\u76ee\u5f55\u3002")
                             : expected, tooltip.GetToolTip(hint));
-                        Assert.Equal((mask & 4) != 0, settings.Enabled);
+                        Assert.Equal((mask & 12) != 0, settings.Enabled);
                         Assert.Equal((mask & 12) == 0, xml.Enabled);
                         if ((mask & 12) != 0) Assert.True(stl.Checked);
                         else xml.Checked = true;
@@ -2049,6 +2192,232 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void TestSimulationSourceKeepsLegacyBaseUntilAnExplicitCommonChoice()
+        {
+            using (var dialog = new OpenUsdSettingsDialog())
+            {
+                var usd = new UsdSimulationProfile { BaseMode = "fixed" };
+                usd.JointDrives.Add(new UsdJointDriveProfile { Joint = "joint", Mode = "position", Stiffness = 12 });
+                dialog.LoadSettings(usd, new[] { new OpenUsdJointDescriptor { Name = "joint", Type = "revolute" } });
+                Assert.Null(dialog.SimulationSettings);
+                var baseMode = (ComboBox)FindDescendant(dialog, "openUsdBaseModeComboBox");
+                Assert.Equal(ChineseUiText.Translate("Keep existing target behavior", "保持各目标原有行为"), baseMode.SelectedItem.ToString());
+                UsdSimulationProfile captured;
+                SimulationProfile simulation;
+                Assert.True(dialog.TryCaptureSettings(out captured, out simulation));
+                Assert.Equal("source", simulation.BaseMode);
+                Assert.Equal("fixed", captured.BaseMode);
+                Assert.Equal("position", Assert.Single(simulation.JointDrives).Mode);
+                Assert.Null(Assert.Single(simulation.Mjcf.JointDrives).Stiffness);
+                Assert.Null(dialog.SimulationSettings);
+                baseMode.SelectedIndex = 2;
+                Assert.True(dialog.TryCaptureSettings(out captured, out simulation));
+                Assert.Equal("floating", simulation.BaseMode);
+                Assert.Equal("fixed", captured.BaseMode);
+                Assert.Equal("fixed", usd.BaseMode);
+            }
+        }
+
+        [Fact]
+        public void TestSimulationIntentMatchesExactNamesAndKeepsTargetDraftsIndependent()
+        {
+            using (var dialog = new OpenUsdSettingsDialog())
+            {
+                var usd = new UsdSimulationProfile();
+                usd.JointDrives.Add(new UsdJointDriveProfile { Joint = "Joint", Mode = "effort", Stiffness = 80, Damping = 4 });
+                var simulation = new SimulationProfile();
+                simulation.JointDrives.Add(new JointDriveIntent { Joint = "Joint", Mode = "position" });
+                simulation.JointDrives.Add(new JointDriveIntent { Joint = "joint", Mode = "passive" });
+                simulation.Mjcf.JointDrives.Add(new MjcfJointDriveProfile { Joint = "Joint", Stiffness = 20, Damping = 2, MaxForce = 5 });
+                var joints = new[]
+                {
+                    new OpenUsdJointDescriptor { Name = "joint", Type = "prismatic" },
+                    new OpenUsdJointDescriptor { Name = "Joint", Type = "revolute" }
+                };
+                dialog.LoadSettings(usd, joints, simulation);
+                var intent = (DataGridView)FindDescendant(dialog, "simulationJointIntentGrid");
+                var usdGrid = (DataGridView)FindDescendant(dialog, "openUsdJointDriveGrid");
+                var mjcfGrid = (DataGridView)FindDescendant(dialog, "mjcfJointDriveGrid");
+                var tabs = (TabControl)FindDescendant(dialog, "simulationTargetTabs");
+                Assert.Equal(new[] { "OpenUSD", "MuJoCo / MJCF" }, tabs.TabPages.Cast<TabPage>().Select(page => page.Text));
+                Assert.StartsWith("passive", Convert.ToString(intent.Rows[0].Cells["driveModeColumn"].Value));
+                Assert.StartsWith("position", Convert.ToString(intent.Rows[1].Cells["driveModeColumn"].Value));
+                Assert.Equal("80", usdGrid.Rows[1].Cells["stiffnessColumn"].Value);
+                Assert.Equal("20", mjcfGrid.Rows[1].Cells["stiffnessColumn"].Value);
+                Assert.Equal("N/m", usdGrid.Rows[0].Cells["stiffnessColumn"].ToolTipText);
+                Assert.Equal("N*m/rad", mjcfGrid.Rows[1].Cells["stiffnessColumn"].ToolTipText);
+                mjcfGrid.Rows[1].Cells["stiffnessColumn"].Value = "23";
+                for (int index = 0; index < 3; index++)
+                {
+                    tabs.SelectedIndex = 1;
+                    SetSimulationIntent(intent.Rows[1], "velocity");
+                    Assert.True(usdGrid.Rows[1].Cells["stiffnessColumn"].ReadOnly);
+                    Assert.True(mjcfGrid.Rows[1].Cells["stiffnessColumn"].ReadOnly);
+                    tabs.SelectedIndex = 0;
+                    SetSimulationIntent(intent.Rows[1], "position");
+                }
+                Assert.Equal("80", usdGrid.Rows[1].Cells["stiffnessColumn"].Value);
+                Assert.Equal("23", mjcfGrid.Rows[1].Cells["stiffnessColumn"].Value);
+                UsdSimulationProfile captured;
+                SimulationProfile common;
+                Assert.True(dialog.TryCaptureSettings(out captured, out common));
+                Assert.Equal(80, Assert.Single(captured.JointDrives).Stiffness);
+                Assert.Equal(23, Assert.Single(common.Mjcf.JointDrives).Stiffness);
+                Assert.Equal(20, simulation.Mjcf.JointDrives[0].Stiffness);
+                Assert.Equal("effort", usd.JointDrives[0].Mode);
+            }
+        }
+
+        [Fact]
+        public void TestSimulationFixedAndMimicCannotBecomeActive()
+        {
+            using (var dialog = new OpenUsdSettingsDialog())
+            {
+                var joints = new[]
+                {
+                    new OpenUsdJointDescriptor { Name = "fixed", Type = "fixed" },
+                    new OpenUsdJointDescriptor { Name = "mimic", Type = "revolute", IsMimic = true }
+                };
+                var simulation = new SimulationProfile();
+                foreach (var joint in joints) simulation.JointDrives.Add(new JointDriveIntent { Joint = joint.Name, Mode = "position" });
+                dialog.LoadSettings(null, joints, simulation);
+                var intent = (DataGridView)FindDescendant(dialog, "simulationJointIntentGrid");
+                foreach (DataGridViewRow row in intent.Rows)
+                {
+                    Assert.True(row.Cells["driveModeColumn"].ReadOnly);
+                    SetSimulationIntent(row, "effort");
+                    Assert.StartsWith("passive", Convert.ToString(row.Cells["driveModeColumn"].Value));
+                }
+                UsdSimulationProfile usd;
+                SimulationProfile captured;
+                Assert.True(dialog.TryCaptureSettings(out usd, out captured));
+                Assert.All(captured.JointDrives, drive => Assert.Equal("passive", drive.Mode));
+                Assert.Empty(usd.JointDrives);
+                Assert.Empty(captured.Mjcf.JointDrives);
+            }
+        }
+
+        [Theory]
+        [InlineData("position", "stiffnessColumn", "0")]
+        [InlineData("position", "dampingColumn", "-1")]
+        [InlineData("velocity", "dampingColumn", "0")]
+        [InlineData("effort", "maxForceColumn", "NaN")]
+        [InlineData("effort", "maxForceColumn", "Infinity")]
+        public void TestSimulationMjcfValidatesFilledGainsButAllowsMissingTargetValues(string mode, string column, string value)
+        {
+            using (var dialog = new OpenUsdSettingsDialog())
+            {
+                var simulation = new SimulationProfile();
+                simulation.JointDrives.Add(new JointDriveIntent { Joint = "joint", Mode = mode });
+                dialog.LoadSettings(null, new[] { new OpenUsdJointDescriptor { Name = "joint", Type = "continuous" } }, simulation);
+                UsdSimulationProfile usd;
+                SimulationProfile captured;
+                Assert.True(dialog.TryCaptureSettings(out usd, out captured));
+                var mjcf = (DataGridView)FindDescendant(dialog, "mjcfJointDriveGrid");
+                mjcf.Rows[0].Cells[column].Value = value;
+                Assert.False(dialog.TryCaptureSettings(out usd, out captured));
+                Assert.NotEmpty(mjcf.Rows[0].Cells[column].ErrorText);
+                mjcf.Rows[0].Cells[column].Value = "2.5";
+                Assert.True(dialog.TryCaptureSettings(out usd, out captured));
+                Assert.Null(Assert.Single(usd.JointDrives).Damping);
+            }
+        }
+
+        [Fact]
+        public void TestSimulationApplyRetainsInactiveDraftsAndCancelDoesNotPromoteEdits()
+        {
+            using (var dialog = new OpenUsdSettingsDialog())
+            {
+                var joints = new[] { new OpenUsdJointDescriptor { Name = "joint", Type = "revolute" } };
+                dialog.LoadSettings(null, joints);
+                var intent = (DataGridView)FindDescendant(dialog, "simulationJointIntentGrid");
+                var usd = (DataGridView)FindDescendant(dialog, "openUsdJointDriveGrid");
+                var mjcf = (DataGridView)FindDescendant(dialog, "mjcfJointDriveGrid");
+                SetSimulationIntent(intent.Rows[0], "position");
+                usd.Rows[0].Cells["stiffnessColumn"].Value = "80";
+                mjcf.Rows[0].Cells["stiffnessColumn"].Value = "20";
+                SetSimulationIntent(intent.Rows[0], "passive");
+                typeof(OpenUsdSettingsDialog).GetMethod("ConfirmButtonClick", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .Invoke(dialog, new object[] { null, EventArgs.Empty });
+                Assert.Equal(DialogResult.OK, dialog.DialogResult);
+                Assert.Empty(dialog.Settings.JointDrives);
+                Assert.Empty(dialog.SimulationSettings.Mjcf.JointDrives);
+                dialog.LoadSettings(dialog.Settings, joints, dialog.SimulationSettings);
+                SetSimulationIntent(intent.Rows[0], "position");
+                Assert.Equal("80", usd.Rows[0].Cells["stiffnessColumn"].Value);
+                Assert.Equal("20", mjcf.Rows[0].Cells["stiffnessColumn"].Value);
+                mjcf.Rows[0].Cells["stiffnessColumn"].Value = "999";
+                dialog.DialogResult = DialogResult.Cancel;
+                dialog.LoadSettings(dialog.Settings, joints, dialog.SimulationSettings);
+                Assert.Equal("20", mjcf.Rows[0].Cells["stiffnessColumn"].Value);
+                Assert.StartsWith("passive", Convert.ToString(intent.Rows[0].Cells["driveModeColumn"].Value));
+            }
+        }
+
+        [Fact]
+        public void TestSimulationFormRestoresSavedProfilesAndCapturesClones()
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                var root = new SW2URDF.URDF.Link();
+                var saved = new ExportTargetOptions { Simulation = new SimulationProfile { BaseMode = "floating" } };
+                saved.Simulation.JointDrives.Add(new JointDriveIntent { Joint = "joint", Mode = "velocity" });
+                saved.Simulation.Mjcf.JointDrives.Add(new MjcfJointDriveProfile { Joint = "joint", Damping = 3 });
+                saved.UsdSimulation.BaseMode = "fixed";
+                saved.SaveSimulationSettings(root);
+                string json = root.SimulationSettingsJson;
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                typeof(ExportHelper).GetField("Links").SetValue(form.Exporter, new List<SW2URDF.URDF.Link> { root });
+                form.Exporter.RosPackageName = "rover_description";
+                InvokePrivate(form, "InitializeExportTargetControls");
+                var captured = (ExportTargetOptions)InvokePrivate(form, "CaptureExportTargetOptions");
+                Assert.Equal("floating", captured.Simulation.BaseMode);
+                Assert.Equal("fixed", captured.UsdSimulation.BaseMode);
+                captured.Simulation.Mjcf.JointDrives[0].Damping = 999;
+                var again = (ExportTargetOptions)InvokePrivate(form, "CaptureExportTargetOptions");
+                Assert.Equal(3, again.Simulation.Mjcf.JointDrives[0].Damping);
+                Assert.Equal(json, root.SimulationSettingsJson);
+            }
+        }
+
+        private static void SetSimulationIntent(DataGridViewRow row, string mode)
+        {
+            var cell = (DataGridViewComboBoxCell)row.Cells["driveModeColumn"];
+            cell.Value = cell.Items.Cast<object>().Single(item => item.ToString().StartsWith(mode, StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void TestSimulationMalformedSettingsBlockOnlySimulatorExportUntilApplied()
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                var root = new SW2URDF.URDF.Link { SimulationSettingsJson = "{broken" };
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                typeof(ExportHelper).GetField("Links").SetValue(form.Exporter, new List<SW2URDF.URDF.Link> { root });
+                string error;
+                Assert.False(form.TryRestoreSimulationSettings(new ExportTargetOptions(), out error));
+                Assert.NotEmpty(error);
+                Assert.Equal("{broken", root.SimulationSettingsJson);
+                Assert.True(form.IsSimulationExportBlocked(true));
+                Assert.False(form.IsSimulationExportBlocked(false));
+                GetControl<CheckBox>(form, "modernUsdAssetCheckBox").Checked = false;
+                Assert.True(form.IsSimulationExportBlocked(true));
+                GetControl<CheckBox>(form, "modernMjcfAssetCheckBox").Checked = false;
+                Assert.False(form.IsSimulationExportBlocked(true));
+                GetControl<CheckBox>(form, "modernUsdAssetCheckBox").Checked = true;
+                var simulation = new SimulationProfile { BaseMode = "floating" };
+                var usd = new UsdSimulationProfile { BaseMode = "fixed" };
+                form.ApplySimulationSettings(usd, simulation);
+                Assert.False(form.IsSimulationExportBlocked(true));
+                simulation.BaseMode = "fixed";
+                var restored = new ExportTargetOptions();
+                ExportTargetOptions.RestoreSimulationSettings(root, restored);
+                Assert.Equal("floating", restored.Simulation.BaseMode);
+                Assert.Equal("fixed", restored.UsdSimulation.BaseMode);
+            }
+        }
+
+        [Fact]
         public void TestOpenUsdSettingsAreVersionIndependentAndPreserveExplicitIntent()
         {
             using (OpenUsdSettingsDialog dialog = new OpenUsdSettingsDialog())
@@ -2319,7 +2688,7 @@ namespace SW2URDF.Test
                     Assert.True(grid.Rows[2].Cells["stiffnessColumn"].ReadOnly);
                     Assert.False(grid.Rows[2].Cells["dampingColumn"].ReadOnly);
                     Assert.Equal(
-                        "0",
+                        "-1",
                         Convert.ToString(
                             grid.Rows[2].Cells["stiffnessColumn"].Value,
                             CultureInfo.InvariantCulture));

@@ -303,6 +303,105 @@ namespace SW2URDF.Test
             AssertValid(robot);
         }
 
+        [Fact]
+        public void SharedSimulationProjectsUsdIntentWithoutCopyingMjcfGains()
+        {
+            ExportTargetOptions options = Options();
+            options.Simulation = new SimulationProfile
+            {
+                BaseMode = "floating",
+                JointDrives = new List<JointDriveIntent>
+                {
+                    new JointDriveIntent { Joint = "shoulder_joint", Mode = "position" }
+                },
+                Mjcf = new MjcfSimulationProfile
+                {
+                    JointDrives = new List<MjcfJointDriveProfile>
+                    {
+                        new MjcfJointDriveProfile { Joint = "shoulder_joint", Stiffness = 25, Damping = 2, MaxForce = 8 }
+                    }
+                }
+            };
+            RobotDocument robot = Robot(options);
+            string before = JsonConvert.SerializeObject(options);
+            Assert.Empty(V2ExportBridge.PrepareTargetProfiles(robot, options));
+            Assert.Equal("floating", robot.Profiles.UsdSimulation.BaseMode);
+            Assert.Equal(10.0, robot.Profiles.UsdSimulation.JointDrives[0].Stiffness);
+            Assert.Equal(25.0, robot.Profiles.Simulation.Mjcf.JointDrives[0].Stiffness);
+            Assert.Equal(before, JsonConvert.SerializeObject(options));
+            Assert.Null(V2ExportBridge.ForTarget(options, "ROS 1").Simulation);
+            Assert.NotSame(options.Simulation, V2ExportBridge.ForTarget(options, "OpenUSD").Simulation);
+        }
+
+        [Fact]
+        public void InvalidMjcfGainsDoNotBlockUsdOrRos()
+        {
+            ExportTargetOptions options = Options();
+            options.Simulation = new SimulationProfile
+            {
+                JointDrives = new List<JointDriveIntent>
+                {
+                    new JointDriveIntent { Joint = "shoulder_joint", Mode = "position" }
+                },
+                Mjcf = new MjcfSimulationProfile
+                {
+                    JointDrives = new List<MjcfJointDriveProfile>
+                    {
+                        new MjcfJointDriveProfile { Joint = "shoulder_joint", Stiffness = -1, Damping = 2 }
+                    }
+                }
+            };
+            RobotDocument robot = Robot(options);
+            IDictionary<string, string> errors = V2ExportBridge.PrepareTargetProfiles(robot, options);
+            Assert.Single(errors);
+            Assert.True(errors.ContainsKey("MuJoCo MJCF"));
+            Assert.Null(robot.Profiles.Simulation.Mjcf);
+            AssertValid(robot);
+        }
+
+        [Fact]
+        public void SimulationSettingsSaveRestoreIsIndependentAndVersioned()
+        {
+            var root = new SW2URDF.URDF.Link { Name = "base_link" };
+            ExportTargetOptions options = Options();
+            options.Simulation = new SimulationProfile { BaseMode = "floating" };
+            options.SaveSimulationSettings(root);
+            ExportTargetOptions restored = Options();
+            ExportTargetOptions.RestoreSimulationSettings(root, restored);
+            Assert.Equal("floating", restored.Simulation.BaseMode);
+            Assert.NotSame(options.Simulation, restored.Simulation);
+            Assert.Equal(10.0, restored.UsdSimulation.JointDrives[0].Stiffness);
+            root.SimulationSettingsJson = "{\"version\":999}";
+            Assert.Throws<InvalidDataException>(() => ExportTargetOptions.RestoreSimulationSettings(root, restored));
+        }
+
+        [Theory]
+        [InlineData("velocity")]
+        [InlineData("passive")]
+        public void SharedIntentCannotEraseInvalidStoredUsdGains(string mode)
+        {
+            ExportTargetOptions options = Options();
+            options.UsdSimulation.JointDrives[0].Stiffness = -100;
+            options.Simulation = new SimulationProfile
+            {
+                JointDrives = new List<JointDriveIntent>
+                {
+                    new JointDriveIntent { Joint = "shoulder_joint", Mode = mode }
+                }
+            };
+            if (mode == "velocity")
+                options.Simulation.Mjcf.JointDrives.Add(new MjcfJointDriveProfile
+                {
+                    Joint = "shoulder_joint", Damping = 2, MaxForce = 8
+                });
+            RobotDocument robot = Robot(options);
+            IDictionary<string, string> errors = V2ExportBridge.PrepareTargetProfiles(robot, options);
+            Assert.Single(errors);
+            Assert.True(errors.ContainsKey("OpenUSD"));
+            Assert.Equal(-100, options.UsdSimulation.JointDrives[0].Stiffness);
+            AssertValid(robot);
+        }
+
         private static ExportTargetOptions Options()
         {
             ExportTargetOptions options = ExportTargetOptions.RecommendedDefaults("minimal_robot");

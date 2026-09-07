@@ -13,6 +13,7 @@ namespace SW2URDF.UI
     {
         internal string Name { get; set; }
         internal string Type { get; set; }
+        internal bool IsMimic { get; set; }
         internal double? EffortLimit { get; set; }
         internal double? VelocityLimit { get; set; }
     }
@@ -40,20 +41,26 @@ namespace SW2URDF.UI
         private readonly ComboBox robotTypeComboBox;
         private readonly CheckBox selfCollisionCheckBox;
         private readonly DataGridView jointDriveGrid;
+        private readonly DataGridView jointIntentGrid;
+        private readonly DataGridView mjcfDriveGrid;
+        private readonly TabControl targetTabs;
         private readonly Button confirmButton;
         private readonly Button cancelButton;
         private bool loadingSettings;
+        private string appliedSettingsKey;
+        private readonly Dictionary<string, string[]> usdGainDrafts = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string[]> mjcfGainDrafts = new Dictionary<string, string[]>(StringComparer.Ordinal);
 
         internal OpenUsdSettingsDialog()
         {
             SuspendLayout();
             Name = "openUsdSettingsDialog";
             Text = ChineseUiText.Translate(
-                "OpenUSD simulation settings",
-                "OpenUSD 仿真设置");
+                "Simulation settings",
+                "仿真设置");
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(900, 560);
+            ClientSize = new Size(960, 720);
             MinimumSize = new Size(900, 500);
             StartPosition = FormStartPosition.CenterParent;
             ShowInTaskbar = false;
@@ -75,37 +82,35 @@ namespace SW2URDF.UI
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            TableLayoutPanel general = new ModernCardPanel
+            TableLayoutPanel general = new TableLayoutPanel
             {
                 Name = "openUsdGeneralSettings",
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 BackColor = ModernWinFormsTheme.Surface,
-                ColumnCount = 4,
+                ColumnCount = 2,
                 Dock = DockStyle.Top,
                 Margin = new Padding(0, 0, 0, 12),
                 Padding = new Padding(14, 12, 14, 12),
-                RowCount = 3
+                RowCount = 2
             };
             general.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
-            general.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            general.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
-            general.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            general.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
             Label title = ModernWinFormsTheme.CreateTextLabel(
                 ChineseUiText.Translate(
-                    "Asset-level physics intent",
-                    "资产级物理意图"),
+                    "Base settings",
+                    "基座设置"),
                 10F,
                 FontStyle.Bold);
             title.Margin = new Padding(0, 0, 0, 8);
             general.Controls.Add(title, 0, 0);
-            general.SetColumnSpan(title, 4);
+            general.SetColumnSpan(title, 2);
 
             baseModeComboBox = CreateChoiceComboBox("openUsdBaseModeComboBox");
             AddChoices(
                 baseModeComboBox,
-                new Choice("source", ChineseUiText.Translate("Keep source semantics", "保持源语义")),
+                new Choice("source", ChineseUiText.Translate("Keep existing target behavior", "保持各目标原有行为")),
                 new Choice("fixed", ChineseUiText.Translate("Fixed base", "固定基座")),
                 new Choice("floating", ChineseUiText.Translate("Floating base", "浮动基座")));
             robotTypeComboBox = CreateChoiceComboBox("openUsdRobotTypeComboBox");
@@ -123,8 +128,6 @@ namespace SW2URDF.UI
 
             general.Controls.Add(CreateLabel("Base mode", "基座模式"), 0, 1);
             general.Controls.Add(baseModeComboBox, 1, 1);
-            general.Controls.Add(CreateLabel("Robot type", "机器人类型"), 2, 1);
-            general.Controls.Add(robotTypeComboBox, 3, 1);
 
             selfCollisionCheckBox = new CheckBox
             {
@@ -135,11 +138,9 @@ namespace SW2URDF.UI
                     "Allow self-collision (off by default)",
                     "允许自碰撞（默认关闭）")
             };
-            general.Controls.Add(selfCollisionCheckBox, 1, 2);
-            general.SetColumnSpan(selfCollisionCheckBox, 3);
             root.Controls.Add(general, 0, 0);
 
-            TableLayoutPanel driveCard = new ModernCardPanel
+            TableLayoutPanel driveCard = new TableLayoutPanel
             {
                 Name = "openUsdJointDriveSettings",
                 BackColor = ModernWinFormsTheme.Surface,
@@ -151,26 +152,50 @@ namespace SW2URDF.UI
             };
             driveCard.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             driveCard.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            driveCard.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            driveCard.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            driveCard.RowStyles.Add(new RowStyle(SizeType.Percent, 38F));
+            driveCard.RowStyles.Add(new RowStyle(SizeType.Percent, 62F));
             Label driveTitle = ModernWinFormsTheme.CreateTextLabel(
-                ChineseUiText.Translate("Single-DOF Joint intent", "单自由度 Joint 驱动意图"),
+                ChineseUiText.Translate("Joint control", "关节控制"),
                 10F,
                 FontStyle.Bold);
             driveTitle.Margin = new Padding(0, 0, 0, 4);
             driveCard.Controls.Add(driveTitle, 0, 0);
-            Label driveHint = ModernWinFormsTheme.CreateTextLabel(
-                ChineseUiText.Translate(
-                    "Passive is the safe default. Position and velocity author DriveAPI; effort records runtime intent only. CAD limits are read-only.",
-                    "被动模式是安全默认值。位置和速度会写入 DriveAPI；effort 仅记录运行时控制意图。CAD 限值只读。"),
-                8.5F,
-                FontStyle.Regular);
-            driveHint.ForeColor = ModernWinFormsTheme.MutedText;
-            driveHint.Margin = new Padding(0, 0, 0, 8);
-            driveCard.Controls.Add(driveHint, 0, 1);
-
+            jointIntentGrid = CreateJointDriveGrid();
+            jointIntentGrid.Name = "simulationJointIntentGrid";
+            jointIntentGrid.Columns["stiffnessColumn"].Visible = false;
+            jointIntentGrid.Columns["dampingColumn"].Visible = false;
+            driveCard.Controls.Add(jointIntentGrid, 0, 1);
             jointDriveGrid = CreateJointDriveGrid();
-            driveCard.Controls.Add(jointDriveGrid, 0, 2);
+            mjcfDriveGrid = CreateJointDriveGrid();
+            mjcfDriveGrid.Name = "mjcfJointDriveGrid";
+            mjcfDriveGrid.Columns.Add(CreateTextColumn(
+                "maxForceColumn", ChineseUiText.Translate("Max force (N*m / N)", "最大力矩/力 (N*m / N)"), 130, 115, false));
+            foreach (DataGridView grid in new[] { jointDriveGrid, mjcfDriveGrid })
+            {
+                grid.Columns["driveModeColumn"].Visible = false;
+                grid.Columns["effortLimitColumn"].Visible = false;
+                grid.Columns["velocityLimitColumn"].Visible = false;
+            }
+            targetTabs = new ModernTabControl { Name = "simulationTargetTabs", Dock = DockStyle.Fill };
+            TabPage usdPage = CreateTargetPage("OpenUSD", jointDriveGrid,
+                "SI gains: rotary N*m/rad, N*m*s/rad; linear N/m, N*s/m. Effort: runtime intent only, no active USD drive.",
+                "SI 增益：旋转 N*m/rad、N*m*s/rad；直线 N/m、N*s/m。effort 仅为运行时意图，不创建 USD 主动驱动。");
+            TableLayoutPanel usdOptions = new TableLayoutPanel
+            {
+                AutoSize = true, Dock = DockStyle.Top, ColumnCount = 2, RowCount = 2
+            };
+            usdOptions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            usdOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            usdOptions.Controls.Add(CreateLabel("Robot type", "机器人类型"), 0, 0);
+            usdOptions.Controls.Add(robotTypeComboBox, 1, 0);
+            usdOptions.Controls.Add(selfCollisionCheckBox, 1, 1);
+            TableLayoutPanel usdLayout = (TableLayoutPanel)usdPage.Controls[0];
+            usdLayout.Controls.Add(usdOptions, 0, 0);
+            targetTabs.TabPages.Add(usdPage);
+            targetTabs.TabPages.Add(CreateTargetPage("MuJoCo / MJCF", mjcfDriveGrid,
+                "SI gains: rotary N*m/rad, N*m*s/rad; linear N/m, N*s/m. Actuator gear = 1; max force in N*m / N.",
+                "SI 增益：旋转 N*m/rad、N*m*s/rad；直线 N/m、N*s/m。执行器 gear = 1；最大力矩/力 N*m / N。"));
+            driveCard.Controls.Add(targetTabs, 0, 2);
             root.Controls.Add(driveCard, 0, 1);
 
             FlowLayoutPanel footer = new FlowLayoutPanel
@@ -213,6 +238,26 @@ namespace SW2URDF.UI
         }
 
         internal UsdSimulationProfile Settings { get; private set; }
+        internal SimulationProfile SimulationSettings { get; private set; }
+
+        private static TabPage CreateTargetPage(string title, DataGridView grid, string english, string chinese)
+        {
+            TabPage page = new TabPage(title) { Padding = new Padding(8), AutoScroll = true };
+            TableLayoutPanel layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, AutoScroll = true
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            Label units = CreateLabel(english, chinese);
+            units.ForeColor = ModernWinFormsTheme.MutedText;
+            layout.Controls.Add(units, 0, 1);
+            layout.Controls.Add(grid, 0, 2);
+            page.Controls.Add(layout);
+            return page;
+        }
 
         internal void PrepareForOwner(Control owner)
         {
@@ -230,16 +275,9 @@ namespace SW2URDF.UI
             }
 
             Size requestedMinimum = MinimumSize;
-            int nonClientWidth = Math.Max(0, Width - ClientSize.Width);
-            int nonClientHeight = Math.Max(0, Height - ClientSize.Height);
-            Size maximumClient = new Size(
-                Math.Max(1, workingArea.Width - nonClientWidth),
-                Math.Max(1, workingArea.Height - nonClientHeight));
-
             MinimumSize = Size.Empty;
-            ClientSize = new Size(
-                Math.Min(ClientSize.Width, maximumClient.Width),
-                Math.Min(ClientSize.Height, maximumClient.Height));
+            // Bound the outer window directly; scaled non-client metrics can change after a handle is created.
+            Size = new Size(Math.Min(Width, workingArea.Width), Math.Min(Height, workingArea.Height));
             MinimumSize = new Size(
                 Math.Min(requestedMinimum.Width, workingArea.Width),
                 Math.Min(requestedMinimum.Height, workingArea.Height));
@@ -268,14 +306,17 @@ namespace SW2URDF.UI
 
         internal void LoadSettings(
             UsdSimulationProfile settings,
-            IEnumerable<OpenUsdJointDescriptor> joints)
+            IEnumerable<OpenUsdJointDescriptor> joints,
+            SimulationProfile simulation = null)
         {
             loadingSettings = true;
             jointDriveGrid.SuspendLayout();
             try
             {
+                bool restoreDrafts = appliedSettingsKey != null && appliedSettingsKey == SettingsKey(settings, simulation);
                 Settings = ExportTargetOptions.CloneUsdSimulation(settings);
-                SelectChoice(baseModeComboBox, Settings.BaseMode, "source");
+                SimulationSettings = ExportTargetOptions.CloneSimulation(simulation);
+                SelectChoice(baseModeComboBox, simulation == null ? "source" : simulation.BaseMode, "source");
                 SelectChoice(robotTypeComboBox, Settings.RobotType, "default");
                 selfCollisionCheckBox.Checked = Settings.AllowSelfCollision;
                 Dictionary<string, UsdJointDriveProfile> configured =
@@ -284,32 +325,57 @@ namespace SW2URDF.UI
                         .GroupBy(item => item.Joint, StringComparer.Ordinal)
                         .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
-                List<DataGridViewRow> rows = new List<DataGridViewRow>();
+                Dictionary<string, JointDriveIntent> intents =
+                    (simulation == null ? new List<JointDriveIntent>() : simulation.JointDrives ?? new List<JointDriveIntent>())
+                        .Where(item => item != null && !String.IsNullOrWhiteSpace(item.Joint))
+                        .GroupBy(item => item.Joint, StringComparer.Ordinal)
+                        .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+                Dictionary<string, MjcfJointDriveProfile> mjcf =
+                    (simulation == null || simulation.Mjcf == null ? new List<MjcfJointDriveProfile>() :
+                        simulation.Mjcf.JointDrives ?? new List<MjcfJointDriveProfile>())
+                        .Where(item => item != null && !String.IsNullOrWhiteSpace(item.Joint))
+                        .GroupBy(item => item.Joint, StringComparer.Ordinal)
+                        .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+                jointDriveGrid.Rows.Clear();
+                jointIntentGrid.Rows.Clear();
+                mjcfDriveGrid.Rows.Clear();
                 foreach (OpenUsdJointDescriptor joint in
-                    joints ?? Enumerable.Empty<OpenUsdJointDescriptor>())
+                    (joints ?? Enumerable.Empty<OpenUsdJointDescriptor>())
+                        .Where(item => item != null && !String.IsNullOrWhiteSpace(item.Name))
+                        .GroupBy(item => item.Name, StringComparer.Ordinal).Select(group => group.First()))
                 {
                     UsdJointDriveProfile drive;
                     configured.TryGetValue(joint.Name ?? String.Empty, out drive);
-                    DataGridViewRow row = new DataGridViewRow();
-                    row.CreateCells(
-                        jointDriveGrid,
-                        joint.Name,
-                        joint.Type,
-                        DriveModeDisplay(drive == null ? "passive" : drive.Mode),
-                        FormatOptional(drive == null ? null : drive.Stiffness),
-                        FormatOptional(drive == null ? null : drive.Damping),
-                        FormatOptional(joint.EffortLimit),
-                        FormatOptional(joint.VelocityLimit));
-                    rows.Add(row);
-                }
-                jointDriveGrid.Rows.Clear();
-                if (rows.Count > 0)
-                {
-                    jointDriveGrid.Rows.AddRange(rows.ToArray());
-                }
-                foreach (DataGridViewRow row in jointDriveGrid.Rows)
-                {
-                    UpdateGainCellState(row);
+                    JointDriveIntent intent;
+                    intents.TryGetValue(joint.Name, out intent);
+                    MjcfJointDriveProfile mjcfDrive;
+                    mjcf.TryGetValue(joint.Name, out mjcfDrive);
+                    string mode = !CanDrive(joint) ? "passive" : intent != null ? intent.Mode :
+                        simulation == null && drive != null ? drive.Mode : "passive";
+                    foreach (DataGridView grid in new[] { jointIntentGrid, jointDriveGrid, mjcfDriveGrid })
+                    {
+                        bool isMjcf = grid == mjcfDriveGrid;
+                        int index = grid.Rows.Add(joint.Name, joint.Type, DriveModeDisplay(mode),
+                            FormatOptional(isMjcf ? (mjcfDrive == null ? null : mjcfDrive.Stiffness) : (drive == null ? null : drive.Stiffness)),
+                            FormatOptional(isMjcf ? (mjcfDrive == null ? null : mjcfDrive.Damping) : (drive == null ? null : drive.Damping)),
+                            FormatOptional(joint.EffortLimit), FormatOptional(joint.VelocityLimit));
+                        DataGridViewRow row = grid.Rows[index];
+                        row.Tag = joint;
+                        if (isMjcf)
+                        {
+                            row.Cells["maxForceColumn"].Value = FormatOptional(mjcfDrive == null ? null : mjcfDrive.MaxForce);
+                        }
+                        string[] draft;
+                        if (restoreDrafts && grid != jointIntentGrid &&
+                            (isMjcf ? mjcfGainDrafts : usdGainDrafts).TryGetValue(joint.Name, out draft))
+                        {
+                            row.Cells["stiffnessColumn"].Value = draft[0];
+                            row.Cells["dampingColumn"].Value = draft[1];
+                            if (isMjcf) row.Cells["maxForceColumn"].Value = draft[2];
+                        }
+                        SetCellEditable(row.Cells["driveModeColumn"], grid == jointIntentGrid && CanDrive(joint));
+                        UpdateGainCellState(row);
+                    }
                 }
             }
             finally
@@ -322,11 +388,28 @@ namespace SW2URDF.UI
 
         internal bool TryCaptureSettings(out UsdSimulationProfile settings)
         {
-            settings = new UsdSimulationProfile
+            SimulationProfile simulation;
+            return TryCaptureSettings(out settings, out simulation);
+        }
+
+        internal bool TryCaptureSettings(out UsdSimulationProfile settings, out SimulationProfile simulation)
+        {
+            jointIntentGrid.EndEdit();
+            jointDriveGrid.EndEdit();
+            mjcfDriveGrid.EndEdit();
+            simulation = new SimulationProfile
             {
                 BaseMode = SelectedValue(baseModeComboBox, "source"),
+                JointDrives = new List<JointDriveIntent>(),
+                Mjcf = new MjcfSimulationProfile { JointDrives = new List<MjcfJointDriveProfile>() }
+            };
+            settings = new UsdSimulationProfile
+            {
+                // A shared source choice must not rewrite the legacy target's base behavior.
+                BaseMode = Settings.BaseMode,
                 RobotType = SelectedValue(robotTypeComboBox, "default"),
-                AllowSelfCollision = selfCollisionCheckBox.Checked
+                AllowSelfCollision = selfCollisionCheckBox.Checked,
+                GainUnits = Settings.GainUnits
             };
             bool valid = true;
             foreach (DataGridViewRow row in jointDriveGrid.Rows)
@@ -334,6 +417,9 @@ namespace SW2URDF.UI
                 string mode = DriveModeValue(Convert.ToString(
                     row.Cells["driveModeColumn"].Value,
                     CultureInfo.CurrentCulture));
+                if (!CanDrive(row.Tag as OpenUsdJointDescriptor)) mode = "passive";
+                string jointName = Convert.ToString(row.Cells["jointNameColumn"].Value, CultureInfo.CurrentCulture);
+                simulation.JointDrives.Add(new JointDriveIntent { Joint = jointName, Mode = mode });
                 if (mode == "passive")
                 {
                     ClearGainErrors(row);
@@ -347,7 +433,7 @@ namespace SW2URDF.UI
                     bool stiffnessValid = TryReadGain(
                         row,
                         "stiffnessColumn",
-                        out stiffness);
+                        out stiffness, true);
                     bool dampingValid = TryReadGain(
                         row,
                         "dampingColumn",
@@ -357,13 +443,12 @@ namespace SW2URDF.UI
                 else if (mode == "velocity")
                 {
                     DataGridViewCell stiffnessCell = row.Cells["stiffnessColumn"];
-                    stiffnessCell.Value = "0";
                     stiffnessCell.ErrorText = String.Empty;
                     stiffness = 0.0;
                     rowValid = TryReadGain(
                         row,
                         "dampingColumn",
-                        out damping);
+                        out damping, true);
                 }
                 else
                 {
@@ -384,26 +469,87 @@ namespace SW2URDF.UI
                     Damping = damping
                 });
             }
+            foreach (DataGridViewRow row in mjcfDriveGrid.Rows)
+            {
+                string mode = DriveModeValue(Convert.ToString(row.Cells["driveModeColumn"].Value));
+                if (!CanDrive(row.Tag as OpenUsdJointDescriptor) || mode == "passive")
+                {
+                    ClearGainErrors(row);
+                    row.Cells["maxForceColumn"].ErrorText = String.Empty;
+                    continue;
+                }
+                double? stiffness = null;
+                double? damping = null;
+                double? maxForce;
+                bool rowValid = true;
+                ClearGainErrors(row);
+                if (mode == "position")
+                {
+                    rowValid &= TryReadGain(row, "stiffnessColumn", out stiffness, true);
+                    rowValid &= TryReadGain(row, "dampingColumn", out damping);
+                }
+                else if (mode == "velocity")
+                {
+                    stiffness = 0.0;
+                    rowValid &= TryReadGain(row, "dampingColumn", out damping, true);
+                }
+                rowValid &= TryReadGain(row, "maxForceColumn", out maxForce, true);
+                valid &= rowValid;
+                if (rowValid)
+                {
+                    simulation.Mjcf.JointDrives.Add(new MjcfJointDriveProfile
+                    {
+                        Joint = Convert.ToString(row.Cells["jointNameColumn"].Value),
+                        Stiffness = stiffness, Damping = damping, MaxForce = maxForce
+                    });
+                }
+            }
             return valid;
         }
 
         private void ConfirmButtonClick(object sender, EventArgs e)
         {
             UsdSimulationProfile settings;
-            if (!TryCaptureSettings(out settings))
+            SimulationProfile simulation;
+            if (!TryCaptureSettings(out settings, out simulation))
             {
+                targetTabs.SelectedIndex = jointDriveGrid.Rows.Cast<DataGridViewRow>().Any(
+                    row => row.Cells.Cast<DataGridViewCell>().Any(cell => !String.IsNullOrEmpty(cell.ErrorText))) ? 0 : 1;
                 MessageBox.Show(
                     this,
                     ChineseUiText.Translate(
-                        "Stiffness and damping must be blank or finite non-negative numbers.",
-                        "刚度和阻尼必须留空，或填写有限的非负数。"),
+                        "Use blank or finite SI values. Position stiffness, velocity damping and max force must be positive; position damping may be zero. Check both target tabs.",
+                        "可留空或填写有限 SI 数值。位置刚度、速度阻尼及最大力矩/力须大于零；位置阻尼可为零。请检查两个目标页。"),
                     Text,
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
                 return;
             }
             Settings = settings;
+            SimulationSettings = simulation;
+            appliedSettingsKey = SettingsKey(settings, simulation);
+            RememberGainDrafts(jointDriveGrid, usdGainDrafts);
+            RememberGainDrafts(mjcfDriveGrid, mjcfGainDrafts);
             DialogResult = DialogResult.OK;
+        }
+
+        private static string SettingsKey(UsdSimulationProfile usd, SimulationProfile simulation)
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(new object[] { usd, simulation });
+        }
+
+        private static void RememberGainDrafts(DataGridView grid, Dictionary<string, string[]> drafts)
+        {
+            drafts.Clear();
+            foreach (DataGridViewRow row in grid.Rows)
+            {
+                drafts[Convert.ToString(row.Cells["jointNameColumn"].Value)] = new[]
+                {
+                    Convert.ToString(row.Cells["stiffnessColumn"].Value),
+                    Convert.ToString(row.Cells["dampingColumn"].Value),
+                    grid.Columns.Contains("maxForceColumn") ? Convert.ToString(row.Cells["maxForceColumn"].Value) : null
+                };
+            }
         }
 
         private DataGridView CreateJointDriveGrid()
@@ -445,13 +591,13 @@ namespace SW2URDF.UI
             mode.Items.AddRange(DriveModeDisplays());
             grid.Columns.Add(mode);
             grid.Columns.Add(CreateTextColumn(
-                "stiffnessColumn", ChineseUiText.Translate("Stiffness", "刚度"), 95, 80, false));
+                "stiffnessColumn", ChineseUiText.Translate("Stiffness (SI)", "刚度 (SI)"), 120, 105, false));
             grid.Columns.Add(CreateTextColumn(
-                "dampingColumn", ChineseUiText.Translate("Damping", "阻尼"), 95, 80, false));
+                "dampingColumn", ChineseUiText.Translate("Damping (SI)", "阻尼 (SI)"), 120, 105, false));
             grid.Columns.Add(CreateTextColumn(
-                "effortLimitColumn", ChineseUiText.Translate("Effort limit", "力矩/力限值"), 105, 90, true));
+                "effortLimitColumn", ChineseUiText.Translate("Effort (N*m / N)", "力矩/力 (N*m / N)"), 140, 125, true));
             grid.Columns.Add(CreateTextColumn(
-                "velocityLimitColumn", ChineseUiText.Translate("Velocity limit", "速度限值"), 105, 90, true));
+                "velocityLimitColumn", ChineseUiText.Translate("Speed (rad/s / m/s)", "速度 (rad/s / m/s)"), 145, 130, true));
             grid.CurrentCellDirtyStateChanged += delegate
             {
                 if (grid.IsCurrentCellDirty)
@@ -464,7 +610,7 @@ namespace SW2URDF.UI
                 if (!loadingSettings && args.RowIndex >= 0 &&
                     args.ColumnIndex == grid.Columns["driveModeColumn"].Index)
                 {
-                    UpdateGainCellState(grid.Rows[args.RowIndex]);
+                    SynchronizeDriveMode(grid.Rows[args.RowIndex]);
                 }
             };
             grid.DataError += delegate(object sender, DataGridViewDataErrorEventArgs args)
@@ -554,16 +700,55 @@ namespace SW2URDF.UI
             string mode = DriveModeValue(Convert.ToString(
                 row.Cells["driveModeColumn"].Value,
                 CultureInfo.CurrentCulture));
-            bool position = mode == "position";
-            bool velocity = mode == "velocity";
+            bool active = CanDrive(row.Tag as OpenUsdJointDescriptor);
+            bool position = active && mode == "position";
+            bool velocity = active && mode == "velocity";
             DataGridViewCell stiffness = row.Cells["stiffnessColumn"];
             DataGridViewCell damping = row.Cells["dampingColumn"];
-            if (velocity)
-            {
-                stiffness.Value = "0";
-            }
             SetCellEditable(stiffness, position);
             SetCellEditable(damping, position || velocity);
+            if (row.DataGridView.Columns.Contains("maxForceColumn"))
+            {
+                SetCellEditable(row.Cells["maxForceColumn"], active && mode != "passive");
+            }
+            OpenUsdJointDescriptor joint = row.Tag as OpenUsdJointDescriptor;
+            bool linear = joint != null && joint.Type == "prismatic";
+            stiffness.ToolTipText = linear ? "N/m" : "N*m/rad";
+            damping.ToolTipText = linear ? "N*s/m" : "N*m*s/rad";
+            row.Cells["driveModeColumn"].ToolTipText = joint != null && joint.IsMimic
+                ? ChineseUiText.Translate("Mimic joint: no active drive", "Mimic 关节：无主动驱动") : String.Empty;
+        }
+
+        private static bool CanDrive(OpenUsdJointDescriptor joint)
+        {
+            return joint != null && !joint.IsMimic &&
+                (joint.Type == "revolute" || joint.Type == "continuous" || joint.Type == "prismatic");
+        }
+
+        private void SynchronizeDriveMode(DataGridViewRow source)
+        {
+            string name = Convert.ToString(source.Cells["jointNameColumn"].Value);
+            string mode = CanDrive(source.Tag as OpenUsdJointDescriptor)
+                ? DriveModeValue(Convert.ToString(source.Cells["driveModeColumn"].Value)) : "passive";
+            loadingSettings = true;
+            try
+            {
+                foreach (DataGridView grid in new[] { jointIntentGrid, jointDriveGrid, mjcfDriveGrid })
+                {
+                    foreach (DataGridViewRow row in grid.Rows)
+                    {
+                        if (String.Equals(name, Convert.ToString(row.Cells["jointNameColumn"].Value), StringComparison.Ordinal))
+                        {
+                            row.Cells["driveModeColumn"].Value = DriveModeDisplay(mode);
+                            UpdateGainCellState(row);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                loadingSettings = false;
+            }
         }
 
         private static void SetCellEditable(DataGridViewCell cell, bool editable)
@@ -609,7 +794,7 @@ namespace SW2URDF.UI
             {
                 return ChineseUiText.Translate("effort / Effort intent", "effort / 力矩或力意图");
             }
-            return ChineseUiText.Translate("passive / No active drive", "passive / 被动（无主动驱动）");
+            return ChineseUiText.Translate("passive / Passive", "passive / 被动");
         }
 
         private static string DriveModeValue(string display)
@@ -634,7 +819,8 @@ namespace SW2URDF.UI
         private static bool TryReadGain(
             DataGridViewRow row,
             string columnName,
-            out double? value)
+            out double? value,
+            bool positive = false)
         {
             string text = Convert.ToString(
                 row.Cells[columnName].Value,
@@ -651,10 +837,12 @@ namespace SW2URDF.UI
                  Double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed)) &&
                 !Double.IsNaN(parsed) &&
                 !Double.IsInfinity(parsed) &&
-                parsed >= 0.0;
+                (positive ? parsed > 0.0 : parsed >= 0.0);
             row.Cells[columnName].ErrorText = valid
                 ? String.Empty
-                : ChineseUiText.Translate("Enter a finite non-negative number.", "请输入有限的非负数。");
+                : positive
+                    ? ChineseUiText.Translate("Enter a finite positive number.", "请输入有限的正数。")
+                    : ChineseUiText.Translate("Enter a finite non-negative number.", "请输入有限的非负数。");
             value = valid ? (double?)parsed : null;
             return valid;
         }

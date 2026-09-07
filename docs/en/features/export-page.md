@@ -21,9 +21,11 @@ Even when exporting only OpenUSD or MJCF, use a clear name and license so the ou
 
 New export configurations select all four targets by default. Existing explicit selections and the URDF-only legacy path retain their choices. Select at least one; clearing unneeded formats reduces export time.
 
-## OpenUSD settings
+## Simulation settings
 
-After selecting OpenUSD, a settings button appears at the bottom between **Previous** and the export buttons. Open it only when you need to specify a fixed or floating base, self-collision, or Joint drive intent. The default settings can be exported directly.
+Common simulation settings select base behavior and passive, position, velocity, or effort intent for single-DOF joints. Separate OpenUSD and MuJoCo tabs hold target parameters: USD stiffness, damping, self-collision and robot type, or MJCF actuator gains and maximum force. Parameters are not borrowed across targets.
+
+Defaults create no actuators or active drives. Without common settings, legacy configuration is preserved. A common `source` base preserves the target's previous behavior; explicit `fixed` / `floating` and common joint modes override legacy target choices. These settings configure a robot asset, not a training world, rewards, policy, or training project.
 
 ## Two export buttons
 

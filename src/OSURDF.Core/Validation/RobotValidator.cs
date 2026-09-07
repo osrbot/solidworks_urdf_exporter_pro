@@ -101,6 +101,14 @@ namespace OSURDF.Core.Validation
             return report;
         }
 
+        public ValidationReport ValidateMjcfSimulation(RobotDocument robot)
+        {
+            if (robot == null) throw new ArgumentNullException(nameof(robot));
+            ValidationReport report = new ValidationReport();
+            SimulationProfileValidator.ValidateMjcf(robot, report, requireTarget: true);
+            return report;
+        }
+
         private static void ValidateHeader(RobotDocument robot, ValidationReport report)
         {
             if (robot.SchemaVersion != RobotSchema.CurrentVersion)
@@ -428,6 +436,8 @@ namespace OSURDF.Core.Validation
             ValidateIsaacProfile(robot, robot.Profiles.Isaac, report);
             ValidateIsaacLabProfile(robot, report);
             ValidateUsdSimulationProfile(robot, report);
+            SimulationProfileValidator.ValidateCommon(robot, report);
+            SimulationProfileValidator.ValidateMjcf(robot, report, requireTarget: false);
         }
 
         private static void ValidateUsdSimulationProfile(RobotDocument robot, ValidationReport report)

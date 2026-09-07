@@ -35,7 +35,11 @@ namespace SW2URDF.URDFExport
                 Ros2ControlProfileFile = targetName == "ROS 2" && source.ExportRos2
                     ? source.Ros2ControlProfileFile : string.Empty,
                 UsdSimulation = targetName == "OpenUSD" && source.ExportUsdAsset
-                    ? CloneTargetUsdSimulation(source.UsdSimulation) : new UsdSimulationProfile()
+                    ? CloneTargetUsdSimulation(source.UsdSimulation) : new UsdSimulationProfile(),
+                Simulation = targetName == "OpenUSD" || targetName == "MuJoCo MJCF"
+                    ? ExportTargetOptions.CloneSimulation(source.Simulation) : null,
+                UsdSimulationRestoreError = source.UsdSimulationRestoreError,
+                MjcfSimulationRestoreError = source.MjcfSimulationRestoreError
             };
         }
 
@@ -62,8 +66,26 @@ namespace SW2URDF.URDFExport
             profiles.IsaacLab.Enabled = false;
             profiles.UsdSimulation = options.ExportUsdAsset
                 ? CloneTargetUsdSimulation(options.UsdSimulation) : new UsdSimulationProfile();
-
+            profiles.Simulation = options.ExportUsdAsset || options.ExportMjcfAsset
+                ? ExportTargetOptions.CloneSimulation(options.Simulation) : null;
             Dictionary<string, string> errors = new Dictionary<string, string>(StringComparer.Ordinal);
+            // Validate stored USD values before projecting shared intent; projection must
+            // not turn a damaged target profile into an apparently valid one.
+            if (options.ExportUsdAsset && profiles.Simulation != null)
+            {
+                foreach (ValidationFinding finding in new RobotValidator().Validate(robot).Findings)
+                {
+                    if (finding.Severity == ValidationSeverity.Error &&
+                        IsTargetProfilePath(finding.Path, "$.profiles.usdSimulation"))
+                        AddTargetProfileError(errors, "OpenUSD", finding.ToString());
+                }
+            }
+            if (profiles.Simulation != null)
+            {
+                if (!options.ExportMjcfAsset) profiles.Simulation.Mjcf = null;
+                if (options.ExportUsdAsset && !errors.ContainsKey("OpenUSD")) ApplySharedUsdIntent(profiles);
+            }
+
             foreach (string target in new[] { "ROS 1", "ROS 2", "OpenUSD", "MuJoCo MJCF" })
             {
                 ExportTargetOptions single = ForTarget(options, target);
@@ -101,7 +123,17 @@ namespace SW2URDF.URDFExport
             foreach (ValidationFinding finding in new RobotValidator().Validate(robot).Findings)
             {
                 if (finding.Severity != ValidationSeverity.Error) continue;
-                if (options.ExportUsdAsset && IsTargetProfilePath(finding.Path, "$.profiles.usdSimulation"))
+                if (IsTargetProfilePath(finding.Path, "$.profiles.simulation.mjcf"))
+                {
+                    if (options.ExportMjcfAsset) AddTargetProfileError(errors, "MuJoCo MJCF", finding.ToString());
+                }
+                else if (IsTargetProfilePath(finding.Path, "$.profiles.simulation"))
+                {
+                    if (options.ExportUsdAsset) AddTargetProfileError(errors, "OpenUSD", finding.ToString());
+                    if (options.ExportMjcfAsset) AddTargetProfileError(errors, "MuJoCo MJCF", finding.ToString());
+                    profiles.Simulation = null;
+                }
+                else if (options.ExportUsdAsset && IsTargetProfilePath(finding.Path, "$.profiles.usdSimulation"))
                 {
                     AddTargetProfileError(errors, "OpenUSD", finding.ToString());
                 }
@@ -142,6 +174,33 @@ namespace SW2URDF.URDFExport
             if (errors.ContainsKey("ROS 1")) profiles.Ros1 = new Ros1ExportProfile();
             if (errors.ContainsKey("ROS 2")) profiles.Ros2 = new Ros2ExportProfile();
             if (errors.ContainsKey("OpenUSD")) profiles.UsdSimulation = new UsdSimulationProfile();
+            if (errors.ContainsKey("MuJoCo MJCF") && profiles.Simulation != null)
+                profiles.Simulation.Mjcf = null;
+        }
+
+        private static void ApplySharedUsdIntent(RobotProfiles profiles)
+        {
+            if (profiles.UsdSimulation == null || profiles.Simulation == null) return;
+            SimulationProfile common = profiles.Simulation;
+            if (common.BaseMode != "source") profiles.UsdSimulation.BaseMode = common.BaseMode;
+            if (common.JointDrives == null) return;
+            List<UsdJointDriveProfile> previous = profiles.UsdSimulation.JointDrives;
+            if (previous == null) return;
+            profiles.UsdSimulation.JointDrives = common.JointDrives
+                .Where(intent => intent == null || intent.Mode != "passive").Select(intent =>
+            {
+                if (intent == null) return null;
+                UsdJointDriveProfile gains = previous.FirstOrDefault(drive =>
+                    drive != null && string.Equals(drive.Joint, intent.Joint, StringComparison.Ordinal));
+                bool active = intent.Mode == "position" || intent.Mode == "velocity";
+                return new UsdJointDriveProfile
+                {
+                    Joint = intent.Joint,
+                    Mode = intent.Mode,
+                    Stiffness = !active ? null : intent.Mode == "velocity" ? 0.0 : gains?.Stiffness,
+                    Damping = active ? gains?.Damping : null
+                };
+            }).ToList();
         }
 
         private static UsdSimulationProfile CloneTargetUsdSimulation(UsdSimulationProfile source)

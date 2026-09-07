@@ -246,6 +246,66 @@ def _root_link_name(
 def _simulation_settings(
     robot: dict[str, Any], joints: Sequence[dict[str, Any]]
 ) -> dict[str, Any]:
+    # Validate the legacy target before applying overrides, including inactive data.
+    legacy = _usd_simulation_settings(robot, joints)
+    common = robot["profiles"].get("simulation")
+    if common is None:
+        return legacy
+    if not isinstance(common, dict):
+        raise AdapterError("profiles.simulation must be an object.")
+    base_mode = common.get("baseMode", "source")
+    if not isinstance(base_mode, str) or base_mode not in _USD_BASE_MODES:
+        raise AdapterError("profiles.simulation.baseMode must be source, fixed, or floating.")
+    raw_drives = common.get("jointDrives", [])
+    if not isinstance(raw_drives, list):
+        raise AdapterError("profiles.simulation.jointDrives must be an array.")
+    joint_types = {joint["name"]: joint.get("type") for joint in joints}
+    mimic_joints = {joint["name"] for joint in joints if joint.get("mimic") is not None}
+    overrides: dict[str, str] = {}
+    for index, entry in enumerate(raw_drives):
+        if not isinstance(entry, dict):
+            raise AdapterError(f"Common joint drive {index} must be an object.")
+        name, mode = entry.get("joint"), entry.get("mode")
+        if not isinstance(name, str) or not name.strip():
+            raise AdapterError(f"Common joint drive {index}.joint must be a non-empty string.")
+        if name in overrides:
+            raise AdapterError(f"Common joint drive is duplicated: {name!r}.")
+        if not isinstance(mode, str) or mode not in _USD_DRIVE_MODES:
+            raise AdapterError(f"Unsupported common joint drive mode: {mode!r}.")
+        if name not in joint_types:
+            raise AdapterError(f"Common joint drive references a missing Joint: {name!r}.")
+        if mode != "passive" and joint_types[name] not in {"continuous", "revolute", "prismatic"}:
+            raise AdapterError(f"Common joint drive references a non-one-DOF Joint: {name!r}.")
+        if mode != "passive" and name in mimic_joints:
+            raise AdapterError(f"Mimic Joint cannot have an active common drive intent: {name!r}.")
+        overrides[name] = mode
+
+    profile = dict(robot["profiles"].get("usdSimulation", {}))
+    if base_mode != "source":
+        profile["baseMode"] = base_mode
+    gains_by_name = {entry["joint"]: entry for entry in profile.get("jointDrives", [])}
+    drives = []
+    for name, mode in overrides.items():
+        if mode == "passive":
+            continue
+        drive = {"joint": name, "mode": mode}
+        for key in ("stiffness", "damping"):
+            if key in gains_by_name.get(name, {}):
+                drive[key] = gains_by_name[name][key]
+        if mode == "effort":
+            drive.pop("stiffness", None)
+            drive.pop("damping", None)
+        elif mode == "velocity":
+            drive["stiffness"] = 0.0
+        drives.append(drive)
+    profile["jointDrives"] = drives
+    resolved = {**robot, "profiles": {**robot["profiles"], "usdSimulation": profile}}
+    return _usd_simulation_settings(resolved, joints)
+
+
+def _usd_simulation_settings(
+    robot: dict[str, Any], joints: Sequence[dict[str, Any]]
+) -> dict[str, Any]:
     schema_version = robot.get("schemaVersion")
     if (
         not isinstance(schema_version, int)

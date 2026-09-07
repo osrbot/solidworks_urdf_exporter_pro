@@ -15,7 +15,7 @@ using Xunit;
 
 namespace OSURDF.Core.Tests;
 
-public sealed class MjcfAssetExporterTests : IDisposable
+public sealed partial class MjcfAssetExporterTests : IDisposable
 {
     private readonly string temporaryDirectory = Path.Combine(
         Path.GetTempPath(),

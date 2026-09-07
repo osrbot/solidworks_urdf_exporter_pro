@@ -19,4 +19,24 @@ The adapter deliberately rejects 3DXML input. Select STL in the exporter for
 USD or MJCF output; silently dropping visual geometry would be worse than an
 actionable export error.
 
+Optional `profiles.simulation` supplies common `baseMode` and `jointDrives`
+(`joint`, `mode`: passive/position/velocity/effort). Missing or null means legacy
+behavior; `source` preserves the USD base choice. Explicit common base/modes
+override `usdSimulation` choices. When common settings are present, their drive
+list is authoritative: unlisted joints are passive and an empty list clears all
+drives. Legacy entries supply gains only. Active mimic intents are rejected.
+USD gains, robot type and self-collision remain target-specific;
+`simulation.mjcf` is owned by the MJCF exporter, not interpreted by this adapter.
+Legacy data is validated before overrides, so overrides cannot hide malformed
+values. Common passive entries accept any existing joint (including fixed/mimic),
+are checked for duplicates, and remove matching USD drive entries entirely.
+Direct legacy USD drives still require single-DOF joints. Effort overrides remove
+resolved gains; velocity zeroes stiffness.
+Angular SI gains retain the radians-to-degrees conversion; linear gains do not
+change. Effort remains runtime intent and an effort limit in the asset/report,
+without DriveAPI. Defaults add no active drives or training world.
+
+Run the Python tests using an existing OpenUSD-enabled runtime (no installation
+needed): `python -m unittest discover -s tools/usd_adapter/tests -v`.
+
 适配器会明确拒绝 3DXML 输入。导出 USD 或 MJCF 时应选择 STL；相比静默丢失可视几何，明确报错更可靠。

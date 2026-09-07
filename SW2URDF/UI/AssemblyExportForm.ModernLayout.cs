@@ -67,6 +67,10 @@ namespace SW2URDF.UI
         private OpenUsdSettingsDialog openUsdSettingsDialog;
         private UsdSimulationProfile modernUsdSimulationProfile =
             new UsdSimulationProfile();
+        private SimulationProfile modernSimulationProfile;
+        private bool modernSimulationRestoreFailed;
+        private string modernUsdSimulationRestoreError;
+        private string modernMjcfSimulationRestoreError;
         private TextBox modernMaterialIdTextBox;
         private TextBox modernPackageVersionTextBox;
         private TextBox modernPackageDescriptionTextBox;
@@ -1849,7 +1853,7 @@ namespace SW2URDF.UI
             }
             if (modernUsdSettingsButton != null)
             {
-                modernUsdSettingsButton.Enabled = modernUsdAssetCheckBox.Checked;
+                modernUsdSettingsButton.Enabled = modernUsdAssetCheckBox.Checked || modernMjcfAssetCheckBox.Checked;
             }
             SynchronizeAssetMeshFormatControls();
             UpdateRosPackageNameHintForTargetChange();
@@ -2073,8 +2077,8 @@ namespace SW2URDF.UI
                 Name = "modernUsdSettingsButton",
                 Enabled = true,
                 Text = ChineseUiText.Translate(
-                    "OpenUSD settings...",
-                    "OpenUSD 设置...")
+                    "Simulation settings...",
+                    "仿真设置...")
             };
             ConfigureModernFooterButton(
                 modernUsdSettingsButton,

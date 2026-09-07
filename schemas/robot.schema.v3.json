@@ -473,6 +473,44 @@
         }
       }
     },
+    "simulationProfile": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["baseMode", "jointDrives", "mjcf"],
+      "properties": {
+        "baseMode": { "enum": ["source", "fixed", "floating"] },
+        "jointDrives": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["joint", "mode"],
+            "properties": {
+              "joint": { "type": "string", "minLength": 1 },
+              "mode": { "enum": ["passive", "position", "velocity", "effort"] }
+            }
+          }
+        },
+        "mjcf": {
+          "type": ["object", "null"], "additionalProperties": false,
+          "required": ["jointDrives"],
+          "properties": {
+            "jointDrives": {
+              "type": "array",
+              "items": {
+                "type": "object", "additionalProperties": false,
+                "required": ["joint"],
+                "properties": {
+                  "joint": { "type": "string", "minLength": 1 },
+                  "stiffness": { "type": ["number", "null"], "minimum": 0 },
+                  "damping": { "type": ["number", "null"], "minimum": 0 },
+                  "maxForce": { "type": ["number", "null"], "exclusiveMinimum": 0 }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "profiles": {
       "type": "object",
       "additionalProperties": false,
@@ -483,7 +521,8 @@
         "ros1": { "$ref": "#/$defs/ros1Profile" },
         "isaac": { "$ref": "#/$defs/isaacProfile" },
         "isaacLab": { "$ref": "#/$defs/isaacLabProfile" },
-        "usdSimulation": { "$ref": "#/$defs/usdSimulationProfile" }
+        "usdSimulation": { "$ref": "#/$defs/usdSimulationProfile" },
+        "simulation": { "$ref": "#/$defs/simulationProfile" }
       }
     }
   }

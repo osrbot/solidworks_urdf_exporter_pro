@@ -403,6 +403,7 @@
     <Compile Include="Test\TestPropertyManager.cs" />
     <Compile Include="Test\TestROSFIles.cs" />
     <Compile Include="Test\TestSerialization.cs" />
+    <Compile Include="Test\TestSimulationSettingsRestore.cs" />
     <Compile Include="Test\TestLegacyConfigurationMigration.cs" />
     <Compile Include="Test\TestMigrationSafety.cs" />
     <Compile Include="Test\TestStlCoordinateTransform.cs" />

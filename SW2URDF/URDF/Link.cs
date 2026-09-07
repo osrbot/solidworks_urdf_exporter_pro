@@ -29,6 +29,10 @@ namespace SW2URDF.URDF
         [DataMember]
         public Link Parent;
 
+        // Root-owned, versioned settings envelope; null preserves legacy behavior.
+        [DataMember(EmitDefaultValue = false)]
+        public string SimulationSettingsJson;
+
         [DataMember]
         public List<Link> Children;
 
@@ -289,6 +293,8 @@ namespace SW2URDF.URDF
 
         private void SetExportSettings(Link externalLink)
         {
+            SimulationSettingsJson = Parent == null && externalLink.Parent == null
+                ? externalLink.SimulationSettingsJson : null;
             InertialEditing = externalLink.InertialEditing == null
                 ? null : externalLink.InertialEditing.Clone();
             STLQualityFine = externalLink.STLQualityFine;

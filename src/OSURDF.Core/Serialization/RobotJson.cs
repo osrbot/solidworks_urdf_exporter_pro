@@ -29,6 +29,9 @@ namespace OSURDF.Core.Serialization
             SortObjectProperty(profiles?["isaacLab"] as JObject, "jointPositions");
             SortObjectProperty(profiles?["isaacLab"] as JObject, "jointVelocities");
             SortObjectArrayProperty(profiles?["usdSimulation"] as JObject, "jointDrives", "joint");
+            JObject simulation = profiles?["simulation"] as JObject;
+            SortObjectArrayProperty(simulation, "jointDrives", "joint");
+            SortObjectArrayProperty(simulation?["mjcf"] as JObject, "jointDrives", "joint");
             return root.ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n";
         }
 
@@ -309,6 +312,8 @@ namespace OSURDF.Core.Serialization
 
         private static void ValidateTokenTypes(JToken source, JToken canonical, string path)
         {
+            if (source?.Type == JTokenType.Null &&
+                (path == "$.profiles.simulation" || path == "$.profiles.simulation.mjcf")) return;
             if (source == null || canonical == null)
             {
                 throw new InvalidDataException(
@@ -615,6 +620,22 @@ namespace OSURDF.Core.Serialization
                 usdSimulation["jointDrives"],
                 "$.profiles.usdSimulation.jointDrives",
                 "joint", "mode");
+
+            JToken simulationToken = profiles["simulation"];
+            if (simulationToken != null && simulationToken.Type != JTokenType.Null)
+            {
+                JObject simulation = RequireObject(simulationToken, "$.profiles.simulation");
+                RequireProperties(simulation, "$.profiles.simulation", "baseMode", "jointDrives", "mjcf");
+                if (simulation["jointDrives"] != null)
+                    ValidateProfileObjectArray(simulation["jointDrives"], "$.profiles.simulation.jointDrives", "joint", "mode");
+                JToken mjcfToken = simulation["mjcf"];
+                if (mjcfToken != null && mjcfToken.Type != JTokenType.Null)
+                {
+                    JObject mjcf = RequireObject(mjcfToken, "$.profiles.simulation.mjcf");
+                    RequireProperties(mjcf, "$.profiles.simulation.mjcf", "jointDrives");
+                    ValidateProfileObjectArray(mjcf["jointDrives"], "$.profiles.simulation.mjcf.jointDrives", "joint");
+                }
+            }
         }
 
         private static void ValidateProfileObjectArray(JToken token, string path, params string[] required)
