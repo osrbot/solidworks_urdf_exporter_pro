@@ -33,11 +33,14 @@ namespace SW2URDF.UI
             buttonResetInertia = new Button
             {
                 Name = "buttonResetInertia", AutoSize = true,
-                Text = ChineseUiText.Translate("Restore SW values", "恢复 SW 值"),
+                Text = ChineseUiText.Translate("Clear Link calibration and edits", "清除 Link 校准与手动修改"),
                 Margin = new Padding(0), Padding = new Padding(8, 2, 8, 2)
             };
             inertialInputErrors = new ErrorProvider { ContainerControl = this, BlinkStyle = ErrorBlinkStyle.NeverBlink };
             inertialEditingToolTip = new ToolTip();
+            inertialEditingToolTip.SetToolTip(buttonResetInertia, ChineseUiText.Translate(
+                "Discard this Link's mass, COM and inertia edits and read SolidWorks effective properties. SolidWorks properties are not modified.",
+                "清除此 Link 的质量、质心和惯性修改，重新读取 SolidWorks 有效属性；不会修改 SolidWorks 的质量属性。"));
             row.Controls.Add(checkBoxCalibrateInertia);
             row.Controls.Add(buttonResetInertia);
             checkBoxCalibrateInertia.CheckedChanged += CalibrateInertiaCheckedChanged;
@@ -142,18 +145,16 @@ namespace SW2URDF.UI
             {
                 bool available = link != null && !link.isFixedFrame;
                 var state = available ? InertialEditingPolicy.EnsureSource(link) : null;
-                checkBoxCalibrateInertia.Enabled = available && InertialEditingPolicy.CanCalibrate(link);
-                checkBoxCalibrateInertia.Checked = checkBoxCalibrateInertia.Enabled && !state.CalibrationDisabled;
+                checkBoxCalibrateInertia.Enabled = available &&
+                    (InertialEditingPolicy.CanEnableCalibration(link) || Exporter != null);
+                checkBoxCalibrateInertia.Checked = available && InertialEditingPolicy.CanCalibrate(link) && !state.CalibrationDisabled;
                 buttonResetInertia.Enabled = available;
                 inertialEditingToolTip.SetToolTip(checkBoxCalibrateInertia,
-                    state != null && state.LegacyValuesPreserved
-                    ? ChineseUiText.Translate("This configuration did not record the inertia source. Existing values are preserved. Restore SW values before using automatic calibration.",
-                        "旧配置未记录惯性来源，现保留原数值。点击恢复 SW 值后，可使用自动质量校准。")
-                    : state != null && (state.TensorEdited || state.SourceHasInertiaOverride)
-                    ? ChineseUiText.Translate("Explicit inertia is preserved. Restore SW values to discard manual edits.",
-                        "保留已指定的惯性矩阵，不自动缩放。恢复 SW 值可撤销插件中的手动修改。")
+                    available && InertialEditingPolicy.NeedsCalibrationConfirmation(link)
+                    ? ChineseUiText.Translate("Enable to use SolidWorks inertia as the calibration source, keeping the entered Link mass. Replacing explicit inertia requires confirmation. SolidWorks properties are not modified.",
+                        "勾选后使用 SolidWorks 惯性作为校准基准，保留输入的 Link 质量；替换已指定的惯性需确认，不修改 SolidWorks 属性。")
                     : ChineseUiText.Translate("Keep the source mass distribution; scale the full tensor by measured/source mass. COM and equivalent cuboid dimensions stay unchanged.",
-                        "保留原质量分布，完整惯性矩阵按实测质量/原质量同比缩放，质心和等效长方体尺寸不变。"));
+                        "仅校准此 Link：惯性矩阵按实测质量/源质量同比缩放；保留质量分布，等效长方体尺寸不变，不修改 SolidWorks 属性。"));
             }
             finally { updatingInertialInputs = previous; }
         }
@@ -191,9 +192,44 @@ namespace SW2URDF.UI
             bool enabled = checkBoxCalibrateInertia.Checked;
             if (!CommitInertialInputs(node.Link)) return;
             refreshInertiaAfterEdit |= inertiaPreview != null && inertiaPreview.IsVisible;
-            InertialEditingPolicy.SetCalibration(node.Link, enabled);
-            FillEffectiveInertialInputs(node.Link);
-            RefreshEditedInertiaPreview();
+            try
+            {
+                TryChangeInertiaCalibration(node.Link, enabled,
+                    () => MessageBox.Show(this, ChineseUiText.Translate(
+                        "Use SolidWorks inertia as the calibration source? This replaces the current Link inertia tensor and keeps the entered mass and COM. SolidWorks properties will not be modified.",
+                        "使用 SolidWorks 惯性作为校准基准？这会替换当前 Link 的惯性矩阵，保留输入的质量和质心，不会修改 SolidWorks 的质量属性。"),
+                        ChineseUiText.Translate("Calibrate Link inertia", "校准 Link 惯性"),
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes,
+                    link => Exporter.ComputeInertialProperties(link));
+                FillEffectiveInertialInputs(node.Link);
+                RefreshEditedInertiaPreview();
+            }
+            catch (Exception error)
+            {
+                UpdateInertialEditingControls(node.Link);
+                MessageBox.Show(this, error.Message, ChineseUiText.Translate("Calibrate Link inertia", "校准 Link 惯性"));
+            }
+        }
+
+        internal static bool TryChangeInertiaCalibration(Link link, bool enabled,
+            Func<bool> confirmReplacement, Action<Link> readSource)
+        {
+            // Read into a detached draft so a failed read cannot partially replace user edits.
+            var candidate = link.Clone();
+            if (enabled && InertialEditingPolicy.NeedsCalibrationConfirmation(candidate) && !confirmReplacement())
+                return false;
+            if (enabled && !InertialEditingPolicy.CanEnableCalibration(candidate))
+            {
+                var state = InertialEditingPolicy.EnsureSource(candidate);
+                state.TensorEdited = state.LegacyValuesPreserved = false;
+                state.MassEdited = true;
+                state.CalibrationDisabled = true;
+                readSource(candidate);
+            }
+            InertialEditingPolicy.SetCalibration(candidate, enabled);
+            link.Inertial.SetElement(candidate.Inertial);
+            link.InertialEditing = candidate.InertialEditing;
+            return true;
         }
 
         private void ResetInertiaClick(object sender, EventArgs args)
@@ -214,7 +250,7 @@ namespace SW2URDF.UI
             catch (Exception error)
             {
                 node.Link.SetElement(snapshot);
-                MessageBox.Show(this, error.Message, ChineseUiText.Translate("Restore SW values", "恢复 SW 值"));
+                MessageBox.Show(this, error.Message, ChineseUiText.Translate("Clear Link calibration and edits", "清除 Link 校准与手动修改"));
             }
         }
     }

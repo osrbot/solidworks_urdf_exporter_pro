@@ -53,7 +53,7 @@ namespace SW2URDF.Test
         }
 
         [Fact]
-        public void ManualTensorDisablesAutomaticCalibrationAndKeepsTypedValue()
+        public void ManualTensorKeepsTypedValueButAllowsExplicitCalibration()
         {
             using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
             {
@@ -64,8 +64,139 @@ namespace SW2URDF.Test
                 Assert.True((bool)Invoke(form, "CommitInertialInputs", link));
                 Assert.Equal(.2, link.Inertial.Inertia.Ixx);
                 var checkbox = (CheckBox)form.Controls.Find("checkBoxCalibrateInertia", true).Single();
-                Assert.False(checkbox.Enabled);
+                Assert.True(checkbox.Enabled);
                 Assert.False(checkbox.Checked);
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ExplicitCalibrationKeepsEnteredMassAndUpdatesVisibleTensor(bool legacy)
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                var link = TestInertialEditing.SourceLink();
+                if (legacy)
+                {
+                    link.InertialEditing = null;
+                    InertialEditingPolicy.EnsureSource(link);
+                    InertialEditingPolicy.ApplySource(link, TestInertialEditing.SourceLink().Inertial, false);
+                }
+                Invoke(form, "FillEffectiveInertialInputs", link);
+                Input(form, "textBoxMass").Text = "5";
+                Input(form, "textBoxIxx").Text = "0.2";
+                Assert.True((bool)Invoke(form, "CommitInertialInputs", link));
+                int confirmations = 0;
+                Assert.True(AssemblyExportForm.TryChangeInertiaCalibration(link, true,
+                    () => { confirmations++; return true; }, _ => throw new Exception("Unnecessary CAD access")));
+                Invoke(form, "FillEffectiveInertialInputs", link);
+                Assert.Equal(1, confirmations);
+                Assert.Equal(5, link.Inertial.Mass.Value);
+                Assert.Equal(.45, link.Inertial.Inertia.Ixx, 12);
+                Assert.Equal(.45, Double.Parse(Input(form, "textBoxIxx").Text, URDFAttribute.URDFNumberFormat), 12);
+                Assert.True(((CheckBox)form.Controls.Find("checkBoxCalibrateInertia", true).Single()).Checked);
+                Assert.False(link.InertialEditing.LegacyValuesPreserved);
+                Assert.Equal(2, link.InertialEditing.Source.Mass.Value);
+                Assert.Equal(.18, link.InertialEditing.Source.Inertia.Ixx);
+            }
+        }
+
+        [Fact]
+        public void DecliningCalibrationPreservesAllEditsWithoutReadingCad()
+        {
+            var link = TestInertialEditing.SourceLink();
+            var edits = InertialEditingPolicy.Copy(link.Inertial);
+            edits.Mass.Value = 5;
+            edits.Inertia.Ixx = .2;
+            InertialEditingPolicy.ApplyExplicitValues(link, edits);
+            var state = link.InertialEditing;
+            Assert.False(AssemblyExportForm.TryChangeInertiaCalibration(link, true,
+                () => false, _ => throw new Exception("Must not read CAD after cancel")));
+            Assert.Same(state, link.InertialEditing);
+            Assert.Equal(5, link.Inertial.Mass.Value);
+            Assert.Equal(.2, link.Inertial.Inertia.Ixx);
+        }
+
+        [Fact]
+        public void LegacyWithoutBaselineReadsDetachedSourceAndKeepsMeasuredMass()
+        {
+            var link = new Link();
+            link.Inertial.SetElement(TestInertialEditing.SourceLink().Inertial);
+            link.Inertial.Mass.Value = 5;
+            int reads = 0;
+            Assert.True(AssemblyExportForm.TryChangeInertiaCalibration(link, true, () => true, draft =>
+            {
+                reads++;
+                Assert.NotSame(link, draft);
+                InertialEditingPolicy.ApplySource(draft, TestInertialEditing.SourceLink().Inertial, true);
+            }));
+            Assert.Equal(1, reads);
+            Assert.Equal(5, link.Inertial.Mass.Value);
+            Assert.Equal(.45, link.Inertial.Inertia.Ixx, 12);
+            Assert.True(link.InertialEditing.CalibrateExplicitSource);
+        }
+
+        [Fact]
+        public void FailedSourceReadLeavesLegacyMassAndTensorUntouched()
+        {
+            var link = new Link();
+            link.Inertial.SetElement(TestInertialEditing.SourceLink().Inertial);
+            link.Inertial.Mass.Value = 5;
+            Assert.Throws<InvalidOperationException>(() => AssemblyExportForm.TryChangeInertiaCalibration(
+                link, true, () => true, draft =>
+                {
+                    draft.Inertial.Mass.Value = 99;
+                    throw new InvalidOperationException("read failed");
+                }));
+            Assert.Null(link.InertialEditing);
+            Assert.Equal(5, link.Inertial.Mass.Value);
+            Assert.Equal(.18, link.Inertial.Inertia.Ixx);
+        }
+
+        [Fact]
+        public void OrdinaryMassCalibrationDoesNotRequireResetConfirmationOrCadAccess()
+        {
+            var link = TestInertialEditing.SourceLink();
+            InertialEditingPolicy.SetCalibration(link, false);
+            var edits = InertialEditingPolicy.Copy(link.Inertial);
+            edits.Mass.Value = 5;
+            InertialEditingPolicy.ApplyEdits(link, edits);
+            Assert.True(AssemblyExportForm.TryChangeInertiaCalibration(link, true,
+                () => throw new Exception("No confirmation needed"), _ => throw new Exception("No CAD access needed")));
+            Assert.Equal(5, link.Inertial.Mass.Value);
+            Assert.Equal(.45, link.Inertial.Inertia.Ixx, 12);
+        }
+
+        [Theory]
+        [InlineData("5", true)]
+        [InlineData("", false)]
+        public void CheckboxEventCommitsPendingMassAndReflectsActualCalibrationState(string mass, bool valid)
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                var link = TestInertialEditing.SourceLink();
+                InertialEditingPolicy.SetCalibration(link, false);
+                var tree = (TreeView)typeof(AssemblyExportForm).GetField("treeViewLinkProperties",
+                    BindingFlags.Instance | BindingFlags.NonPublic).GetValue(form);
+                tree.AfterSelect -= (TreeViewEventHandler)Delegate.CreateDelegate(typeof(TreeViewEventHandler),
+                    form, "TreeViewLinkPropertiesAfterSelect");
+                var node = new LinkNode(link);
+                tree.Nodes.Add(node);
+                tree.SelectedNode = node;
+                Invoke(form, "FillEffectiveInertialInputs", link);
+                Input(form, "textBoxMass").Text = mass;
+                var checkbox = (CheckBox)form.Controls.Find("checkBoxCalibrateInertia", true).Single();
+                checkbox.Checked = true;
+                Assert.Equal(valid, checkbox.Checked);
+                Assert.Equal(!valid, link.InertialEditing.CalibrationDisabled);
+                if (valid)
+                {
+                    Assert.Equal(5, link.Inertial.Mass.Value);
+                    Assert.Equal(.45, link.Inertial.Inertia.Ixx, 12);
+                    Assert.Equal(.45, Double.Parse(Input(form, "textBoxIxx").Text, URDFAttribute.URDFNumberFormat), 12);
+                }
+                else Assert.True(Double.IsNaN(link.Inertial.Mass.Value));
             }
         }
 

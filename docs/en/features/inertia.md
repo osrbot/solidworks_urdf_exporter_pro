@@ -24,15 +24,18 @@ tensor entry by 1.5 while preserving COM, principal directions, and equivalent c
 This assumes the source model's relative mass distribution is credible. Fix material distribution,
 ballast, and component placement in SolidWorks when that assumption is wrong.
 
-Explicitly entered tensors and SolidWorks inertia overrides are preserved, not automatically scaled.
-**Restore SW values** rereads current properties and discards edits made in the exporter. Preview
-and all export targets use the same final values. A measured mass differing from CAD is not itself
-an error; non-positive mass and physically invalid inertia still block export.
+Enter the measured total mass of the whole Link, which may contain several parts. Calibration is
+stored only in the exporter configuration; it never writes back part or assembly mass, materials,
+density, or SolidWorks override settings.
 
-Older configurations without source metadata keep their existing mass and tensor unchanged. Use
-**Restore SW values**, then enter measured mass, to opt into calibration from SW mass distribution.
+Enter mass and enable calibration directly; no reset is required. Legacy values, manual tensors,
+and explicit SW inertia overrides stay unchanged by default. Enabling calibration asks for confirmation
+before using SW inertia as the source, retaining the entered mass and COM. Declining keeps existing values.
 
-**Restore SW values** does not clear overrides in SolidWorks. An explicit SW inertia override still prevents automatic scaling after restoring.
+**Clear Link calibration and edits** discards the Link's mass, COM, and inertia edits and rereads SW
+effective properties. Valid mass edits and calibration changes refresh an open preview. Preview and
+all targets use the same final values; proportional calibration correctly keeps cuboid dimensions
+unchanged. Non-positive mass and physically invalid inertia still block export.
 
 ## Change the Link frame
 

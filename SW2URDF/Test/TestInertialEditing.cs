@@ -85,6 +85,59 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void ExplicitSwInertiaScalesOnlyAfterOptInAndKeepsSourceAndCuboid()
+        {
+            var link = SourceLink(true);
+            var sibling = SourceLink(true);
+            var source = InertialEditingPolicy.Copy(link.InertialEditing.Source);
+            Assert.True(InertiaEllipsoid.TryCreate(2, source.Inertia, out var before, out var error), error);
+            ChangeMass(link, 5);
+            Assert.Equal(.18, link.Inertial.Inertia.Ixx);
+            Assert.True(InertialEditingPolicy.NeedsCalibrationConfirmation(link));
+            InertialEditingPolicy.SetCalibration(link, true);
+            Assert.Equal(.45, link.Inertial.Inertia.Ixx, 12);
+            var snapshot = new MassPropertySnapshot(source.Mass.Value, source.Origin.GetXYZ(),
+                source.Inertia.GetMoment(), hasInertiaOverride: true);
+            Assert.All(ExportHelper.BuildEffectiveInertiaComparisonRows(link, snapshot), row => Assert.True(row.Passed));
+            Assert.Equal(source.Inertia.GetMoment(), link.InertialEditing.Source.Inertia.GetMoment());
+            Assert.Equal(2, link.InertialEditing.Source.Mass.Value);
+            Assert.Equal(2, sibling.Inertial.Mass.Value);
+            Assert.Equal(source.Origin.GetXYZ(), link.Inertial.Origin.GetXYZ());
+            Assert.True(InertiaEllipsoid.TryCreate(5, link.Inertial.Inertia, out var after, out error), error);
+            for (int i = 0; i < 3; i++) Assert.Equal(before.EquivalentBoxDimensions[i], after.EquivalentBoxDimensions[i], 12);
+            for (int i = 0; i < 5; i++)
+            {
+                InertialEditingPolicy.SetCalibration(link, false);
+                Assert.Equal(.18, link.Inertial.Inertia.Ixx);
+                InertialEditingPolicy.SetCalibration(link, true);
+                Assert.Equal(.45, link.Inertial.Inertia.Ixx, 12);
+            }
+            InertialEditingPolicy.Reset(link);
+            Assert.False(link.InertialEditing.CalibrateExplicitSource);
+            Assert.Equal(2, link.Inertial.Mass.Value);
+        }
+
+        [Fact]
+        public void ExplicitCalibrationConsentSurvivesSerializationAndFreshSourceRead()
+        {
+            var link = SourceLink(true);
+            ChangeMass(link, 5);
+            InertialEditingPolicy.SetCalibration(link, true);
+            using (var stream = new MemoryStream())
+            {
+                var serializer = new DataContractSerializer(typeof(Link));
+                serializer.WriteObject(stream, link);
+                stream.Position = 0;
+                var restored = (Link)serializer.ReadObject(stream);
+                Assert.True(restored.InertialEditing.CalibrateExplicitSource);
+                InertialEditingPolicy.ApplySource(restored, SourceLink(true).Inertial, true);
+                Assert.Equal(5, restored.Inertial.Mass.Value);
+                Assert.Equal(.45, restored.Inertial.Inertia.Ixx, 12);
+                Assert.False(InertialEditingPolicy.NeedsCalibrationConfirmation(restored));
+            }
+        }
+
+        [Fact]
         public void CalibrationCanBeDisabledAndRestoredWithoutDrift()
         {
             var link = SourceLink();
@@ -189,11 +242,14 @@ namespace SW2URDF.Test
                 row => row.Quantity == "principal_moments.triangle_inequality" && !row.Passed);
         }
 
-        [Fact]
-        public void UrdfAndAllTargetInputUseTheSameCalibratedValuesAsPreview()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void UrdfAndAllTargetInputUseTheSameCalibratedValuesAsPreview(bool explicitSource)
         {
-            var link = SourceLink();
+            var link = SourceLink(explicitSource);
             ChangeMass(link, 5);
+            if (explicitSource) InertialEditingPolicy.SetCalibration(link, true);
             string path = Path.Combine(Path.GetTempPath(), "calibrated-" + Guid.NewGuid().ToString("N") + ".urdf");
             try
             {

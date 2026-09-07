@@ -29,8 +29,22 @@ namespace SW2URDF.URDFExport
         internal static bool CanCalibrate(Link link)
         {
             var state = EnsureSource(link);
-            return !state.TensorEdited && !state.SourceHasInertiaOverride &&
+            return CanEnableCalibration(link) && !state.TensorEdited && !state.LegacyValuesPreserved &&
+                (!state.SourceHasInertiaOverride || state.CalibrateExplicitSource);
+        }
+
+        internal static bool CanEnableCalibration(Link link)
+        {
+            var state = EnsureSource(link);
+            return state.SourceIsSolidWorks && !state.FrameChangePending &&
                 IsPositiveFinite(state.Source.Mass.Value);
+        }
+
+        internal static bool NeedsCalibrationConfirmation(Link link)
+        {
+            var state = EnsureSource(link);
+            return !state.SourceIsSolidWorks || state.TensorEdited || state.LegacyValuesPreserved ||
+                (state.SourceHasInertiaOverride && !state.CalibrateExplicitSource);
         }
 
         internal static bool IsPositiveFinite(double value)
@@ -46,7 +60,7 @@ namespace SW2URDF.URDFExport
             if (state.OriginEdited) result.Origin.SetElement(edits.Origin);
             if (state.TensorEdited) result.Inertia.SetElement(edits.Inertia);
             else if (state.MassEdited && !state.CalibrationDisabled &&
-                !state.SourceHasInertiaOverride && IsPositiveFinite(source.Mass.Value) &&
+                (!state.SourceHasInertiaOverride || state.CalibrateExplicitSource) && IsPositiveFinite(source.Mass.Value) &&
                 IsPositiveFinite(result.Mass.Value))
             {
                 double factor = result.Mass.Value / source.Mass.Value;
@@ -98,6 +112,14 @@ namespace SW2URDF.URDFExport
         internal static void SetCalibration(Link link, bool enabled)
         {
             var state = EnsureSource(link);
+            if (enabled)
+            {
+                if (!CanEnableCalibration(link) || !IsPositiveFinite(link.Inertial.Mass.Value))
+                    throw new InvalidOperationException("A valid SolidWorks source and positive Link mass are required for calibration.");
+                // Explicit user opt-in replaces only the plugin tensor, never the CAD source.
+                state.TensorEdited = state.LegacyValuesPreserved = false;
+                state.CalibrateExplicitSource = state.SourceHasInertiaOverride;
+            }
             state.CalibrationDisabled = !enabled;
             link.Inertial.SetElement(Resolve(state, link.Inertial, state.Source));
         }
@@ -195,6 +217,7 @@ namespace SW2URDF.URDFExport
         {
             var state = EnsureSource(link);
             state.MassEdited = state.OriginEdited = state.TensorEdited = false;
+            state.LegacyValuesPreserved = state.CalibrateExplicitSource = false;
             state.CalibrationDisabled = false;
             link.Inertial.SetElement(state.Source);
         }

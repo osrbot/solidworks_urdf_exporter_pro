@@ -27,7 +27,7 @@ The exporter reads effective SolidWorks mass properties, including mass, center 
 
 Enter measured mass in kg and enable **Calibrate inertia with measured mass** to scale the full tensor by `measured mass / source mass`, preserving COM, principal directions, and equivalent cuboid dimensions. This assumes the source model's relative mass distribution is credible. Manually entered tensors and explicit SolidWorks inertia overrides are not automatically scaled.
 
-Older configurations without inertia source metadata keep their existing values without enabling calibration. To use SW properties as the source again, click **Restore SW values**, then enter measured mass. This discards edits made in the exporter but does not clear overrides in SolidWorks. Preview and all targets use the same final values; non-positive mass and physically invalid inertia still block export.
+Enter the total measured mass of the whole Link; it is never written back to SolidWorks parts or assemblies. Enable calibration directly. Legacy values, manual tensors, and SW inertia overrides require confirmation before calibration from the SW source, keeping entered mass and COM. **Clear Link calibration and edits** discards exporter edits without changing SW overrides; it is not a prerequisite for calibration. An open preview refreshes and uses the same final values as all targets. Non-positive mass and physically invalid inertia still block export.
 
 Initial **Preview and Export** preparation and pre-export inertia validation can still be slow. SolidWorks may temporarily stop responding during mass calculations. This remains a known limitation; temporary unresponsiveness alone does not establish that export has failed.
 

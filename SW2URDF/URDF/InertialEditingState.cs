@@ -10,6 +10,7 @@ namespace SW2URDF.URDF
         [DataMember] public Inertial Source;
         [DataMember] public bool SourceIsSolidWorks;
         [DataMember] public bool SourceHasInertiaOverride;
+        [DataMember(EmitDefaultValue = false)] public bool CalibrateExplicitSource;
         [DataMember] public bool MassEdited;
         [DataMember] public bool OriginEdited;
         [DataMember] public bool TensorEdited;

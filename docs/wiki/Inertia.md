@@ -54,13 +54,15 @@ This preserves COM, principal directions, and equivalent cuboid dimensions only 
 that the source relative mass distribution remains valid. Correct actual material and ballast
 distribution in SW when that assumption is wrong.
 
-Explicit manual tensors and SW inertia overrides are not automatically scaled. **Restore SW values**
-rereads current components and discards exporter edits. The final values are shared by the page,
-preview, and export; calibration choices are saved with the configuration.
+The measured value is the total mass of the whole Link, which may contain several parts. It affects
+only exporter configuration, preview, and output, never SW part or assembly mass, materials, density,
+or override settings.
 
-Restoring SW values does not remove overrides stored in SolidWorks. An explicit SW inertia override
-still prevents automatic tensor scaling. On older configurations with unknown inertia provenance,
-review the retained values or restore SW values before enabling calibration.
+Enter mass and enable calibration directly, without resetting first. Legacy values, manual tensors,
+and SW inertia overrides remain unchanged until calibration is explicitly confirmed. Confirmation
+uses SW inertia as the source while retaining entered mass and COM; declining preserves the values.
+**Clear Link calibration and edits** discards exporter edits and rereads effective SW properties.
+An open preview refreshes; the page, preview, and export share final values. Calibration choices persist.
 
 ## Sign Convention
 

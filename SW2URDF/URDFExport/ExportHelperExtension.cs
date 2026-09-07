@@ -750,7 +750,7 @@ namespace SW2URDF.URDFExport
                     state != null && state.MassEdited, state != null && state.OriginEdited,
                     state != null && state.TensorEdited, massProperty.HasInertiaOverride,
                     state != null && state.MassEdited && !state.CalibrationDisabled &&
-                    !state.TensorEdited && !massProperty.HasInertiaOverride)));
+                    !state.TensorEdited && (!massProperty.HasInertiaOverride || state.CalibrateExplicitSource))));
             return rows;
         }
 
