@@ -63,6 +63,7 @@ namespace SW2URDF.Test
                     return true;
                 });
             model.SetupGet(x => x.Extension).Returns(extension.Object);
+            model.Setup(x => x.GetCurrentCoordinateSystemName()).Returns(() => values[legacy]);
             extension.Setup(x => x.GetUserPreferenceString(legacy, It.IsAny<int>()))
                 .Returns<int, int>((id, option) => values[id]);
             extension.Setup(x => x.SetUserPreferenceString(legacy, It.IsAny<int>(), It.IsAny<string>()))
@@ -99,13 +100,147 @@ namespace SW2URDF.Test
             app.Setup(x => x.SetUserPreferenceStringValue(modern, String.Empty)).Returns(true);
             app.Setup(x => x.GetUserPreferenceStringValue(modern)).Returns(String.Empty);
             model.SetupGet(x => x.Extension).Returns(extension.Object);
+            model.Setup(x => x.GetCurrentCoordinateSystemName()).Returns(String.Empty);
             extension.Setup(x => x.SetUserPreferenceString(legacy, It.IsAny<int>(), String.Empty)).Returns(true);
             extension.Setup(x => x.GetUserPreferenceString(legacy, It.IsAny<int>())).Returns(String.Empty);
             var helper = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
             helper.iSwApp = app.Object;
             helper.ResetMeshExportCoordinateSystem(model.Object);
             app.VerifyAll();
+            model.VerifyAll();
             extension.VerifyAll();
+        }
+
+        [Theory]
+        [InlineData(false, true, "base_link", "", "", true)]
+        [InlineData(false, false, "base_link", "", "", true)]
+        [InlineData(true, true, "", "", "", true)]
+        [InlineData(false, false, "base_link", "base_link", "base_link", false)]
+        [InlineData(true, true, "", "base_link", "base_link", false)]
+        [InlineData(false, true, "base_link", "", "base_link", false)]
+        [InlineData(false, true, "base_link", "base_link", "", false)]
+        [InlineData(false, true, "base_link", "", null, false)]
+        [InlineData(false, true, "base_link", null, "", true)]
+        [InlineData(false, false, "base_link", null, "", false)]
+        public void MeshCoordinatesRequireTheEffectiveDocumentFrame(
+            bool accepted, bool documentAccepted, string global, string document, string current, bool valid)
+        {
+            var app = new Mock<ISldWorks>(MockBehavior.Strict);
+            var model = new Mock<ModelDoc2>(MockBehavior.Strict);
+            var extension = new Mock<ModelDocExtension>(MockBehavior.Strict);
+            int modern = (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem;
+            int legacy = (int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem;
+            app.Setup(x => x.SetUserPreferenceStringValue(modern, String.Empty)).Returns(accepted);
+            app.Setup(x => x.GetUserPreferenceStringValue(modern)).Returns(global);
+            model.SetupGet(x => x.Extension).Returns(extension.Object);
+            model.Setup(x => x.GetCurrentCoordinateSystemName()).Returns(current);
+            extension.Setup(x => x.SetUserPreferenceString(legacy, 0, String.Empty)).Returns(documentAccepted);
+            extension.Setup(x => x.GetUserPreferenceString(legacy, 0)).Returns(document);
+            var helper = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+            helper.iSwApp = app.Object;
+            if (valid)
+                helper.ResetMeshExportCoordinateSystem(model.Object);
+            else
+            {
+                var error = Assert.Throws<InvalidOperationException>(() => helper.ResetMeshExportCoordinateSystem(model.Object));
+                Assert.Contains("prepare", error.Message);
+                Assert.Contains("global=", error.Message);
+                Assert.Contains("document=", error.Message);
+                Assert.Contains("current=", error.Message);
+            }
+            app.VerifyAll();
+            model.VerifyAll();
+            extension.VerifyAll();
+        }
+
+        [Fact]
+        public void UnchangedGlobalCoordinateRestoresDespiteFalseSetterResult()
+        {
+            var app = new Mock<ISldWorks>();
+            var model = new Mock<ModelDoc2>();
+            var extension = new Mock<ModelDocExtension>();
+            int modern = (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem;
+            int legacy = (int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem;
+            string document = "base_link";
+            app.Setup(x => x.GetUserPreferenceStringValue(modern)).Returns("base_link");
+            app.Setup(x => x.SetUserPreferenceStringValue(modern, It.IsAny<string>())).Returns(false);
+            model.SetupGet(x => x.Extension).Returns(extension.Object);
+            model.Setup(x => x.GetCurrentCoordinateSystemName()).Returns(() => document);
+            extension.Setup(x => x.GetUserPreferenceString(legacy, 0)).Returns(() => document);
+            extension.Setup(x => x.SetUserPreferenceString(legacy, 0, It.IsAny<string>()))
+                .Returns<int, int, string>((id, option, value) => { document = value; return true; });
+            var helper = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+            helper.iSwApp = app.Object;
+            helper.ActiveSWModel = model.Object;
+            helper.SaveUserPreferences();
+            document = String.Empty;
+            helper.ResetUserPreferences();
+            Assert.Equal("base_link", document);
+            app.Verify(x => x.SetUserPreferenceStringValue(modern, It.IsAny<string>()), Times.Never);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void FailedCoordinateReadbackStillRestoresTheCapturedDocument(bool failCurrent)
+        {
+            var app = new Mock<ISldWorks>();
+            var model = new Mock<ModelDoc2>();
+            var extension = new Mock<ModelDocExtension>();
+            int modern = (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem;
+            int legacy = (int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem;
+            string document = "base_link";
+            bool fail = false;
+            var error = new System.Runtime.InteropServices.COMException("readback failed");
+            app.Setup(x => x.GetUserPreferenceStringValue(modern)).Returns("base_link");
+            app.Setup(x => x.SetUserPreferenceStringValue(modern, It.IsAny<string>())).Returns(false);
+            model.SetupGet(x => x.Extension).Returns(extension.Object);
+            model.Setup(x => x.GetCurrentCoordinateSystemName()).Returns(() =>
+            {
+                if (fail && failCurrent) throw error;
+                return document;
+            });
+            extension.Setup(x => x.GetUserPreferenceString(legacy, 0)).Returns(() =>
+            {
+                if (fail && !failCurrent) throw error;
+                return document;
+            });
+            extension.Setup(x => x.SetUserPreferenceString(legacy, 0, It.IsAny<string>()))
+                .Returns<int, int, string>((id, option, value) => { document = value; return true; });
+            var helper = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+            helper.iSwApp = app.Object;
+            helper.ActiveSWModel = model.Object;
+            helper.SaveUserPreferences();
+            fail = true;
+            Assert.Same(error, Assert.Throws<System.Runtime.InteropServices.COMException>(() =>
+                helper.ResetMeshExportCoordinateSystem(model.Object)));
+            Assert.Equal(String.Empty, document);
+            fail = false;
+            helper.ActiveSWModel = new Mock<ModelDoc2>(MockBehavior.Strict).Object;
+            helper.ResetUserPreferences();
+            Assert.Equal("base_link", document);
+        }
+
+        [Fact]
+        public void RestoringPreferenceTextAloneDoesNotProveTheEffectiveFrameWasRestored()
+        {
+            var app = new Mock<ISldWorks>();
+            var model = new Mock<ModelDoc2>();
+            var extension = new Mock<ModelDocExtension>();
+            int modern = (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem;
+            int legacy = (int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem;
+            string current = "base_link";
+            app.Setup(x => x.GetUserPreferenceStringValue(modern)).Returns("base_link");
+            model.SetupGet(x => x.Extension).Returns(extension.Object);
+            model.Setup(x => x.GetCurrentCoordinateSystemName()).Returns(() => current);
+            extension.Setup(x => x.GetUserPreferenceString(legacy, 0)).Returns("base_link");
+            var helper = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+            helper.iSwApp = app.Object;
+            helper.ActiveSWModel = model.Object;
+            helper.SaveUserPreferences();
+            current = String.Empty;
+            var error = Assert.Throws<AggregateException>(() => helper.ResetUserPreferences());
+            Assert.Contains(error.InnerExceptions, e => e.Message.Contains("effective document") && e.Message.Contains("base_link"));
         }
 
         [Theory]

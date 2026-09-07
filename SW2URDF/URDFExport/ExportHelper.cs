@@ -69,6 +69,8 @@ namespace SW2URDF.URDFExport
         private double mSTLAngleTolerance;
         private double mHideTransitionSpeed;
         private ModelDocExtension mExportCoordinateDocument;
+        private ModelDoc2 mExportCoordinateModel;
+        private string mEffectiveExportCoordinateSystem;
         private string mExportCoordinateSystem;
         private string mLegacyExportCoordinateSystem;
         private readonly List<string> meshPreferenceWarnings = new List<string>();
@@ -3348,7 +3350,11 @@ namespace SW2URDF.URDFExport
             mSTLPreview = iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLPreview);
             mHideTransitionSpeed = iSwApp.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent);
             mSaveComponentsIntoOneFile = iSwApp.GetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLComponentsIntoOneFile);
-            mExportCoordinateDocument = ActiveSWModel.Extension;
+            mExportCoordinateModel = ActiveSWModel;
+            mExportCoordinateDocument = mExportCoordinateModel.Extension;
+            mEffectiveExportCoordinateSystem = mExportCoordinateModel.GetCurrentCoordinateSystemName();
+            if (mEffectiveExportCoordinateSystem == null)
+                throw new InvalidOperationException("SolidWorks did not identify the effective export coordinate system before mesh export.");
             mExportCoordinateSystem = iSwApp.GetUserPreferenceStringValue(
                 (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem) ?? String.Empty;
             mLegacyExportCoordinateSystem = mExportCoordinateDocument.GetUserPreferenceString(
@@ -3389,7 +3395,8 @@ namespace SW2URDF.URDFExport
                 () => iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent, mHideTransitionSpeed),
                 () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLComponentsIntoOneFile, mSaveComponentsIntoOneFile),
                 () => RestoreGlobalExportCoordinateSystem(mExportCoordinateSystem),
-                () => RestoreExportCoordinateSystem((int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem, mLegacyExportCoordinateSystem)
+                () => RestoreExportCoordinateSystem((int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem, mLegacyExportCoordinateSystem),
+                ValidateRestoredDocumentCoordinateSystem
             };
             var failures = new List<Exception>();
             foreach (Action action in actions)
@@ -3412,9 +3419,19 @@ namespace SW2URDF.URDFExport
                     "; setter accepted=" + accepted + ".");
         }
 
+        private void ValidateRestoredDocumentCoordinateSystem()
+        {
+            string current = mExportCoordinateModel.GetCurrentCoordinateSystemName();
+            if (!String.Equals(current, mEffectiveExportCoordinateSystem, StringComparison.Ordinal))
+                throw new InvalidOperationException("SolidWorks did not restore the effective document export coordinate system; expected=[" +
+                    mEffectiveExportCoordinateSystem + "], current=[" + (current ?? "<null>") + "].");
+        }
+
         private void RestoreGlobalExportCoordinateSystem(string value)
         {
             int preference = (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem;
+            if (String.Equals(iSwApp.GetUserPreferenceStringValue(preference) ?? String.Empty, value, StringComparison.Ordinal))
+                return;
             bool accepted = iSwApp.SetUserPreferenceStringValue(preference, value);
             string actual = iSwApp.GetUserPreferenceStringValue(preference) ?? String.Empty;
             if (!String.Equals(actual, value, StringComparison.Ordinal))
@@ -3423,12 +3440,26 @@ namespace SW2URDF.URDFExport
 
         internal void ResetMeshExportCoordinateSystem(ModelDoc2 doc)
         {
-            RestoreGlobalExportCoordinateSystem(String.Empty);
+            int globalPreference = (int)swUserPreferenceStringValue_e.swExportOutputCoordinateSystem;
+            bool globalAccepted = iSwApp.SetUserPreferenceStringValue(globalPreference, String.Empty);
             int preference = (int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem;
             int option = (int)swUserPreferenceOption_e.swDetailingNoOptionSpecified;
-            doc.Extension.SetUserPreferenceString(preference, option, String.Empty);
-            if (!String.IsNullOrEmpty(doc.Extension.GetUserPreferenceString(preference, option)))
-                throw new InvalidOperationException("SolidWorks refused to reset the document mesh export coordinate system to the assembly frame.");
+            ModelDocExtension extension = doc.Extension;
+            bool documentAccepted = extension.SetUserPreferenceString(preference, option, String.Empty);
+            string document = extension.GetUserPreferenceString(preference, option);
+            string current = doc.GetCurrentCoordinateSystemName();
+            string global = iSwApp.GetUserPreferenceStringValue(globalPreference);
+            // SW 2023 can retain a stale global value after clearing the effective document frame.
+            // Parts may return null from the legacy getter after an accepted clear, but the
+            // effective frame must always explicitly confirm the default (empty) name.
+            bool documentCleared = String.Equals(document, String.Empty, StringComparison.Ordinal) ||
+                (document == null && documentAccepted);
+            if (!documentCleared ||
+                !String.Equals(current, String.Empty, StringComparison.Ordinal))
+                throw new InvalidOperationException("SolidWorks could not prepare the mesh export coordinate system in the assembly frame; " +
+                    "global=[" + (global ?? "<null>") + "], document=[" + (document ?? "<null>") +
+                    "], current=[" + (current ?? "<null>") + "], global setter accepted=" + globalAccepted +
+                    ", document setter accepted=" + documentAccepted + ".");
         }
 
         //If the user selected something specific for a particular link, that is handled here.
