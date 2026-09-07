@@ -2709,8 +2709,7 @@ namespace SW2URDF.URDFExport
             UpdateProgressTitle("SolidWorks is saving STL: " + link.Name,
                 "SolidWorks \u6b63\u5728\u4fdd\u5b58 STL: " + link.Name);
             Stopwatch saveTimer = Stopwatch.StartNew();
-            bool saved = activeDoc.Extension.SaveAs(windowsMeshFilename,
-                (int)swSaveAsVersion_e.swSaveAsCurrentVersion, saveOptions, null,
+            bool saved = SaveStlMesh(activeDoc, windowsMeshFilename, saveOptions,
                 ref errors, ref warnings);
             logger.Info(String.Format("{0}: SolidWorks SaveAs returned after {1:F3} seconds; saved={2}, errors={3}, warnings={4}",
                 link.Name, saveTimer.Elapsed.TotalSeconds, saved, errors, warnings));
@@ -3044,8 +3043,8 @@ namespace SW2URDF.URDFExport
                 int warnings = 0;
 
                 logger.Info("Saving part STL to " + windowsMeshFileName);
-                bool saved = ActiveSWModel.Extension.SaveAs(windowsMeshFileName, (int)swSaveAsVersion_e.swSaveAsCurrentVersion,
-                    (int)swSaveAsOptions_e.swSaveAsOptions_Silent, null, ref errors, ref warnings);
+                bool saved = SaveStlMesh(ActiveSWModel, windowsMeshFileName,
+                    (int)swSaveAsOptions_e.swSaveAsOptions_Silent, ref errors, ref warnings);
                 if (!saved || errors != 0 || !File.Exists(windowsMeshFileName))
                 {
                     throw new InvalidOperationException(
@@ -3363,7 +3362,7 @@ namespace SW2URDF.URDFExport
         }
 
         //This is how the STL export preferences need to be to properly export
-        private void SetSTLExportPreferences()
+        internal void SetSTLExportPreferences()
         {
             logger.Info("Setting STL preferences");
             iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLBinaryFormat, true);
@@ -3376,6 +3375,77 @@ namespace SW2URDF.URDFExport
             iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLPreview, false);
             iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent, 0);
             iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLComponentsIntoOneFile, true);
+            ValidateStlExportPreferences();
+        }
+
+        internal bool SaveStlMesh(ModelDoc2 document, string filename, int options,
+            ref int errors, ref int warnings)
+        {
+            ValidateStlExportPreferences();
+            return document.Extension.SaveAs(filename,
+                (int)swSaveAsVersion_e.swSaveAsCurrentVersion, options, null,
+                ref errors, ref warnings);
+        }
+
+        private void ValidateStlExportPreferences()
+        {
+            RequirePreferenceValue(swUserPreferenceIntegerValue_e.swExportStlUnits.ToString(),
+                (int)swLengthUnit_e.swMETER,
+                iSwApp.GetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swExportStlUnits));
+            foreach (var preference in new[] { swUserPreferenceToggle_e.swSTLBinaryFormat,
+                swUserPreferenceToggle_e.swSTLDontTranslateToPositive,
+                swUserPreferenceToggle_e.swSTLComponentsIntoOneFile })
+                RequirePreferenceValue(preference.ToString(), true,
+                    iSwApp.GetUserPreferenceToggle((int)preference));
+        }
+
+        private static void RequirePreferenceValue<T>(string name, T expected, T actual,
+            Func<T, T, bool> matches = null)
+        {
+            if (!(matches ?? EqualityComparer<T>.Default.Equals)(expected, actual))
+                throw new InvalidOperationException("SolidWorks preference " + name +
+                    " did not match the required value; expected=" + expected + ", actual=" + actual + ".");
+        }
+
+        private static void RestorePreference<T>(string name, T value, Func<T> read, Action write,
+            Func<T, T, bool> matches = null)
+        {
+            // Unchanged unsupported preferences need no write; setter return values are not evidence.
+            if ((matches ?? EqualityComparer<T>.Default.Equals)(read(), value))
+                return;
+            write();
+            RequirePreferenceValue(name, value, read(), matches);
+        }
+
+        private void RestorePreference(swUserPreferenceToggle_e preference, bool value)
+        {
+            RestorePreference(preference.ToString(), value,
+                () => iSwApp.GetUserPreferenceToggle((int)preference),
+                () => iSwApp.SetUserPreferenceToggle((int)preference, value));
+        }
+
+        private void RestorePreference(swUserPreferenceIntegerValue_e preference, int value)
+        {
+            RestorePreference(preference.ToString(), value,
+                () => iSwApp.GetUserPreferenceIntegerValue((int)preference),
+                () => iSwApp.SetUserPreferenceIntegerValue((int)preference, value));
+        }
+
+        private void RestorePreference(swUserPreferenceDoubleValue_e preference, double value)
+        {
+            RestorePreference(preference.ToString(), value,
+                () => iSwApp.GetUserPreferenceDoubleValue((int)preference),
+                () => iSwApp.SetUserPreferenceDoubleValue((int)preference, value),
+                SameRestoredDoublePreference);
+        }
+
+        private static bool SameRestoredDoublePreference(double expected, double actual)
+        {
+            // Reuse the effective STL settings tolerance, but never equate finite and non-finite values.
+            return expected.Equals(actual) ||
+                (!Double.IsNaN(expected) && !Double.IsInfinity(expected) &&
+                 !Double.IsNaN(actual) && !Double.IsInfinity(actual) &&
+                 InertialEditingPolicy.Same(expected, actual));
         }
 
         //This resets the user preferences back to what they were.
@@ -3384,16 +3454,16 @@ namespace SW2URDF.URDFExport
             logger.Info("Returning STL preferences to user preferences");
             var actions = new Action[]
             {
-                () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLBinaryFormat, mBinary),
-                () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLDontTranslateToPositive, mTranslateToPositive),
-                () => iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swExportStlUnits, mSTLUnits),
-                () => iSwApp.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, mSTLQuality),
-                () => iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation, mSTLDeviation),
-                () => iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance, mSTLAngleTolerance),
-                () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLShowInfoOnSave, mshowInfo),
-                () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLPreview, mSTLPreview),
-                () => iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent, mHideTransitionSpeed),
-                () => iSwApp.SetUserPreferenceToggle((int)swUserPreferenceToggle_e.swSTLComponentsIntoOneFile, mSaveComponentsIntoOneFile),
+                () => RestorePreference(swUserPreferenceToggle_e.swSTLBinaryFormat, mBinary),
+                () => RestorePreference(swUserPreferenceToggle_e.swSTLDontTranslateToPositive, mTranslateToPositive),
+                () => RestorePreference(swUserPreferenceIntegerValue_e.swExportStlUnits, mSTLUnits),
+                () => RestorePreference(swUserPreferenceIntegerValue_e.swSTLQuality, mSTLQuality),
+                () => RestorePreference(swUserPreferenceDoubleValue_e.swSTLDeviation, mSTLDeviation),
+                () => RestorePreference(swUserPreferenceDoubleValue_e.swSTLAngleTolerance, mSTLAngleTolerance),
+                () => RestorePreference(swUserPreferenceToggle_e.swSTLShowInfoOnSave, mshowInfo),
+                () => RestorePreference(swUserPreferenceToggle_e.swSTLPreview, mSTLPreview),
+                () => RestorePreference(swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent, mHideTransitionSpeed),
+                () => RestorePreference(swUserPreferenceToggle_e.swSTLComponentsIntoOneFile, mSaveComponentsIntoOneFile),
                 () => RestoreGlobalExportCoordinateSystem(mExportCoordinateSystem),
                 () => RestoreExportCoordinateSystem((int)swUserPreferenceStringValue_e.swFileSaveAsCoordinateSystem, mLegacyExportCoordinateSystem),
                 ValidateRestoredDocumentCoordinateSystem

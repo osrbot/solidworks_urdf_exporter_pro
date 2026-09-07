@@ -990,26 +990,64 @@ namespace SW2URDF.UI
 
         private void Button_Joint_Cancel_Click(object sender, EventArgs e)
         {
-            if (previouslySelectedNode != null)
-            {
-                SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link);
-            }
-            MoveJointTreeNodesToBaseNode();
-            if (SaveConfigTree(ActiveSWModel, BaseNode, true))
+            CancelExportConfiguration(true);
+        }
+
+        private void ButtonLinksCancelClick(object sender, EventArgs e)
+        {
+            CancelExportConfiguration(false);
+        }
+
+        private void CancelExportConfiguration(bool editingJoints)
+        {
+            if (ConfigurationSaveInteraction.TryClose(
+                () => MessageBox.Show(this,
+                    ChineseUiText.Translate("Save the current export configuration before closing?",
+                        "关闭前是否保存当前导出配置？"),
+                    ChineseUiText.Translate("Save export configuration", "保存导出配置"),
+                    MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question),
+                () =>
+                {
+                    if (previouslySelectedNode != null)
+                    {
+                        if (editingJoints) SaveJointDataFromPropertyBoxes(previouslySelectedNode.Link);
+                        else SaveLinkDataFromPropertyBoxes(previouslySelectedNode.Link);
+                    }
+                    return TrySaveConfigurationBeforeClose(editingJoints,
+                        () => SaveConfigTree(ActiveSWModel, BaseNode, false));
+                }))
             {
                 CloseWithoutRecoveryDraft();
             }
         }
 
-        private void ButtonLinksCancelClick(object sender, EventArgs e)
+        internal bool TrySaveConfigurationBeforeClose(bool editingJoints, Func<bool> save)
         {
-            if (previouslySelectedNode != null)
+            if (!editingJoints) return save();
+
+            TreeNode selected = treeViewJointTree.SelectedNode;
+            TreeNode top = treeViewJointTree.TopNode;
+            LinkNode previous = previouslySelectedNode;
+            bool saved = false;
+            try
             {
-                SaveLinkDataFromPropertyBoxes(previouslySelectedNode.Link);
+                MoveJointTreeNodesToBaseNode();
+                saved = save();
+                return saved;
             }
-            if (SaveConfigTree(ActiveSWModel, BaseNode, true))
+            finally
             {
-                CloseWithoutRecoveryDraft();
+                // The save projection borrows the UI's nodes; failed saves must return them.
+                if (!saved)
+                {
+                    FillJointTree();
+                    using (treeSelectionUpdateGuard.Suppress())
+                    {
+                        treeViewJointTree.SelectedNode = selected;
+                        previouslySelectedNode = previous;
+                        if (top != null) treeViewJointTree.TopNode = top;
+                    }
+                }
             }
         }
 
@@ -1051,7 +1089,7 @@ namespace SW2URDF.UI
                 logger.Info("Using the lightweight URDF-only compatibility path; derived target packages require a complete mesh export.");
             }
             IList<ExportTargetValidationFinding> targetErrors =
-                Exporter.ExportTargets.ValidateFindings();
+                Exporter.ExportTargets.ValidateSharedFindings();
             if (targetErrors.Count > 0)
             {
                 ExportDiagnosticsDialog.ShowValidation(

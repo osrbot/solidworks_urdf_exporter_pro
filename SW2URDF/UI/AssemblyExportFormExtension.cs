@@ -378,7 +378,8 @@ namespace SW2URDF.UI
                 MimicCheckBox.Checked = true;
                 ShowMimicControls(true);
                 MimicJointComboBox.SelectedIndex =
-                    MimicJointComboBox.FindStringExact(joint.Mimic.JointName);
+                    jointNames.FindIndex(name => String.Equals(
+                        name, joint.Mimic.JointName, StringComparison.Ordinal));
                 joint.Mimic.FillBoxes(textBoxMimicMultiplier, textBoxMimicOffset);
             }
             else

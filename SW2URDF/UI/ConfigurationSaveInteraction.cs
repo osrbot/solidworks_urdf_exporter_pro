@@ -9,6 +9,13 @@ namespace SW2URDF.UI
     {
         private static readonly log4net.ILog logger = Logger.GetLogger();
 
+        internal static bool TryClose(Func<DialogResult> confirm, Func<bool> save)
+        {
+            DialogResult choice = confirm();
+            if (choice == DialogResult.No) return true;
+            return choice == DialogResult.Yes && save();
+        }
+
         public static bool Save(
             Func<bool, ConfigurationSaveResult> saveOperation,
             bool confirmChanges, out bool persisted)

@@ -365,6 +365,7 @@
     <Compile Include="Test\TestExportTargetProfiles.cs" />
     <Compile Include="Test\TestCSVImportExport.cs" />
     <Compile Include="Test\TestAssemblyExportLayout.cs" />
+    <Compile Include="Test\TestAssemblyExportInteractions.cs" />
     <Compile Include="Test\TestAutomaticLinkColorScheme.cs" />
     <Compile Include="Test\TestCollisionPreview.cs" />
     <Compile Include="Test\TestConfigurationFactory.cs" />

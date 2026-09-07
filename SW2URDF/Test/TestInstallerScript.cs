@@ -572,7 +572,7 @@ namespace SW2URDF.Test
                 captureTargets,
                 StringComparison.Ordinal);
             int validateTargets = form.IndexOf(
-                "Exporter.ExportTargets.ValidateFindings()",
+                "Exporter.ExportTargets.ValidateSharedFindings()",
                 legacyTargets,
                 StringComparison.Ordinal);
 
@@ -580,6 +580,7 @@ namespace SW2URDF.Test
             Assert.True(captureTargets > finishExport);
             Assert.True(legacyTargets > captureTargets);
             Assert.True(validateTargets > legacyTargets);
+            Assert.DoesNotContain("Exporter.ExportTargets.ValidateFindings()", form);
             Assert.Contains(
                 "derived target packages require a complete mesh export",
                 form.Substring(finishExport, validateTargets - finishExport));

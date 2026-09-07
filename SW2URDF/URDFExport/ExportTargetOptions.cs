@@ -106,7 +106,7 @@ namespace SW2URDF.URDFExport
             return errors;
         }
 
-        public IList<ExportTargetValidationFinding> ValidateFindings()
+        public IList<ExportTargetValidationFinding> ValidateSharedFindings()
         {
             List<ExportTargetValidationFinding> errors =
                 new List<ExportTargetValidationFinding>();
@@ -119,6 +119,13 @@ namespace SW2URDF.URDFExport
                 Add(errors, "TARGET_REQUIRED", "Targets",
                     "Select at least one output target: ROS 1, ROS 2, OpenUSD, or MuJoCo MJCF.");
             }
+            return errors;
+        }
+
+        public IList<ExportTargetValidationFinding> ValidateFindings()
+        {
+            var errors = new List<ExportTargetValidationFinding>(ValidateSharedFindings());
+            if (!UseV2Pipeline) return errors;
             if (ExportRos1Legacy || ExportRos2)
             {
                 if (!ExactVersion.IsMatch(PackageVersion ?? string.Empty))
