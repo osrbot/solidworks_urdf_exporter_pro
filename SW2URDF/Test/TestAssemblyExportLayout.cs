@@ -2388,6 +2388,22 @@ namespace SW2URDF.Test
         }
 
         [Fact]
+        public void SimulationTargetOptionsRemainAutoSizedAcrossTabCaching()
+        {
+            using (var dialog = new OpenUsdSettingsDialog())
+            {
+                var tabs = (ModernTabControl)FindDescendant(dialog, "simulationTargetTabs");
+                var options = (TableLayoutPanel)FindDescendant(dialog, "openUsdTargetOptions");
+                tabs.CacheAllPageLayouts();
+                foreach (TabPage page in tabs.TabPages)
+                    Assert.False(Assert.IsType<ModernTabPage>(page).CacheAutoSizeLayout);
+                Assert.True(options.AutoSize);
+                Assert.Equal(AutoSizeMode.GrowAndShrink, options.AutoSizeMode);
+                Assert.All(options.RowStyles.Cast<RowStyle>(), row => Assert.Equal(SizeType.AutoSize, row.SizeType));
+            }
+        }
+
+        [Fact]
         public void TestSimulationMalformedSettingsBlockOnlySimulatorExportUntilApplied()
         {
             using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))

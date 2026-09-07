@@ -182,10 +182,14 @@ namespace SW2URDF.UI
                 "SI 增益：旋转 N*m/rad、N*m*s/rad；直线 N/m、N*s/m。effort 仅为运行时意图，不创建 USD 主动驱动。");
             TableLayoutPanel usdOptions = new TableLayoutPanel
             {
-                AutoSize = true, Dock = DockStyle.Top, ColumnCount = 2, RowCount = 2
+                Name = "openUsdTargetOptions",
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Dock = DockStyle.Top, ColumnCount = 2, RowCount = 2
             };
             usdOptions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             usdOptions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            usdOptions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            usdOptions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             usdOptions.Controls.Add(CreateLabel("Robot type", "机器人类型"), 0, 0);
             usdOptions.Controls.Add(robotTypeComboBox, 1, 0);
             usdOptions.Controls.Add(selfCollisionCheckBox, 1, 1);
@@ -242,7 +246,12 @@ namespace SW2URDF.UI
 
         private static TabPage CreateTargetPage(string title, DataGridView grid, string english, string chinese)
         {
-            TabPage page = new TabPage(title) { Padding = new Padding(8), AutoScroll = true };
+            // Target options reflow when first shown or scaled; do not freeze their initial height.
+            TabPage page = new ModernTabPage
+            {
+                Text = title, Padding = new Padding(8), AutoScroll = true,
+                CacheAutoSizeLayout = false
+            };
             TableLayoutPanel layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, AutoScroll = true
