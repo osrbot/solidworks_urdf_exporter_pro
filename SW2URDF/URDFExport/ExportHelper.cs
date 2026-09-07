@@ -3457,9 +3457,9 @@ namespace SW2URDF.URDFExport
                 () => RestorePreference(swUserPreferenceToggle_e.swSTLBinaryFormat, mBinary),
                 () => RestorePreference(swUserPreferenceToggle_e.swSTLDontTranslateToPositive, mTranslateToPositive),
                 () => RestorePreference(swUserPreferenceIntegerValue_e.swExportStlUnits, mSTLUnits),
-                () => RestorePreference(swUserPreferenceIntegerValue_e.swSTLQuality, mSTLQuality),
-                () => RestorePreference(swUserPreferenceDoubleValue_e.swSTLDeviation, mSTLDeviation),
+                RestoreStlDeviation,
                 () => RestorePreference(swUserPreferenceDoubleValue_e.swSTLAngleTolerance, mSTLAngleTolerance),
+                () => RestorePreference(swUserPreferenceIntegerValue_e.swSTLQuality, mSTLQuality),
                 () => RestorePreference(swUserPreferenceToggle_e.swSTLShowInfoOnSave, mshowInfo),
                 () => RestorePreference(swUserPreferenceToggle_e.swSTLPreview, mSTLPreview),
                 () => RestorePreference(swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent, mHideTransitionSpeed),
@@ -3476,6 +3476,16 @@ namespace SW2URDF.URDFExport
             }
             if (failures.Count > 0)
                 throw new AggregateException("SolidWorks export preferences could not all be restored.", failures);
+        }
+
+        private void RestoreStlDeviation()
+        {
+            // SW 2023 activates Custom only after writing a tolerance, even if it is unchanged.
+            // Restore the mode last because tolerance writes can switch Fine/Coarse to Custom.
+            if (mSTLQuality == (int)swSTLQuality_e.swSTLQuality_Custom &&
+                iSwApp.GetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality) != mSTLQuality)
+                iSwApp.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation, mSTLDeviation);
+            RestorePreference(swUserPreferenceDoubleValue_e.swSTLDeviation, mSTLDeviation);
         }
 
         private void RestoreExportCoordinateSystem(int preference, string value)

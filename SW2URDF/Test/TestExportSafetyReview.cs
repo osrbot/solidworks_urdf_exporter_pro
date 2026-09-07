@@ -134,6 +134,35 @@ namespace SW2URDF.Test
             state.AssertRestored("swSTLDeviation");
         }
 
+        [Theory]
+        [InlineData(1, false)]
+        [InlineData(2, false)]
+        [InlineData(3, false)]
+        [InlineData(3, true)]
+        public void StlResolutionRestoresCoupledModeAfterTolerances(int originalQuality, bool unchangedTolerances)
+        {
+            var state = new StlPreferenceState();
+            int quality = (int)swUserPreferenceIntegerValue_e.swSTLQuality;
+            int deviation = (int)swUserPreferenceDoubleValue_e.swSTLDeviation;
+            int angle = (int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance;
+            state.Integers[quality] = originalQuality;
+            state.Helper.SaveUserPreferences();
+            state.Integers[quality] = originalQuality == 3 ? 1 : 3;
+            if (!unchangedTolerances) { state.Doubles[deviation] = 0.02; state.Doubles[angle] = 0.02; }
+            state.App.Setup(x => x.SetUserPreferenceIntegerValue(quality, It.IsAny<int>()))
+                .Returns<int, int>((id, value) => { if (value != 3) state.Integers[id] = value; return true; });
+            state.App.Setup(x => x.SetUserPreferenceDoubleValue(It.IsAny<int>(), It.IsAny<double>()))
+                .Returns<int, double>((id, value) => {
+                    state.Doubles[id] = value;
+                    if (id == deviation || id == angle) state.Integers[quality] = 3;
+                    return false;
+                });
+            state.Helper.ResetUserPreferences();
+            Assert.Equal(originalQuality, state.Integers[quality]);
+            Assert.Equal(0.01, state.Doubles[deviation]);
+            Assert.Equal(0.01, state.Doubles[angle]);
+        }
+
         private sealed class StlPreferenceState
         {
             internal readonly Mock<ISldWorks> App = new Mock<ISldWorks>();
