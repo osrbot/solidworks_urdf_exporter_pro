@@ -97,8 +97,6 @@ namespace SW2URDF.UI
             };
             general.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
             general.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            general.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            general.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             Label title = ModernWinFormsTheme.CreateTextLabel(
                 ChineseUiText.Translate(
@@ -264,7 +262,6 @@ namespace SW2URDF.UI
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             Label units = CreateLabel(english, chinese);
-            units.Anchor = AnchorStyles.Left | AnchorStyles.Right;
             units.ForeColor = ModernWinFormsTheme.MutedText;
             layout.Controls.Add(units, 0, 1);
             layout.Controls.Add(grid, 0, 2);
@@ -722,7 +719,7 @@ namespace SW2URDF.UI
             return new Label
             {
                 AutoSize = true,
-                Anchor = AnchorStyles.Left,
+                Dock = DockStyle.Fill,
                 Margin = new Padding(0, 6, 8, 4),
                 Text = ChineseUiText.Translate(english, chinese),
                 TextAlign = ContentAlignment.MiddleLeft
