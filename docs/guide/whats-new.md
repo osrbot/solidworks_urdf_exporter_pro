@@ -8,9 +8,10 @@
 - “仿真设置”同时服务 OpenUSD 和 MJCF：共用基座模式和关节控制方式，增益分别填写，保存后重启仍能恢复。
 - 直接输入 Link 实测质量即可校准惯性，不会反向修改 SW 零部件；详见[惯性页面](/features/inertia)。
 - 修复取消保存失败后的空树、Mimic 大小写匹配、导出设置恢复和部分 DPI 布局问题。
-- SW2023 SP1 实机四目标导出通过，MuJoCo 完成编译和单步运行，USD 完成结构校验。未完成 Isaac Sim 或长时间仿真测试。
+- RC2 在生成网格前检查 MJCF 驱动参数；可确认跳过 MJCF，继续其他已选目标，不会自动猜测增益。
+- RC1 已完成 SW2023 SP1 四目标导出、MuJoCo 编译和单步运行、USD 结构校验。RC2 安装后用户手动验证暂未发现新问题；未完成 Isaac Sim 或长时间仿真测试。
 
-下载 [v20260908-rc1](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases/tag/v20260908-rc1)。这是候选版，正式版仍可单独下载。
+下载 [v20260908-rc2](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases/tag/v20260908-rc2)。这是候选版，正式版仍可单独下载。
 
 | 使用场景 | 原社区版 | 当前版本 |
 | --- | --- | --- |

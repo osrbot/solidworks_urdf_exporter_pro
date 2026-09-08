@@ -7,9 +7,10 @@ The current version keeps the familiar SolidWorks export workflow while addressi
 - Simulation Settings now serve OpenUSD and MJCF: shared base/joint control intent, separate gains, and restoration after saving and restarting.
 - Enter measured Link mass directly to calibrate inertia without modifying CAD component properties. See [Inertia](/en/features/inertia).
 - Fix the empty tree after failed cancel/save, Mimic case matching, export-setting restoration and selected DPI layout issues.
-- All four targets passed a SW2023 SP1 export. MuJoCo passed compilation and one-step execution; USD passed structural validation. Isaac Sim and long-running simulations were not tested.
+- RC2 checks MJCF drive parameters before generating meshes, with an explicit choice to skip MJCF and continue other selected targets. Gains are never invented automatically.
+- RC1 passed a SW2023 SP1 four-target export, MuJoCo compilation and one-step execution, and USD structural validation. After installing RC2, the user reported no new issues so far during manual testing. Isaac Sim and long-running simulations were not tested.
 
-Download [v20260908-rc1](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases/tag/v20260908-rc1). This is a pre-release; the stable release remains available separately.
+Download [v20260908-rc2](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases/tag/v20260908-rc2). This is a pre-release; the stable release remains available separately.
 
 | Use case | Community edition | Current version |
 | --- | --- | --- |

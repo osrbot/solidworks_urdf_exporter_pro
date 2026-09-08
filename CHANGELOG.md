@@ -2,6 +2,27 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## 2026-09-08 / v20260908-rc2 (Pre-release / 候选版)
+
+### 简体中文
+
+- MJCF 在生成网格前检查驱动参数；标记缺失的刚度、阻尼，确认后可保留不完整草稿。
+- 多目标导出允许明确跳过配置有问题的 MJCF，继续其他目标；不自动猜测增益或复制 OpenUSD 参数。
+- 隔离 WinForms 布局测试的并发干扰，未跳过用例或放宽截图断言；撤回试探性的窗口布局调整。
+- 沿用已安装的 `49c01cb` 包；Core 129 项、官方 MuJoCo 9 项、插件 997 项通过。远端 249 个载荷文件及注册校验正常，用户手动验证反馈暂未发现新问题。
+- 候选版不替换稳定版；不扩大解释手动测试覆盖范围。
+
+### English
+
+- Validate MJCF drive parameters before generating meshes; mark missing gains and allow incomplete drafts after confirmation.
+- Explicitly skip an invalid MJCF target and continue other selected targets, without invented gains or copying OpenUSD parameters.
+- Isolate concurrent WinForms layout tests without skips or relaxed screenshot assertions; revert speculative UI layout changes.
+- Reuse the installed `49c01cb` binary. Core 129, official MuJoCo 9, and plug-in 997 tests passed. All 249 installed payload files and registration verified; the user reported no new issues so far after manual testing.
+- Pre-release only, with no expanded claims about test coverage.
+
+Evidence: [verification record](docs/reviews/2026-09-08-mjcf-preflight.md),
+[candidate notes](.github/release-notes/v20260908-rc2.md).
+
 ## 2026-09-08 / v20260908-rc1 (Pre-release / 候选版)
 
 ### 简体中文
