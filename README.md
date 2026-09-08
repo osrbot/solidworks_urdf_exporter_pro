@@ -16,6 +16,8 @@ OpenUSD, or MuJoCo workflows.
 
 ## This update
 
+**Candidate:** [v20260908-rc1](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases/tag/v20260908-rc1) adds shared base/drive settings for OpenUSD and MJCF, direct measured-mass calibration, and export-state/UI fixes. It is a pre-release; the stable Latest download is unchanged. See [changes and tested scope](CHANGELOG.md).
+
 - Migrate older configurations after reviewing components, frames, and axes; retain the original configuration.
 - Use SolidWorks mass-property overrides and measured-mass calibration consistently in inertia preview and export.
 - Preserve data through Link multi-selection, hierarchy edits, Joint renaming, and inertia-frame changes.

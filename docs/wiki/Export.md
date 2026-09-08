@@ -16,8 +16,8 @@ and license are also useful for identifying OpenUSD and MJCF output directories 
 - OpenUSD robot asset
 - MuJoCo MJCF model
 
-Select at least one target. After selecting OpenUSD, open its settings only when base behavior,
-self-collision, or Joint drive intent needs adjustment; the defaults can be exported directly.
+Select at least one target. Selecting OpenUSD or MJCF enables shared Simulation Settings: common base/joint drive intent, with separate target tabs for independent gains. Self-collision remains an OpenUSD-specific option.
+Settings are stored with the root Link configuration; save the assembly to restore them after restarting. This does not generate a ground plane, controller or training environment.
 
 Export URDF Without Meshes is useful for a quick structure and value check. Export URDF and Meshes
 creates the deliverable directory and is required for OpenUSD and MJCF. Read the export report before

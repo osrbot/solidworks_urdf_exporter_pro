@@ -2,6 +2,15 @@
 
 The current version keeps the familiar SolidWorks export workflow while addressing problems with complex assemblies, physical validation, modern output formats, and general usability.
 
+## September 8, 2026 candidate
+
+- Simulation Settings now serve OpenUSD and MJCF: shared base/joint control intent, separate gains, and restoration after saving and restarting.
+- Enter measured Link mass directly to calibrate inertia without modifying CAD component properties. See [Inertia](/en/features/inertia).
+- Fix the empty tree after failed cancel/save, Mimic case matching, export-setting restoration and selected DPI layout issues.
+- All four targets passed a SW2023 SP1 export. MuJoCo passed compilation and one-step execution; USD passed structural validation. Isaac Sim and long-running simulations were not tested.
+
+Download [v20260908-rc1](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases/tag/v20260908-rc1). This is a pre-release; the stable release remains available separately.
+
 | Use case | Community edition | Current version |
 | --- | --- | --- |
 | Coordinate systems and axes in nested components | Results can depend on names, hierarchy, and the active configuration | Locates the actual component instance and supports deeply nested, duplicate-name, and Chinese-named reference geometry |
@@ -19,7 +28,7 @@ The current version keeps the familiar SolidWorks export workflow while addressi
 - The Limits page supplies the smallest valid default for missing required positive values. A valid user value always takes precedence.
 - The Link page is divided into Inertia, Visual/Collision, and Appearance tabs.
 - At the retested window size, the Joint Basic and Limits and Safety pages keep complete input borders without extra scrollbars. This does not verify every DPI or multi-monitor combination.
-- OpenUSD settings open only when needed and do not occupy space on the main page.
+- Selecting OpenUSD or MJCF enables the shared Simulation Settings dialog, without filling the main page with extra controls.
 
 ## Editing Links
 
@@ -37,4 +46,4 @@ The current version keeps the familiar SolidWorks export workflow while addressi
 
 ![OpenUSD settings](/screenshots/openusd-settings.png)
 
-<p class="caption">OpenUSD settings cover base behavior, self-collision, and Joint drive intent. No Isaac version is required.</p>
+<p class="caption">Previous OpenUSD settings screenshot. The candidate uses shared Simulation Settings with separate target tabs. No Isaac version is required.</p>

@@ -15,6 +15,8 @@ MuJoCo 可以继续使用的机器人模型。
 
 ## 本次更新
 
+**候选版：**[v20260908-rc1](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases/tag/v20260908-rc1) 新增 OpenUSD/MJCF 公共基座与驱动设置，改进实测质量校准，并修复导出状态和界面问题。这是预发布版本，不替换正式版 Latest。详见[变更与测试范围](CHANGELOG.md)。
+
 - 旧版配置可以在核对组件、坐标系和轴后迁移，原配置保留。
 - 支持 SolidWorks 质量属性覆盖和实测质量校准，惯性预览与导出使用同一组结果。
 - 修复 Link 多选、修改层级、Joint 重命名及惯性坐标系转换中的数据保留问题。

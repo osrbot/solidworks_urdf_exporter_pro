@@ -2,6 +2,31 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## 2026-09-08 / v20260908-rc1 (Pre-release / 候选版)
+
+### 简体中文
+
+- 新增公共“仿真设置”：统一选择基座模式和 Joint 驱动意图，OpenUSD 与 MJCF 分别填写增益，不会互相覆盖。修复实际应用设置时找不到根 Link 的问题；保存后重启 SolidWorks 可以恢复。
+- 直接输入 Link 实测质量即可校准完整惯性矩阵，不必先恢复 SW 值；不修改 SW 零部件质量属性。预览与导出共用结果；质量和惯性同比缩放时，等效长方体尺寸不变是正常现象。
+- 修复导出坐标系设置被 SW 拒绝时的处理，核对实际生效状态；校验 STL 单位、禁止平移和精度参数，并按有效顺序恢复。
+- 修复取消保存失败后树为空、Mimic 名称大小写回填错误，以及 ROS 专属配置错误拦截其他目标的问题。
+- 修复初始 DPI 重复缩放、部分控件溢出，以及仿真子标签自动布局被固定尺寸缓存干扰的问题。
+- 沿用已实测的 `a422ed7` 安装包，不重新编译。Core 129 项、官方 MuJoCo 9 项、插件 992 项通过。远端 SW2023 SP1 四目标导出成功：119 个文件、234.27 MiB、1 分 33 秒。不同模型和设置之间不作速度倍数比较。
+- 候选版不替代正式版 Latest。未纳入开发区尚未验收的 CSV 几何往返和取消自动保存改动；不宣称所有 DPI、SW 版本、Isaac Sim 或长时间仿真均已验证。
+
+### English
+
+- Add shared Simulation Settings for base mode and joint drive intent, with independent OpenUSD/MJCF gains. Fix applying settings through the real root Link; settings survive saving and restarting SolidWorks.
+- Calibrate a Link's full inertia tensor directly from measured mass without first resetting SW values or modifying CAD component properties. Preview and export use the same result; proportional mass/inertia scaling correctly leaves cuboid dimensions unchanged.
+- Verify effective export coordinates and STL units, translation and resolution settings; restore coupled settings in the effective order.
+- Preserve the tree after a failed cancel/save, match Mimic names case-sensitively, and keep ROS-only configuration errors from blocking other targets.
+- Fix initial DPI scaling, clipped controls and cached sizing of dynamic simulation tabs.
+- Reuse the unchanged, remotely tested `a422ed7` installer. Core 129, official MuJoCo 9 and plug-in 992 tests passed. Remote SW2023 SP1 exported all four targets: 119 files, 234.27 MiB, 1:33. This is not a speedup comparison across different models/settings.
+- Pre-release only; the stable Latest release remains unchanged. Unverified CSV roundtrip and no-auto-save development changes are excluded. Not blanket validation of all displays, SW versions, Isaac Sim or long simulations.
+
+Evidence: [shared simulation acceptance](docs/reviews/2026-09-07-shared-simulation-settings.md),
+[candidate notes](.github/release-notes/v20260908-rc1.md).
+
 ## 2026-09-06 / v20260906
 
 Published on 2026-09-07 using the unchanged, tested `fc88a14` installer built on 2026-09-06.

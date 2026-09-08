@@ -22,9 +22,11 @@ USD/<package>/
 `robot.usd` contains the robot hierarchy, Visuals, Collisions, mass, center of mass, inertia, and
 Joints.
 
-## OpenUSD settings
+## Simulation settings
 
-The main export page has one OpenUSD target. Its optional settings cover:
+Select OpenUSD or MJCF and open **Simulation Settings**. Base mode and Joint intent are shared; OpenUSD gains, robot type and self-collision belong to the OpenUSD tab. MJCF gains are stored separately.
+
+The available settings cover:
 
 - **Base behavior:** keep the source behavior, fixed base, or floating base.
 - **Robot type:** classification for downstream tools.
