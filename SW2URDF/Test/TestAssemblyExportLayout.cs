@@ -636,6 +636,9 @@ namespace SW2URDF.Test
                     var intent = (DataGridView)FindDescendant(dialog, "simulationJointIntentGrid");
                     var root = FindDescendant(dialog, "openUsdRoot");
                     var footer = FindDescendant(dialog, "openUsdFooter");
+                    var general = (TableLayoutPanel)FindDescendant(dialog, "openUsdGeneralSettings");
+                    Assert.Equal(2, general.RowStyles.Count);
+                    Assert.All(general.RowStyles.Cast<RowStyle>(), row => Assert.Equal(SizeType.AutoSize, row.SizeType));
                     string output = SimulationPreviewDirectory();
                     System.IO.Directory.CreateDirectory(output);
                     for (int tab = 0; tab < tabs.TabCount; tab++)

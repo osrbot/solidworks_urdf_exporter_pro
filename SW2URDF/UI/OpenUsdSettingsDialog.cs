@@ -97,6 +97,8 @@ namespace SW2URDF.UI
             };
             general.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110F));
             general.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            general.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            general.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             Label title = ModernWinFormsTheme.CreateTextLabel(
                 ChineseUiText.Translate(
