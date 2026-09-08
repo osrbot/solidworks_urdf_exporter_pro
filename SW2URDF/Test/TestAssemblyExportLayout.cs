@@ -2314,6 +2314,9 @@ namespace SW2URDF.Test
                 SimulationProfile captured;
                 Assert.True(dialog.TryCaptureSettings(out usd, out captured));
                 var mjcf = (DataGridView)FindDescendant(dialog, "mjcfJointDriveGrid");
+                dialog.MarkMissingMjcfGains();
+                if (mode == "position" || mode == "velocity")
+                    Assert.NotEmpty(mjcf.Rows[0].Cells["dampingColumn"].ErrorText);
                 mjcf.Rows[0].Cells[column].Value = value;
                 Assert.False(dialog.TryCaptureSettings(out usd, out captured));
                 Assert.NotEmpty(mjcf.Rows[0].Cells[column].ErrorText);

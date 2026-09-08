@@ -15,6 +15,53 @@ namespace SW2URDF.Test
     public class TestSimulationSettingsRestore
     {
         [Theory]
+        [InlineData("position", "MJCF_POSITION_GAINS")]
+        [InlineData("velocity", "MJCF_VELOCITY_GAIN")]
+        public void MjcfPreflightRejectsIncompleteDraftWithoutChangingIt(string mode, string code)
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.Simulation = new SimulationProfile {
+                JointDrives = new List<JointDriveIntent> { new JointDriveIntent { Joint = "wheel", Mode = mode } },
+                Mjcf = new MjcfSimulationProfile { JointDrives = new List<MjcfJointDriveProfile> {
+                    new MjcfJointDriveProfile { Joint = "wheel" } } } };
+            var joints = new[] { new OpenUsdJointDescriptor { Name = "wheel", Type = "continuous", EffortLimit = 1 } };
+            string before = Newtonsoft.Json.JsonConvert.SerializeObject(options);
+            Assert.Equal(code, Assert.Single(OpenUsdSettingsDialog.GetMjcfPreflightFindings(options, joints)).Code);
+            Assert.Equal(before, Newtonsoft.Json.JsonConvert.SerializeObject(options));
+            options.ExportMjcfAsset = false;
+            Assert.Empty(OpenUsdSettingsDialog.GetMjcfPreflightFindings(options, joints));
+        }
+
+        [Theory]
+        [InlineData("position", 25, 0)]
+        [InlineData("velocity", 0, 2)]
+        public void MjcfPreflightAcceptsExplicitGainsAndSourceEffort(string mode, double stiffness, double damping)
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.Simulation = new SimulationProfile {
+                JointDrives = new List<JointDriveIntent> { new JointDriveIntent { Joint = "wheel", Mode = mode } },
+                Mjcf = new MjcfSimulationProfile { JointDrives = new List<MjcfJointDriveProfile> {
+                    new MjcfJointDriveProfile { Joint = "wheel", Stiffness = stiffness, Damping = damping } } } };
+            var joints = new[] { new OpenUsdJointDescriptor { Name = "wheel", Type = "continuous", EffortLimit = 1 } };
+            Assert.Empty(OpenUsdSettingsDialog.GetMjcfPreflightFindings(options, joints));
+            joints[0].EffortLimit = null;
+            Assert.Equal("MJCF_DRIVE_EFFORT_LIMIT", Assert.Single(
+                OpenUsdSettingsDialog.GetMjcfPreflightFindings(options, joints)).Code);
+        }
+
+        [Fact]
+        public void MjcfPreflightKeepsLegacyDefaultsAndDetectsRestoreError()
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            Assert.Empty(OpenUsdSettingsDialog.GetMjcfPreflightFindings(options, null));
+            options.MjcfSimulationRestoreError = "Invalid target configuration";
+            Assert.Equal("MJCF_SIMULATION_RESTORE", Assert.Single(
+                OpenUsdSettingsDialog.GetMjcfPreflightFindings(options, null)).Code);
+            options.ExportMjcfAsset = false;
+            Assert.Empty(OpenUsdSettingsDialog.GetMjcfPreflightFindings(options, null));
+        }
+
+        [Theory]
         [InlineData(true)]
         [InlineData(false)]
         public void TargetDamageRestoresOtherTargetAndValidatesOnlyWhenSelected(bool usdDamage)

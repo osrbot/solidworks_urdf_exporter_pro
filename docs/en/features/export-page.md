@@ -27,6 +27,8 @@ Common simulation settings select base behavior and passive, position, velocity,
 
 Defaults create no actuators or active drives. Without common settings, legacy configuration is preserved. A common `source` base preserves the target's previous behavior; explicit `fixed` / `floating` and common joint modes override legacy target choices. These settings configure a robot asset, not a training world, rewards, policy, or training project.
 
+MJCF position control requires positive stiffness and explicitly entered nonnegative damping. Velocity control requires positive velocity gain (the damping column). Missing values are marked, but you can confirm saving an incomplete draft. Export checks them before mesh generation: return to edit by default, or explicitly skip MJCF and continue with other selected targets.
+
 ## Two export buttons
 
 - **Export URDF without meshes**: faster and useful for checking structure and values only.

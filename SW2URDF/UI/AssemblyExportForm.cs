@@ -1086,6 +1086,32 @@ namespace SW2URDF.UI
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+            if (exportSTL)
+            {
+                var options = CaptureExportTargetOptions();
+                var findings = OpenUsdSettingsDialog.GetMjcfPreflightFindings(
+                    options, BuildOpenUsdJointDescriptors(BaseNode));
+                if (findings.Count > 0)
+                {
+                    string details = String.Join("\n", findings.Select(finding =>
+                        finding.Code + ": " + finding.Message));
+                    bool otherTargets = options.ExportRos1Legacy || options.ExportRos2 || options.ExportUsdAsset;
+                    if (!otherTargets)
+                    {
+                        MessageBox.Show(this, ChineseUiText.Translate(
+                            "Complete the MuJoCo tab in Simulation settings before exporting.\n\n",
+                            "请先在仿真设置的 MuJoCo 页补齐参数，再导出。\n\n") + details,
+                            "MuJoCo MJCF", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    if (MessageBox.Show(this, ChineseUiText.Translate(
+                        "MJCF is not ready. Skip MJCF and export the other selected targets? Choose No to return and edit Simulation settings.\n\n",
+                        "MJCF 配置尚未完成。是否跳过 MJCF，继续导出其他已选目标？选择“否”返回修改仿真设置。\n\n") + details,
+                        "MuJoCo MJCF", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                    modernMjcfAssetCheckBox.Checked = false;
+                }
+            }
             ClearPreviews();
             logger.Info("Completing URDF export");
             Exporter.RosPackageName = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);

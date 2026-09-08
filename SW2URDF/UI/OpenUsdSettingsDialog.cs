@@ -1,4 +1,5 @@
 using OSURDF.Core.Model;
+using OSURDF.Core.Validation;
 using SW2URDF.URDFExport;
 using System;
 using System.Collections.Generic;
@@ -393,6 +394,45 @@ namespace SW2URDF.UI
                 jointDriveGrid.ResumeLayout(false);
             }
             DialogResult = DialogResult.None;
+            MarkMissingMjcfGains();
+        }
+
+        internal static IList<ValidationFinding> GetMjcfPreflightFindings(
+            ExportTargetOptions options, IEnumerable<OpenUsdJointDescriptor> joints)
+        {
+            if (options == null || !options.ExportMjcfAsset)
+                return new List<ValidationFinding>();
+            if (!String.IsNullOrWhiteSpace(options.MjcfSimulationRestoreError))
+                return new List<ValidationFinding> { new ValidationFinding {
+                    Severity = ValidationSeverity.Error, Code = "MJCF_SIMULATION_RESTORE",
+                    Message = options.MjcfSimulationRestoreError } };
+            // Only Joint descriptors are needed; do not touch CAD or generate meshes for preflight.
+            var robot = new RobotDocument();
+            robot.Profiles.Simulation = options.Simulation;
+            robot.Joints = (joints ?? Enumerable.Empty<OpenUsdJointDescriptor>()).Select(joint =>
+                new JointDocument { Name = joint.Name, Type = joint.Type,
+                    Limit = new JointLimitDocument { Effort = joint.EffortLimit },
+                    Mimic = joint.IsMimic ? new MimicDocument() : null }).ToList();
+            return new RobotValidator().ValidateMjcfSimulation(robot).Findings
+                .Where(finding => finding.Severity == ValidationSeverity.Error).ToList();
+        }
+
+        internal void MarkMissingMjcfGains()
+        {
+            if (mjcfDriveGrid == null || loadingSettings) return;
+            foreach (DataGridViewRow row in mjcfDriveGrid.Rows)
+            {
+                string mode = DriveModeValue(Convert.ToString(row.Cells["driveModeColumn"].Value));
+                foreach (string column in new[] { "stiffnessColumn", "dampingColumn" })
+                {
+                    bool required = CanDrive(row.Tag as OpenUsdJointDescriptor) &&
+                        (mode == "position" || (mode == "velocity" && column == "dampingColumn"));
+                    var cell = row.Cells[column];
+                    cell.ErrorText = required && String.IsNullOrWhiteSpace(Convert.ToString(cell.Value))
+                        ? ChineseUiText.Translate("Required before MJCF export; the draft can be saved.",
+                            "MJCF 导出前必填；可先保存草稿。") : String.Empty;
+                }
+            }
         }
 
         internal bool TryCaptureSettings(out UsdSimulationProfile settings)
@@ -534,6 +574,20 @@ namespace SW2URDF.UI
                     MessageBoxIcon.Warning);
                 return;
             }
+            MarkMissingMjcfGains();
+            var missing = GetMjcfPreflightFindings(new ExportTargetOptions {
+                ExportMjcfAsset = true, Simulation = simulation },
+                jointIntentGrid.Rows.Cast<DataGridViewRow>().Select(row => (OpenUsdJointDescriptor)row.Tag));
+            if (missing.Count > 0 && MessageBox.Show(this,
+                ChineseUiText.Translate(
+                    "MJCF settings are incomplete. Save this draft anyway? Complete the MuJoCo tab before exporting MJCF.\n\n",
+                    "MJCF 配置尚未完成。仍然保存草稿吗？导出 MJCF 前需要补齐 MuJoCo 页参数。\n\n") +
+                    String.Join("\n", missing.Select(finding => finding.Code + ": " + finding.Message)),
+                Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            {
+                targetTabs.SelectedIndex = 1;
+                return;
+            }
             Settings = settings;
             SimulationSettings = simulation;
             appliedSettingsKey = SettingsKey(settings, simulation);
@@ -621,6 +675,7 @@ namespace SW2URDF.UI
                 {
                     SynchronizeDriveMode(grid.Rows[args.RowIndex]);
                 }
+                if (!loadingSettings && args.RowIndex >= 0) MarkMissingMjcfGains();
             };
             grid.DataError += delegate(object sender, DataGridViewDataErrorEventArgs args)
             {
