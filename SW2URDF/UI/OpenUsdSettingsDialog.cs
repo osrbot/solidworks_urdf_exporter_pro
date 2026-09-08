@@ -264,6 +264,7 @@ namespace SW2URDF.UI
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             Label units = CreateLabel(english, chinese);
+            units.Anchor = AnchorStyles.Left | AnchorStyles.Right;
             units.ForeColor = ModernWinFormsTheme.MutedText;
             layout.Controls.Add(units, 0, 1);
             layout.Controls.Add(grid, 0, 2);
@@ -721,7 +722,7 @@ namespace SW2URDF.UI
             return new Label
             {
                 AutoSize = true,
-                Dock = DockStyle.Fill,
+                Anchor = AnchorStyles.Left,
                 Margin = new Padding(0, 6, 8, 4),
                 Text = ChineseUiText.Translate(english, chinese),
                 TextAlign = ContentAlignment.MiddleLeft
