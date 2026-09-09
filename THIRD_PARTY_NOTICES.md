@@ -4,6 +4,18 @@ SolidWorks URDF Exporter Pro is distributed under the MIT License in
 `LICENSE`. The installer also contains the runtime components listed below.
 Their license texts are shipped in `THIRD_PARTY_LICENSES/`.
 
+## geometry3Sharp 1.0.324
+
+Copyright (c) Ryan Schmidt (rms@rms80.com).
+
+Licensed under the Boost Software License 1.0, reproduced in
+`THIRD_PARTY_LICENSES/BSL-1.0.txt`.
+The managed .NET Framework 4.5 assembly provides triangle mesh reduction.
+
+Pinned package: <https://www.nuget.org/packages/geometry3Sharp/1.0.324>
+
+Source and license: <https://github.com/gradientspace/geometry3Sharp>
+
 ## Apache log4net 3.4.0
 
 Copyright 2004-2026 The Apache Software Foundation.

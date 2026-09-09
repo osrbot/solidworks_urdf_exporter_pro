@@ -7,6 +7,11 @@
   },
   "packages": [
     {
+      "id": "geometry3Sharp",
+      "version": "1.0.324",
+      "sha256": "7b52218ac25b464ab8bc954816bc7522d352ea5b7ab048ea763f84d71c869e3e"
+    },
+    {
       "id": "CsvHelper",
       "version": "7.1.1",
       "sha256": "9c4344ce14c6a988f11e29252ab2270d0da227792beac2185253c551014c37aa"

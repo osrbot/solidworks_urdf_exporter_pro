@@ -757,7 +757,7 @@
             this.labelEstimatedMeshSize.Name = "labelEstimatedMeshSize";
             this.labelEstimatedMeshSize.Size = new System.Drawing.Size(160, 12);
             this.labelEstimatedMeshSize.TabIndex = 78;
-            this.labelEstimatedMeshSize.Text = "Rough STL estimate: logged on export";
+            this.labelEstimatedMeshSize.Text = "Actual triangles and file sizes: export report";
             //
             // labelMeshReductionValue
             //
@@ -766,7 +766,7 @@
             this.labelMeshReductionValue.Name = "labelMeshReductionValue";
             this.labelMeshReductionValue.Size = new System.Drawing.Size(23, 12);
             this.labelMeshReductionValue.TabIndex = 77;
-            this.labelMeshReductionValue.Text = "0.00";
+            this.labelMeshReductionValue.Text = "0%";
             //
             // trackBarMeshReduction
             //
@@ -785,7 +785,7 @@
             this.labelMeshReduction.Name = "labelMeshReduction";
             this.labelMeshReduction.Size = new System.Drawing.Size(112, 12);
             this.labelMeshReduction.TabIndex = 75;
-            this.labelMeshReduction.Text = "Export STL reduction (0-1)";
+            this.labelMeshReduction.Text = "Target triangle reduction (%)";
             // 
             // groupBox1
             // 

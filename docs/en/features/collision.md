@@ -11,7 +11,19 @@ This page configures the Visual mesh origin and the Collision generation method.
 - Collision preview.
 - Mesh detail.
 - STL or 3DXML Visual format.
-- STL simplification ratio.
+- STL target triangle reduction (%).
+
+## Target triangle reduction
+
+This is the fraction of triangles to remove, not the fraction to retain or a promise of file-size reduction.
+
+- 0%: no decimation.
+- 50%: target removal of half the triangles.
+- 100%: maximum simplification within shape safeguards, never an empty mesh.
+
+An existing saved value of `0.5` now means a target of removing 50% of the triangles; `0` means no decimation, and `1` means maximum simplification within shape safeguards. Existing values use this meaning directly, with no conversion required.
+
+Shape preservation may prevent reaching the target. After export, inspect outlines, holes, slots, and important contact features. Check actual triangle counts and actual reduction statistics in the export report; neither the target percentage nor a pre-export estimate is an actual result.
 
 ## Choosing a collision strategy
 

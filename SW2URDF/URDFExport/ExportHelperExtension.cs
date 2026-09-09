@@ -1306,6 +1306,16 @@ namespace SW2URDF.URDFExport
 
             public double? ActualReductionPercent { get; set; }
 
+            public uint? OriginalTriangles { get; set; }
+
+            public long? OriginalBytes { get; set; }
+
+            public uint? TargetTriangles { get; set; }
+
+            public string ReductionStatus { get; set; }
+
+            public string ReductionWarning { get; set; }
+
             public static StlExportStats FromSettings(StlMeshSettings settings)
             {
                 return new StlExportStats
@@ -1313,8 +1323,10 @@ namespace SW2URDF.URDFExport
                     QualityLabel = settings == null ? "" : settings.QualityLabel,
                     ReductionRatio = settings == null ? (double?)null : settings.ReductionRatio,
                     CustomSettings = settings == null ? (bool?)null : settings.UseCustom,
-                    Deviation = settings == null ? (double?)null : settings.Deviation,
-                    AngleTolerance = settings == null ? (double?)null : settings.AngleTolerance
+                    Deviation = settings == null || !InertialEditingPolicy.IsPositiveFinite(settings.Deviation)
+                        ? (double?)null : settings.Deviation,
+                    AngleTolerance = settings == null || !InertialEditingPolicy.IsPositiveFinite(settings.AngleTolerance)
+                        ? (double?)null : settings.AngleTolerance
                 };
             }
 

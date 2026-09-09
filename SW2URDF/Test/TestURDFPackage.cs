@@ -1275,7 +1275,7 @@ namespace SW2URDF.Test
             Assert.Contains("| Inertial validation | PASS | rows=1, failures=0, warnings=0 |", report);
             Assert.Contains("| Mesh manifest paths | PASS | rows=1, missing_visual=0, missing_collision=0 |", report);
             Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=VisualMesh=1, effective=VisualMesh=1, urdf_refs=mesh=1 |", report);
-            Assert.Contains("| STL reduction | PASS | stats_rows=1, high_estimate_errors=0, ratios=0.5=1 |", report);
+            Assert.Contains("| STL reduction | PASS | stats_rows=1, high_estimate_errors=0, reduction_warnings=0, ratios=0.5=1 |", report);
             Assert.Contains("Plugin version: ", report);
             Assert.Contains("Commit hash: ", report);
             Assert.Contains("Build time UTC: ", report);
@@ -1351,11 +1351,11 @@ namespace SW2URDF.Test
             Assert.Contains("Average estimated STL reduction: 50%", report);
             Assert.Contains("Average actual STL reduction: 50%", report);
             Assert.Contains("## STL Reduction Details", report);
-            Assert.Contains("| Link | Quality | Ratio | Custom | Deviation (m) | Angle tolerance (rad) | Baseline est. bytes | Baseline est. triangles | Estimated bytes | Estimated triangles | Actual visual bytes | Actual visual triangles | Estimate error | Estimated reduction | Actual reduction |", report);
+            Assert.Contains("| Link | Quality | Target removal ratio | Original bytes | Original triangles | Target triangles | Final bytes | Final triangles | Actual reduction | Result | Notes |", report);
             Assert.Contains(
-                "| base_link | custom | 0.5 | true | 0.001 | 1 | 5084 | 100 | 2584 | 50 | " +
+                "| base_link | custom | 0.5 |  |  |  | " +
                 new FileInfo(visualMesh).Length.ToString() +
-                " | 0 | 0% | 50% | 50% |",
+                " | 0 | 50% |  |  |",
                 report);
             Assert.DoesNotContain("FAIL:", report);
 
@@ -1481,7 +1481,7 @@ namespace SW2URDF.Test
             Assert.Contains("| Inertial validation | PASS | rows=5, failures=0, warnings=0 |", report);
             Assert.Contains("| Mesh manifest paths | PASS | rows=5, missing_visual=0, missing_collision=0 |", report);
             Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=VisualMesh=5, effective=VisualMesh=5, urdf_refs=mesh=5 |", report);
-            Assert.Contains("| STL reduction | PASS | stats_rows=5, high_estimate_errors=0, ratios=0.35=5 |", report);
+            Assert.Contains("| STL reduction | PASS | stats_rows=5, high_estimate_errors=0, reduction_warnings=0, ratios=0.35=5 |", report);
             Assert.Contains("| meshes/visual | WheelLF-1.STL | yes | yes | yes |", report);
             Assert.Contains("| meshes/collision | LiDAR-B.STL | yes | yes | yes |", report);
             Assert.Contains("| WheelLF-1 | Origin_global | PASS | 1 | 1 | 0 | 0 | 0 | 0 | 0% | none | none |", report);

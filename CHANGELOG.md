@@ -2,6 +2,16 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## Unreleased
+
+- STL 精简比例改为真实目标减面：0 不减面，0.5 目标移除一半三角面，1 在保护形状的前提下尽可能减面。旧配置数值直接按此含义读取。
+- 先按 SW 粗糙/精细预设导出，再减面；不再用比例写固定毫米公差，避免小 Link 返回无穷大公差的问题。
+- 报告增加原始/目标/最终三角面数及文件大小。保留独立几何部分并检查候选形状，没有更小的有效结果时保留原网格并提示；不修改 CAD 质量或惯性。
+- 收尾恢复按原模式处理：预设恢复模式，自定义模式恢复公差和模式，避免对随网格上下文变化的预设公差作错误校验。
+- Interpret existing STL reduction values as the fraction of triangles to remove: 0 disables reduction, 0.5 targets half, and 1 requests maximum shape-protected reduction.
+- Decimate after preset-based SW export instead of mapping reduction to fixed custom tolerances. Report measured original/final triangles and bytes, preserve separate shells, and retain the original file if no smaller valid candidate is available. CAD mass and inertia are unchanged.
+- Restore preset modes without validating their context-dependent custom tolerance readback; continue restoring and validating explicit tolerances for Custom mode.
+
 ## 2026-09-08 / v20260908-rc2 (Pre-release / 候选版)
 
 ### 简体中文

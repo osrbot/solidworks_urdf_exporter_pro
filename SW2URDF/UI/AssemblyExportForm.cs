@@ -2523,12 +2523,12 @@ namespace SW2URDF.UI
         private void UpdateMeshReductionLabel()
         {
             double ratio = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
-            labelMeshReductionValue.Text = ratio.ToString("0.00", URDFAttribute.URDFNumberFormat);
+            labelMeshReductionValue.Text = (ratio * 100.0).ToString("0", URDFAttribute.URDFNumberFormat) + "%";
             SetModernLinkStatusText(
                 labelEstimatedMeshSize,
                 ChineseUiText.Translate(
-                    "Rough STL estimate: logged on export",
-                    "\u7c97\u7565 STL \u4f30\u7b97\uff1a\u5bfc\u51fa\u65f6\u5199\u5165\u65e5\u5fd7"));
+                    "Actual triangles and file sizes: export report",
+                    "实际面数与文件大小见导出报告"));
         }
 
         private static int MeshReductionRatioToTrackBarValue(double ratio)
@@ -2551,8 +2551,8 @@ namespace SW2URDF.UI
 
             ApplyMeshReductionToTree(BaseNode, meshReductionRatioForExport);
             logger.Info(String.Format(
-                "Applying STL mesh reduction ratio {0:0.00} to every link for this export",
-                meshReductionRatioForExport));
+                "Applying target STL triangle reduction {0:0}% to every link for this export",
+                meshReductionRatioForExport * 100.0));
         }
 
         internal static void ApplyMeshReductionToTree(LinkNode node, double ratio)

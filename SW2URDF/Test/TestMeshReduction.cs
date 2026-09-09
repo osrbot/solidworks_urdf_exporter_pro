@@ -17,8 +17,8 @@ namespace SW2URDF.Test
         [InlineData(true, 0.0, false, "fine", 0.0)]
         [InlineData(false, 0.0, false, "coarse", 0.0)]
         [InlineData(true, -1.0, false, "fine", 0.0)]
-        [InlineData(false, 0.5, true, "custom", 0.5)]
-        [InlineData(true, 2.0, true, "custom", 1.0)]
+        [InlineData(false, 0.5, false, "coarse", 0.5)]
+        [InlineData(true, 2.0, false, "fine", 1.0)]
         public void TestStlMeshReductionSettings(
             bool qualityFine,
             double reductionRatio,
@@ -32,20 +32,32 @@ namespace SW2URDF.Test
             Assert.Equal(expectedCustom, settings.UseCustom);
             Assert.Equal(expectedQuality, settings.QualityLabel);
             Assert.Equal(expectedReduction, settings.ReductionRatio, 5);
-            Assert.InRange(settings.Deviation, 0.001, 0.02);
-            Assert.InRange(settings.AngleTolerance, 0.52359, 2.0944);
+            Assert.True(Double.IsNaN(settings.Deviation));
+            Assert.True(Double.IsNaN(settings.AngleTolerance));
         }
 
         [Fact]
-        public void TestHigherReductionUsesLooserStlTolerances()
+        public void TestHigherReductionDoesNotChangeSolidWorksTessellationQuality()
         {
             ExportHelper.StlMeshSettings lowReduction =
                 ExportHelper.CreateStlMeshSettings(true, 0.25);
             ExportHelper.StlMeshSettings highReduction =
                 ExportHelper.CreateStlMeshSettings(true, 0.75);
 
-            Assert.True(highReduction.Deviation > lowReduction.Deviation);
-            Assert.True(highReduction.AngleTolerance > lowReduction.AngleTolerance);
+            Assert.Equal(lowReduction.QualityLabel, highReduction.QualityLabel);
+            Assert.False(lowReduction.UseCustom);
+            Assert.False(highReduction.UseCustom);
+            Assert.Equal(0.25, lowReduction.ReductionRatio);
+            Assert.Equal(0.75, highReduction.ReductionRatio);
+        }
+
+        [Theory]
+        [InlineData(Double.NaN)]
+        [InlineData(Double.PositiveInfinity)]
+        [InlineData(Double.NegativeInfinity)]
+        public void InvalidReductionCannotReachSolidWorks(double ratio)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => ExportHelper.CreateStlMeshSettings(false, ratio));
         }
 
         [Theory]
@@ -563,7 +575,12 @@ namespace SW2URDF.Test
                         EstimatedTriangles = 50,
                         EstimateErrorPercent = 10.5,
                         EstimatedReductionPercent = 50.0,
-                        ActualReductionPercent = 98.0
+                        ActualReductionPercent = 98.0,
+                        OriginalTriangles = 100,
+                        OriginalBytes = 5084,
+                        TargetTriangles = 50,
+                        ReductionStatus = "reduced",
+                        ReductionWarning = "shape, checked"
                     },
                     "native:box");
 
@@ -576,6 +593,33 @@ namespace SW2URDF.Test
                 "\"base,link\",Primitive,BoxPrimitive,urdf_box_primitive,ok,STL,custom,0.5,true,0.001,1,5084,100,2584,50,10.5,50,98,package://robot/meshes/visual/base_link.STL,package://robot/meshes/collision/base_link.STL,native:box",
                 csv);
             Assert.Contains(",true,true,184,84,2,0,54.3478260869565,100", csv);
+            Assert.Contains("original_visual_bytes,original_visual_triangles,target_visual_triangles,mesh_reduction_status,mesh_reduction_warning", csv);
+            Assert.Contains(",5084,100,50,reduced,\"shape, checked\"", csv);
+        }
+
+        [Fact]
+        public void TriangleReductionStatisticsUseActualSourceFile()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "sw2urdf-actual-reduction-" + Guid.NewGuid() + ".stl");
+            var box = new ExportHelper.LinkLocalBoundingBox();
+            box.Include(-0.5, -0.5, -0.5);
+            box.Include(0.5, 0.5, 0.5);
+            try
+            {
+                ExportHelper.WriteBoxPrimitiveStl(path, box);
+                byte[] before = File.ReadAllBytes(path);
+                var stats = ExportHelper.ReduceStlFile(path, ExportHelper.CreateStlMeshSettings(true, 0));
+                Assert.Equal((uint)12, stats.OriginalTriangles.Value);
+                Assert.Equal((uint)12, stats.TargetTriangles.Value);
+                Assert.Equal((uint)12, stats.ActualTriangles.Value);
+                Assert.Equal(684L, stats.OriginalBytes.Value);
+                Assert.Equal(684L, stats.ActualBytes.Value);
+                Assert.Equal(0.0, stats.ActualReductionPercent.Value);
+                Assert.Null(stats.BaselineEstimatedTriangles);
+                Assert.Null(stats.EstimatedTriangles);
+                Assert.Equal(before, File.ReadAllBytes(path));
+            }
+            finally { if (File.Exists(path)) File.Delete(path); }
         }
 
         [Fact]
