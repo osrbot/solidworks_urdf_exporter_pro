@@ -65,7 +65,10 @@ namespace OSURDF.Core.Export
             NameContext names = NameContext.Create(robot);
             string outputRoot = Path.GetFullPath(options.OutputDirectory);
             string mujocoRoot = Path.Combine(outputRoot, "MuJoCo");
-            string destination = Path.GetFullPath(Path.Combine(mujocoRoot, names.RobotName));
+            string directoryName = string.IsNullOrWhiteSpace(options.OutputDirectoryName)
+                ? names.RobotName
+                : GetRobotDirectoryName(options.OutputDirectoryName);
+            string destination = Path.GetFullPath(Path.Combine(mujocoRoot, directoryName));
             if (PathsOverlap(destination, bundleRoot))
             {
                 throw new InvalidDataException(

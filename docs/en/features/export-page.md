@@ -4,13 +4,17 @@ The final page collects package information, selects output formats, and starts 
 
 ## Basic information
 
-- ROS package name and version.
+- Output name and package version.
 - Package description.
 - Maintainer name and email.
-- License.
+- Model license: choose a common identifier such as MIT, Apache-2.0, BSD, or CC, or type a custom name. Existing values are retained; `NOASSERTION` means the license has not been confirmed.
 - Author or configurator.
 
 Even when exporting only OpenUSD or MJCF, use a clear name and license so the output directory and reports can be identified correctly.
+
+All four targets share the output name. For example, `osracer_description` produces
+`ROS1/osracer_description`, `ROS2/osracer_description`, `USD/osracer_description`, and
+`MuJoCo/osracer_description`. The preview shows normalized directory names. This does not rename the assembly or the model inside the exported files.
 
 ## Output options
 

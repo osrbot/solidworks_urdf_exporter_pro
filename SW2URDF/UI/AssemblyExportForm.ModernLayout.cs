@@ -76,7 +76,7 @@ namespace SW2URDF.UI
         private TextBox modernPackageDescriptionTextBox;
         private TextBox modernMaintainerNameTextBox;
         private TextBox modernMaintainerEmailTextBox;
-        private TextBox modernModelLicenseTextBox;
+        private ComboBox modernModelLicenseComboBox;
         private TextBox modernModelAuthorTextBox;
         private bool modernJointTreeExpandedOnce;
         private bool modernLinkTreeExpandedOnce;
@@ -1769,6 +1769,7 @@ namespace SW2URDF.UI
             {
                 grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             }
+            labelRosPackageName.Text = ChineseUiText.Translate("Output name", "输出名称");
             AddModernField(grid, labelRosPackageName, textBoxRosPackageName, 0, 0, 1);
             modernPackageVersionTextBox = CreateTargetTextBox("0.1.0");
             AddModernField(grid, CreateTargetLabel("Package version", "功能包版本"), modernPackageVersionTextBox, 0, 2, 3);
@@ -1789,9 +1790,20 @@ namespace SW2URDF.UI
             modernMaintainerEmailTextBox = CreateTargetTextBox(string.Empty);
             AddModernField(grid, CreateTargetLabel("Maintainer", "维护者"), modernMaintainerNameTextBox, 3, 0, 1);
             AddModernField(grid, CreateTargetLabel("Email", "维护者邮箱"), modernMaintainerEmailTextBox, 3, 2, 3);
-            modernModelLicenseTextBox = CreateTargetTextBox(string.Empty);
+            modernModelLicenseComboBox = new ComboBox
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 2, 8, 6),
+                DropDownStyle = ComboBoxStyle.DropDown
+            };
+            modernModelLicenseComboBox.Items.AddRange(new object[]
+            {
+                "NOASSERTION", "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause",
+                "GPL-3.0-only", "LGPL-3.0-only", "MPL-2.0",
+                "CC0-1.0", "CC-BY-4.0", "CC-BY-SA-4.0"
+            });
             modernModelAuthorTextBox = CreateTargetTextBox(string.Empty);
-            AddModernField(grid, CreateTargetLabel("Model license", "模型许可证"), modernModelLicenseTextBox, 4, 0, 1);
+            AddModernField(grid, CreateTargetLabel("Model license", "模型许可证"), modernModelLicenseComboBox, 4, 0, 1);
             AddModernField(
                 grid,
                 CreateTargetLabel(

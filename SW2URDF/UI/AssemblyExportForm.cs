@@ -1307,13 +1307,6 @@ namespace SW2URDF.UI
         private void UpdateRosPackageNameHintCore(bool updateLayout)
         {
             string sanitized = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
-            string robotName = Exporter == null
-                ? sanitized
-                : URDFPackage.SanitizePackageName(Exporter.PackageName);
-            if (string.IsNullOrWhiteSpace(robotName))
-            {
-                robotName = sanitized;
-            }
             List<string> paths = new List<string>();
             if (modernRos1CheckBox == null || modernRos1CheckBox.Checked)
             {
@@ -1329,7 +1322,7 @@ namespace SW2URDF.UI
             }
             if (modernMjcfAssetCheckBox != null && modernMjcfAssetCheckBox.Checked)
             {
-                paths.Add("MuJoCo/" + robotName);
+                paths.Add("MuJoCo/" + OSURDF.Core.Export.MjcfAssetExporter.GetRobotDirectoryName(sanitized));
             }
             string hint = paths.Count == 0
                 ? ChineseUiText.Translate("No target selected", "未选择输出目标")
@@ -1404,7 +1397,7 @@ namespace SW2URDF.UI
                 modernPackageDescriptionTextBox.Text = options.Description;
                 modernMaintainerNameTextBox.Text = options.MaintainerName;
                 modernMaintainerEmailTextBox.Text = options.MaintainerEmail;
-                modernModelLicenseTextBox.Text = options.ModelLicense;
+                modernModelLicenseComboBox.Text = options.ModelLicense;
                 modernModelAuthorTextBox.Text = options.ModelAuthor;
             }
             finally
@@ -1420,7 +1413,7 @@ namespace SW2URDF.UI
                         "配置公共基座与 Joint 驱动意图，以及独立的 OpenUSD 和 MuJoCo 增益。"));
             }
             packagePathToolTip.SetToolTip(
-                modernModelLicenseTextBox,
+                modernModelLicenseComboBox,
                 ChineseUiText.Translate(
                     "NOASSERTION means the model license has not been confirmed. Review it before publishing.",
                     "NOASSERTION 表示模型许可证尚未确认；公开发布前必须审核。"));
@@ -1441,7 +1434,7 @@ namespace SW2URDF.UI
                 Description = modernPackageDescriptionTextBox.Text.Trim(),
                 MaintainerName = modernMaintainerNameTextBox.Text.Trim(),
                 MaintainerEmail = modernMaintainerEmailTextBox.Text.Trim(),
-                ModelLicense = modernModelLicenseTextBox.Text.Trim(),
+                ModelLicense = modernModelLicenseComboBox.Text.Trim(),
                 ModelAuthor = modernModelAuthorTextBox.Text.Trim(),
                 UsdSimulation = ExportTargetOptions.CloneUsdSimulation(
                     modernUsdSimulationProfile),

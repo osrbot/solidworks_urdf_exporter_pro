@@ -5,13 +5,17 @@ Link。
 
 ## 基本信息
 
-- ROS 包名与版本。
+- 输出名称与功能包版本。
 - 功能包说明。
 - 维护者名称和邮箱。
-- 许可证。
+- 模型许可证：可下拉选择 MIT、Apache-2.0、BSD、CC 等常用标识，也可直接输入自定义名称。已有内容会保留；`NOASSERTION` 表示尚未确认许可证。
 - 作者或配置者。
 
 只导出 OpenUSD 或 MJCF 时，也建议填写清楚名称和许可证，方便结果目录和报告被正确识别。
+
+四种输出共用“输出名称”。例如填写 `osracer_description`，将分别输出到
+`ROS1/osracer_description`、`ROS2/osracer_description`、`USD/osracer_description` 和
+`MuJoCo/osracer_description`。下方预览显示整理后的目录名；这不会修改装配体或模型内部名称。
 
 ## 输出选项
 

@@ -1547,7 +1547,7 @@ namespace SW2URDF.URDFExport
                 if (options.ExportMjcfAsset)
                     addJob("MuJoCo MJCF",
                         Path.Combine(outputPackage.WindowsMjcfAssetDirectory,
-                            MjcfAssetExporter.GetRobotDirectoryName(outputPackage.RobotName)), () =>
+                            MjcfAssetExporter.GetRobotDirectoryName(outputPackage.PackageName)), () =>
                     {
                         string applicationRoot = ApplicationRoot();
                         string lockPath = Path.Combine(applicationRoot, "tools", "mujoco_runtime.lock.json");
@@ -1560,6 +1560,7 @@ namespace SW2URDF.URDFExport
                         {
                             BundleDirectory = bundleDirectory,
                             OutputDirectory = transactionRoot,
+                            OutputDirectoryName = outputPackage.PackageName,
                             Overwrite = true,
                             CompilerValidator = new BundledMjcfCompilerValidator(
                                 Path.Combine(runtime, "compile.exe"), Path.Combine(runtime, "testspeed.exe"), version)

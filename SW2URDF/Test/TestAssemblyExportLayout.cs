@@ -1095,7 +1095,7 @@ namespace SW2URDF.Test
                 string[] paths =
                 {
                     "ROS1/rover_description", "ROS2/rover_description",
-                    "USD/rover_description", "MuJoCo/robot_model"
+                    "USD/rover_description", "MuJoCo/rover_description"
                 };
                 for (int cycle = 0; cycle < 3; cycle++)
                 {
@@ -1929,8 +1929,8 @@ namespace SW2URDF.Test
                 Assert.DoesNotContain("and", packageHint.Text);
                 Assert.DoesNotContain("\u548c", packageHint.Text);
                 Assert.True(
-                    packageLabel.Text == "ROS package" ||
-                    packageLabel.Text == "ROS \u5305\u540d");
+                    packageLabel.Text == "Output name" ||
+                    packageLabel.Text == "\u8f93\u51fa\u540d\u79f0");
 
                 form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(
                     typeof(ExportHelper));
@@ -1941,12 +1941,40 @@ namespace SW2URDF.Test
                 mjcfTarget.Checked = true;
                 InvokePrivate(form, "UpdateRosPackageNameHint");
                 Assert.Equal(
-                    "USD/rover_description | MuJoCo/robot_model",
+                    "USD/rover_description | MuJoCo/rover_description",
                     packageHint.Text);
             }
             finally
             {
                 form.Dispose();
+            }
+        }
+
+        [Fact]
+        public void TestModelLicenseOffersPresetsAndCapturesCustomText()
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                var license = GetControl<ComboBox>(form, "modernModelLicenseComboBox");
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                form.Exporter.ExportTargets = ExportTargetOptions.RecommendedDefaults("robot");
+                InvokePrivate(form, "InitializeExportTargetControls");
+                Assert.Equal(ComboBoxStyle.DropDown, license.DropDownStyle);
+                Assert.Equal("NOASSERTION", license.Text);
+                Assert.Contains("MIT", license.Items.Cast<string>());
+                Assert.Contains("Apache-2.0", license.Items.Cast<string>());
+                Assert.Contains("CC-BY-4.0", license.Items.Cast<string>());
+                foreach (string value in new[] { "MIT", "LicenseRef-My-Custom-License", "MIT OR Apache-2.0" })
+                {
+                    license.Text = value;
+                    var options = (ExportTargetOptions)typeof(AssemblyExportForm).GetMethod(
+                        "CaptureExportTargetOptions", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(form, null);
+                    Assert.Equal(value, options.ModelLicense);
+                    form.Exporter.ExportTargets = options;
+                    license.Text = string.Empty;
+                    InvokePrivate(form, "InitializeExportTargetControls");
+                    Assert.Equal(value, license.Text);
+                }
             }
         }
 
