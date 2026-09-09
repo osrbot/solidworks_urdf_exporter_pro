@@ -19,6 +19,11 @@ namespace SW2URDF.Test
                 string modelPath = Path.Combine(directory, "robot.SLDASM");
                 LinkNode root = CreateTree();
                 root.Link.MeshReductionRatio = 0.35;
+                var options = ExportTargetOptions.RecommendedDefaults("rover_description");
+                options.ModelLicense = "LicenseRef-Custom";
+                options.ModelAuthor = "Model author";
+                options.ExportMjcfAsset = false;
+                options.SaveModelSettings(root.Link, "rover_description");
 
                 Assert.True(store.Save(modelPath, root, "rover_description", "D:\\exports"));
                 Assert.True(store.TryLoad(modelPath, out ExportSessionDraft restored));
@@ -29,6 +34,11 @@ namespace SW2URDF.Test
                 Assert.Equal("rover_description", restored.RosPackageName);
                 Assert.Equal("D:\\exports", restored.SavePath);
                 Assert.True(restored.SavedUtc > DateTime.UtcNow.AddMinutes(-1));
+                var restoredOptions = ExportTargetOptions.RecommendedDefaults("another_model");
+                Assert.Equal("rover_description", ExportTargetOptions.RestoreModelSettings(restored.Root.Link, restoredOptions));
+                Assert.Equal("LicenseRef-Custom", restoredOptions.ModelLicense);
+                Assert.Equal("Model author", restoredOptions.ModelAuthor);
+                Assert.False(restoredOptions.ExportMjcfAsset);
             }
             finally
             {

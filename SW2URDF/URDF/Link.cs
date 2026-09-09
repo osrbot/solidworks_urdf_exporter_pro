@@ -33,6 +33,9 @@ namespace SW2URDF.URDF
         [DataMember(EmitDefaultValue = false)]
         public string SimulationSettingsJson;
 
+        [DataMember(EmitDefaultValue = false)]
+        public string ModelSettingsJson;
+
         [DataMember]
         public List<Link> Children;
 
@@ -293,6 +296,8 @@ namespace SW2URDF.URDF
 
         private void SetExportSettings(Link externalLink)
         {
+            ModelSettingsJson = Parent == null && externalLink.Parent == null
+                ? externalLink.ModelSettingsJson : null;
             SimulationSettingsJson = Parent == null && externalLink.Parent == null
                 ? externalLink.SimulationSettingsJson : null;
             InertialEditing = externalLink.InertialEditing == null

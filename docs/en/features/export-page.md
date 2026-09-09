@@ -18,6 +18,10 @@ All four targets share the output name. For example, `osracer_description` produ
 
 ## Output options
 
+The output name, version, description, maintainer, email, license, author, and target selections are saved with the export configuration.
+Choose Save when closing to retain edits; choosing not to save does not commit them. Window-close recovery drafts also include these fields.
+After writing the configuration to the assembly, save the SolidWorks document normally to retain it when reopening the file.
+
 - ROS 1 package.
 - ROS 2 package.
 - OpenUSD robot asset.

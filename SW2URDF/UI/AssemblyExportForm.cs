@@ -1365,6 +1365,10 @@ namespace SW2URDF.UI
             ExportTargetOptions options = restore
                 ? existing
                 : ExportTargetOptions.RecommendedDefaults(Exporter.RosPackageName);
+            string outputName = ExportTargetOptions.RestoreModelSettings(
+                BaseNode == null ? null : BaseNode.Link, options);
+            if (outputName != null)
+                textBoxRosPackageName.Text = outputName;
             if (!restore)
             {
                 string restoreError;
@@ -1419,6 +1423,12 @@ namespace SW2URDF.UI
                     "NOASSERTION 表示模型许可证尚未确认；公开发布前必须审核。"));
             SynchronizeAssetMeshFormatControls();
             UpdateRosPackageNameHintForTargetChange();
+        }
+
+        internal void CaptureModelSettingsForPersistence()
+        {
+            if (!modernUiInitialized || BaseNode == null) return;
+            CaptureExportTargetOptions().SaveModelSettings(BaseNode.Link, textBoxRosPackageName.Text);
         }
 
         private ExportTargetOptions CaptureExportTargetOptions()
@@ -2468,6 +2478,7 @@ namespace SW2URDF.UI
 
         private void CaptureCurrentExportSession()
         {
+            CaptureModelSettingsForPersistence();
             bool editingLink = modernUiInitialized
                 ? modernActivePage != ModernAssemblyPage.Joint
                 : panelLinkProperties.Visible;

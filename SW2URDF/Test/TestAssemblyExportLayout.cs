@@ -1950,6 +1950,59 @@ namespace SW2URDF.Test
             }
         }
 
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public void TestModelSettingsReloadIntoANewFormWithoutInMemoryExportTargets(bool recoveryDraft, bool staleMemory)
+        {
+            string payload;
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                var root = new SW2URDF.URDF.LinkNode { IsBaseNode = true };
+                root.Link.Name = "base_link";
+                typeof(AssemblyExportForm).GetField("BaseNode", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(form, root);
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                // URDF-only export uses temporary legacy options; persistence must use the UI instead.
+                form.Exporter.ExportTargets = ExportTargetOptions.LegacyCompatibilityDefaults();
+                InvokePrivate(form, "InitializeExportTargetControls");
+                GetControl<TextBox>(form, "textBoxRosPackageName").Text = "osracer_description";
+                GetControl<TextBox>(form, "modernPackageVersionTextBox").Text = "0.1.1";
+                GetControl<TextBox>(form, "modernPackageDescriptionTextBox").Text = "Saved description";
+                GetControl<TextBox>(form, "modernMaintainerNameTextBox").Text = "kitso666";
+                GetControl<TextBox>(form, "modernMaintainerEmailTextBox").Text = "kitso@osrbot.com";
+                GetControl<TextBox>(form, "modernModelAuthorTextBox").Text = "Model author";
+                GetControl<ComboBox>(form, "modernModelLicenseComboBox").Text = "LicenseRef-My-Custom";
+                GetControl<CheckBox>(form, "modernRos1CheckBox").Checked = false;
+                GetControl<CheckBox>(form, "modernUsdAssetCheckBox").Checked = false;
+                if (recoveryDraft) InvokePrivate(form, "CaptureCurrentExportSession");
+                else form.CaptureModelSettingsForPersistence();
+                payload = ConfigurationSerialization.SerializeDraftPayload(root);
+            }
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                typeof(AssemblyExportForm).GetField("BaseNode", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(form, ConfigurationSerialization.DeserializeDraftPayload(payload));
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                Assert.Null(form.Exporter.ExportTargets);
+                if (staleMemory)
+                    form.Exporter.ExportTargets = ExportTargetOptions.RecommendedDefaults("outdated_name");
+                InvokePrivate(form, "InitializeExportTargetControls");
+                Assert.Equal("osracer_description", GetControl<TextBox>(form, "textBoxRosPackageName").Text);
+                Assert.Equal("0.1.1", GetControl<TextBox>(form, "modernPackageVersionTextBox").Text);
+                Assert.Equal("Saved description", GetControl<TextBox>(form, "modernPackageDescriptionTextBox").Text);
+                Assert.Equal("kitso666", GetControl<TextBox>(form, "modernMaintainerNameTextBox").Text);
+                Assert.Equal("kitso@osrbot.com", GetControl<TextBox>(form, "modernMaintainerEmailTextBox").Text);
+                Assert.Equal("Model author", GetControl<TextBox>(form, "modernModelAuthorTextBox").Text);
+                Assert.Equal("LicenseRef-My-Custom", GetControl<ComboBox>(form, "modernModelLicenseComboBox").Text);
+                Assert.False(GetControl<CheckBox>(form, "modernRos1CheckBox").Checked);
+                Assert.True(GetControl<CheckBox>(form, "modernRos2CheckBox").Checked);
+                Assert.False(GetControl<CheckBox>(form, "modernUsdAssetCheckBox").Checked);
+                Assert.True(GetControl<CheckBox>(form, "modernMjcfAssetCheckBox").Checked);
+            }
+        }
+
         [Fact]
         public void TestModelLicenseOffersPresetsAndCapturesCustomText()
         {

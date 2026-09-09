@@ -883,6 +883,7 @@ namespace SW2URDF.UI
                 MessageBox.Show(message, "URDF Joint Errors");
                 return false;
             }
+            CaptureModelSettingsForPersistence();
             CommonSwOperations.RetrieveSWComponentPIDs(model, BaseNode);
             bool saved = ConfigurationSaveInteraction.Save(
                 allowOverwrite => ConfigurationSerialization.SaveConfigTreeXML(
