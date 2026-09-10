@@ -827,6 +827,71 @@ namespace SW2URDF.Test
                 finding.Field == "MaintainerEmail");
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void RosMetadataValidationAcceptsValidValuesWithoutTargetOrPipelineGates(bool useV2)
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.UseV2Pipeline = useV2;
+            options.ExportRos1Legacy = options.ExportRos2 = options.ExportUsdAsset = options.ExportMjcfAsset = false;
+            options.Ros2Distribution = "unsupported";
+            options.GazeboDistribution = "unsupported";
+            options.Ros2ControlProfileFile = "missing-profile.json";
+            options.UsdSimulationRestoreError = "unrelated USD error";
+            Assert.Empty(options.ValidateRosMetadataFindings());
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void RosMetadataValidationRejectsEmptyRequiredFields(bool useV2)
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.UseV2Pipeline = useV2;
+            options.PackageVersion = options.Description = options.ModelLicense =
+                options.MaintainerName = options.MaintainerEmail = string.Empty;
+            var findings = options.ValidateRosMetadataFindings();
+            Assert.Equal(5, findings.Count);
+            foreach (string code in new[] { "PACKAGE_VERSION", "PACKAGE_DESCRIPTION", "MODEL_LICENSE",
+                "MAINTAINER_NAME", "MAINTAINER_EMAIL" })
+                Assert.Contains(findings, finding => finding.Code == code);
+        }
+
+        [Theory]
+        [InlineData("invalid", "owner@example.com", "PACKAGE_VERSION")]
+        [InlineData("1.2.3", "invalid", "MAINTAINER_EMAIL_FORMAT")]
+        public void LegacyRosMetadataValidationRejectsInvalidVersionAndEmail(string version, string email, string code)
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.UseV2Pipeline = false;
+            options.PackageVersion = version;
+            options.MaintainerEmail = email;
+            Assert.Equal(code, Assert.Single(options.ValidateRosMetadataFindings()).Code);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void InvalidRosMetadataDoesNotBlockSharedV2OrUsdOnlyValidation(bool includeRos)
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.ExportRos1Legacy = includeRos;
+            options.ExportRos2 = options.ExportMjcfAsset = false;
+            options.ExportUsdAsset = true;
+            options.PackageVersion = "invalid";
+            options.MaintainerEmail = "invalid";
+            Assert.Empty(options.ValidateSharedFindings());
+            var findings = options.ValidateFindings();
+            if (includeRos)
+            {
+                Assert.Equal(2, findings.Count);
+                Assert.Contains(findings, finding => finding.Code == "PACKAGE_VERSION");
+                Assert.Contains(findings, finding => finding.Code == "MAINTAINER_EMAIL_FORMAT");
+            }
+            else Assert.Empty(findings);
+        }
+
         private static void WriteMarker(string directory, string value)
         {
             Directory.CreateDirectory(directory);

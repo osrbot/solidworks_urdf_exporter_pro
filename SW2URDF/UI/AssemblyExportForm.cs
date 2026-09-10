@@ -1123,7 +1123,8 @@ namespace SW2URDF.UI
                 logger.Info("Using the lightweight URDF-only compatibility path; derived target packages require a complete mesh export.");
             }
             IList<ExportTargetValidationFinding> targetErrors =
-                Exporter.ExportTargets.ValidateSharedFindings();
+                exportSTL ? Exporter.ExportTargets.ValidateSharedFindings()
+                    : Exporter.ExportTargets.ValidateRosMetadataFindings();
             if (targetErrors.Count > 0)
             {
                 ExportDiagnosticsDialog.ShowValidation(

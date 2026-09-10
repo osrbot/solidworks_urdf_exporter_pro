@@ -254,6 +254,31 @@ namespace SW2URDF.URDFExport
             return errors;
         }
 
+        public IList<ExportTargetValidationFinding> ValidateRosMetadataFindings()
+        {
+            var errors = new List<ExportTargetValidationFinding>();
+            if (!ExactVersion.IsMatch(PackageVersion ?? string.Empty))
+            {
+                Add(errors, "PACKAGE_VERSION", "PackageVersion",
+                    "Package version must be an exact semantic version, for example 0.1.0.");
+            }
+            Require(errors, Description, "PACKAGE_DESCRIPTION", "Description",
+                "Package description");
+            Require(errors, ModelLicense, "MODEL_LICENSE", "ModelLicense",
+                "Model license");
+            Require(errors, MaintainerName, "MAINTAINER_NAME", "MaintainerName",
+                "Maintainer name");
+            Require(errors, MaintainerEmail, "MAINTAINER_EMAIL", "MaintainerEmail",
+                "Maintainer email");
+            if (!string.IsNullOrWhiteSpace(MaintainerEmail) &&
+                !EmailAddress.IsMatch(MaintainerEmail))
+            {
+                Add(errors, "MAINTAINER_EMAIL_FORMAT", "MaintainerEmail",
+                    "Maintainer email is not a valid email address.");
+            }
+            return errors;
+        }
+
         public IList<ExportTargetValidationFinding> ValidateFindings()
         {
             var errors = new List<ExportTargetValidationFinding>(ValidateSharedFindings());
@@ -264,25 +289,7 @@ namespace SW2URDF.URDFExport
                 Add(errors, "MJCF_SIMULATION_RESTORE", "Simulation.Mjcf", MjcfSimulationRestoreError);
             if (ExportRos1Legacy || ExportRos2)
             {
-                if (!ExactVersion.IsMatch(PackageVersion ?? string.Empty))
-                {
-                    Add(errors, "PACKAGE_VERSION", "PackageVersion",
-                        "Package version must be an exact semantic version, for example 0.1.0.");
-                }
-                Require(errors, Description, "PACKAGE_DESCRIPTION", "Description",
-                    "Package description");
-                Require(errors, ModelLicense, "MODEL_LICENSE", "ModelLicense",
-                    "Model license");
-                Require(errors, MaintainerName, "MAINTAINER_NAME", "MaintainerName",
-                    "Maintainer name");
-                Require(errors, MaintainerEmail, "MAINTAINER_EMAIL", "MaintainerEmail",
-                    "Maintainer email");
-                if (!string.IsNullOrWhiteSpace(MaintainerEmail) &&
-                    !EmailAddress.IsMatch(MaintainerEmail))
-                {
-                    Add(errors, "MAINTAINER_EMAIL_FORMAT", "MaintainerEmail",
-                        "Maintainer email is not a valid email address.");
-                }
+                errors.AddRange(ValidateRosMetadataFindings());
             }
             if (ExportRos2 &&
                 !(string.Equals(Ros2Distribution, "lyrical", StringComparison.OrdinalIgnoreCase) &&
