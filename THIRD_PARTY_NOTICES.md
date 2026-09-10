@@ -72,7 +72,8 @@ Package: <https://www.nuget.org/packages/System.Threading.Tasks.Extensions/4.5.1
 
 ## CPython 3.11.9 embedded runtime
 
-The pinned Windows embedded runtime is used by the bundled OpenUSD tooling.
+The pinned Windows embedded runtime is shared by the bundled OpenUSD tooling
+and mesh reduction worker; no second Python interpreter is bundled.
 
 Copyright (c) 2001-2023 Python Software Foundation; All Rights Reserved.
 
@@ -101,6 +102,36 @@ Official package, source, and license:
 - <https://pypi.org/project/usd-core/26.8/>
 - <https://github.com/PixarAnimationStudios/OpenUSD/tree/v26.08>
 - <https://github.com/PixarAnimationStudios/OpenUSD/blob/v26.08/LICENSE.txt>
+
+## NumPy 2.2.6 and PyMeshLab 2025.7.post1
+
+The mesh reduction worker source is installed as
+`tools/mesh_reduction/reduce_stl.py`. Its dependencies are the unmodified
+CPython 3.11 Windows x86-64 wheels pinned in
+`tools/mesh_reduction_runtime.lock.json`, extracted into the shared
+`tools/openusd_runtime/Lib/site-packages` directory.
+
+NumPy is BSD-3-Clause licensed, with additional bundled library terms in
+the wheel's complete license. PyMeshLab declares GPL3, not MIT, and includes
+MeshLab and other native components with their own applicable terms.
+The project's MIT license does not relicense these dependencies.
+
+Wheel sources, native libraries, `.dist-info` metadata and license
+directories are retained; bundled Python bytecode/cache files are excluded.
+The `.data/purelib` payload is placed directly in `site-packages`.
+Exact copies of the wheels' main license files
+are also installed as `THIRD_PARTY_LICENSES/numpy-2.2.6-LICENSE.txt` and
+`THIRD_PARTY_LICENSES/pymeshlab-2025.7.post1-LICENSE.txt`.
+See `THIRD_PARTY_LICENSES/MESH-REDUCTION-SOURCE-NOTICE.txt` for source
+locations and unresolved public-release prerequisites. These notices do not
+claim that retaining license files alone satisfies source distribution duties.
+
+Official package metadata and upstream source:
+
+- <https://pypi.org/pypi/numpy/2.2.6/json>
+- <https://github.com/numpy/numpy/tree/v2.2.6>
+- <https://pypi.org/pypi/pymeshlab/2025.7.post1/json>
+- <https://github.com/cnr-isti-vclab/PyMeshLab>
 
 ## MuJoCo 3.12.0
 

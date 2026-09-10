@@ -1,6 +1,7 @@
 using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -64,6 +65,9 @@ namespace SW2URDF.Test
         [InlineData(1.0, "unchanged", 100, 1, "shape safeguard", false, true)]
         [InlineData(1.0, "failed", 100, 1, "replacement failed", false, true)]
         [InlineData(0.0, "unchanged", 100, 100, "", true, false)]
+        [InlineData(0.5, "reduced", 50, 50, "", true, false)]
+        [InlineData(0.5, "reduced", 80, 50, "shape safeguard", true, true)]
+        [InlineData(0.5, "unchanged", 100, 50, "shape safeguard", false, true)]
         public void CollisionAttemptKeepsCountsAndReasonEvenWhenFallbackIsRequired(
             double ratio, string result, int actual, int target, string warning, bool accepted, bool limited)
         {
@@ -92,6 +96,29 @@ namespace SW2URDF.Test
             Assert.Contains("SaveAs failed", notes);
         }
 
+        [Theory]
+        [InlineData(0.0, false)]
+        [InlineData(0.5, false)]
+        [InlineData(1.0, false)]
+        [InlineData(0.5, true)]
+        [InlineData(1.0, true)]
+        public void CollisionInheritsVisualRatioUnlessAccurateMeshDisablesReduction(double ratio, bool accurate)
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                double expected = accurate ? 0 : ratio;
+                uint target = Math.Max(1U, (uint)Math.Floor(100 * (1 - expected)));
+                uint actual = expected == 0 ? 100U : Math.Max(4U, target);
+                var stats = Stats(expected, expected == 0 ? "unchanged" : "reduced", actual, target, "");
+                string notes;
+                Assert.True(TryCollision(path, accurate ? 0.0 : (double?)null, () => stats, out notes, ratio));
+                Assert.Contains(String.Format(CultureInfo.InvariantCulture, "target removal={0:P0};", expected), notes);
+                Assert.Contains("triangles=100->" + actual, notes);
+            }
+            finally { File.Delete(path); }
+        }
+
         [Fact]
         public void MissingCollisionFileCannotReportSuccess()
         {
@@ -100,6 +127,75 @@ namespace SW2URDF.Test
             Assert.False(TryCollision(path, 0, () => Stats(0, "unchanged", 100, 100, ""), out notes));
             Assert.Contains("collision STL file missing", notes);
             Assert.Contains("triangles=100->100", notes);
+        }
+
+        [Theory]
+        [InlineData(0.0)]
+        [InlineData(0.5)]
+        [InlineData(1.0)]
+        public void VisualMeshCollisionCopiesBytesWithoutSecondReduction(double ratio)
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "sw2urdf-copy-smoke-" + Guid.NewGuid());
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var paths = new ExportHelper.MeshFileNames
+                {
+                    WindowsVisualMeshFilename = Path.Combine(directory, "visual.stl"),
+                    WindowsCollisionMeshFilename = Path.Combine(directory, "collision.stl")
+                };
+                var box = new ExportHelper.LinkLocalBoundingBox();
+                box.Include(-1, -2, -3);
+                box.Include(1, 2, 3);
+                ExportHelper.WriteCylinderPrimitiveStl(paths.WindowsVisualMeshFilename, box);
+                byte[] expected = File.ReadAllBytes(paths.WindowsVisualMeshFilename);
+                var exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                typeof(ExportHelper).GetMethod("ExportCollisionMesh", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(exporter, new object[] {
+                        new Link { Name = "link", CollisionMeshStrategy = CollisionMeshStrategy.VisualMesh,
+                            MeshReductionRatio = ratio }, paths, MeshExportFormat.STL });
+                Assert.Equal(expected, File.ReadAllBytes(paths.WindowsCollisionMeshFilename));
+                Assert.Equal(expected, File.ReadAllBytes(paths.WindowsVisualMeshFilename));
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
+        [Theory]
+        [InlineData(0.0, false)]
+        [InlineData(0.5, false)]
+        [InlineData(1.0, false)]
+        [InlineData(0.0, true)]
+        [InlineData(0.5, true)]
+        [InlineData(1.0, true)]
+        public void CollisionNotesAndFallbackUseActualReducerResult(double ratio, bool accurate)
+        {
+            string path = Path.Combine(Path.GetTempPath(), "sw2urdf-real-collision-" + Guid.NewGuid() + ".stl");
+            try
+            {
+                var box = new ExportHelper.LinkLocalBoundingBox();
+                box.Include(-1, -2, -3);
+                box.Include(1, 2, 3);
+                ExportHelper.WriteSpherePrimitiveStl(path, box);
+                byte[] original = File.ReadAllBytes(path);
+                double effective = accurate ? 0 : ratio;
+                var result = StlMeshReducer.ReduceFile(path, effective);
+                var stats = new ExportHelper.StlExportStats
+                {
+                    ReductionRatio = effective, OriginalTriangles = result.OriginalTriangles,
+                    ActualTriangles = result.FinalTriangles, TargetTriangles = result.TargetTriangles,
+                    OriginalBytes = result.OriginalBytes, ActualBytes = result.FinalBytes,
+                    ReductionStatus = result.Status, ReductionWarning = result.Warning
+                };
+                string notes;
+                bool accepted = TryCollision(path, accurate ? 0.0 : (double?)null, () => stats, out notes, ratio);
+                Assert.Equal(result.Status != "failed" && (effective == 0 ||
+                    result.FinalTriangles < result.OriginalTriangles), accepted);
+                Assert.Contains("triangles=" + result.OriginalTriangles + "->" + result.FinalTriangles, notes);
+                Assert.Contains("status=" + result.Status, notes);
+                if (effective == 0 || result.Status != "reduced")
+                    Assert.Equal(original, File.ReadAllBytes(path));
+            }
+            finally { File.Delete(path); }
         }
 
         private static ExportHelper.StlExportStats Stats(
@@ -170,11 +266,12 @@ namespace SW2URDF.Test
             }
         }
 
-        private static bool TryCollision(string path, double ratio, Func<ExportHelper.StlExportStats> save, out string notes)
+        private static bool TryCollision(string path, double? ratio, Func<ExportHelper.StlExportStats> save,
+            out string notes, double linkRatio = 0)
         {
             // Inject only the SaveSTL operation so the production decision/notes run without CAD.
             var exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
-            object[] arguments = { new Link { Name = "base_link" }, path, ratio, null, save };
+            object[] arguments = { new Link { Name = "base_link", MeshReductionRatio = linkRatio }, path, ratio, null, save };
             bool accepted = (bool)typeof(ExportHelper).GetMethod("TrySaveCollisionStl",
                 BindingFlags.Instance | BindingFlags.NonPublic).Invoke(exporter, arguments);
             notes = (string)arguments[3];

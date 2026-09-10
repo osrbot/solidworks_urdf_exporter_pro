@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "pythonVersion": "3.11.9",
+  "runtime": "tools/openusd_runtime",
+  "wheelTag": "cp311-cp311-win_amd64",
+  "packages": [
+    {
+      "id": "numpy",
+      "version": "2.2.6",
+      "filename": "numpy-2.2.6-cp311-cp311-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/31/0a/f354fb7176b81747d870f7991dc763e157a934c717b67b58456bc63da3df/numpy-2.2.6-cp311-cp311-win_amd64.whl",
+      "sha256": "e8213002e427c69c45a52bbd94163084025f533a55a59d6f9c5b820774ef3303",
+      "metadataUrl": "https://pypi.org/pypi/numpy/2.2.6/json",
+      "licenseFile": "numpy-2.2.6.dist-info/LICENSE.txt"
+    },
+    {
+      "id": "pymeshlab",
+      "version": "2025.7.post1",
+      "filename": "pymeshlab-2025.7.post1-cp311-cp311-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/e6/56/c4383522d9603cca76ad0c1c886014bf6ac4e79df96018e13025c669b068/pymeshlab-2025.7.post1-cp311-cp311-win_amd64.whl",
+      "sha256": "3c1b87f3d6e6c8b129311b44f5c75a22df23c969b9d4300843286220a0d2a49c",
+      "metadataUrl": "https://pypi.org/pypi/pymeshlab/2025.7.post1/json",
+      "licenseFile": "pymeshlab-2025.7.post1.dist-info/licenses/LICENSE"
+    }
+  ]
+}

@@ -367,6 +367,8 @@
     <Compile Include="Test\TestStlMeshReducer.cs" />
     <Compile Include="Test\TestMeshReductionUi.cs" />
     <Compile Include="Test\TestMeshReductionReporting.cs" />
+    <Compile Include="Test\TestMeshReductionTargetUi.cs" />
+    <Compile Include="Test\TestBundledStlMeshReducer.cs" />
     <Compile Include="Test\TestComponentTraversal.cs" />
     <Compile Include="Test\TestIndependentTargetExport.cs" />
     <Compile Include="Test\TestExportTargetProfiles.cs" />
@@ -456,6 +458,7 @@
     <Compile Include="URDFExport\CSV\ContextToColumns.cs" />
     <Compile Include="URDFExport\CSV\CSVImportExport.cs" />
     <Compile Include="URDFExport\StlMeshReducer.cs" />
+    <Compile Include="URDFExport\BundledStlMeshReducer.cs" />
     <Compile Include="URDFExport\CadFeatureReference.cs" />
     <Compile Include="URDFExport\ConfigurationSerialization.cs" />
     <Compile Include="URDFExport\LegacyConfigurationMigration.cs" />
@@ -600,6 +603,14 @@
     </None>
     <None Include="..\tools\usd_adapter\osurdf_usd_adapter.py">
       <Link>tools\usd_adapter\osurdf_usd_adapter.py</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\tools\mesh_reduction\reduce_stl.py">
+      <Link>tools\mesh_reduction\reduce_stl.py</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\tools\mesh_reduction_runtime.lock.json">
+      <Link>tools\mesh_reduction_runtime.lock.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="..\tools\usd_adapter\README.md">

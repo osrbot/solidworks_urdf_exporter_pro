@@ -14,8 +14,8 @@ Collision 和 Inertial 独立：改变碰撞策略不会改变质量、COM 或�
 | UI/配置策略 | 用途 | 正式输出 |
 | --- | --- | --- |
 | `VisualMesh` | 最大兼容或查看 | 复制 Visual mesh 作为 Collision mesh |
-| `SimplifiedMesh` | 原语不适合但希望降低网格成本 | 使用更粗 STL tessellation；失败时回退 |
-| `AccurateMesh` | 必须保留接触细节 | 使用更精细 Collision STL；成本最高 |
+| `SimplifiedMesh` | 原语不适合但希望降低网格成本 | 与可视 STL 使用同一目标减面比例；失败时回退 |
+| `AccurateMesh` | 必须保留接触细节 | 不做减面的碰撞 STL |
 | `BoxPrimitive` | 底盘、板、盒体、支架 | URDF box/对应几何 |
 | `CylinderPrimitive` | 轮子、轴、管、圆柱壳 | URDF cylinder/对应几何 |
 | `SpherePrimitive` | 球形传感器或结构 | URDF sphere/对应几何 |
@@ -25,6 +25,9 @@ Collision 和 Inertial 独立：改变碰撞策略不会改变质量、COM 或�
 配置中的历史 `Primitive` 值是兼容入口，不应作为新的用户策略名称传播。
 
 ## 推荐顺序
+
+STL 精简比例旁显示目标剩余大小，例如精简 67% 对应约剩余 33%。导出结果显示各 Link 的实际
+原始大小和最终大小。相连区域分开减面，未通过校验的区域保留原始几何，并显示警告。
 
 1. 装配体先尝试 `ComponentBoxes`。
 2. 规则外形使用 Box/Cylinder/Sphere。
@@ -52,7 +55,7 @@ Collision 和 Inertial 独立：改变碰撞策略不会改变质量、COM 或�
 
 - 原语、ComponentBoxes 和 ConvexHull 使用 Modeler 创建临时 BREP/sheet body；
 - Visual/Accurate/Simplified mesh 预览复制非破坏性的 CAD body；
-- Simplified 的最终 STL tessellation 可能比预览 CAD body 更粗；
+- Simplified 的最终 STL 按共用比例减面；CAD 预览仅作为外形参考；
 - 预览不写回装配体，不改变源组件外观，并在关闭/切换时释放临时体。
 
 预览目标是快速选择策略，不承诺 mesh 策略的预览与最终 STL 字节级一致。ConvexHull 预览与

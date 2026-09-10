@@ -187,7 +187,7 @@ namespace SW2URDF.UI
                 return summary.FormatDetails();
 
             var withoutWarnings = new ExportResultSummary(summary.OutputRoot, summary.FileCount,
-                summary.TotalBytes, summary.Elapsed, summary.Targets);
+                summary.TotalBytes, summary.Elapsed, summary.Targets, meshReductionDetails: summary.MeshReductionDetails);
             return ChineseUiText.Translate("Warnings:", "警告:") + Environment.NewLine +
                 String.Join(Environment.NewLine, summary.Warnings) + Environment.NewLine +
                 Environment.NewLine + withoutWarnings.FormatDetails();

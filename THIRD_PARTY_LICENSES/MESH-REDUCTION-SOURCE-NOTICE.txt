@@ -1,0 +1,58 @@
+MESH REDUCTION: LICENSE AND SOURCE AVAILABILITY
+
+The worker's editable source is supplied in the installer at
+tools/mesh_reduction/reduce_stl.py. Project source and build scripts are at
+https://github.com/osrbot/solidworks_urdf_exporter_pro
+Use the sourceCommit recorded in the installer provenance for the exact
+project revision. This notice does not change any component's license.
+
+NumPy 2.2.6 source:
+https://github.com/numpy/numpy/tree/v2.2.6
+https://pypi.org/project/numpy/2.2.6/#files
+Its wheel's complete license, including bundled numerical libraries, is
+retained at tools/openusd_runtime/Lib/site-packages/numpy-2.2.6.dist-info/LICENSE.txt
+and copied to THIRD_PARTY_LICENSES/numpy-2.2.6-LICENSE.txt.
+
+PyMeshLab 2025.7.post1 wheel and upstream source locations:
+https://pypi.org/project/pymeshlab/2025.7.post1/#files
+https://github.com/cnr-isti-vclab/PyMeshLab
+https://github.com/cnr-isti-vclab/PyMeshLab/tree/v2025.7
+https://github.com/cnr-isti-vclab/PyMeshLab/blob/v2025.7/src/README.md
+https://github.com/cnr-isti-vclab/meshlab
+
+PyMeshLab's wheel declares GPL3. Its GNU GPL version 3 license is retained at
+tools/openusd_runtime/Lib/site-packages/pymeshlab-2025.7.post1.dist-info/licenses/LICENSE
+and copied to THIRD_PARTY_LICENSES/pymeshlab-2025.7.post1-LICENSE.txt.
+Wheel sources, native libraries and license metadata are retained unchanged.
+Python bytecode/cache entries are omitted; .data/purelib files are relocated
+to site-packages according to the wheel layout. Original wheel RECORD metadata
+is retained as supplied (it describes the archive, not relocated install paths).
+PyMeshLab, MeshLab, and GPL-covered dependencies are NOT relicensed as MIT.
+Refer to their license texts for redistribution terms and warranty disclaimers.
+
+PUBLIC RELEASE PREREQUISITES (NOT YET VERIFIED)
+
+The v2025.7 tree is a source discovery starting point, NOT a verified exact
+source match for the 2025.7.post1 Windows wheel. Before public distribution,
+the release owner must establish and provide the complete Corresponding
+Source matching the shipped binaries, including the necessary submodules,
+third-party native components, modifications, and build/install scripts.
+An automatic GitHub source ZIP without submodules must not be assumed complete.
+GPLv3 sections 1 and 6 describe Corresponding Source and ways of conveying
+object code. For download distribution, arrange equivalent source access
+with clear directions alongside the installer, and maintain availability
+as required by the applicable terms. A generic upstream link or this notice
+alone is not evidence that those requirements have been met and is not a
+written source offer. Review the worker's integration and any applicable
+combined-work obligations; a subprocess boundary is not a legal conclusion.
+
+The actual cp311 PyMeshLab wheel METADATA also lists Requires-Dist:
+msvc-runtime, although PyPI's release JSON lists only numpy. This package is
+not supplied by this two-wheel lock. Confirm the exact native runtime
+requirements, redistribution rights, and provisioning on a clean supported
+Windows system before release. A smoke pass on a developer machine with
+Visual C++ installed does not establish standalone runtime completeness.
+
+These are engineering release-review notes, not legal advice or an assertion
+of completed license compliance. Public release remains blocked until the
+source availability and native runtime prerequisites above are resolved.

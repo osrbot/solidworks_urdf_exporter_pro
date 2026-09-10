@@ -94,6 +94,116 @@ function Assert-NoPythonBytecode([string]$Root) {
     }
 }
 
+function Install-MeshReductionRuntime(
+    [string]$LockPath,
+    [string]$PythonVersion,
+    [string]$SitePackages,
+    [string]$Cache,
+    [string]$LicenseDirectory) {
+    $Lock = Get-Content -LiteralPath $LockPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($Lock.schemaVersion -ne 1 -or $Lock.pythonVersion -ne "3.11.9" -or
+        $Lock.pythonVersion -ne $PythonVersion -or
+        $Lock.runtime -ne "tools/openusd_runtime" -or
+        $Lock.wheelTag -ne "cp311-cp311-win_amd64" -or
+        @($Lock.packages).Count -ne 2 -or
+        (@($Lock.packages.id | Sort-Object) -join ",") -ne "numpy,pymeshlab") {
+        throw "The mesh reduction runtime lock is incompatible with embedded Python."
+    }
+    New-Item -ItemType Directory -Path $LicenseDirectory -Force | Out-Null
+    foreach ($Package in $Lock.packages) {
+        $ExpectedVersion = if ($Package.id -eq "numpy") { "2.2.6" } else { "2025.7.post1" }
+        $ExpectedFilename = "$($Package.id)-$ExpectedVersion-cp311-cp311-win_amd64.whl"
+        if ($Package.version -ne $ExpectedVersion -or $Package.filename -cne $ExpectedFilename -or
+            $Package.sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+            $Package.url -cnotmatch ('^https://files\.pythonhosted\.org/packages/[0-9a-f/]+/' +
+                [regex]::Escape($ExpectedFilename) + '$')) {
+            throw "Invalid pinned mesh reduction wheel: $($Package.id)"
+        }
+        $Wheel = Assert-ChildPath $Cache (Join-Path $Cache $Package.filename) "Mesh wheel cache"
+        $Hash = Get-PinnedDownload $Package.url $Package.sha256 $Wheel "$($Package.id) wheel"
+        # Spread wheel .data/purelib into site-packages and retain licenses.
+        # PyMeshLab's importable package is not at ZIP root.
+        $Archive = [System.IO.Compression.ZipFile]::OpenRead($Wheel)
+        try {
+            $DataPrefix = "$($Package.id)-$ExpectedVersion.data/"
+            foreach ($Entry in $Archive.Entries) {
+                $Relative = $Entry.FullName
+                if ($Relative -match '(^|/)__pycache__(/|$)|\.py[co]$') {
+                    continue
+                }
+                if ($Relative.StartsWith($DataPrefix, [StringComparison]::Ordinal)) {
+                    $Relative = $Relative.Substring($DataPrefix.Length)
+                    if ($Relative -notmatch '^(purelib|platlib)/') {
+                        throw "Unsupported wheel install scheme: $($Entry.FullName)"
+                    }
+                    $Relative = $Relative.Substring($Relative.IndexOf('/') + 1)
+                }
+                $Target = Assert-ChildPath $SitePackages (Join-Path $SitePackages $Relative) `
+                    "Mesh wheel entry"
+                if ($Entry.FullName.EndsWith('/')) {
+                    New-Item -ItemType Directory -Path $Target -Force | Out-Null
+                    continue
+                }
+                New-Item -ItemType Directory -Path (Split-Path -Parent $Target) -Force | Out-Null
+                [System.IO.Compression.ZipFileExtensions]::ExtractToFile($Entry, $Target, $false)
+            }
+        }
+        finally {
+            $Archive.Dispose()
+        }
+        $License = Assert-ChildPath $SitePackages (Join-Path $SitePackages $Package.licenseFile) `
+            "Mesh wheel license"
+        if (-not (Test-Path -LiteralPath $License -PathType Leaf)) {
+            throw "The mesh reduction wheel license is missing: $License"
+        }
+        Copy-Item -LiteralPath $License -Destination (Join-Path $LicenseDirectory `
+            ("{0}-{1}-LICENSE.txt" -f $Package.id, $Package.version)) -Force
+        [ordered]@{
+            id = [string]$Package.id
+            version = [string]$Package.version
+            sha256 = $Hash
+        }
+    }
+}
+
+function Test-MeshReductionRuntime([string]$Python) {
+    & $Python -B -c "import sys, struct; import numpy as np; import pymeshlab; from importlib.metadata import version; assert sys.version_info[:3] == (3, 11, 9); assert struct.calcsize('P') == 8; assert np.__version__ == '2.2.6'; assert version('pymeshlab') == '2025.7.post1'; assert 'meshing_decimation_quadric_edge_collapse' in pymeshlab.filter_list(); ms = pymeshlab.MeshSet(); ms.create_sphere(); before = ms.current_mesh().face_number(); ms.meshing_decimation_quadric_edge_collapse(targetfacenum=80); assert 0 < ms.current_mesh().face_number() < before; print('Mesh reduction runtime smoke passed')"
+    if ($LASTEXITCODE -ne 0) {
+        throw "The pinned mesh reduction runtime failed its import/filter smoke test."
+    }
+}
+
+function Test-MeshReductionWorker([string]$Python, [string]$Worker, [string]$Staging) {
+    $InputFile = Join-Path $Staging "mesh-input.stl"
+    $OutputFile = Join-Path $Staging "mesh-output.stl"
+    $RequestFile = Join-Path $Staging "mesh-request.json"
+    $ResultFile = Join-Path $Staging "mesh-result.json"
+    & $Python -B -c "import struct, sys; from pathlib import Path; Path(sys.argv[1]).write_bytes(bytes(80) + struct.pack('<I12fH', 1, 0,0,1, 0,0,0, 1,0,0, 0,1,0, 0))" $InputFile
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to generate mesh worker smoke fixture."
+    }
+    $Request = [ordered]@{
+        schemaVersion = 1
+        input = $InputFile
+        output = $OutputFile
+        ratio = 0.0
+        timeoutSeconds = 10
+    }
+    [System.IO.File]::WriteAllText($RequestFile, ($Request | ConvertTo-Json),
+        (New-Object System.Text.UTF8Encoding($false)))
+    & $Python -B $Worker --request $RequestFile --result $ResultFile
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $ResultFile -PathType Leaf)) {
+        throw "The packaged mesh worker protocol smoke failed."
+    }
+    $Result = Get-Content -LiteralPath $ResultFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    $InputHash = Get-Sha256 $InputFile
+    if ($Result.schemaVersion -ne 1 -or $Result.status -ne "unchanged" -or
+        $Result.originalTriangles -ne 1 -or $Result.finalTriangles -ne 1 -or
+        $Result.sourceSha256 -ne $InputHash -or (Get-Sha256 $OutputFile) -ne $InputHash) {
+        throw "The packaged mesh worker returned an invalid smoke result."
+    }
+}
+
 if ($Configuration -ne "Release" -or $Platform -ne "x64") {
     throw "The installer supports only Configuration=Release and Platform=x64."
 }
@@ -500,6 +610,7 @@ try {
         $OpenUsdWheel `
         "usd-core wheel"
     $OpenUsdRuntime = Join-Path $BuildOutputDirectory "tools\openusd_runtime"
+    $OpenUsdRuntime = Assert-ChildPath $BuildOutputDirectory $OpenUsdRuntime "Shared Python runtime"
     if (Test-Path -LiteralPath $OpenUsdRuntime) {
         Remove-Item -LiteralPath $OpenUsdRuntime -Recurse -Force
     }
@@ -512,6 +623,20 @@ try {
     [System.IO.Compression.ZipFile]::ExtractToDirectory(
         $OpenUsdWheel,
         $OpenUsdSitePackages)
+    $MeshReductionLockPath = Join-Path $BuildRoot "tools\mesh_reduction_runtime.lock.json"
+    $MeshReductionInputs = @(Install-MeshReductionRuntime $MeshReductionLockPath `
+        ([string]$OpenUsdLock.python.version) $OpenUsdSitePackages $ToolCache `
+        (Join-Path $BuildOutputDirectory "THIRD_PARTY_LICENSES"))
+    Copy-Item -LiteralPath $MeshReductionLockPath `
+        -Destination (Join-Path $BuildOutputDirectory "tools\mesh_reduction_runtime.lock.json") -Force
+    $MeshReductionWorker = Join-Path $BuildOutputDirectory "tools\mesh_reduction\reduce_stl.py"
+    if (-not (Test-Path -LiteralPath $MeshReductionWorker -PathType Leaf)) {
+        throw "The release output must include the mesh reduction worker source: $MeshReductionWorker"
+    }
+    if ((Get-Sha256 $MeshReductionWorker) -ne
+        (Get-Sha256 (Join-Path $BuildRoot "tools\mesh_reduction\reduce_stl.py"))) {
+        throw "Packaged mesh reduction worker differs from its source."
+    }
     [System.IO.File]::WriteAllLines(
         (Join-Path $OpenUsdRuntime "python311._pth"),
         @("python311.zip", ".", "Lib\site-packages", "import site"),
@@ -520,6 +645,8 @@ try {
     $PreviousPythonDontWriteBytecode = $env:PYTHONDONTWRITEBYTECODE
     try {
         $env:PYTHONDONTWRITEBYTECODE = "1"
+        Test-MeshReductionRuntime $OpenUsdPython
+        Test-MeshReductionWorker $OpenUsdPython $MeshReductionWorker $RuntimeStaging
         & $OpenUsdPython -B -c `
             "from pxr import Usd, UsdGeom, UsdPhysics; assert Usd.GetVersion() == (0, 26, 8); print(Usd.GetVersion())"
         if ($LASTEXITCODE -ne 0) {
@@ -597,6 +724,8 @@ try {
         }
     )
 
+    $AssetRuntimeInputs += $MeshReductionInputs
+
     $CoreTestsProject = Join-Path $BuildRoot `
         "tests\OSURDF.Core.Tests\OSURDF.Core.Tests.csproj"
     & $DotNet restore $CoreTestsProject --locked-mode `
@@ -658,8 +787,11 @@ try {
         framework = "net8.0"
         result = "passed"
         bundledOpenUsdIntegration = "passed"
+        bundledMeshReductionRuntimeSmoke = "passed"
+        bundledMeshReductionWorkerProtocol = "passed"
         bundledMuJoCoIntegration = "passed"
     }
+    $RuntimeStaging = Assert-ChildPath $BuildRoot $RuntimeStaging "Asset runtime staging"
     Remove-Item -LiteralPath $RuntimeStaging -Recurse -Force
     Assert-NoPythonBytecode $BuildOutputDirectory
 
@@ -685,11 +817,13 @@ try {
         $InstallerSchemaFiles
         Get-ChildItem -LiteralPath (Join-Path $BuildOutputDirectory "tools\usd_adapter") `
             -File -Recurse
+        Get-Item -LiteralPath $MeshReductionWorker
         Get-ChildItem -LiteralPath (Join-Path $BuildOutputDirectory "tools\openusd_runtime") `
             -File -Recurse
         Get-ChildItem -LiteralPath (Join-Path $BuildOutputDirectory "tools\mujoco_runtime") `
             -File -Recurse
         Get-Item -LiteralPath (Join-Path $BuildOutputDirectory "tools\openusd_runtime.lock.json")
+        Get-Item -LiteralPath (Join-Path $BuildOutputDirectory "tools\mesh_reduction_runtime.lock.json")
         Get-Item -LiteralPath (Join-Path $BuildOutputDirectory "tools\mujoco_runtime.lock.json")
     )
     $RequiredPayloadFiles = @(
@@ -700,6 +834,11 @@ try {
         "APACHE-2.0.txt",
         "MIT.txt",
         "osurdf_usd_adapter.py",
+        "reduce_stl.py",
+        "mesh_reduction_runtime.lock.json",
+        "numpy-2.2.6-LICENSE.txt",
+        "pymeshlab-2025.7.post1-LICENSE.txt",
+        "MESH-REDUCTION-SOURCE-NOTICE.txt",
         "python.exe",
         "compile.exe",
         "testspeed.exe",

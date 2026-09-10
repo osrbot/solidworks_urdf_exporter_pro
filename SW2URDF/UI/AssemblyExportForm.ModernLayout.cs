@@ -1520,6 +1520,8 @@ namespace SW2URDF.UI
                     labelEstimatedMeshSize,
                     8.5F,
                     FontStyle.Regular);
+                // Reserve wrapped feedback space before this page's auto-size layout is cached.
+                labelEstimatedMeshSize.MinimumSize = new Size(0, labelEstimatedMeshSize.Font.Height * 3);
                 reduction.Controls.Add(labelEstimatedMeshSize, 0, 2);
                 reduction.SetColumnSpan(labelEstimatedMeshSize, 2);
                 Control reductionSection = CreateModernSubsection(

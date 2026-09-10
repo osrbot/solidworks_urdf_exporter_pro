@@ -159,8 +159,8 @@ namespace SW2URDF.Test
                         String.Format("Explanation is clipped: measured {0}, actual {1}, width {2}.",
                             measured.Height, note.Height, note.Width));
                     Assert.Equal(culture == "en-US"
-                        ? "Actual triangles and file sizes: export report"
-                        : "\u5b9e\u9645\u9762\u6570\u4e0e\u6587\u4ef6\u5927\u5c0f\u89c1\u5bfc\u51fa\u62a5\u544a", note.Text);
+                        ? "Reduce as much as possible; actual size is reported after export"
+                        : "\u5c3d\u53ef\u80fd\u7cbe\u7b80\uff1b\u5b9e\u9645\u5927\u5c0f\u4ee5\u5bfc\u51fa\u7ed3\u679c\u4e3a\u51c6", note.Text);
                     Assert.Equal(culture == "en-US"
                         ? "Target triangle reduction (%)"
                         : "\u76ee\u6807\u51cf\u9762\u6bd4\u4f8b (%)",

@@ -2537,11 +2537,43 @@ namespace SW2URDF.UI
         {
             double ratio = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
             labelMeshReductionValue.Text = (ratio * 100.0).ToString("0", URDFAttribute.URDFNumberFormat) + "%";
-            SetModernLinkStatusText(
-                labelEstimatedMeshSize,
-                ChineseUiText.Translate(
-                    "Actual triangles and file sizes: export report",
-                    "实际面数与文件大小见导出报告"));
+            // Slider feedback must not invalidate or rebuild the cached page layout.
+            labelEstimatedMeshSize.Text = FormatMeshReductionTarget(
+                ratio, ChineseUiText.ShouldUseChinese());
+        }
+
+        // Only pass current, verified STL byte counts, never CAD document sizes.
+        internal static string FormatMeshReductionTarget(
+            double removalRatio, bool useChinese, long? verifiedOriginalStlBytes = null)
+        {
+            if (Double.IsNaN(removalRatio)) removalRatio = 0.0;
+            int removedPercent = MeshReductionRatioToTrackBarValue(removalRatio);
+            if (removedPercent == 0)
+            {
+                return useChinese ? "不减面；目标 STL 大小：原始的 100%"
+                    : "No reduction; target STL size: 100% of original";
+            }
+            if (removedPercent == 100)
+            {
+                return useChinese ? "尽可能精简；实际大小以导出结果为准"
+                    : "Reduce as much as possible; actual size is reported after export";
+            }
+
+            string remaining = (100 - removedPercent).ToString(URDFAttribute.URDFNumberFormat);
+            string target = useChinese ? "目标 STL 大小：约原始的 " + remaining + "%"
+                : "Target STL size: approx. " + remaining + "% of original";
+            if (verifiedOriginalStlBytes.HasValue && verifiedOriginalStlBytes.Value > 0)
+            {
+                double bytes = Math.Max(1.0,
+                    verifiedOriginalStlBytes.Value * ((100 - removedPercent) / 100.0));
+                string size = bytes >= 1048576.0
+                    ? (bytes / 1048576.0).ToString("0.##", URDFAttribute.URDFNumberFormat) + " MiB"
+                    : bytes >= 1024.0
+                        ? (bytes / 1024.0).ToString("0.##", URDFAttribute.URDFNumberFormat) + " KiB"
+                        : Math.Ceiling(bytes).ToString("0", URDFAttribute.URDFNumberFormat) + " B";
+                target += useChinese ? "（约 " + size + "）" : " (approx. " + size + ")";
+            }
+            return target;
         }
 
         private static int MeshReductionRatioToTrackBarValue(double ratio)

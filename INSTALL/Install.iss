@@ -100,6 +100,8 @@ Source: {#BuildPlatform + "\" + BuildConfiguration + "\schemas\ros2-control-prof
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\usd_adapter\*"}; DestDir: {app}\tools\usd_adapter; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\openusd_runtime\*"}; DestDir: {app}\tools\openusd_runtime; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\openusd_runtime.lock.json"}; DestDir: {app}\tools; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\mesh_reduction\reduce_stl.py"}; DestDir: {app}\tools\mesh_reduction; Flags: ignoreversion; Check: IsWin64;
+Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\mesh_reduction_runtime.lock.json"}; DestDir: {app}\tools; Flags: ignoreversion; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\mujoco_runtime\*"}; DestDir: {app}\tools\mujoco_runtime; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsWin64;
 Source: {#BuildPlatform + "\" + BuildConfiguration + "\tools\mujoco_runtime.lock.json"}; DestDir: {app}\tools; Flags: ignoreversion; Check: IsWin64;
 ;Source: x86\Debug\*;  DestDir: {app}; Flags: regserver ignoreversion; Check: not IsWin64

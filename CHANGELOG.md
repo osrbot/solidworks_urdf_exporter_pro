@@ -4,6 +4,14 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## Unreleased
 
+- 将分区 STL 减面接入独立进程，保留共享接口和无法安全精简的区域；增加内容缓存及处理超时保护。可视 STL 与精简碰撞 STL 共用比例，质量和惯性不变。
+- 比例旁显示目标剩余 STL 大小，导出结果列出各 Link 的实际原始/最终大小；100% 不再显示误导性的零体积目标。
+- Run partitioned STL reduction in an isolated helper with shared-interface preservation, content caching and time limits. Show target remaining size beside the slider and measured per-Link sizes after export; maximum reduction never promises zero bytes.
+
+- 减面允许合并直线轮廓上的冗余顶点，保留拐角、分叉、孔洞和独立几何；区分 STL 写出舍入误差与真实形变。新增不启动 SolidWorks 的 STL 批量回归及前后对照工具。
+- Allow redundant collinear feature vertices to collapse while preserving corners, junctions, holes, and separate shells. Account for STL float rounding without widening input feature detection. Add offline corpus regression and comparison tools.
+- 精简碰撞 STL 改为与可视 STL 共用目标减面比例，不再固定请求最大减面；精确网格、基础几何体和可视网格复制策略保持原有含义。
+- Simplified collision STL now shares the visual STL target reduction ratio instead of always requesting maximum reduction; accurate meshes, primitives, and visual-mesh copies retain their existing behavior.
 - 修复“不含网格”导出忽略当前模型元数据的问题，ROS 1/ROS 2 的版本、说明、维护者、许可证和作者保持一致。
 - 导出结果直接显示警告数量和内容；减面警告纳入报告状态。惯性校验和网格阶段显示当前 Link 及序号/总数。
 - 简化碰撞预览明确为原始 CAD 外形参考。保留全局可视网格减面行为及现有名称，碰撞简化仍由碰撞策略决定；未更改 MJCF 速度限制行为。

@@ -16,8 +16,8 @@ the inertia tensor.
 | UI/configuration strategy | Typical use | Formal output |
 | --- | --- | --- |
 | `VisualMesh` | Maximum compatibility or inspection | Copies Visual mesh as Collision mesh |
-| `SimplifiedMesh` | Primitives do not fit, lower mesh cost desired | Coarser STL tessellation; fallback on failure |
-| `AccurateMesh` | Contact details are required | Finer Collision STL; highest cost |
+| `SimplifiedMesh` | Primitives do not fit, lower mesh cost desired | STL decimation using the same target ratio as Visual; fallback on failure |
+| `AccurateMesh` | Contact details are required | Collision STL without decimation |
 | `BoxPrimitive` | Chassis, plate, box, bracket | Native URDF box/corresponding geometry |
 | `CylinderPrimitive` | Wheel, shaft, tube, cylindrical shell | Native URDF cylinder/corresponding geometry |
 | `SpherePrimitive` | Spherical sensor or structure | Native URDF sphere/corresponding geometry |
@@ -28,6 +28,10 @@ The historical `Primitive` configuration value is a compatibility alias and shou
 as a new UI strategy name.
 
 ## Recommended Order
+
+For STL reduction, the UI shows the target remaining size (67% removal means about 33% remaining).
+Actual per-Link original and final sizes are shown after export. Connected regions are processed
+independently; failed checks retain the affected original geometry and produce a warning.
 
 1. Start with `ComponentBoxes` for an assembly.
 2. Use Box/Cylinder/Sphere for regular shapes.
@@ -59,7 +63,7 @@ Every user-selectable strategy has a temporary display path:
 
 - primitives, ComponentBoxes, and ConvexHull use Modeler-created temporary BREP/sheet bodies;
 - Visual/Accurate/Simplified mesh previews copy non-destructive CAD bodies;
-- final Simplified STL tessellation can be coarser than the preview CAD body;
+- final Simplified STL uses the shared target triangle reduction ratio; the CAD preview is only a shape reference;
 - previews do not write back to the assembly or mutate source appearance and are released on switch
   or close.
 

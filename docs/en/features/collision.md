@@ -16,12 +16,21 @@ This page configures the Visual mesh origin and the Collision generation method.
 ## Target triangle reduction
 
 This is the fraction of triangles to remove, not the fraction to retain or a promise of file-size reduction.
-Changing this ratio applies it to every Link's visual STL. Each Link's collision strategy remains independent.
-Simplified collision meshes request maximum shape-protected reduction, not the visual STL ratio.
+Changing this ratio applies it to every Link's visual STL and collision STL using the Simplified Mesh strategy.
+Both use the same target reduction ratio. Visual Mesh collision copies the reduced visual mesh without reducing it again.
+Accurate Mesh is not decimated. Boxes, cylinders, spheres, component boxes, and convex hulls keep their respective generation strategies.
 
 - 0%: no decimation.
 - 50%: target removal of half the triangles.
 - 100%: maximum simplification within shape safeguards, never an empty mesh.
+
+The ratio shows a target STL size beside it: removing 67% targets about 33% of the original size.
+This reduces triangles, not the model's physical dimensions. Without measured source STL statistics,
+only a percentage is shown. Export results list each Link's measured original and final STL sizes.
+
+Connected regions are reduced separately while shared interfaces are retained. A region that cannot
+be safely reduced does not prevent other regions from shrinking. Time limits or failed checks retain
+original geometry and produce warnings; parts, mass and inertia are not removed or recalculated.
 
 An existing saved value of `0.5` now means a target of removing 50% of the triangles; `0` means no decimation, and `1` means maximum simplification within shape safeguards. Existing values use this meaning directly, with no conversion required.
 

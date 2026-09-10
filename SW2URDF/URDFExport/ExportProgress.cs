@@ -67,7 +67,8 @@ namespace SW2URDF.URDFExport
             long totalBytes,
             TimeSpan elapsed,
             IEnumerable<ExportTargetResult> targets = null,
-            IEnumerable<string> warnings = null)
+            IEnumerable<string> warnings = null,
+            IEnumerable<string> meshReductionDetails = null)
         {
             OutputRoot = outputRoot ?? String.Empty;
             FileCount = fileCount;
@@ -77,6 +78,8 @@ namespace SW2URDF.URDFExport
                 .Where(target => target != null).ToList().AsReadOnly();
             Warnings = (warnings ?? Enumerable.Empty<string>())
                 .Where(warning => !String.IsNullOrWhiteSpace(warning)).ToList().AsReadOnly();
+            MeshReductionDetails = (meshReductionDetails ?? Enumerable.Empty<string>())
+                .Where(detail => !String.IsNullOrWhiteSpace(detail)).ToList().AsReadOnly();
             SucceededCount = Targets.Count(target => target.Succeeded);
             FailedCount = Targets.Count - SucceededCount;
         }
@@ -87,6 +90,7 @@ namespace SW2URDF.URDFExport
         public TimeSpan Elapsed { get; private set; }
         public IList<ExportTargetResult> Targets { get; private set; }
         public IList<string> Warnings { get; private set; }
+        public IList<string> MeshReductionDetails { get; private set; }
         public int SucceededCount { get; private set; }
         public int FailedCount { get; private set; }
         public bool HasFailures { get { return FailedCount > 0; } }
@@ -97,7 +101,8 @@ namespace SW2URDF.URDFExport
             ExportOutputSnapshot outputBeforeExport,
             TimeSpan elapsed,
             IEnumerable<ExportTargetResult> targets = null,
-            IEnumerable<string> warnings = null)
+            IEnumerable<string> warnings = null,
+            IEnumerable<string> meshReductionDetails = null)
         {
             if (package == null)
             {
@@ -133,7 +138,8 @@ namespace SW2URDF.URDFExport
                 totalBytes,
                 elapsed,
                 results,
-                warnings);
+                warnings,
+                meshReductionDetails);
         }
 
         public string FormatDetails()
@@ -154,6 +160,12 @@ namespace SW2URDF.URDFExport
                 OperationHeartbeat.FormatElapsed(Elapsed),
                 chinese ? "输出根目录" : "Output root",
                 OutputRoot));
+            if (MeshReductionDetails.Count > 0)
+            {
+                builder.AppendLine().AppendLine();
+                builder.AppendLine(chinese ? "STL 减面实际结果（原始 -> 导出）:" : "Measured STL reduction (original -> exported):");
+                foreach (string detail in MeshReductionDetails) builder.AppendLine(detail);
+            }
             if (Targets.Count > 0)
             {
                 builder.AppendLine().AppendLine();

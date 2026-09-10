@@ -60,7 +60,10 @@ namespace SW2URDF.URDFExport
                 try
                 {
                     if (info.Degenerate || info.HasAttributes)
-                        throw new UnsafeMeshException("Degenerate triangles or per-face attributes require the original STL.");
+                        throw new UnsafeMeshException(info.Degenerate && info.HasAttributes
+                            ? "Degenerate triangles and per-face attributes require the original STL."
+                            : info.Degenerate ? "Degenerate triangles require the original STL."
+                            : "Per-face attributes require the original STL.");
                     if ((long)info.Count * EstimatedBytesPerTriangle > WorkingSetBudget)
                         throw new UnsafeMeshException("The mesh exceeds the reduction working-set budget.");
 
@@ -153,6 +156,7 @@ namespace SW2URDF.URDFExport
             double tolerance = bounds.Diagonal * RelativeSampleTolerance;
             if (!(tolerance > 0) || !Finite(tolerance))
                 return original;
+            FeatureGraph features = BuildFeatures(original, tolerance, check);
             var referenceTree = new DMeshAABBTree3(original, true);
             DMesh3 best = original;
             bool firstAttempt = true;
@@ -160,19 +164,12 @@ namespace SW2URDF.URDFExport
             {
                 check();
                 var candidate = new DMesh3(original);
-                var constraints = new MeshConstraints();
-                // Lock CAD creases as well as open boundaries. Otherwise near-zero-area
-                // slivers along a crease can pass double-precision QEM and collapse at STL precision.
-                foreach (int edge in ProtectedEdges(candidate))
-                {
-                    constraints.SetOrUpdateEdgeConstraint(edge, EdgeConstraint.FullyConstrained);
-                    Index2i vertices = candidate.GetEdgeV(edge);
-                    constraints.SetOrUpdateVertexConstraint(vertices.a, VertexConstraint.Pinned);
-                    constraints.SetOrUpdateVertexConstraint(vertices.b, VertexConstraint.Pinned);
-                }
+                MeshConstraints constraints = ConstrainFeatures(candidate, features, check);
                 var reducer = new Reducer(candidate)
                 {
-                    PreserveBoundaryShape = true,
+                    // In g3 1.0.324 this option overrides the constrained collapse position.
+                    // Explicit feature targets below protect boundaries without bypassing projection.
+                    PreserveBoundaryShape = false,
                     EdgeFlipTolerance = 0,
                     AllowCollapseFixedVertsWithSameSetID = false,
                     Progress = new ProgressCancel(() => clock.Elapsed.TotalSeconds > TimeBudgetSeconds)
@@ -187,7 +184,7 @@ namespace SW2URDF.URDFExport
                     candidate.SetVertex(vertex, new Vector3d((float)p.x, (float)p.y, (float)p.z));
                 }
                 if (candidate.TriangleCount > 0 && candidate.TriangleCount < best.TriangleCount &&
-                    ValidateCandidate(original, candidate, bounds, referenceTree, tolerance, check))
+                    ValidateCandidate(original, candidate, bounds, referenceTree, tolerance, features, constraints, check))
                 {
                     best = candidate;
                     if (firstAttempt)
@@ -214,19 +211,296 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private static IEnumerable<int> ProtectedEdges(DMesh3 mesh)
+        private static bool IsFeatureEdge(DMesh3 mesh, int edge)
         {
             double sharpDot = Math.Cos(SharpEdgeAngleDegrees * Math.PI / 180);
-            foreach (int edge in mesh.EdgeIndices())
+            Index2i adjacent = mesh.GetEdgeT(edge);
+            return adjacent.b < 0 || mesh.GetTriNormal(adjacent.a).Dot(mesh.GetTriNormal(adjacent.b)) < sharpDot;
+        }
+
+        private sealed class FeatureGraph
+        {
+            public readonly List<FeatureChain> Chains = new List<FeatureChain>();
+            public int BoundaryLoops;
+        }
+
+        private sealed class FeatureChain
+        {
+            public List<int> Vertices;
+            public bool Boundary;
+            public FeatureSegment Target;
+        }
+
+        // A separate target per chain prevents shortcuts between different creases/loops.
+        // FixedSetID alone permits unconstrained QEM positions, including off-curve ones.
+        private sealed class FeatureSegment : IProjectionTarget
+        {
+            public readonly Vector3d Start, End, Direction;
+            public readonly double LengthSquared, EpsilonSquared;
+            private readonly double tolerance;
+
+            public FeatureSegment(Vector3d start, Vector3d end, double tolerance)
             {
-                Index2i adjacent = mesh.GetEdgeT(edge);
-                if (adjacent.b < 0 || mesh.GetTriNormal(adjacent.a).Dot(mesh.GetTriNormal(adjacent.b)) < sharpDot)
-                    yield return edge;
+                Start = start;
+                End = end;
+                Direction = end - start;
+                LengthSquared = Direction.LengthSquared;
+                this.tolerance = tolerance;
+                double epsilon = Math.Min(Math.Sqrt(LengthSquared) * 1e-7, tolerance * 1e-3);
+                EpsilonSquared = epsilon * epsilon;
+            }
+
+            public double Parameter(Vector3d point) => (point - Start).Dot(Direction) / LengthSquared;
+
+            public Vector3d Project(Vector3d point, int identifier = -1)
+            {
+                double t = Math.Max(0, Math.Min(1, Parameter(point)));
+                return t == 0 ? Start : t == 1 ? End : Start + t * Direction;
+            }
+
+            public bool Contains(Vector3d point) => Finite(point) &&
+                (point - Project(point)).LengthSquared <= EpsilonSquared;
+
+            public bool ContainsSerialized(Vector3d point)
+            {
+                // IEEE binary32 rounding: |fl(x)-x| <= |fl(x)|/(2^24-1), with
+                // half a subnormal ULP as the absolute floor. Input chain detection
+                // stays strict; only the already-quantized output gets this allowance.
+                double roundoff = point.Length / 16777215.0 + Math.Sqrt(3) * ((double)float.Epsilon * 0.5);
+                double epsilon = Math.Min(tolerance, Math.Sqrt(EpsilonSquared) + roundoff);
+                return Finite(point) && (point - Project(point)).LengthSquared <= epsilon * epsilon;
             }
         }
 
+        private static void AddNeighbor(Dictionary<int, List<int>> graph, int vertex, int neighbor)
+        {
+            List<int> neighbors;
+            if (!graph.TryGetValue(vertex, out neighbors))
+                graph.Add(vertex, neighbors = new List<int>(2));
+            neighbors.Add(neighbor);
+        }
+
+        private static FeatureGraph BuildFeatures(DMesh3 mesh, double tolerance, Action check)
+        {
+            var result = new FeatureGraph { BoundaryLoops = CountBoundaryLoops(mesh, check) };
+            if (result.BoundaryLoops < 0)
+                throw new UnsafeMeshException("The boundary is not a set of manifold loops; original retained.");
+            var adjacency = new Dictionary<int, List<int>>();
+            var edges = new HashSet<int>();
+            foreach (int edge in mesh.EdgeIndices())
+            {
+                check();
+                if (!IsFeatureEdge(mesh, edge))
+                    continue;
+                edges.Add(edge);
+                Index2i v = mesh.GetEdgeV(edge);
+                AddNeighbor(adjacency, v.a, v.b);
+                AddNeighbor(adjacency, v.b, v.a);
+            }
+            var pins = new HashSet<int>();
+            foreach (var pair in adjacency)
+            {
+                check();
+                List<int> n = pair.Value;
+                if (n.Count != 2)
+                {
+                    pins.Add(pair.Key);
+                    continue;
+                }
+                Vector3d p = mesh.GetVertex(pair.Key);
+                Vector3d a = (mesh.GetVertex(n[0]) - p).Normalized;
+                Vector3d b = (mesh.GetVertex(n[1]) - p).Normalized;
+                // Only redundant, nearly collinear vertices qualify. Curved chains stay pinned.
+                if (a.Dot(b) >= 0 || a.Cross(b).LengthSquared > 1e-12 ||
+                    mesh.IsBoundaryEdge(mesh.FindEdge(pair.Key, n[0])) !=
+                    mesh.IsBoundaryEdge(mesh.FindEdge(pair.Key, n[1])))
+                    pins.Add(pair.Key);
+            }
+            var visited = new HashSet<int>();
+            foreach (int pin in pins)
+                foreach (int neighbor in adjacency[pin])
+                {
+                    int edge = mesh.FindEdge(pin, neighbor);
+                    if (!visited.Add(edge))
+                        continue;
+                    var vertices = new List<int> { pin, neighbor };
+                    int previous = pin, current = neighbor;
+                    while (!pins.Contains(current))
+                    {
+                        check();
+                        List<int> next = adjacency[current];
+                        int vertex = next[0] == previous ? next[1] : next[0];
+                        if (!visited.Add(mesh.FindEdge(current, vertex)))
+                            throw new UnsafeMeshException("The feature chain could not be reconstructed; original retained.");
+                        vertices.Add(vertex);
+                        previous = current;
+                        current = vertex;
+                    }
+                    AddFeatureChain(result, mesh, vertices, tolerance, check);
+                }
+            // A cycle without a true corner cannot be a straight span. Keep it exactly.
+            foreach (int edge in edges)
+                if (!visited.Contains(edge))
+                {
+                    check();
+                    Index2i v = mesh.GetEdgeV(edge);
+                    AddFeatureChain(result, mesh, new List<int> { v.a, v.b }, tolerance, check);
+                }
+            return result;
+        }
+
+        private static void AddFeatureChain(FeatureGraph graph, DMesh3 mesh, List<int> vertices,
+            double tolerance, Action check)
+        {
+            var target = new FeatureSegment(mesh.GetVertex(vertices[0]),
+                mesh.GetVertex(vertices[vertices.Count - 1]), tolerance);
+            bool straight = target.LengthSquared > 0;
+            double previous = -1;
+            foreach (int vertex in vertices)
+            {
+                check();
+                Vector3d p = mesh.GetVertex(vertex);
+                double t = target.Parameter(p);
+                straight &= target.Contains(p) && t > previous;
+                previous = t;
+            }
+            if (!straight && vertices.Count > 2)
+            {
+                // Local near-collinearity must not accumulate into an appreciably bent curve.
+                for (int i = 1; i < vertices.Count; ++i)
+                    AddFeatureChain(graph, mesh, new List<int> { vertices[i - 1], vertices[i] }, tolerance, check);
+                return;
+            }
+            graph.Chains.Add(new FeatureChain
+            {
+                Vertices = vertices,
+                Boundary = mesh.IsBoundaryEdge(mesh.FindEdge(vertices[0], vertices[1])),
+                Target = target
+            });
+        }
+
+        private static MeshConstraints ConstrainFeatures(DMesh3 mesh, FeatureGraph features, Action check)
+        {
+            var constraints = new MeshConstraints();
+            for (int i = 0; i < features.Chains.Count; ++i)
+            {
+                check();
+                FeatureChain chain = features.Chains[i];
+                // Verified against 1.0.324: pins span endpoints, projects interiors, tags edges.
+                // Pinned-to-target collapses are disallowed, leaving at least one interior vertex.
+                MeshConstraintUtil.ConstrainVtxSpanTo(constraints, mesh, chain.Vertices, chain.Target, i);
+            }
+            return constraints;
+        }
+
+        private static int CountBoundaryLoops(DMesh3 mesh, Action check)
+        {
+            var adjacency = new Dictionary<int, List<int>>();
+            foreach (int edge in mesh.BoundaryEdgeIndices())
+            {
+                check();
+                Index2i v = mesh.GetEdgeV(edge);
+                AddNeighbor(adjacency, v.a, v.b);
+                AddNeighbor(adjacency, v.b, v.a);
+            }
+            var visited = new HashSet<int>();
+            var pending = new Stack<int>();
+            int loops = 0;
+            foreach (var pair in adjacency)
+            {
+                if (pair.Value.Count != 2)
+                    return -1;
+                if (!visited.Add(pair.Key))
+                    continue;
+                ++loops;
+                pending.Push(pair.Key);
+                while (pending.Count > 0)
+                {
+                    check();
+                    foreach (int neighbor in adjacency[pending.Pop()])
+                        if (visited.Add(neighbor))
+                            pending.Push(neighbor);
+                }
+            }
+            return loops;
+        }
+
+        private static bool ValidateFeatures(DMesh3 original, DMesh3 candidate, FeatureGraph features,
+            MeshConstraints constraints, Action check)
+        {
+            if (CountBoundaryLoops(candidate, check) != features.BoundaryLoops ||
+                candidate.VertexCount - candidate.EdgeCount + candidate.TriangleCount !=
+                original.VertexCount - original.EdgeCount + original.TriangleCount)
+                return false;
+            var chains = new List<int>[features.Chains.Count];
+            // One edge pass, not FindConstrainedEdgesBySetID once per chain (quadratic).
+            foreach (int edge in candidate.EdgeIndices())
+            {
+                check();
+                int id = constraints.GetEdgeConstraint(edge).TrackingSetID;
+                if (id < 0)
+                {
+                    // Every boundary must still belong to an original chain. Dihedral angles,
+                    // however, change with triangulation: 30 degrees identifies INPUT creases,
+                    // not an invariant of their adjacent output faces. The tracked curve stays
+                    // protected even if its output dihedral crosses that threshold.
+                    if (candidate.IsBoundaryEdge(edge))
+                        return false;
+                    continue;
+                }
+                if (id >= chains.Length ||
+                    candidate.IsBoundaryEdge(edge) != features.Chains[id].Boundary)
+                    return false;
+                if (chains[id] == null)
+                    chains[id] = new List<int>();
+                chains[id].Add(edge);
+            }
+            for (int i = 0; i < chains.Length; ++i)
+            {
+                check();
+                if (chains[i] == null)
+                    return false;
+                FeatureChain chain = features.Chains[i];
+                int start = chain.Vertices[0], end = chain.Vertices[chain.Vertices.Count - 1];
+                if (!candidate.IsVertex(start) || !candidate.IsVertex(end) ||
+                    candidate.GetVertex(start) != chain.Target.Start || candidate.GetVertex(end) != chain.Target.End)
+                    return false;
+                var adjacency = new Dictionary<int, List<int>>();
+                foreach (int edge in chains[i])
+                {
+                    check();
+                    Index2i v = candidate.GetEdgeV(edge);
+                    AddNeighbor(adjacency, v.a, v.b);
+                    AddNeighbor(adjacency, v.b, v.a);
+                }
+                foreach (var pair in adjacency)
+                    if (pair.Value.Count != (pair.Key == start || pair.Key == end ? 1 : 2) ||
+                        !chain.Target.ContainsSerialized(candidate.GetVertex(pair.Key)))
+                        return false;
+                // A connected, strictly ordered span covers the entire original feature curve.
+                // Per-chain identity also prevents substituting a nearby hole or crease.
+                int current = start, previous = -1, traversed = 0;
+                while (current != end)
+                {
+                    check();
+                    List<int> next;
+                    if (!adjacency.TryGetValue(current, out next) || ++traversed > chains[i].Count)
+                        return false;
+                    int vertex = next[0] == previous ? (next.Count == 2 ? next[1] : -1) : next[0];
+                    if (vertex < 0 || chain.Target.Parameter(candidate.GetVertex(vertex)) <=
+                        chain.Target.Parameter(candidate.GetVertex(current)))
+                        return false;
+                    previous = current;
+                    current = vertex;
+                }
+                if (traversed != chains[i].Count)
+                    return false;
+            }
+            return true;
+        }
+
         private static bool ValidateCandidate(DMesh3 original, DMesh3 candidate, Bounds bounds,
-            DMeshAABBTree3 referenceTree, double tolerance, Action check)
+            DMeshAABBTree3 referenceTree, double tolerance, FeatureGraph features, MeshConstraints constraints, Action check)
         {
             if (!candidate.CheckValidity(false, FailMode.ReturnOnly))
                 return false;
@@ -253,17 +527,8 @@ namespace SW2URDF.URDFExport
                     n.Dot((ob - oa).Cross(oc - oa)) <= 0)
                     return false;
             }
-            foreach (int edge in ProtectedEdges(original))
-            {
-                Index2i v = original.GetEdgeV(edge);
-                if (!candidate.IsVertex(v.a) || !candidate.IsVertex(v.b) ||
-                    candidate.GetVertex(v.a) != original.GetVertex(v.a) ||
-                    candidate.GetVertex(v.b) != original.GetVertex(v.b))
-                    return false;
-                int kept = candidate.FindEdge(v.a, v.b);
-                if (kept < 0 || candidate.IsBoundaryEdge(kept) != original.IsBoundaryEdge(edge))
-                    return false;
-            }
+            if (!ValidateFeatures(original, candidate, features, constraints, check))
+                return false;
             check();
             var candidateTree = new DMeshAABBTree3(candidate, true);
             // Seven samples per face, in BOTH directions and within the same shell.

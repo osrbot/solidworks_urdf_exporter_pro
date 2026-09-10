@@ -74,6 +74,7 @@ namespace SW2URDF.URDFExport
         private string mExportCoordinateSystem;
         private string mLegacyExportCoordinateSystem;
         private readonly List<string> meshPreferenceWarnings = new List<string>();
+        private readonly List<string> meshReductionDetails = new List<string>();
 
         private UserProgressBar progressBar;
         private Stopwatch exportStopwatch;
@@ -194,6 +195,7 @@ namespace SW2URDF.URDFExport
             ExportErrorWhy = "";
             LastExportSummary = null;
             meshPreferenceWarnings.Clear();
+            meshReductionDetails.Clear();
             exportStopwatch = Stopwatch.StartNew();
             exportStageNumber = 0;
             logger.Info("Beginning the export process");
@@ -436,14 +438,14 @@ namespace SW2URDF.URDFExport
                 {
                     LastExportSummary = ExportResultSummary.Create(
                         exportedPackage, outputBeforeExport, exportStopwatch.Elapsed,
-                        v2Result.Targets, v2Result.Warnings);
+                        v2Result.Targets, v2Result.Warnings, meshReductionDetails);
                 }
                 catch (Exception exception) when (IndependentTargetExport.IsTargetFailure(exception))
                 {
                     v2Result.Warnings.Add("File statistics are unavailable: " + exception.Message);
                     LastExportSummary = new ExportResultSummary(
                         exportedPackage.WindowsExportRootDirectory, 0, 0, exportStopwatch.Elapsed,
-                        v2Result.Targets, v2Result.Warnings);
+                        v2Result.Targets, v2Result.Warnings, meshReductionDetails);
                 }
                 if (!success)
                     ExportErrorWhy = String.Join(System.Environment.NewLine,
@@ -464,7 +466,7 @@ namespace SW2URDF.URDFExport
                 LastExportSummary = ExportResultSummary.Create(
                     exportedPackage,
                     outputBeforeExport,
-                    exportStopwatch.Elapsed, warnings: meshPreferenceWarnings);
+                    exportStopwatch.Elapsed, warnings: meshPreferenceWarnings, meshReductionDetails: meshReductionDetails);
             }
             catch (Exception summaryException)
             {
@@ -1216,7 +1218,7 @@ namespace SW2URDF.URDFExport
                 case CollisionMeshStrategy.SimplifiedMesh:
                     string simplifiedNotes = "";
                     if (meshFormat == MeshExportFormat.STL &&
-                        TrySaveCollisionStl(link, meshFiles.WindowsCollisionMeshFilename, 1.0, out simplifiedNotes))
+                        TrySaveCollisionStl(link, meshFiles.WindowsCollisionMeshFilename, null, out simplifiedNotes))
                     {
                         return new CollisionMeshExportResult(
                             CollisionMeshStrategy.SimplifiedMesh,
@@ -1285,11 +1287,13 @@ namespace SW2URDF.URDFExport
                 meshFiles.WindowsCollisionMeshFilename);
         }
 
-        private bool TrySaveCollisionStl(Link link, string windowsCollisionMeshFilename, double reductionRatio,
+        private bool TrySaveCollisionStl(Link link, string windowsCollisionMeshFilename, double? reductionRatioOverride,
             out string notes, Func<StlExportStats> save = null)
         {
             try
             {
+                double reductionRatio = CreateStlMeshSettings(link.STLQualityFine,
+                    reductionRatioOverride ?? link.MeshReductionRatio).ReductionRatio;
                 StlExportStats stats = save == null
                     ? SaveSTL(link, windowsCollisionMeshFilename, reductionRatio) : save();
                 bool limited = reductionRatio > 0 && stats.ActualTriangles.HasValue &&
@@ -3665,11 +3669,23 @@ namespace SW2URDF.URDFExport
         private StlExportStats ReduceExportedStl(Link link, string filename, StlMeshSettings settings)
         {
             UpdateProgressTitle("Reducing STL triangles: " + link.Name, "正在精简 STL 三角面: " + link.Name);
-            StlExportStats stats = ReduceStlFile(filename, settings);
+            var progressClock = Stopwatch.StartNew();
+            StlExportStats stats = ReduceStlFile(filename, settings, update =>
+            {
+                if (progressClock.ElapsedMilliseconds < 1000 && update.Completed != update.Total) return;
+                progressClock.Restart();
+                string detail = update.Total > 0
+                    ? " (" + update.Completed + "/" + update.Total + ")" : "";
+                UpdateProgressTitle("Reducing STL regions: " + link.Name + detail,
+                    "正在精简 STL 分区: " + link.Name + detail);
+            });
             logger.Info(String.Format(CultureInfo.InvariantCulture,
                 "{0}: STL triangle reduction requested={1:P0}, target={2}; triangles {3} -> {4}; bytes {5} -> {6}; status={7}",
                 link.Name, settings.ReductionRatio, stats.TargetTriangles, stats.OriginalTriangles,
                 stats.ActualTriangles, stats.OriginalBytes, stats.ActualBytes, stats.ReductionStatus));
+            if (settings.ReductionRatio > 0 && stats.OriginalBytes.HasValue && stats.ActualBytes.HasValue)
+                meshReductionDetails.Add(link.Name + (collisionProgress ? " [collision STL]: " : " [visual STL]: ") +
+                    FormatByteSize(stats.OriginalBytes.Value) + " -> " + FormatByteSize(stats.ActualBytes.Value));
             if (!String.IsNullOrEmpty(stats.ReductionWarning))
             {
                 string warning = link.Name + ": " + stats.ReductionWarning;
@@ -3679,9 +3695,10 @@ namespace SW2URDF.URDFExport
             return stats;
         }
 
-        internal static StlExportStats ReduceStlFile(string filename, StlMeshSettings settings)
+        internal static StlExportStats ReduceStlFile(string filename, StlMeshSettings settings,
+            Action<BundledStlMeshReducer.Progress> progress = null)
         {
-            var result = StlMeshReducer.ReduceFile(filename, settings.ReductionRatio);
+            var result = BundledStlMeshReducer.ReduceFile(filename, settings.ReductionRatio, progress);
             var stats = StlExportStats.FromSettings(settings);
             stats.OriginalTriangles = result.OriginalTriangles;
             stats.OriginalBytes = result.OriginalBytes;
