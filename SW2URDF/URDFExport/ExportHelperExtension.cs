@@ -429,7 +429,15 @@ namespace SW2URDF.URDFExport
         {
             List<InertialValidationRecord> records = new List<InertialValidationRecord>();
             logger.Info("Validating URDF inertial values against SolidWorks mass properties");
-            LogLinkInertialValidation(link, records);
+            IList<Link> links = GetMeshExportLinks(link);
+            for (int index = 0; index < links.Count; index++)
+            {
+                Link current = links[index];
+                UpdateProgressTitle(
+                    FormatLinkProgressTitle("Validating inertia: " + current.Name, index + 1, links.Count),
+                    FormatLinkProgressTitle("正在校验惯性: " + current.Name, index + 1, links.Count));
+                LogLinkInertialValidation(current, records);
+            }
             WriteInertialValidationCsv(csvFileName, records);
             logger.Info("Wrote inertial validation CSV with " + records.Count + " rows to " + csvFileName);
             return records;
@@ -587,10 +595,6 @@ namespace SW2URDF.URDFExport
                         e.Message)));
             }
 
-            foreach (Link child in link.Children)
-            {
-                LogLinkInertialValidation(child, records);
-            }
         }
 
         private void LogSingleLinkInertialValidation(Link link, List<InertialValidationRecord> records)

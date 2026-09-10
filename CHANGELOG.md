@@ -4,6 +4,11 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## Unreleased
 
+- 修复“不含网格”导出忽略当前模型元数据的问题，ROS 1/ROS 2 的版本、说明、维护者、许可证和作者保持一致。
+- 导出结果直接显示警告数量和内容；减面警告纳入报告状态。惯性校验和网格阶段显示当前 Link 及序号/总数。
+- 简化碰撞预览明确为原始 CAD 外形参考。保留全局可视网格减面行为及现有名称，碰撞简化仍由碰撞策略决定；未更改 MJCF 速度限制行为。
+- Preserve model metadata in mesh-free ROS exports, expose warnings in results, and show per-Link progress. Clarify that simplified collision previews show the original CAD shape; visual reduction scope and MJCF speed-limit behavior are unchanged.
+
 - STL 精简比例改为真实目标减面：0 不减面，0.5 目标移除一半三角面，1 在保护形状的前提下尽可能减面。旧配置数值直接按此含义读取。
 - 先按 SW 粗糙/精细预设导出，再减面；不再用比例写固定毫米公差，避免小 Link 返回无穷大公差的问题。
 - 报告增加原始/目标/最终三角面数及文件大小。保留独立几何部分并检查候选形状，没有更小的有效结果时保留原网格并提示；不修改 CAD 质量或惯性。

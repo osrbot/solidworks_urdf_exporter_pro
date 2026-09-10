@@ -40,8 +40,10 @@ MJCF position control requires positive stiffness and explicitly entered nonnega
 ## Two export buttons
 
 - **Export URDF without meshes**: faster and useful for checking structure and values only.
+  This lightweight path writes ROS 1/ROS 2 descriptions using the current version, description, maintainer, email, license, and author. It does not generate OpenUSD/MJCF. Without mesh assets, it is not a complete model delivery.
 - **Export URDF and meshes**: generates the deliverable directory. OpenUSD and MJCF require this path.
 
 Do not click repeatedly while export is running. When it finishes, read `export_report.md` first, then open the relevant target directory.
+Inertia validation and mesh export show the current Link and its index/total. When reduction is limited or collision generation falls back, the results window shows warning counts and details without blocking other valid outputs.
 
 After a partial failure, successful outputs are retained and the export form stays open so you can retry only failed targets. Check the results window and error details for old output not updated this run or directories requiring recovery. See [Choose an Export Target](/en/exports/).

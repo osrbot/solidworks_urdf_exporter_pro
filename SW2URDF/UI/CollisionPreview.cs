@@ -177,8 +177,8 @@ namespace SW2URDF.UI
                             displayContext.DisplayTarget,
                             displayContext.DisplayTargetToDocument);
                         status = ChineseUiText.Translate(
-                            "CAD shape preview shown. The final coarse-tessellation STL uses the selected tolerance and may have fewer facets.",
-                            "已显示 CAD 外形预览；最终粗化三角化 STL 使用所选公差，分面数量可能更少。");
+                            "Original CAD shape reference, not the final simplified mesh. Inspect the exported collision mesh for the final result.",
+                            "原始 CAD 外形参考，非最终简化网格；实际结果请检查导出的碰撞网格。");
                         break;
                     default:
                         throw new InvalidOperationException(ChineseUiText.Translate(

@@ -896,6 +896,46 @@ namespace SW2URDF.Test
             Assert.Equal("custom", ChineseUiText.JointTypeValue("custom"));
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void TestExportCapturePreservesMetadataAndOnlySwitchesLightweightTargets(bool exportMeshes)
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                GetControl<CheckBox>(form, "modernRos1CheckBox").Checked = false;
+                GetControl<CheckBox>(form, "modernRos2CheckBox").Checked = false;
+                GetControl<CheckBox>(form, "modernUsdAssetCheckBox").Checked = true;
+                GetControl<CheckBox>(form, "modernMjcfAssetCheckBox").Checked = true;
+                GetControl<TextBox>(form, "modernPackageVersionTextBox").Text = " 2.3.4 ";
+                GetControl<TextBox>(form, "modernPackageDescriptionTextBox").Text = " Custom model ";
+                GetControl<TextBox>(form, "modernMaintainerNameTextBox").Text = " Maintainer ";
+                GetControl<TextBox>(form, "modernMaintainerEmailTextBox").Text = " owner@example.com ";
+                GetControl<ComboBox>(form, "modernModelLicenseComboBox").Text = "MIT";
+                GetControl<TextBox>(form, "modernModelAuthorTextBox").Text = " Model author ";
+
+                var options = form.CaptureExportTargetOptionsForExport(exportMeshes);
+                Assert.Equal(exportMeshes, options.UseV2Pipeline);
+                Assert.Equal(!exportMeshes, options.ExportRos1Legacy);
+                Assert.Equal(!exportMeshes, options.ExportRos2);
+                Assert.Equal(exportMeshes, options.ExportUsdAsset);
+                Assert.Equal(exportMeshes, options.ExportMjcfAsset);
+                Assert.Equal("2.3.4", options.PackageVersion);
+                Assert.Equal("Custom model", options.Description);
+                Assert.Equal("Maintainer", options.MaintainerName);
+                Assert.Equal("owner@example.com", options.MaintainerEmail);
+                Assert.Equal("MIT", options.ModelLicense);
+                Assert.Equal("Model author", options.ModelAuthor);
+                var unchanged = form.CaptureExportTargetOptionsForExport(true);
+                Assert.True(unchanged.UseV2Pipeline);
+                Assert.False(unchanged.ExportRos1Legacy);
+                Assert.False(unchanged.ExportRos2);
+                Assert.True(unchanged.ExportUsdAsset);
+                Assert.True(unchanged.ExportMjcfAsset);
+                Assert.NotSame(options, unchanged);
+            }
+        }
+
         [Fact]
         public void TestFourExportTargetsAreExplicitAndCapturedWithoutLegacyProfiles()
         {

@@ -1117,9 +1117,7 @@ namespace SW2URDF.UI
             Exporter.RosPackageName = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
             textBoxRosPackageName.Text = Exporter.RosPackageName;
             UpdateRosPackageNameHint();
-            Exporter.ExportTargets = exportSTL
-                ? CaptureExportTargetOptions()
-                : ExportTargetOptions.LegacyCompatibilityDefaults();
+            Exporter.ExportTargets = CaptureExportTargetOptionsForExport(exportSTL);
             if (!exportSTL)
             {
                 logger.Info("Using the lightweight URDF-only compatibility path; derived target packages require a complete mesh export.");
@@ -1429,6 +1427,20 @@ namespace SW2URDF.UI
         {
             if (!modernUiInitialized || BaseNode == null) return;
             CaptureExportTargetOptions().SaveModelSettings(BaseNode.Link, textBoxRosPackageName.Text);
+        }
+
+        internal ExportTargetOptions CaptureExportTargetOptionsForExport(bool exportMeshes)
+        {
+            ExportTargetOptions options = CaptureExportTargetOptions();
+            if (!exportMeshes)
+            {
+                options.UseV2Pipeline = false;
+                options.ExportRos1Legacy = true;
+                options.ExportRos2 = true;
+                options.ExportUsdAsset = false;
+                options.ExportMjcfAsset = false;
+            }
+            return options;
         }
 
         private ExportTargetOptions CaptureExportTargetOptions()

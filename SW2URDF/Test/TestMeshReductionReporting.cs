@@ -2,6 +2,7 @@ using SW2URDF.URDF;
 using SW2URDF.URDFExport;
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text;
@@ -28,6 +29,26 @@ namespace SW2URDF.Test
             Assert.Contains("| STL reduction | " + expected + " |", health);
             Assert.Contains("reduction_warnings=" + (expected == "WARN" ? "1" : "0"), health);
             Assert.DoesNotContain("| FAIL |", health);
+            foreach (bool ros2 in new[] { false, true })
+            {
+                ExportHelper.ExportReportBuildResult report = Report(stats, ros2);
+                Assert.Equal(expected, report.Status);
+                Assert.Contains("Status: " + expected, report.Content);
+                Assert.Contains("| STL reduction | " + expected + " |", report.Content);
+                Assert.False(report.HasBlockingFailures);
+                Assert.Equal(String.Empty, report.BlockingFailureSummary());
+                if (expected == "WARN")
+                {
+                    string finding = Assert.Single(report.Findings);
+                    Assert.Contains("WARN: STL reduction for link base_link", finding);
+                    Assert.Contains("status=" + result, finding);
+                    Assert.Contains("target_triangles=" + target, finding);
+                    Assert.Contains("actual_triangles=" + actual, finding);
+                    if (!String.IsNullOrWhiteSpace(warning)) Assert.Contains("reason=" + warning, finding);
+                    Assert.Contains(finding, report.Content.Split(new[] { "## Findings" }, StringSplitOptions.None).Last());
+                }
+                else Assert.Empty(report.Findings);
+            }
         }
 
         [Fact]
@@ -107,6 +128,46 @@ namespace SW2URDF.Test
             typeof(ExportHelper).GetMethod("AppendStlReductionHealthRow", BindingFlags.Static | BindingFlags.NonPublic)
                 .Invoke(null, new object[] { builder, new[] { record }, exportMeshes, format });
             return builder.ToString();
+        }
+
+        private static ExportHelper.ExportReportBuildResult Report(ExportHelper.StlExportStats stats, bool ros2)
+        {
+            string root = Path.Combine(Path.GetTempPath(), "sw2urdf-reduction-report-" + Guid.NewGuid());
+            try
+            {
+                var package = new URDFPackage("robot", "robot_description", root);
+                string directory = ros2 ? package.WindowsRos2PackageDirectory : package.WindowsPackageDirectory;
+                string urdf = Path.Combine(ros2 ? package.WindowsRos2RobotsDirectory : package.WindowsRobotsDirectory,
+                    OSURDF.Core.Export.RosPackageExporter.GetRobotUrdfFileName(package.RobotName));
+                foreach (string relative in new[] { "CMakeLists.txt", "package.xml",
+                    "config/inertial_validation.csv", "config/mesh_manifest.csv",
+                    ros2 ? "launch/display.launch.py" : "launch/display.launch",
+                    ros2 ? "launch/gazebo.launch.py" : "launch/gazebo.launch",
+                    "meshes/visual/base_link.stl", "meshes/collision/base_link.stl" })
+                {
+                    string path = Path.Combine(directory, relative);
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    File.WriteAllText(path, "fixture");
+                }
+                Directory.CreateDirectory(Path.GetDirectoryName(urdf));
+                File.WriteAllText(urdf, "<robot name=\"robot\"><link name=\"base_link\" /></robot>");
+                var record = new ExportHelper.MeshExportRecord(
+                    "base_link", "VisualMesh", "VisualMesh", "visual_mesh_copy", "ok", "STL",
+                    "visual.stl", "collision.stl", "visual.stl", "collision.stl", true, true,
+                    stats.ActualBytes, stats.ActualBytes, stats.ActualTriangles, stats.ActualTriangles, stats);
+                var inertial = new ExportHelper.InertialValidationRecord("base_link", "Origin_global",
+                    new ExportHelper.InertialValidationRow("mass", "kg", 1.0, 1.0));
+                return ExportHelper.BuildExportReportResult(package, urdf, new[] { inertial }, new[] { record },
+                    true, MeshExportFormat.STL, TimeSpan.Zero, new ExportTargetOptions
+                    {
+                        UseV2Pipeline = true, ExportRos1Legacy = !ros2, ExportRos2 = ros2,
+                        ExportUsdAsset = false, ExportMjcfAsset = false
+                    });
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
         }
 
         private static bool TryCollision(string path, double ratio, Func<ExportHelper.StlExportStats> save, out string notes)

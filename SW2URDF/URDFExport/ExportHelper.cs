@@ -78,6 +78,9 @@ namespace SW2URDF.URDFExport
         private UserProgressBar progressBar;
         private Stopwatch exportStopwatch;
         private int exportStageNumber;
+        private int meshProgressIndex;
+        private int meshProgressTotal;
+        private bool collisionProgress;
         public event EventHandler<ExportProgressEventArgs> ExportProgressChanged;
 
         [XmlIgnore]
@@ -152,7 +155,8 @@ namespace SW2URDF.URDFExport
             ComputeVisualCollision = true;
             ComputeJointKinematics = true;
             ComputeJointLimits = true;
-            ExportTargets = ExportTargetOptions.LegacyCompatibilityDefaults();
+            // No explicit options: retain the legacy writers' metadata defaults.
+            ExportTargets = null;
         }
 
         public void SetComputeInertial(bool computeInertial)
@@ -259,7 +263,7 @@ namespace SW2URDF.URDFExport
 
                 logger.Info("Creating package.xml at " + windowsPackageXMLFileName);
                 PackageXMLWriter packageXMLWriter = new PackageXMLWriter(windowsPackageXMLFileName);
-                PackageXML packageXML = new PackageXML(RosPackageName);
+                PackageXML packageXML = new PackageXML(RosPackageName, ExportTargets);
                 packageXML.WriteElement(packageXMLWriter);
 
                 Rviz rviz = new Rviz(RosPackageName, URDFRobot.Name + ".urdf");
@@ -349,7 +353,7 @@ namespace SW2URDF.URDFExport
                 {
                     UpdateProgressTitle("Creating ROS 2 package", "\u6b63\u5728\u521b\u5efa ROS 2 \u529f\u80fd\u5305");
                     logger.Info("Creating ROS 2 package at " + package.WindowsRos2PackageDirectory);
-                    package.CreateRos2Package(windowsURDFFileName);
+                    package.CreateRos2Package(windowsURDFFileName, ExportTargets);
                 }
 
                 if (v2Result == null)
@@ -639,11 +643,21 @@ namespace SW2URDF.URDFExport
             MeshExportFormat meshFormat = MeshExportFormat.STL,
             List<MeshExportRecord> meshRecords = null)
         {
-            int count = 0;
-            foreach (Link link in GetMeshExportLinks(root))
+            IList<Link> links = GetMeshExportLinks(root);
+            meshProgressTotal = links.Count;
+            try
             {
-                ExportLinkFiles(link, package, count, exportSTL, meshFormat, meshRecords);
-                count++;
+                for (int count = 0; count < links.Count; count++)
+                {
+                    meshProgressIndex = count + 1;
+                    collisionProgress = false;
+                    ExportLinkFiles(links[count], package, count, exportSTL, meshFormat, meshRecords);
+                }
+            }
+            finally
+            {
+                meshProgressIndex = meshProgressTotal = 0;
+                collisionProgress = false;
             }
         }
 
@@ -718,10 +732,10 @@ namespace SW2URDF.URDFExport
             MeshExportFormat meshFormat,
             List<MeshExportRecord> meshRecords)
         {
-            progressBar.UpdateProgress(count);
-            progressBar.UpdateTitle(ChineseUiText.Translate(
-                "Exporting mesh: " + link.Name,
-                "\u6b63\u5728\u5bfc\u51fa\u7f51\u683c: " + link.Name));
+            if (progressBar != null) progressBar.UpdateProgress(count);
+            UpdateProgressTitle(
+                (exportSTL ? "Exporting mesh: " : "Writing mesh references: ") + link.Name,
+                (exportSTL ? "正在导出网格: " : "正在写入网格引用: ") + link.Name);
             logger.Info("Exporting link: " + link.Name);
             logger.Info("Link " + link.Name + " has " + link.Children.Count + " children");
 
@@ -763,6 +777,8 @@ namespace SW2URDF.URDFExport
                         visualStlStats = SaveSTL(link, meshFiles.WindowsVisualMeshFilename);
                         break;
                 }
+                collisionProgress = true;
+                UpdateProgressTitle("Preparing collision: " + link.Name, "正在准备碰撞几何: " + link.Name);
                 collisionExport = ExportCollisionMesh(link, meshFiles, meshFormat);
             }
             link.Visual.Geometry.UseMesh(meshFiles.VisualMeshFilename);
@@ -3882,9 +3898,18 @@ namespace SW2URDF.URDFExport
             return mib.ToString("0.##") + " MiB";
         }
 
+        internal static string FormatLinkProgressTitle(string title, int index, int total)
+        {
+            return String.Format(CultureInfo.InvariantCulture, "{0} ({1}/{2})", title, index, total);
+        }
+
         private void UpdateProgressTitle(string english, string chinese)
         {
             string title = ChineseUiText.Translate(english, chinese);
+            if (meshProgressTotal > 0)
+                title = FormatLinkProgressTitle(title, meshProgressIndex, meshProgressTotal) +
+                    ChineseUiText.Translate(collisionProgress ? " [collision]" : " [visual]",
+                        collisionProgress ? " [碰撞]" : " [可视]");
             exportStageNumber++;
             string elapsed = exportStopwatch == null
                 ? "not available"

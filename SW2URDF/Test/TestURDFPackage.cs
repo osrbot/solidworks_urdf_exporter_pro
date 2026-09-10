@@ -999,8 +999,10 @@ namespace SW2URDF.Test
             Directory.Delete(tempDirectory, true);
         }
 
-        [Fact]
-        public void TestGeneratedPackageMetadataHasMaintainer()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void TestGeneratedPackageMetadataHasMaintainer(bool explicitNull)
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("metadata_robot", tempDirectory);
@@ -1009,7 +1011,9 @@ namespace SW2URDF.Test
 
             string ros1PackageXml = Path.Combine(pkg.WindowsPackageDirectory, "package.xml");
             PackageXMLWriter packageXmlWriter = new PackageXMLWriter(ros1PackageXml);
-            PackageXML packageXml = new PackageXML(pkg.PackageName);
+            PackageXML packageXml = explicitNull
+                ? new PackageXML(pkg.PackageName, null)
+                : new PackageXML(pkg.PackageName);
             packageXml.WriteElement(packageXmlWriter);
 
             string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
@@ -1018,7 +1022,8 @@ namespace SW2URDF.Test
                 "<?xml version=\"1.0\"?><robot name=\"metadata_robot\"><link name=\"base_link\" /></robot>",
                 new UTF8Encoding(false));
             CreateRos1LaunchFiles(pkg);
-            pkg.CreateRos2Package(ros1Urdf);
+            if (explicitNull) pkg.CreateRos2Package(ros1Urdf, null);
+            else pkg.CreateRos2Package(ros1Urdf);
 
             string ros1Package = File.ReadAllText(ros1PackageXml, Encoding.UTF8);
             string ros2Package = File.ReadAllText(
@@ -1041,8 +1046,128 @@ namespace SW2URDF.Test
                 ros2Package);
             Assert.Contains("maintainer='" + PackageXML.DefaultMaintainerName + "'", ros2Setup);
             Assert.Contains("maintainer_email='" + PackageXML.DefaultMaintainerEmail + "'", ros2Setup);
+            Assert.Equal("1.0.0", System.Xml.Linq.XDocument.Parse(ros1Package).Root.Element("version").Value);
+            Assert.Equal("BSD", System.Xml.Linq.XDocument.Parse(ros1Package).Root.Element("license").Value);
+            Assert.Equal("1.0.0", System.Xml.Linq.XDocument.Parse(ros2Package).Root.Element("version").Value);
+            Assert.Equal("BSD", System.Xml.Linq.XDocument.Parse(ros2Package).Root.Element("license").Value);
+            Assert.Contains("version='1.0.0'", ros2Setup);
+            Assert.Contains("license='BSD'", ros2Setup);
+            Assert.Contains("URDF Description package for metadata_robot", ros1Package);
+            Assert.Contains("ROS 2 URDF description package for metadata_robot", ros2Package);
+            Assert.Contains("description='ROS 2 URDF description package for metadata_robot'", ros2Setup);
+            Assert.Equal(PackageXML.DefaultMaintainerName,
+                System.Xml.Linq.XDocument.Parse(ros1Package).Root.Element("author").Value);
 
             Directory.Delete(tempDirectory, true);
+        }
+
+        [Theory]
+        [InlineData("Model author")]
+        [InlineData("")]
+        [InlineData("   ")]
+        [InlineData(null)]
+        public void TestLegacyPackageMetadataWithoutMeshes(string author)
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            try
+            {
+                var metadata = new ExportTargetOptions
+                {
+                    UseV2Pipeline = false,
+                    PackageVersion = "2.3.4",
+                    Description = "Robot & <model> \"quoted\" 'single' \\path\n\u4e2d\u6587",
+                    MaintainerName = "Maintainer & <team>",
+                    MaintainerEmail = "maintainer@example.com",
+                    ModelLicense = "MIT",
+                    ModelAuthor = author
+                };
+                var pkg = new URDFPackage("metadata_robot", tempDirectory);
+                pkg.CreateDirectories();
+                string ros1Xml = Path.Combine(pkg.WindowsPackageDirectory, "package.xml");
+                new PackageXML(pkg.PackageName, metadata).WriteElement(new PackageXMLWriter(ros1Xml));
+                string urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+                File.WriteAllText(urdf, "<robot name=\"metadata_robot\"><link name=\"base_link\" /></robot>");
+                pkg.CreateRos2Package(urdf, metadata);
+
+                foreach (string path in new[] { ros1Xml, Path.Combine(pkg.WindowsRos2PackageDirectory, "package.xml") })
+                {
+                    var root = System.Xml.Linq.XDocument.Load(path).Root;
+                    Assert.Equal(metadata.PackageVersion, root.Element("version").Value);
+                    Assert.Equal(metadata.Description, root.Element("description").Value);
+                    Assert.False(root.Element("description").HasElements);
+                    Assert.Equal(metadata.ModelLicense, root.Element("license").Value);
+                    Assert.Equal(metadata.MaintainerName, root.Element("maintainer").Value);
+                    Assert.Equal(metadata.MaintainerEmail, root.Element("maintainer").Attribute("email").Value);
+                    if (string.IsNullOrWhiteSpace(author)) Assert.Null(root.Element("author"));
+                    else Assert.Equal(author, root.Element("author").Value);
+                    Assert.NotNull(root.Element("buildtool_depend"));
+                    Assert.NotNull(root.Element("export"));
+                }
+
+                string setup = File.ReadAllText(Path.Combine(pkg.WindowsRos2PackageDirectory, "setup.py"));
+                var fields = new Dictionary<string, string>
+                {
+                    { "version", metadata.PackageVersion }, { "description", metadata.Description },
+                    { "maintainer", metadata.MaintainerName }, { "maintainer_email", metadata.MaintainerEmail },
+                    { "license", metadata.ModelLicense }
+                };
+                if (!string.IsNullOrWhiteSpace(author)) fields.Add("author", author);
+                else Assert.DoesNotContain("    author=", setup);
+                foreach (var field in fields)
+                    Assert.Contains("    " + field.Key + "=" + Newtonsoft.Json.JsonConvert.SerializeObject(field.Value) + ",", setup);
+                Assert.Empty(Directory.GetFiles(pkg.WindowsMeshesDirectory, "*", SearchOption.AllDirectories));
+                Assert.Empty(Directory.GetFiles(pkg.WindowsRos2MeshesDirectory, "*", SearchOption.AllDirectories));
+            }
+            finally
+            {
+                Directory.Delete(tempDirectory, true);
+            }
+        }
+
+        [Fact]
+        public void TestExplicitEmptyLegacyMetadataDoesNotUseDefaults()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            try
+            {
+                var metadata = new ExportTargetOptions
+                {
+                    PackageVersion = string.Empty,
+                    Description = string.Empty,
+                    MaintainerName = string.Empty,
+                    MaintainerEmail = string.Empty,
+                    ModelLicense = string.Empty,
+                    ModelAuthor = string.Empty
+                };
+                var pkg = new URDFPackage("metadata_robot", tempDirectory);
+                pkg.CreateDirectories();
+                string ros1Xml = Path.Combine(pkg.WindowsPackageDirectory, "package.xml");
+                new PackageXML(pkg.PackageName, metadata).WriteElement(new PackageXMLWriter(ros1Xml));
+                string urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+                File.WriteAllText(urdf, "<robot name=\"metadata_robot\"><link name=\"base_link\" /></robot>");
+                pkg.CreateRos2Package(urdf, metadata);
+
+                foreach (string path in new[] { ros1Xml, Path.Combine(pkg.WindowsRos2PackageDirectory, "package.xml") })
+                {
+                    var root = System.Xml.Linq.XDocument.Load(path).Root;
+                    foreach (string field in new[] { "version", "description", "maintainer", "license" })
+                    {
+                        Assert.NotNull(root.Element(field));
+                        Assert.Equal(string.Empty, root.Element(field).Value);
+                    }
+                    Assert.Equal(string.Empty, root.Element("maintainer").Attribute("email").Value);
+                    Assert.False(root.Element("description").HasElements);
+                    Assert.Null(root.Element("author"));
+                }
+                string setup = File.ReadAllText(Path.Combine(pkg.WindowsRos2PackageDirectory, "setup.py"));
+                foreach (string field in new[] { "version", "description", "maintainer", "maintainer_email", "license" })
+                    Assert.Contains("    " + field + "=\"\",", setup);
+                Assert.DoesNotContain("    author=", setup);
+            }
+            finally
+            {
+                Directory.Delete(tempDirectory, true);
+            }
         }
 
         [Fact]

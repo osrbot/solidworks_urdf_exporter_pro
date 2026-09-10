@@ -16,6 +16,8 @@ This page configures the Visual mesh origin and the Collision generation method.
 ## Target triangle reduction
 
 This is the fraction of triangles to remove, not the fraction to retain or a promise of file-size reduction.
+Changing this ratio applies it to every Link's visual STL. Each Link's collision strategy remains independent.
+Simplified collision meshes request maximum shape-protected reduction, not the visual STL ratio.
 
 - 0%: no decimation.
 - 50%: target removal of half the triangles.
@@ -41,3 +43,4 @@ Start with a simple strategy. Increase mesh complexity only when simple geometry
 ## Preview and reports
 
 Use the preview to confirm that the collision geometry covers the correct Link, keeps important regions, and does not pass through adjacent structures. If the exporter falls back to another strategy, the report records both the requested strategy and the actual result.
+In simplified-mesh mode, the live preview shows the original CAD shape as a reference, not the final decimated result. Inspect the exported collision mesh for the final shape.

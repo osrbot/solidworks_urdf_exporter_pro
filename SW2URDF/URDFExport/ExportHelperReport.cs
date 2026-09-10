@@ -61,7 +61,8 @@ namespace SW2URDF.URDFExport
             StringBuilder report = new StringBuilder();
             report.AppendLine("# SW2URDF Export Report");
             report.AppendLine();
-            report.AppendLine("Status: " + (succeeded == 0 ? "FAIL" : failed > 0 ? "PARTIAL" : "PASS"));
+            report.AppendLine("Status: " + (succeeded == 0 ? "FAIL" : failed > 0 ? "PARTIAL" :
+                result.Warnings.Count > 0 ? "WARN" : "PASS"));
             report.AppendLine("Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture));
             report.AppendLine("Commit: " + Versioning.Version.GetCommitHash());
             report.AppendLine("Elapsed: " + Utilities.OperationHeartbeat.FormatElapsed(elapsed));
@@ -448,6 +449,16 @@ namespace SW2URDF.URDFExport
             }
             foreach (MeshExportRecord record in meshList)
             {
+                if (HasStlReductionWarning(record.StlStats))
+                {
+                    StlExportStats stats = record.StlStats;
+                    findings.Add("WARN: STL reduction for link " + record.LinkName +
+                        " status=" + stats.ReductionStatus +
+                        ", target_triangles=" + FormatNullableUInt(stats.TargetTriangles) +
+                        ", actual_triangles=" + FormatNullableUInt(stats.ActualTriangles) +
+                        (String.IsNullOrWhiteSpace(stats.ReductionWarning) ? "." :
+                            ", reason=" + stats.ReductionWarning));
+                }
                 if (CollisionStrategyChanged(record))
                 {
                     findings.Add("WARN: Collision strategy for link " + record.LinkName +
@@ -963,6 +974,18 @@ namespace SW2URDF.URDFExport
                 ", urdf_refs=" + FormatCollisionUrdfReferenceKinds(rows));
         }
 
+        private static bool HasStlReductionWarning(StlExportStats stats)
+        {
+            return stats != null &&
+                (String.Equals(stats.ReductionStatus, "failed", StringComparison.OrdinalIgnoreCase) ||
+                 String.Equals(stats.ReductionStatus, "limited", StringComparison.OrdinalIgnoreCase) ||
+                 !String.IsNullOrWhiteSpace(stats.ReductionWarning) ||
+                 (stats.ReductionRatio.GetValueOrDefault() > 0 &&
+                  (String.Equals(stats.ReductionStatus, "unchanged", StringComparison.OrdinalIgnoreCase) ||
+                   (stats.ActualTriangles.HasValue && stats.TargetTriangles.HasValue &&
+                    stats.ActualTriangles.Value > stats.TargetTriangles.Value))));
+        }
+
         private static void AppendStlReductionHealthRow(
             StringBuilder builder,
             IEnumerable<MeshExportRecord> records,
@@ -975,14 +998,7 @@ namespace SW2URDF.URDFExport
                 r.StlStats != null &&
                 r.StlStats.EstimateErrorPercent.HasValue &&
                 Math.Abs(r.StlStats.EstimateErrorPercent.Value) > 50.0);
-            int reductionWarnings = rows.Count(r => r.StlStats != null &&
-                (String.Equals(r.StlStats.ReductionStatus, "failed", StringComparison.OrdinalIgnoreCase) ||
-                 String.Equals(r.StlStats.ReductionStatus, "limited", StringComparison.OrdinalIgnoreCase) ||
-                 !String.IsNullOrWhiteSpace(r.StlStats.ReductionWarning) ||
-                 (r.StlStats.ReductionRatio.GetValueOrDefault() > 0 &&
-                  (String.Equals(r.StlStats.ReductionStatus, "unchanged", StringComparison.OrdinalIgnoreCase) ||
-                   (r.StlStats.ActualTriangles.HasValue && r.StlStats.TargetTriangles.HasValue &&
-                    r.StlStats.ActualTriangles.Value > r.StlStats.TargetTriangles.Value)))));
+            int reductionWarnings = rows.Count(r => HasStlReductionWarning(r.StlStats));
             string status;
             if (!exportMeshes || meshFormat != MeshExportFormat.STL)
             {
