@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-16"?>
+<SerialNode xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <linkName>base_link</linkName>
+  <coordsysName>Origin_global</coordsysName>
+  <componentPIDs>
+    <base64Binary>iBMAAAUAAAD//v8OQQByAG0AXwBiAGEAcwBlAC0AMQBAAEEAcgBtAAQAAAAQAAAAAQAAAAEAAAASAAAA</base64Binary>
+  </componentPIDs>
+  <isBaseNode>true</isBaseNode>
+  <isIncomplete>false</isIncomplete>
+  <Nodes>
+    <SerialNode>
+      <linkName>link1</linkName>
+      <jointName>joint1</jointName>
+      <axisName>Axis_joint1</axisName>
+      <coordsysName>Joint Origin &lt;Arm_link-1&gt;</coordsysName>
+      <componentPIDs>
+        <base64Binary>iBMAAAUAAAD//v8OQQByAG0AXwBsAGkAbgBrAC0AMQBAAEEAcgBtAAQAAAAQAAAAAQAAAAEAAAATAAAA</base64Binary>
+      </componentPIDs>
+      <jointType>continuous</jointType>
+      <isBaseNode>false</isBaseNode>
+      <isIncomplete>false</isIncomplete>
+      <Nodes>
+        <SerialNode>
+          <linkName>link2</linkName>
+          <jointName>joint2</jointName>
+          <axisName>Primary Axis &lt;Arm_link-2&gt;</axisName>
+          <coordsysName>Joint Origin &lt;Arm_link-2&gt;</coordsysName>
+          <componentPIDs>
+            <base64Binary>iBMAAAUAAAD//v8OQQByAG0AXwBsAGkAbgBrAC0AMgBAAEEAcgBtAAQAAAAQAAAAAQAAAAEAAAAUAAAA</base64Binary>
+          </componentPIDs>
+          <jointType>revolute</jointType>
+          <isBaseNode>false</isBaseNode>
+          <isIncomplete>false</isIncomplete>
+          <Nodes>
+            <SerialNode>
+              <linkName>link3</linkName>
+              <jointName>joint3</jointName>
+              <axisName>Primary Axis &lt;Arm_link-3&gt;</axisName>
+              <coordsysName>Joint Origin &lt;Arm_link-3&gt;</coordsysName>
+              <componentPIDs>
+                <base64Binary>iBMAAAUAAAD//v8OQQByAG0AXwBsAGkAbgBrAC0AMwBAAEEAcgBtAAQAAAAQAAAAAQAAAAEAAAAVAAAA</base64Binary>
+              </componentPIDs>
+              <jointType>revolute</jointType>
+              <isBaseNode>false</isBaseNode>
+              <isIncomplete>false</isIncomplete>
+              <Nodes />
+            </SerialNode>
+          </Nodes>
+        </SerialNode>
+      </Nodes>
+    </SerialNode>
+  </Nodes>
+</SerialNode>

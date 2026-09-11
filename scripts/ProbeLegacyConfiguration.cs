@@ -16,6 +16,7 @@ using System.Runtime.Serialization;
 using System.Text;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Xml.Serialization;
 
 internal static class ProbeLegacyConfiguration
 {
@@ -40,7 +41,7 @@ internal static class ProbeLegacyConfiguration
             if (!ConfigurationSerialization.TryReadLegacyConfiguration(model, out original, out version))
                 throw new InvalidOperationException("No migratable legacy configuration in the active assembly.");
             Console.WriteLine("ASSEMBLY " + model.GetPathName());
-            var catalog = new ReferenceGeometryCatalog(model, false);
+            var catalog = new ReferenceGeometryCatalog(model);
             var plan = new LegacyConfigurationMigration(original, version, catalog.Entries);
             Console.WriteLine("PLAN version=" + version + " links=" + plan.LinkCount + " explicitReferences=" + plan.References.Count);
             var resolver = new ReferenceGeometryResolver(model);
@@ -52,8 +53,22 @@ internal static class ProbeLegacyConfiguration
                     throw new InvalidOperationException("Unresolved reference: " + item.LinkName + "/" + item.LegacyName);
             }
             Link oldRoot;
-            using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(original)))
-                oldRoot = (Link)new DataContractSerializer(typeof(Link)).ReadObject(stream);
+            using (var text = new StringReader(original))
+            using (var reader = System.Xml.XmlReader.Create(text, new System.Xml.XmlReaderSettings
+            {
+                DtdProcessing = System.Xml.DtdProcessing.Prohibit,
+                XmlResolver = null
+            }))
+            {
+                if (version < 1.3)
+                {
+                    var serialNode = (LegacySerialNode)new XmlSerializer(typeof(LegacySerialNode)).Deserialize(reader);
+                    oldRoot = (Link)typeof(LegacySerialNode).GetMethod("ToLink",
+                        BindingFlags.Instance | BindingFlags.NonPublic).Invoke(serialNode, new object[] { null });
+                }
+                else
+                    oldRoot = (Link)new DataContractSerializer(typeof(Link)).ReadObject(reader);
+            }
             var tree = plan.CreateReviewedTree();
             var validateBindings = typeof(LegacyConfigurationMigration).GetMethod(
                 "EnsureComponentBindings", BindingFlags.Static | BindingFlags.NonPublic);

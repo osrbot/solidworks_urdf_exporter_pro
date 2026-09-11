@@ -23,6 +23,50 @@ namespace SW2URDF.Test
         private const string RecoverySlotName = "URDF Export Configuration (v2 recovery)";
 
         [Fact]
+        public void OriginalArmUtf16StringMigratesAndRoundTrips()
+        {
+            string payload;
+            using (var stream = typeof(TestLegacyConfigurationMigration).Assembly.GetManifestResourceStream(
+                "SW2URDF.Test.Fixtures.original-arm-v1.0.xml"))
+            using (var reader = new StreamReader(stream))
+                payload = reader.ReadToEnd();
+            Assert.Contains("encoding=\"utf-16\"", payload);
+            var entries = new List<ReferenceGeometryEntry>
+            {
+                Entry("Origin_global", ReferenceGeometryKind.CoordinateSystem, 1),
+                Entry("Axis_joint1", ReferenceGeometryKind.Axis, 2)
+            };
+            for (int i = 1; i <= 3; i++)
+            {
+                entries.Add(Entry("Joint Origin", ReferenceGeometryKind.CoordinateSystem, (byte)(i + 2), "Arm_link-" + i));
+                if (i > 1)
+                    entries.Add(Entry("Primary Axis", ReferenceGeometryKind.Axis, (byte)(i + 5), "Arm_link-" + i));
+            }
+            var migration = new LegacyConfigurationMigration(payload, 1.0, entries);
+            Assert.Equal(4, migration.LinkCount);
+            Assert.Equal(7, migration.References.Count);
+            Assert.True(migration.IsResolved);
+            var restored = ConfigurationSerialization.DeserializeDraftPayload(
+                ConfigurationSerialization.SerializeDraftPayload(migration.CreateReviewedTree()));
+            var expected = XDocument.Parse(payload).Descendants("SerialNode").ToList();
+            for (int i = 0; i < expected.Count; i++)
+            {
+                Assert.Equal(expected[i].Element("linkName").Value, restored.Link.Name);
+                Assert.Equal(Convert.FromBase64String(expected[i].Element("componentPIDs").Element("base64Binary").Value),
+                    Assert.Single(restored.Link.SWComponentPIDs));
+                if (i > 0)
+                {
+                    Assert.Equal(expected[i].Element("jointName").Value, restored.Link.Joint.Name);
+                    Assert.Equal(expected[i].Element("jointType").Value, restored.Link.Joint.Type);
+                }
+                if (i < expected.Count - 1)
+                    restored = Assert.Single(restored.Nodes.Cast<LinkNode>());
+                else
+                    Assert.Empty(restored.Nodes.Cast<LinkNode>());
+            }
+        }
+
+        [Fact]
         public void SnapshotClonePreservesMigrationAndIncompleteFlags()
         {
             var source = new LinkNode(CreateTree()) { NeedsSaving = true };
@@ -499,7 +543,8 @@ namespace SW2URDF.Test
         [InlineData(1.2)]
         public void SerialNodeXmlMigratesNamesHierarchyAndComponentIds(double version)
         {
-            const string xml = "<SerialNode><linkName>底座</linkName><isBaseNode>true</isBaseNode>" +
+            const string xml = "<?xml version=\"1.0\" encoding=\"utf-16\"?>" +
+                "<SerialNode><linkName>底座</linkName><isBaseNode>true</isBaseNode>" +
                 "<componentPIDs><base64Binary>AID/</base64Binary></componentPIDs><Nodes><SerialNode>" +
                 "<linkName>wheel</linkName><jointName>wheel_joint</jointName><jointType>revolute</jointType>" +
                 "<coordsysName>frame</coordsysName><axisName>axis</axisName><isIncomplete>true</isIncomplete>" +

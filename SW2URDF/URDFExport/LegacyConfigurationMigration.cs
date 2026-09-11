@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
-using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
 
@@ -39,8 +38,10 @@ namespace SW2URDF.URDFExport
                 throw new SerializationException("Unsupported legacy configuration version. Supported storage versions are 1.0 through 1.5. The original was not changed.");
             if (string.IsNullOrWhiteSpace(data))
                 throw new SerializationException("The legacy configuration is empty. The original was not changed.");
-            using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(data)))
-            using (var reader = XmlReader.Create(stream, new XmlReaderSettings
+            // SolidWorks returns decoded text. Early StringWriter payloads declare UTF-16;
+            // re-encoding them as UTF-8 bytes contradicts that declaration.
+            using (var text = new StringReader(data))
+            using (var reader = XmlReader.Create(text, new XmlReaderSettings
             {
                 DtdProcessing = DtdProcessing.Prohibit,
                 XmlResolver = null,
