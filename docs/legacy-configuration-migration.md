@@ -23,8 +23,11 @@ as the only recorded direction; a named axis is resolved from CAD.
 Old mass, inertia, poses, visual/collision data, mesh settings and editing provenance
 are discarded. Fresh inertial state is marked as not yet read from SolidWorks;
 kinematics and limits are pending recalculation. A successful new mass read must
-replace the fresh state without restoring old manual edits. This does not fix the
-separate mixed-configuration mass-reader limitation. Supported storage versions
+replace the fresh state without restoring old manual edits. The mass reader separately
+aligns each loaded component document with its occurrence's referenced configuration
+for override metadata, restores the original configuration, then rebuilds the assembly
+before reading numeric values. It never changes occurrence configuration bindings.
+Activation, restoration or rebuild failure rejects the read. Supported storage versions
 remain explicitly enumerated; an arbitrary unknown version below 2 is not accepted.
 
 Old exporters leave lower-version attributes behind when upgrading. Migration now

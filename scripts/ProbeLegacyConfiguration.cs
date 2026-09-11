@@ -17,6 +17,7 @@ using System.Text;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Xml.Serialization;
+using System.Xml.Linq;
 
 internal static class ProbeLegacyConfiguration
 {
@@ -31,7 +32,17 @@ internal static class ProbeLegacyConfiguration
                 RenderArchivedDialog(args[1]);
                 return 0;
             }
-            var sw = (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
+            int expectedProcessId = 0;
+            if (args.Length > 0 && args[0].StartsWith("--owned-pid=", StringComparison.Ordinal))
+            {
+                expectedProcessId = int.Parse(args[0].Substring("--owned-pid=".Length));
+                args = args.Skip(1).ToArray();
+            }
+            var sw = expectedProcessId > 0
+                ? (SldWorks)Activator.CreateInstance(Type.GetTypeFromProgID("SldWorks.Application"))
+                : (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
+            if (expectedProcessId > 0 && sw.GetProcessID() != expectedProcessId)
+                throw new InvalidOperationException("SolidWorks returned a different process than the explicitly owned test session.");
             var model = (ModelDoc2)sw.ActiveDoc;
             if (model == null || model.GetType() != 2)
                 throw new InvalidOperationException("An assembly must already be active.");
@@ -171,6 +182,8 @@ internal static class ProbeLegacyConfiguration
     {
         if (source.GetSaveFlag())
             throw new InvalidOperationException("Save-copy testing requires a source with no unsaved edits.");
+        byte[] sourceFile = ReadSharedFile(source.GetPathName());
+        string[] expectedBindings = DescribeBindings(source, tree, "root").ToArray();
         string path = Path.Combine(output, "migration-test-copy.SLDASM");
         File.Copy(source.GetPathName(), path, false);
         ModelDoc2 copy = null;
@@ -200,6 +213,10 @@ internal static class ProbeLegacyConfiguration
             CommonSwOperations.LoadSWComponents(copy, restored, problems);
             if (problems.Count != 0)
                 throw new InvalidOperationException("Saved component bindings failed: " + string.Join(", ", problems));
+            string[] actualBindings = DescribeBindings(copy, restored, "root").ToArray();
+            if (!expectedBindings.SequenceEqual(actualBindings, StringComparer.Ordinal))
+                throw new InvalidOperationException("A saved Link resolves to a different component occurrence, file or configuration.");
+            File.WriteAllLines(Path.Combine(output, "component-bindings.txt"), actualBindings, new UTF8Encoding(false));
             bool retained = false;
             foreach (Feature feature in (object[])copy.FeatureManager.GetFeatures(true))
             {
@@ -217,6 +234,43 @@ internal static class ProbeLegacyConfiguration
             var reopenedResolver = new ReferenceGeometryResolver(copy);
             CheckReferences(restored, reopenedResolver);
             Console.WriteLine("PASS: assembly copy saved/reopened; v2 loads; parameters/PIDs/references retained; original v" + sourceVersion + " attribute retained.");
+            sw.ActivateDoc2(copy.GetTitle(), false, ref errors);
+            // Match the preview button's existing defaulting step for pre-v2 formats
+            // that never stored effort/velocity. Do not invent position bounds.
+            typeof(ExportHelper).Assembly.GetType("SW2URDF.UI.AssemblyExportForm")
+                .GetMethod("ApplyMissingRequiredJointLimitDefaultsToTree", BindingFlags.Static | BindingFlags.NonPublic,
+                    null, new[] { typeof(LinkNode) }, null)
+                .Invoke(null, new object[] { restored });
+            var exporter = new ExportHelper(sw)
+            {
+                SavePath = output,
+                PackageName = "migration_test",
+                RosPackageName = "migration_test"
+            };
+            if (!exporter.CreateRobotFromTreeView(restored))
+                throw new InvalidOperationException("Migrated model preview failed: " + exporter.ExportErrorWhy);
+            if (!exporter.ExportRobot())
+                throw new InvalidOperationException("Migrated model export failed: " + exporter.ExportErrorWhy);
+            string[] urdfPaths = Directory.GetFiles(output, "*.urdf", SearchOption.AllDirectories);
+            if (urdfPaths.Length == 0) throw new InvalidOperationException("Export produced no URDF.");
+            foreach (string urdfPath in urdfPaths)
+            {
+                XElement robot = XDocument.Load(urdfPath).Root;
+                if (robot == null || robot.Elements("link").Count() != CountLinks(restored) ||
+                    robot.Elements("joint").Count() != CountLinks(restored) - 1)
+                    throw new InvalidOperationException("Exported Link/Joint counts do not match the migrated tree.");
+                foreach (XElement mass in robot.Descendants("mass"))
+                {
+                    double value = (double)mass.Attribute("value");
+                    if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
+                        throw new InvalidOperationException("Export contains invalid mass.");
+                }
+            }
+            if (!Directory.GetFiles(output, "*.stl", SearchOption.AllDirectories).Any())
+                throw new InvalidOperationException("Export produced no STL meshes.");
+            if (!expectedBindings.SequenceEqual(DescribeBindings(copy, restored, "root"), StringComparer.Ordinal))
+                throw new InvalidOperationException("Export changed a Link component binding.");
+            Console.WriteLine("PASS: migrated assembly exported URDF/STL with matching Link/Joint counts and unchanged component bindings.");
         }
         finally
         {
@@ -227,9 +281,48 @@ internal static class ProbeLegacyConfiguration
         string after;
         double version;
         ConfigurationSerialization.TryReadLegacyConfiguration(source, out after, out version);
-        if (source.GetSaveFlag() || original != after || version != sourceVersion)
+        if (!sourceFile.SequenceEqual(ReadSharedFile(source.GetPathName())) || original != after || version != sourceVersion)
             throw new InvalidOperationException("Original assembly changed during copy verification.");
-        Console.WriteLine("PASS: original assembly still unmodified.");
+        Console.WriteLine("PASS: source file and legacy configuration unchanged; source was not saved. Rebuild dirty flag=" + source.GetSaveFlag());
+    }
+
+    private static IEnumerable<string> DescribeBindings(ModelDoc2 model, LinkNode node, string location)
+    {
+        var bindings = new List<byte[]> { node.Link.SWMainComponentPID };
+        bindings.AddRange(node.Link.SWComponentPIDs);
+        for (int index = 0; index < bindings.Count; index++)
+        {
+            byte[] pid = bindings[index];
+            string label = location + "/" + node.Name + (index == 0 ? " main" : " component " + (index - 1));
+            if (pid == null)
+            {
+                if (index != 0) throw new InvalidOperationException("Missing component binding: " + label);
+                yield return label + " | <none>";
+                continue;
+            }
+            Component2 component = CommonSwOperations.LoadSWComponent(model, pid);
+            if (component == null) throw new InvalidOperationException("Unresolved component binding: " + label);
+            yield return label + " | " + component.Name2 + " | " + component.GetPathName() +
+                " | " + component.ReferencedConfiguration;
+        }
+        for (int index = 0; index < node.Nodes.Count; index++)
+            foreach (string binding in DescribeBindings(model, (LinkNode)node.Nodes[index], location + "/" + index))
+                yield return binding;
+    }
+
+    private static int CountLinks(LinkNode node)
+    {
+        return 1 + node.Nodes.Cast<LinkNode>().Sum(child => CountLinks(child));
+    }
+
+    private static byte[] ReadSharedFile(string path)
+    {
+        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (var buffer = new MemoryStream())
+        {
+            stream.CopyTo(buffer);
+            return buffer.ToArray();
+        }
     }
 
     private static void CheckReferences(LinkNode node, ReferenceGeometryResolver resolver)

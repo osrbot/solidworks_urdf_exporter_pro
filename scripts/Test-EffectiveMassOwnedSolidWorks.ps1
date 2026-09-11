@@ -1,4 +1,4 @@
-# REVIEW BEFORE RUNNING. This creates disposable documents ONLY in a proven new,
+﻿# REVIEW BEFORE RUNNING. This creates disposable documents ONLY in a proven new,
 # initially empty SolidWorks process. No ROT attachment, original models, forced
 # process termination, or explicit COM release. Run in a fresh Windows PowerShell.
 # Uses a temporary copy of the repository sample, two part configurations and an assembly.
@@ -151,8 +151,16 @@ public static class OwnedEffectiveMassProbe
                 CheckMetadata(assembly, metadata, new Component2[0], "000");
                 string partConfigurationBefore = ConfigurationName(part);
                 Phase("PART CONFIGURATION AFTER ASSEMBLY INSERTIONS " + partConfigurationBefore);
-                ExpectConfigurationMismatch(assembly, a);
-                Require(ConfigurationName(part) == partConfigurationBefore, "Rejected read changed active part configuration.");
+                foreach (Component2 component in new[] { a, b, a })
+                {
+                    bool isA = Object.Equals(component, a);
+                    CheckReader(assembly, new[] { component }, isA ? "111" : "100", isA ? 3.25 : 5.0,
+                        isA ? FixtureCenter(a) : null, isA ? partMoment : null, false, isA ? b : a);
+                    Require(ConfigurationName(part) == partConfigurationBefore, "Mixed-configuration read did not restore the part configuration.");
+                }
+                CheckReader(assembly, new[] { a, b }, "111", 8.25, null, null);
+                Require(ConfigurationName(part) == partConfigurationBefore, "Mixed aggregate read changed the part configuration.");
+                Phase("PASS mixed configurations A/B/A and aggregate without changing occurrence references");
                 Com("Align ONLY fixture B referenced configuration", () => b.ReferencedConfiguration = configA);
                 ActivateConfiguration(part, configA);
                 Require(Com("Rebuild aligned fixture assembly", () => assembly.ForceRebuild3(false)), "Aligned assembly rebuild failed.");
@@ -475,28 +483,6 @@ public static class OwnedEffectiveMassProbe
         var manager = Com("ConfigurationManager GET", () => model.ConfigurationManager);
         var config = Com("ActiveConfiguration GET", () => manager.ActiveConfiguration);
         return Com("Configuration.Name GET", () => config.Name);
-    }
-
-    private static void ExpectConfigurationMismatch(ModelDoc2 model, Component2 component)
-    {
-        string before = DocumentState(model);
-        Tuple<object, int>[] selectionBefore = CaptureSelection(model);
-        Exception rejected = null;
-        try
-        {
-            Com("reader.Read must reject mismatched referenced configuration", () =>
-                reader.Invoke(null, new object[] { model, new[] { component } }));
-        }
-        catch (TargetInvocationException error) { rejected = error.InnerException; }
-        finally
-        {
-            AssertSelectionUnchanged(model, selectionBefore);
-            Require(DocumentState(model) == before, "Rejected read changed assembly state.");
-        }
-        Require(rejected is InvalidOperationException &&
-            rejected.Message.IndexOf("configuration", StringComparison.OrdinalIgnoreCase) >= 0,
-            "Reader must reject unsupported override configuration instead of returning misleading flags.");
-        Phase("PASS explicit configuration guard: " + rejected.Message);
     }
 
     private static void ActivateConfiguration(ModelDoc2 model, string name)

@@ -20,7 +20,7 @@ Unique matches in the original owning scope are selected automatically; unresolv
 require an explicit selection.
 
 Mass, inertia, poses and meshes are regenerated; old manual values and mesh settings are reset.
-Recalculation still requires readable CAD data. Migration does not resolve mixed-configuration mass-reading limitations.
+For mixed configurations, the mass reader temporarily activates the occurrence's referenced configuration for override metadata, restores the original document configuration and rebuilds the assembly. It preserves occurrence bindings and rejects activation, restoration or rebuild failures.
 
 After confirming migration, review the normal export pages. Saving adds the current-format
 configuration and retains the old one. Cancelling does not modify the original configuration.

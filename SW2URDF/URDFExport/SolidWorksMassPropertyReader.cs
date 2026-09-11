@@ -156,37 +156,67 @@ namespace SW2URDF.URDFExport
 
                 // For bounded reads, the empty selection ONLY inspects document-level overrides.
                 // This API cannot establish Link ownership of a whole-assembly override.
-                IMassProperty2 metadata = CreateProperty(assembly, extension);
-                Overrides documentOverrides = ReadOverrides(metadata, new Component2[0]);
-                if (!wholeDocument && documentOverrides != Overrides.None)
-                    throw new InvalidOperationException(
-                        "The active assembly has a whole-assembly mass/COM/inertia override. " +
-                        "It cannot be distributed across Link component selections. Apply overrides to individual " +
-                        "components or an entire subassembly assigned to one Link instead.");
-
-                foreach (Component2 ancestor in ancestors.Values)
+                bool configurationChanged = false;
+                Action onConfigurationChanged = () => configurationChanged = true;
+                Overrides flags = Overrides.None;
+                Exception metadataFailure = null;
+                try
                 {
-                    if (selected.ContainsKey(ancestor.Name2)) continue;
-                    // An ancestor below a selected ancestor is already part of that atomic selection.
-                    if (bounded.Any(item => IsDescendantOf(ancestor, item))) continue;
-                    if (ReadOverrides(metadata, new[] { ancestor }) != Overrides.None)
+                    IMassProperty2 metadata = CreateProperty(assembly, extension);
+                    Overrides documentOverrides = ReadOverrides(metadata, new Component2[0], onConfigurationChanged);
+                    if (!wholeDocument && documentOverrides != Overrides.None)
                         throw new InvalidOperationException(
-                            "Subassembly '" + ancestor.Name2 + "' has a whole-subassembly mass/COM/inertia override, " +
-                            "but this Link selects only descendants. Select the whole subassembly in one Link; " +
-                            "its override cannot be distributed across Links.");
-                }
+                            "The active assembly has a whole-assembly mass/COM/inertia override. " +
+                            "It cannot be distributed across Link component selections. Apply overrides to individual " +
+                            "components or an entire subassembly assigned to one Link instead.");
 
-                Overrides flags = wholeDocument ? documentOverrides : Overrides.None;
-                var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                if (wholeDocument && documentType == (int)swDocumentTypes_e.swDocASSEMBLY &&
-                    flags != (Overrides.Mass | Overrides.Center | Overrides.Inertia))
-                {
-                    Component2 root = assembly.ConfigurationManager.ActiveConfiguration.GetRootComponent3(false);
-                    if (root == null) throw new InvalidOperationException("SolidWorks returned no root for the active assembly configuration.");
-                    flags |= ReadChildrenOverrides(metadata, root, observed, visited);
+                    foreach (Component2 ancestor in ancestors.Values)
+                    {
+                        if (selected.ContainsKey(ancestor.Name2)) continue;
+                        // An ancestor below a selected ancestor is already part of that atomic selection.
+                        if (bounded.Any(item => IsDescendantOf(ancestor, item))) continue;
+                        if (ReadOverrides(metadata, new[] { ancestor }, onConfigurationChanged) != Overrides.None)
+                            throw new InvalidOperationException(
+                                "Subassembly '" + ancestor.Name2 + "' has a whole-subassembly mass/COM/inertia override, " +
+                                "but this Link selects only descendants. Select the whole subassembly in one Link; " +
+                                "its override cannot be distributed across Links.");
+                    }
+
+                    flags = wholeDocument ? documentOverrides : Overrides.None;
+                    var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (wholeDocument && documentType == (int)swDocumentTypes_e.swDocASSEMBLY &&
+                        flags != (Overrides.Mass | Overrides.Center | Overrides.Inertia))
+                    {
+                        Component2 root = assembly.ConfigurationManager.ActiveConfiguration.GetRootComponent3(false);
+                        if (root == null) throw new InvalidOperationException("SolidWorks returned no root for the active assembly configuration.");
+                        flags |= ReadChildrenOverrides(metadata, root, observed, visited, onConfigurationChanged);
+                    }
+                    foreach (Component2 component in bounded)
+                        flags |= ReadSubtreeOverrides(metadata, component, observed, visited, onConfigurationChanged);
                 }
-                foreach (Component2 component in bounded)
-                    flags |= ReadSubtreeOverrides(metadata, component, observed, visited);
+                catch (Exception error)
+                {
+                    metadataFailure = error;
+                    throw;
+                }
+                finally
+                {
+                    // Configuration switching invalidates assembly mass caches. Rebuild
+                    // after restoration, including when a metadata read was rejected.
+                    if (configurationChanged)
+                    {
+                        try
+                        {
+                            if (!assembly.ForceRebuild3(false))
+                                throw new InvalidOperationException("SolidWorks could not rebuild the assembly after reading configuration metadata.");
+                        }
+                        catch (Exception rebuildError)
+                        {
+                            throw new InvalidOperationException("Cannot refresh the assembly after restoring component configurations.",
+                                metadataFailure == null ? rebuildError : new AggregateException(metadataFailure, rebuildError));
+                        }
+                    }
+                }
 
                 // Retain the separate-object read discipline of the SW2023 legacy cache workaround.
                 // Never ReleaseComObject: these RCWs are owned by SolidWorks and releasing them
@@ -302,7 +332,61 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private static Overrides ReadOverrides(IMassProperty2 property, IList<Component2> components)
+        private static Overrides ReadOverrides(IMassProperty2 property, IList<Component2> components, Action onConfigurationChanged)
+        {
+            // GetOverrideOptions has no configuration argument. SW2023 reads metadata
+            // from the loaded document's active configuration even for SelectedItems.
+            // Align only for this metadata read, then restore before traversing children
+            // or calculating assembly-context numeric properties.
+            if (components.Count == 0) return ReadAlignedOverrides(property, components);
+            if (components.Count != 1) throw new ArgumentException("Read override metadata one occurrence at a time.");
+            Component2 component = components[0];
+            var document = component.GetModelDoc2() as ModelDoc2;
+            string referenced = component.ReferencedConfiguration;
+            if (document == null || string.IsNullOrWhiteSpace(referenced))
+                throw new InvalidOperationException("Cannot resolve the document/configuration for occurrence '" + component.Name2 + "': <unavailable>.");
+            string previous = ActiveConfigurationName(document);
+            if (string.Equals(previous, referenced, StringComparison.OrdinalIgnoreCase))
+                return ReadAlignedOverrides(property, components);
+
+            Exception readFailure = null;
+            try
+            {
+                onConfigurationChanged();
+                if (!document.ShowConfiguration2(referenced))
+                    throw new InvalidOperationException("Cannot activate referenced configuration '" + referenced + "' for occurrence '" + component.Name2 + "' (previous='" + previous + "').");
+                if (!string.Equals(component.ReferencedConfiguration, referenced, StringComparison.Ordinal))
+                    throw new InvalidOperationException("The referenced configuration changed while reading mass metadata.");
+                Overrides result = ReadAlignedOverrides(property, components);
+                if (!string.Equals(component.ReferencedConfiguration, referenced, StringComparison.Ordinal))
+                    throw new InvalidOperationException("The referenced configuration changed while reading mass metadata.");
+                return result;
+            }
+            catch (Exception error)
+            {
+                readFailure = error;
+                throw;
+            }
+            finally
+            {
+                try
+                {
+                    // Activation can mutate and then fail. Always inspect and restore.
+                    if (!string.Equals(ActiveConfigurationName(document), previous, StringComparison.OrdinalIgnoreCase) &&
+                        !document.ShowConfiguration2(previous))
+                        throw new InvalidOperationException("SolidWorks refused to restore configuration '" + previous + "'.");
+                    if (!string.Equals(ActiveConfigurationName(document), previous, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("SolidWorks did not restore configuration '" + previous + "'.");
+                }
+                catch (Exception restoreError)
+                {
+                    throw new InvalidOperationException("Cannot restore the original component configuration after reading mass metadata.",
+                        readFailure == null ? restoreError : new AggregateException(readFailure, restoreError));
+                }
+            }
+        }
+
+        private static Overrides ReadAlignedOverrides(IMassProperty2 property, IList<Component2> components)
         {
             // Override options describe stored settings, not calculated geometry. Their API
             // has no Recalculate precondition. Reuse this metadata-only object for each scope;
@@ -345,25 +429,23 @@ namespace SW2URDF.URDFExport
                     "Cannot verify effective mass override metadata for occurrence '" + occurrence +
                     "': referenced configuration='" + (referenced ?? "<unavailable>") +
                     "', active document configuration='" + (active ?? "<unavailable>") +
-                    "'. Resolve the component and make its loaded document active configuration match the " +
-                    "referenced configuration before retrying. Mixed configurations of the same document " +
-                    "cannot be verified safely in this read; no configuration was switched.", failure);
+                    "'. The document did not remain in the referenced configuration during the metadata read.", failure);
         }
 
         private static Overrides ReadSubtreeOverrides(IMassProperty2 metadata, Component2 component,
-            IDictionary<string, ComponentState> observed, ISet<string> visited)
+            IDictionary<string, ComponentState> observed, ISet<string> visited, Action onConfigurationChanged)
         {
             Observe(component, observed);
             if (!visited.Add(component.Name2))
                 throw new InvalidOperationException("Duplicate or cyclic component subtree: " + component.Name2);
             // GetOverrideOptions supports only one selected occurrence at a time.
-            Overrides flags = ReadOverrides(metadata, new[] { component });
+            Overrides flags = ReadOverrides(metadata, new[] { component }, onConfigurationChanged);
             if (flags == (Overrides.Mass | Overrides.Center | Overrides.Inertia)) return flags;
-            return flags | ReadChildrenOverrides(metadata, component, observed, visited);
+            return flags | ReadChildrenOverrides(metadata, component, observed, visited, onConfigurationChanged);
         }
 
         private static Overrides ReadChildrenOverrides(IMassProperty2 metadata, Component2 component,
-            IDictionary<string, ComponentState> observed, ISet<string> visited)
+            IDictionary<string, ComponentState> observed, ISet<string> visited, Action onConfigurationChanged)
         {
             Overrides flags = Overrides.None;
             object childrenValue = component.GetChildren();
@@ -376,7 +458,7 @@ namespace SW2URDF.URDFExport
                 var child = item as Component2;
                 if (child == null) throw new InvalidOperationException("SolidWorks returned an unresolved child in the active configuration.");
                 if (child.GetSuppression2() == (int)swComponentSuppressionState_e.swComponentSuppressed) continue;
-                flags |= ReadSubtreeOverrides(metadata, child, observed, visited);
+                flags |= ReadSubtreeOverrides(metadata, child, observed, visited, onConfigurationChanged);
             }
             return flags;
         }
