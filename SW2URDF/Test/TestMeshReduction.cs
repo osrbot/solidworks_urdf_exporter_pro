@@ -328,6 +328,110 @@ namespace SW2URDF.Test
             Assert.Equal(expectedYaw, rpy[2], 12);
         }
 
+        [Theory]
+        [InlineData(CollisionMeshStrategy.BoxPrimitive)]
+        [InlineData(CollisionMeshStrategy.CylinderPrimitive)]
+        [InlineData(CollisionMeshStrategy.SpherePrimitive)]
+        [InlineData(CollisionMeshStrategy.ComponentBoxes)]
+        public void GeneratedCollisionMeshRemovesNativeShapesAndBakedOrigin(CollisionMeshStrategy strategy)
+        {
+            var link = new Link { Name = "base_link", Inertial = null, Visual = null };
+            link.Collision.Geometry.UseCylinder(0.2, 1.0);
+            link.Collision.Origin.SetXYZ(new[] { 2.0, 3.0, 4.0 });
+            link.Collision.Origin.SetRPY(new[] { 0.0, Math.PI / 2, 0.0 });
+            for (int i = 0; i < 500; i++)
+            {
+                var extra = new Collision();
+                extra.Geometry.UseBox(1, 2, 3);
+                link.AddAdditionalCollision(extra);
+            }
+            const string uri = "package://robot/meshes/collision/base_link.STL";
+            ExportHelper.ApplyCollisionMeshReference(link, uri,
+                new ExportHelper.CollisionMeshExportResult(strategy, strategy, "primitive_stl", "ok"));
+            var xml = new XmlDocument();
+            xml.LoadXml(WriteLinkXml(link));
+            Assert.Empty(link.AdditionalCollisions);
+            Assert.Equal(1, xml.SelectNodes("/link/collision").Count);
+            Assert.Equal(uri, xml.SelectSingleNode("/link/collision/geometry/mesh/@filename").Value);
+            Assert.Equal(0, xml.SelectNodes("//box | //cylinder | //sphere").Count);
+            Assert.Equal("0 0 0", xml.SelectSingleNode("/link/collision/origin/@xyz").Value);
+            Assert.Equal("0 0 0", xml.SelectSingleNode("/link/collision/origin/@rpy").Value);
+            Assert.True(xml.OuterXml.Length < 600);
+        }
+
+        [Fact]
+        public void CollisionMeshFallbackKeepsExplicitOrigin()
+        {
+            var link = new Link { Name = "base_link", Inertial = null, Visual = null };
+            link.Collision.Origin.SetXYZ(new[] { 1.0, 2.0, 3.0 });
+            ExportHelper.ApplyCollisionMeshReference(link, "collision.STL",
+                new ExportHelper.CollisionMeshExportResult(CollisionMeshStrategy.ComponentBoxes,
+                    CollisionMeshStrategy.VisualMesh, "visual_mesh_copy", "fallback"));
+            var xml = new XmlDocument();
+            xml.LoadXml(WriteLinkXml(link));
+            Assert.Equal("1 2 3", xml.SelectSingleNode("/link/collision/origin/@xyz").Value);
+            Assert.Equal("collision.STL", xml.SelectSingleNode("/link/collision/geometry/mesh/@filename").Value);
+        }
+
+        [Fact]
+        public void ComponentCollisionMeshSurvivesRosPackageExport()
+        {
+            string directory = Path.Combine(Path.GetTempPath(), "sw2urdf-collision-package-" + Guid.NewGuid());
+            Directory.CreateDirectory(directory);
+            try
+            {
+                string mesh = Path.Combine(directory, "collision.STL");
+                var boxes = new List<ExportHelper.LinkLocalBoundingBox>();
+                for (int i = 0; i < 500; i++)
+                {
+                    var box = new ExportHelper.LinkLocalBoundingBox();
+                    box.Include(i, 2, 3);
+                    box.Include(i + 0.5, 3, 4);
+                    boxes.Add(box);
+                }
+                ExportHelper.WriteComponentBoxPrimitiveStl(mesh, boxes);
+                Assert.Equal((uint)6000, ReadBinaryStlTriangleCount(mesh));
+                var link = new Link { Name = "base_link", Inertial = null, Visual = null };
+                ExportHelper.ApplyCollisionMeshReference(link, "collision.STL",
+                    new ExportHelper.CollisionMeshExportResult(CollisionMeshStrategy.ComponentBoxes,
+                        CollisionMeshStrategy.ComponentBoxes, "component_box_set_stl", "ok"));
+                string source = Path.Combine(directory, "robot.urdf");
+                File.WriteAllText(source, "<robot name='collision_robot'>" + WriteLinkXml(link) + "</robot>");
+                var robot = OSURDF.Core.Urdf.UrdfCodec.Read(source);
+                robot.Profiles.Ros1.Enabled = true;
+                robot.Profiles.Ros2.Enabled = true;
+                robot.Profiles.Package = new OSURDF.Core.Model.PackageMetadataProfile
+                {
+                    PackageName = "collision_description", Version = "1.0.0", Description = "Collision test",
+                    MaintainerName = "Test", MaintainerEmail = "test@example.com", License = "MIT"
+                };
+                string bundle = new OSURDF.Core.Bundle.RobotBundleBuilder().Build(robot,
+                    new OSURDF.Core.Bundle.BundleBuildOptions
+                    {
+                        SourceUrdfPath = source, OutputDirectory = Path.Combine(directory, "bundle")
+                    }).OutputDirectory;
+                foreach (bool ros2 in new[] { false, true })
+                {
+                    var options = new OSURDF.Core.Export.RosExportOptions
+                    {
+                        BundleDirectory = bundle, OutputDirectory = Path.Combine(directory, ros2 ? "ROS2" : "ROS1")
+                    };
+                    var exporter = new OSURDF.Core.Export.RosPackageExporter();
+                    string package = ros2 ? exporter.ExportRos2(options) : exporter.ExportRos1(options);
+                    var xml = new XmlDocument();
+                    xml.Load(Directory.GetFiles(Path.Combine(package, "urdf"), "*.urdf")[0]);
+                    Assert.Equal(1, xml.SelectNodes("/robot/link/collision").Count);
+                    string uri = xml.SelectSingleNode("/robot/link/collision/geometry/mesh/@filename").Value;
+                    const string prefix = "package://collision_description/";
+                    Assert.StartsWith(prefix, uri);
+                    string deliveredMesh = Path.Combine(package, uri.Substring(prefix.Length).Replace('/', Path.DirectorySeparatorChar));
+                    Assert.Equal(File.ReadAllBytes(mesh), File.ReadAllBytes(deliveredMesh));
+                    Assert.Equal(0, xml.SelectNodes("//box").Count);
+                }
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
         [Fact]
         public void TestPrimitiveBoxStlWritesTwelveBinaryTriangles()
         {

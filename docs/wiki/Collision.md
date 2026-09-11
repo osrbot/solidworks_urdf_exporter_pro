@@ -18,14 +18,21 @@ the inertia tensor.
 | `VisualMesh` | Maximum compatibility or inspection | Copies Visual mesh as Collision mesh |
 | `SimplifiedMesh` | Primitives do not fit, lower mesh cost desired | STL decimation using the same target ratio as Visual; fallback on failure |
 | `AccurateMesh` | Contact details are required | Collision STL without decimation |
-| `BoxPrimitive` | Chassis, plate, box, bracket | Native URDF box/corresponding geometry |
-| `CylinderPrimitive` | Wheel, shaft, tube, cylindrical shell | Native URDF cylinder/corresponding geometry |
-| `SpherePrimitive` | Spherical sensor or structure | Native URDF sphere/corresponding geometry |
-| `ComponentBoxes` | Stable default approximation for assemblies | Multiple component-local boxes |
+| `BoxPrimitive` | Chassis, plate, box, bracket | Box STL referenced by the robot description |
+| `CylinderPrimitive` | Wheel, shaft, tube, cylindrical shell | Cylinder STL referenced by the robot description |
+| `SpherePrimitive` | Spherical sensor or structure | Sphere STL referenced by the robot description |
+| `ComponentBoxes` | Stable default approximation for assemblies | One STL containing the component-local boxes |
 | `ConvexHull` | One complex shape that permits a convex approximation | Convex-hull STL from Link-local points/faces |
 
 The historical `Primitive` configuration value is a compatibility alias and should not be promoted
 as a new UI strategy name.
+
+Generated collision approximations use `meshes/collision/<link>.STL`. Each Link references one
+collision mesh instead of expanding a component box list into the URDF. Centers and axes are
+baked into Link-local vertices, so the generated primitive mesh has an identity collision origin.
+This reduces robot-description text; it does not establish that message size caused a TF failure.
+Mesh contact handling depends on the simulator: a combined, nonconvex box mesh can be treated
+differently from separate native primitives. Validate contacts in the target simulator.
 
 ## Recommended Order
 

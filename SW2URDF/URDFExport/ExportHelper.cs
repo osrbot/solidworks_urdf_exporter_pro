@@ -784,11 +784,7 @@ namespace SW2URDF.URDFExport
                 collisionExport = ExportCollisionMesh(link, meshFiles, meshFormat);
             }
             link.Visual.Geometry.UseMesh(meshFiles.VisualMeshFilename);
-            if (!UsesUrdfPrimitiveCollision(collisionExport))
-            {
-                link.ClearAdditionalCollisions();
-                link.Collision.Geometry.UseMesh(meshFiles.CollisionMeshFilename);
-            }
+            ApplyCollisionMeshReference(link, meshFiles.CollisionMeshFilename, collisionExport);
             if (meshRecords != null)
             {
                 meshRecords.Add(CreateMeshExportRecord(link, meshFiles, meshFormat, collisionExport, visualStlStats));
@@ -1024,32 +1020,7 @@ namespace SW2URDF.URDFExport
                 isStl && visualExists ? TryReadStlTriangleCount(meshFiles.WindowsVisualMeshFilename) : null,
                 isStl && collisionExists ? TryReadStlTriangleCount(meshFiles.WindowsCollisionMeshFilename) : null,
                 visualStlStats,
-                BuildCollisionUrdfReference(safeCollisionExport, meshFiles.CollisionMeshFilename));
-        }
-
-        private static string BuildCollisionUrdfReference(
-            CollisionMeshExportResult collisionExport,
-            string meshCollisionUri)
-        {
-            if (UsesUrdfPrimitiveCollision(collisionExport))
-            {
-                switch (collisionExport.EffectiveStrategy)
-                {
-                    case CollisionMeshStrategy.BoxPrimitive:
-                        return "native:box";
-
-                    case CollisionMeshStrategy.CylinderPrimitive:
-                        return "native:cylinder";
-
-                    case CollisionMeshStrategy.SpherePrimitive:
-                        return "native:sphere";
-
-                    case CollisionMeshStrategy.ComponentBoxes:
-                        return "native:box_set";
-                }
-            }
-
-            return meshCollisionUri;
+                meshFiles.CollisionMeshFilename);
         }
 
         internal static uint? TryReadStlTriangleCount(string filename)
@@ -1105,11 +1076,10 @@ namespace SW2URDF.URDFExport
                             meshFiles.WindowsCollisionMeshFilename,
                             out primitiveBox))
                     {
-                        UseBoxCollisionGeometry(link, primitiveBox);
                         return new CollisionMeshExportResult(
                             link.CollisionMeshStrategy,
                             CollisionMeshStrategy.BoxPrimitive,
-                            "urdf_box_primitive",
+                            "box_primitive_stl",
                             "ok");
                     }
                     logger.Warn(link.Name + ": primitive collision mesh failed; falling back to visual mesh copy");
@@ -1129,11 +1099,10 @@ namespace SW2URDF.URDFExport
                             meshFiles.WindowsCollisionMeshFilename,
                             out primitiveBox))
                     {
-                        UseCylinderCollisionGeometry(link, primitiveBox);
                         return new CollisionMeshExportResult(
                             CollisionMeshStrategy.CylinderPrimitive,
                             CollisionMeshStrategy.CylinderPrimitive,
-                            "urdf_cylinder_primitive",
+                            "cylinder_primitive_stl",
                             "ok");
                     }
                     logger.Warn(link.Name + ": cylinder primitive collision mesh failed; falling back to visual mesh copy");
@@ -1153,11 +1122,10 @@ namespace SW2URDF.URDFExport
                             meshFiles.WindowsCollisionMeshFilename,
                             out primitiveBox))
                     {
-                        UseSphereCollisionGeometry(link, primitiveBox);
                         return new CollisionMeshExportResult(
                             CollisionMeshStrategy.SpherePrimitive,
                             CollisionMeshStrategy.SpherePrimitive,
-                            "urdf_sphere_primitive",
+                            "sphere_primitive_stl",
                             "ok");
                     }
                     logger.Warn(link.Name + ": sphere primitive collision mesh failed; falling back to visual mesh copy");
@@ -1178,11 +1146,10 @@ namespace SW2URDF.URDFExport
                             meshFiles.WindowsCollisionMeshFilename,
                             out componentBoxes))
                     {
-                        UseComponentBoxCollisionGeometry(link, componentBoxes);
                         return new CollisionMeshExportResult(
                             CollisionMeshStrategy.ComponentBoxes,
                             CollisionMeshStrategy.ComponentBoxes,
-                            "urdf_component_box_set",
+                            "component_box_set_stl",
                             "ok");
                     }
                     logger.Warn(link.Name + ": component box collision mesh failed; falling back to visual mesh copy");
@@ -1318,7 +1285,7 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private static bool UsesUrdfPrimitiveCollision(CollisionMeshExportResult result)
+        private static bool UsesBakedPrimitiveCollisionMesh(CollisionMeshExportResult result)
         {
             if (result == null)
             {
@@ -1338,57 +1305,18 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private static void UseBoxCollisionGeometry(Link link, LinkLocalBoundingBox box)
+        internal static void ApplyCollisionMeshReference(
+            Link link, string meshUri, CollisionMeshExportResult result)
         {
             link.ClearAdditionalCollisions();
-            link.Collision.Geometry.UseBox(box.Width, box.Depth, box.Height);
-            SetCollisionPrimitiveOrigin(link, box.Center, new[] { 0.0, 0.0, 0.0 });
-        }
-
-        private static void UseCylinderCollisionGeometry(Link link, LinkLocalBoundingBox box)
-        {
-            int axis = box.CylinderAxisIndex;
-            int uAxis = (axis + 1) % 3;
-            int vAxis = (axis + 2) % 3;
-            double radius = Math.Max(box.GetDimension(uAxis), box.GetDimension(vAxis)) / 2.0;
-            double length = box.GetDimension(axis);
-
-            link.Collision.Geometry.UseCylinder(radius, length);
-            link.ClearAdditionalCollisions();
-            SetCollisionPrimitiveOrigin(link, box.Center, GetCylinderPrimitiveRpy(axis));
-        }
-
-        private static void UseSphereCollisionGeometry(Link link, LinkLocalBoundingBox box)
-        {
-            double radius = Math.Max(box.Width, Math.Max(box.Depth, box.Height)) / 2.0;
-            link.ClearAdditionalCollisions();
-            link.Collision.Geometry.UseSphere(radius);
-            SetCollisionPrimitiveOrigin(link, box.Center, new[] { 0.0, 0.0, 0.0 });
-        }
-
-        private static void UseComponentBoxCollisionGeometry(Link link, IList<LinkLocalBoundingBox> boxes)
-        {
-            link.ClearAdditionalCollisions();
-            for (int i = 0; i < boxes.Count; i++)
+            link.Collision.Geometry.UseMesh(meshUri);
+            if (UsesBakedPrimitiveCollisionMesh(result))
             {
-                SW2URDF.URDF.Collision collision = i == 0
-                    ? link.Collision
-                    : new SW2URDF.URDF.Collision();
-                collision.Geometry.UseBox(boxes[i].Width, boxes[i].Depth, boxes[i].Height);
-                collision.Origin.SetXYZ(boxes[i].Center);
-                collision.Origin.SetRPY(new[] { 0.0, 0.0, 0.0 });
-
-                if (i > 0)
-                {
-                    link.AddAdditionalCollision(collision);
-                }
+                // Primitive STL vertices already include their Link-local center and axis.
+                // Applying the native primitive origin again would displace the mesh.
+                link.Collision.Origin.SetXYZ(new[] { 0.0, 0.0, 0.0 });
+                link.Collision.Origin.SetRPY(new[] { 0.0, 0.0, 0.0 });
             }
-        }
-
-        private static void SetCollisionPrimitiveOrigin(Link link, double[] center, double[] rpy)
-        {
-            link.Collision.Origin.SetXYZ(new[] { center[0], center[1], center[2] });
-            link.Collision.Origin.SetRPY(rpy);
         }
 
         internal static double[] GetCylinderPrimitiveRpy(int axis)

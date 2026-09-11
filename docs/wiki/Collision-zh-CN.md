@@ -16,13 +16,18 @@ Collision 和 Inertial 独立：改变碰撞策略不会改变质量、COM 或�
 | `VisualMesh` | 最大兼容或查看 | 复制 Visual mesh 作为 Collision mesh |
 | `SimplifiedMesh` | 原语不适合但希望降低网格成本 | 与可视 STL 使用同一目标减面比例；失败时回退 |
 | `AccurateMesh` | 必须保留接触细节 | 不做减面的碰撞 STL |
-| `BoxPrimitive` | 底盘、板、盒体、支架 | URDF box/对应几何 |
-| `CylinderPrimitive` | 轮子、轴、管、圆柱壳 | URDF cylinder/对应几何 |
-| `SpherePrimitive` | 球形传感器或结构 | URDF sphere/对应几何 |
-| `ComponentBoxes` | 多组件装配体的稳定默认近似 | 多个组件 Link-local 包围盒 |
+| `BoxPrimitive` | 底盘、板、盒体、支架 | 引用箱体 STL |
+| `CylinderPrimitive` | 轮子、轴、管、圆柱壳 | 引用圆柱 STL |
+| `SpherePrimitive` | 球形传感器或结构 | 引用球体 STL |
+| `ComponentBoxes` | 多组件装配体的稳定默认近似 | 多个组件 Link-local 包围盒合并为一个 STL |
 | `ConvexHull` | 单一复杂但可凸近似的形状 | 由 Link-local 顶点/三角面生成凸包 STL |
 
 配置中的历史 `Primitive` 值是兼容入口，不应作为新的用户策略名称传播。
+
+碰撞近似写入 `meshes/collision/<link>.STL`，每个 Link 引用一个碰撞网格，不再在 URDF 中展开
+组件包围盒列表。中心和轴向已写入 Link-local 顶点，因此生成的基本体网格使用零位移、零旋转。
+这能缩短机器人描述文本，但不能据此认定消息长度就是 TF 故障的原因。合并网格与多个原生
+基本体在仿真器中的接触处理可能不同，尤其是非凸形状；需要在目标仿真器中验证接触行为。
 
 ## 推荐顺序
 
