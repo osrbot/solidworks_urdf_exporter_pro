@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Xml;
+using System.Xml.Serialization;
 
 namespace SW2URDF.URDFExport
 {
@@ -34,8 +35,8 @@ namespace SW2URDF.URDFExport
         public LegacyConfigurationMigration(string data, double version,
             IEnumerable<ReferenceGeometryEntry> catalog)
         {
-            if (version != 1.5)
-                throw new SerializationException("Only legacy configuration v1.5 can be migrated. The original was not changed.");
+            if (!IsSupportedVersion(version))
+                throw new SerializationException("Unsupported legacy configuration version. Supported storage versions are 1.0 through 1.5. The original was not changed.");
             if (string.IsNullOrWhiteSpace(data))
                 throw new SerializationException("The legacy configuration is empty. The original was not changed.");
             using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(data)))
@@ -45,10 +46,22 @@ namespace SW2URDF.URDFExport
                 XmlResolver = null,
                 MaxCharactersInDocument = 32 * 1024 * 1024
             }))
-                root = (Link)new DataContractSerializer(typeof(Link)).ReadObject(reader);
+            {
+                // ROS uses SerialNode XML before 1.3, and the same Link data contract as
+                // the maintained fork for 1.3/1.4/1.5. Never reinterpret an unknown version.
+                root = version < 1.3
+                    ? ((LegacySerialNode)new XmlSerializer(typeof(LegacySerialNode)).Deserialize(reader)).ToLink(null)
+                    : (Link)new DataContractSerializer(typeof(Link)).ReadObject(reader);
+            }
 
             var entries = (catalog ?? throw new ArgumentNullException("catalog")).ToList();
             Visit(root, null, entries, new HashSet<Link>(), new HashSet<string>(StringComparer.Ordinal));
+        }
+
+        internal static bool IsSupportedVersion(double version)
+        {
+            return version == 1.0 || version == 1.1 || version == 1.2 ||
+                version == 1.3 || version == 1.4 || version == 1.5;
         }
 
         private void Visit(Link link, Link parent, List<ReferenceGeometryEntry> catalog,
@@ -133,6 +146,38 @@ namespace SW2URDF.URDFExport
             link.Joint.LegacyAxisName = null;
             foreach (var child in link.Children)
                 InitializeReferences(child);
+        }
+    }
+
+    // XML wire shape used by ros/solidworks_urdf_exporter Legacy/SerialNode.cs.
+    // URDFLink was XmlIgnore: numeric dynamics were never stored in this format.
+    [XmlRoot("SerialNode")]
+    public sealed class LegacySerialNode
+    {
+        public string linkName;
+        public string jointName;
+        public string axisName;
+        public string coordsysName;
+        public List<byte[]> componentPIDs;
+        public string jointType;
+        public bool isBaseNode;
+        public bool isIncomplete;
+        [XmlArrayItem("SerialNode")]
+        public List<LegacySerialNode> Nodes = new List<LegacySerialNode>();
+
+        internal Link ToLink(Link parent)
+        {
+            if (string.IsNullOrWhiteSpace(linkName) || Nodes == null || Nodes.Any(node => node == null))
+                throw new SerializationException("The legacy SerialNode tree is incomplete. The original was not changed.");
+            var link = new Link { Name = linkName, Parent = parent, isIncomplete = isIncomplete };
+            link.Joint.Name = jointName ?? string.Empty;
+            link.Joint.Type = jointType ?? string.Empty;
+            link.Joint.LegacyAxisName = axisName;
+            link.Joint.LegacyCoordinateSystemName = coordsysName;
+            link.SWComponentPIDs = componentPIDs ?? new List<byte[]>();
+            foreach (var child in Nodes)
+                link.Children.Add(child.ToLink(link));
+            return link;
         }
     }
 }

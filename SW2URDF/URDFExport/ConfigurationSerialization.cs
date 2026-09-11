@@ -609,11 +609,25 @@ namespace SW2URDF.URDFExport
                     !(featureName.StartsWith(UrdfConfigurationAttributePrefix, StringComparison.Ordinal) ||
                       definitionName.StartsWith(UrdfConfigurationAttributePrefix, StringComparison.Ordinal)))
                     continue;
-                if (++count > 1)
-                    throw new SerializationException("Multiple legacy export configurations exist. No configuration was changed.");
-                if (!TryReadConfigurationAttribute(attribute, out data, out version))
+                string candidateData;
+                double candidateVersion;
+                if (!TryReadConfigurationAttribute(attribute, out candidateData, out candidateVersion))
                     throw new SerializationException("The legacy export configuration cannot be read. No configuration was changed.");
+                if (!LegacyConfigurationMigration.IsSupportedVersion(candidateVersion))
+                    throw new SerializationException("An unsupported legacy configuration exists. No configuration was changed.");
+                // Old exporters retained prior-version attributes on upgrade. Select the
+                // highest stored schema version, independent of feature enumeration order.
+                if (count == 0 || candidateVersion > version)
+                {
+                    data = candidateData;
+                    version = candidateVersion;
+                    count = 1;
+                }
+                else if (candidateVersion == version)
+                    count++;
             }
+            if (count > 1)
+                throw new SerializationException("Multiple legacy export configurations have the same latest version. No configuration was changed.");
             return count == 1;
         }
 

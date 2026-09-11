@@ -65,6 +65,10 @@ namespace SW2URDF.URDF
         {
             LinkNode cloned = (LinkNode)base.Clone();
             cloned.Link = Link.Clone();
+            cloned.IsBaseNode = IsBaseNode;
+            cloned.IsIncomplete = IsIncomplete;
+            cloned.NeedsSaving = NeedsSaving;
+            cloned.WhyIncomplete = WhyIncomplete;
             return cloned;
         }
 

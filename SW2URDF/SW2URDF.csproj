@@ -450,6 +450,7 @@
     <Compile Include="URDFExport\CadFeatureReference.cs" />
     <Compile Include="URDFExport\ConfigurationSerialization.cs" />
     <Compile Include="URDFExport\LegacyConfigurationMigration.cs" />
+    <EmbeddedResource Include="Test\Fixtures\ros-v1.4.xml" />
     <Compile Include="URDFExport\ExportSessionCloseCoordinator.cs" />
     <Compile Include="URDFExport\ExportSessionDraftStore.cs" />
     <Compile Include="URDFExport\AutomaticLinkColorScheme.cs" />

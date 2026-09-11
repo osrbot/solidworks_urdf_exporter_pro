@@ -22,6 +22,58 @@ namespace SW2URDF.Test
     {
         private const string RecoverySlotName = "URDF Export Configuration (v2 recovery)";
 
+        [Fact]
+        public void SnapshotClonePreservesMigrationAndIncompleteFlags()
+        {
+            var source = new LinkNode(CreateTree()) { NeedsSaving = true };
+            var child = (LinkNode)source.Nodes[0];
+            child.IsIncomplete = true;
+            child.WhyIncomplete = "Review old settings";
+            var copy = (LinkNode)source.Clone();
+            Assert.True(copy.IsBaseNode);
+            Assert.True(copy.NeedsSaving);
+            var childCopy = (LinkNode)copy.Nodes[0];
+            Assert.True(childCopy.IsIncomplete);
+            Assert.Equal(child.WhyIncomplete, childCopy.WhyIncomplete);
+            Assert.NotSame(child.Link, childCopy.Link);
+        }
+
+        [Fact]
+        public void ActualRosDataContractMigratesWithoutForkOnlyMembers()
+        {
+            string payload;
+            using (var stream = typeof(TestLegacyConfigurationMigration).Assembly.GetManifestResourceStream(
+                "SW2URDF.Test.Fixtures.ros-v1.4.xml"))
+            using (var reader = new StreamReader(stream))
+                payload = reader.ReadToEnd();
+            Assert.DoesNotContain("FrameReference", payload);
+            Assert.DoesNotContain("AdditionalCollisions", payload);
+            var frame = Entry("wheel frame", ReferenceGeometryKind.CoordinateSystem, 1);
+            var axis = Entry("wheel axis", ReferenceGeometryKind.Axis, 2);
+            var migration = new LegacyConfigurationMigration(payload, 1.4, new[] { frame, axis });
+            Assert.True(migration.IsResolved);
+            var restored = ConfigurationSerialization.DeserializeDraftPayload(
+                ConfigurationSerialization.SerializeDraftPayload(migration.CreateReviewedTree()));
+            Assert.Equal("底座", restored.Link.Name);
+            Assert.Equal(new byte[] { 0, 128, 255 }, restored.Link.SWMainComponentPID);
+            var child = Assert.Single(restored.Nodes.Cast<LinkNode>());
+            Assert.Equal("wheel_link", child.Link.Name);
+            Assert.Equal(new byte[] { 4, 0, 254 }, child.Link.SWMainComponentPID);
+            Assert.Equal(child.Link.SWMainComponentPID, Assert.Single(child.Link.SWComponentPIDs));
+            Assert.True(child.Link.STLQualityFine);
+            Assert.Equal("wheel_joint", child.Link.Joint.Name);
+            Assert.Equal("revolute", child.Link.Joint.Type);
+            Assert.Equal(new double[] { 0, -1, 0 }, child.Link.Joint.Axis.GetXYZ());
+            Assert.Equal(-1.25, child.Link.Joint.Limit.Lower);
+            Assert.Equal(2.5, child.Link.Joint.Limit.Upper);
+            Assert.Equal(12, child.Link.Joint.Limit.Effort);
+            Assert.Equal(3, child.Link.Joint.Limit.Velocity);
+            Assert.Equal(4.125, child.Link.Inertial.Mass.Value);
+            Assert.Equal(0.0023456789, child.Link.Inertial.Inertia.Ixx);
+            Assert.Equal(frame.Reference, child.Link.FrameReference);
+            Assert.Equal(axis.Reference, child.Link.Joint.AxisReference);
+        }
+
         [Theory]
         [InlineData(true, false)]
         [InlineData(false, true)]
@@ -231,8 +283,11 @@ namespace SW2URDF.Test
             }
         }
 
-        [Fact]
-        public void ReviewedTreeAndVersionTwoRoundTripPreserveLegacyData()
+        [Theory]
+        [InlineData(1.3)]
+        [InlineData(1.4)]
+        [InlineData(1.5)]
+        public void ReviewedTreeAndVersionTwoRoundTripPreserveLegacyData(double version)
         {
             Link original = CreateTree();
             original.Joint.LegacyCoordinateSystemName = " root frame";
@@ -248,7 +303,7 @@ namespace SW2URDF.Test
             Assert.DoesNotContain("AxisReference", legacy);
 
             var migration = new LegacyConfigurationMigration(
-                legacy, 1.5, new[] { rootFrame, wheelFrame, wheelAxis });
+                legacy, version, new[] { rootFrame, wheelFrame, wheelAxis });
             Assert.Equal(2, migration.LinkCount);
             Assert.Equal(3, migration.References.Count);
             Assert.True(migration.IsResolved);
@@ -427,15 +482,82 @@ namespace SW2URDF.Test
 
         [Theory]
         [InlineData(0.0)]
-        [InlineData(1.4)]
+        [InlineData(1.25)]
         [InlineData(1.6)]
         [InlineData(2.0)]
         [InlineData(double.NaN)]
         [InlineData(double.PositiveInfinity)]
-        public void OnlyVersionOnePointFiveIsAccepted(double version)
+        public void UnknownStorageVersionsAreRejected(double version)
         {
             Assert.Throws<SerializationException>(() => new LegacyConfigurationMigration(
                 SerializeLegacy(CreateTree()), version, new ReferenceGeometryEntry[0]));
+        }
+
+        [Theory]
+        [InlineData(1.0)]
+        [InlineData(1.1)]
+        [InlineData(1.2)]
+        public void SerialNodeXmlMigratesNamesHierarchyAndComponentIds(double version)
+        {
+            const string xml = "<SerialNode><linkName>底座</linkName><isBaseNode>true</isBaseNode>" +
+                "<componentPIDs><base64Binary>AID/</base64Binary></componentPIDs><Nodes><SerialNode>" +
+                "<linkName>wheel</linkName><jointName>wheel_joint</jointName><jointType>revolute</jointType>" +
+                "<coordsysName>frame</coordsysName><axisName>axis</axisName><isIncomplete>true</isIncomplete>" +
+                "<componentPIDs><base64Binary>BAD+</base64Binary></componentPIDs><Nodes />" +
+                "</SerialNode></Nodes></SerialNode>";
+            var frame = Entry("frame", ReferenceGeometryKind.CoordinateSystem, 1);
+            var axis = Entry("axis", ReferenceGeometryKind.Axis, 2);
+            var migration = new LegacyConfigurationMigration(xml, version, new[] { frame, axis });
+            Assert.True(migration.IsResolved);
+            var restored = ConfigurationSerialization.DeserializeDraftPayload(
+                ConfigurationSerialization.SerializeDraftPayload(migration.CreateReviewedTree()));
+            Assert.Equal("底座", restored.Link.Name);
+            Assert.Equal(new byte[] { 0, 128, 255 }, Assert.Single(restored.Link.SWComponentPIDs));
+            var child = Assert.Single(restored.Nodes.Cast<LinkNode>());
+            Assert.Equal("wheel", child.Link.Name);
+            Assert.Equal("wheel_joint", child.Link.Joint.Name);
+            Assert.Equal("revolute", child.Link.Joint.Type);
+            Assert.True(child.IsIncomplete);
+            Assert.Equal(new byte[] { 4, 0, 254 }, Assert.Single(child.Link.SWComponentPIDs));
+            Assert.Equal(frame.Reference, child.Link.FrameReference);
+            Assert.Equal(axis.Reference, child.Link.Joint.AxisReference);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void RollingUpgradeSelectsLatestStoredVersionRegardlessOfFeatureOrder(bool reverse)
+        {
+            string latest = SerializeLegacy(CreateTree());
+            var slots = new List<ReadOnlyConfigurationSlot>
+            {
+                new ReadOnlyConfigurationSlot("URDF Export Configuration", "old XML", 1.0, null),
+                new ReadOnlyConfigurationSlot("URDF Export Configuration (v1.3)", "older contract", 1.3, null),
+                new ReadOnlyConfigurationSlot("URDF Export Configuration (v1.4)", latest, 1.4, null)
+            };
+            if (reverse) slots.Reverse();
+            Assert.True(ConfigurationSerialization.TryReadLegacyConfiguration(
+                ConfigurationModel(slots), out string data, out double version));
+            Assert.Equal(1.4, version);
+            Assert.Equal(latest, data);
+            Assert.Equal(2, new LegacyConfigurationMigration(data, version, new ReferenceGeometryEntry[0]).LinkCount);
+            foreach (var slot in slots) slot.VerifyReadOnly();
+        }
+
+        [Theory]
+        [InlineData(1.4)]
+        [InlineData(1.6)]
+        [InlineData(double.NaN)]
+        public void ConflictingOrUnsupportedLegacyAttributesAreRejected(double competingVersion)
+        {
+            var slots = new[]
+            {
+                new ReadOnlyConfigurationSlot("URDF Export Configuration (v1.4)", SerializeLegacy(CreateTree()), 1.4, null),
+                new ReadOnlyConfigurationSlot("URDF Export Configuration copy", SerializeLegacy(CreateTree()), competingVersion, null)
+            };
+            Assert.Throws<SerializationException>(() => ConfigurationSerialization.TryReadLegacyConfiguration(
+                ConfigurationModel(slots), out string data, out double version));
+            foreach (var slot in slots) slot.VerifyReadOnly();
         }
 
         [Theory]
