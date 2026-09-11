@@ -14,8 +14,8 @@ You do not need Isaac Sim or MuJoCo installed on the Windows computer to enable 
 
 - Exit SolidWorks completely before upgrading.
 - Test a new release with a copy of your assembly first.
-- When a migratable v1.5 configuration is detected, **Migrate export configuration** opens. Review every coordinate system and axis, select the correct object in the current assembly for missing or ambiguous matches, then click **Migrate**. The Link tree, Joint parameters, and component bindings are retained. Resolve missing components first; the plugin does not guess replacements.
-- After confirming migration, review the export pages and save the export configuration to write the current format. The old configuration is retained, and canceling migration does not change it. Only v1.5 migration is supported; other versions or unreadable configurations produce an error. Do not delete the old configuration first.
+- For supported storage formats 1.0–1.5, **Migrate export configuration** opens. Review coordinate systems and axes, select missing or ambiguous matches, then click **Migrate**. Connections, names, component bindings and joint design settings are retained. Mass, inertia, poses and meshes are regenerated; old manual values and mesh settings are reset. Resolve missing components first; the plugin does not guess replacements.
+- After confirming migration, review the export pages and save the export configuration to write the current format. The old configuration is retained, and canceling migration does not change it. Unknown storage formats or unreadable configurations produce an error. Do not delete the old configuration first.
 - After upgrading, check the Link tree, coordinate systems, Joints, inertia, and collision preview before using a production model.
 
 ## Supported environment

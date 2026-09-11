@@ -423,13 +423,14 @@ namespace SW2URDF.Test
             fixture.EffectiveMass = components => components.Single().ReferencedConfiguration == "Measured variant" ? 9.0 : 3.0;
 
             Assert.Equal(9.0, fixture.Read(part.Object).Mass);
-            part.Verify(value => value.GetModelDoc2(), Times.Exactly(2));
+            part.Verify(value => value.GetModelDoc2(), Times.Exactly(3));
             part.VerifySet(value => value.ReferencedConfiguration = It.IsAny<string>(), Times.Never);
             fixture.Assembly.Verify(value => value.ShowConfiguration2(It.IsAny<string>()), Times.Never);
+            fixture.Assembly.Verify(value => value.ForceRebuild3(It.IsAny<bool>()), Times.Never);
         }
 
         [Fact]
-        public void MismatchedActiveComponentConfigurationRejectsMetadataBeforeReadingIt()
+        public void FailedConfigurationActivationRejectsMetadataBeforeReadingIt()
         {
             var fixture = new Fixture();
             var part = fixture.Component("part-1", 3.0);
@@ -440,9 +441,70 @@ namespace SW2URDF.Test
             Assert.Contains("part-1", error.Message);
             Assert.Contains("Referenced configuration", error.Message);
             Assert.Contains("Wrong active", error.Message);
-            Assert.Contains("no configuration was switched", error.Message);
+            Assert.Contains("Cannot activate", error.Message);
             fixture.Properties[0].Verify(value => value.GetOverrideOptions(), Times.Once); // document only
             Assert.Equal(0, fixture.NumericReads);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void MetadataConfigurationIsRestoredAfterSuccessOrFailure(bool failRead)
+        {
+            var fixture = new Fixture();
+            var part = fixture.Component("part-1", 3.0);
+            string active = "Other";
+            fixture.ComponentConfigurations["part-1"].SetupGet(value => value.Name).Returns(() => active);
+            var document = Mock.Get((ModelDoc2)part.Object.GetModelDoc2());
+            document.Setup(value => value.ShowConfiguration2(It.IsAny<string>()))
+                .Returns((string name) => { active = name; return true; });
+            fixture.Assembly.Setup(value => value.ForceRebuild3(false)).Returns(() =>
+            {
+                Assert.Equal("Other", active);
+                Assert.Equal(0, fixture.NumericReads);
+                return true;
+            });
+            fixture.BeforeOverridesRead = scope =>
+            {
+                if (scope.Length == 0) return;
+                Assert.Equal("Referenced configuration", active);
+                if (failRead) throw new InvalidOperationException("metadata failed");
+            };
+            if (failRead)
+                Assert.Contains("metadata failed", Assert.Throws<InvalidOperationException>(() => fixture.Read(part.Object)).Message);
+            else
+                Assert.Equal(3.0, fixture.Read(part.Object).Mass);
+            Assert.Equal("Other", active);
+            document.Verify(value => value.ShowConfiguration2("Other"), Times.Once);
+            fixture.Assembly.Verify(value => value.ForceRebuild3(false), Times.Once);
+            part.VerifySet(value => value.ReferencedConfiguration = It.IsAny<string>(), Times.Never);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ActivationThatMutatesThenFailsIsRestoredAndRestoreFailureIsReported(bool failRestore)
+        {
+            var fixture = new Fixture();
+            var part = fixture.Component("part-1", 3.0);
+            string active = "Other";
+            fixture.ComponentConfigurations["part-1"].SetupGet(value => value.Name).Returns(() => active);
+            var document = Mock.Get((ModelDoc2)part.Object.GetModelDoc2());
+            document.Setup(value => value.ShowConfiguration2(It.IsAny<string>())).Returns((string name) =>
+            {
+                if (name == "Other" && failRestore) return false;
+                active = name;
+                return name == "Other";
+            });
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Read(part.Object));
+            if (failRestore)
+            {
+                Assert.Contains("restore the original component configuration", error.Message);
+                Assert.IsType<AggregateException>(error.InnerException);
+            }
+            else Assert.Equal("Other", active);
+            Assert.Equal(0, fixture.NumericReads);
+            document.Verify(value => value.ShowConfiguration2("Other"), Times.Once);
         }
 
         [Fact]
@@ -460,6 +522,30 @@ namespace SW2URDF.Test
 
             Assert.Contains("Changed active", error.Message);
             fixture.Properties[0].Verify(value => value.GetOverrideOptions(), Times.Exactly(2));
+            Assert.Equal(0, fixture.NumericReads);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void FailedRebuildRejectsNumbersAndRetainsMetadataFailure(bool failMetadata)
+        {
+            var fixture = new Fixture();
+            var part = fixture.Component("part-1", 3.0);
+            string active = "Other";
+            fixture.ComponentConfigurations["part-1"].SetupGet(value => value.Name).Returns(() => active);
+            Mock.Get((ModelDoc2)part.Object.GetModelDoc2())
+                .Setup(value => value.ShowConfiguration2(It.IsAny<string>()))
+                .Returns((string name) => { active = name; return true; });
+            fixture.Assembly.Setup(value => value.ForceRebuild3(false)).Returns(false);
+            fixture.BeforeOverridesRead = scope =>
+            {
+                if (failMetadata && scope.Length > 0) throw new InvalidOperationException("metadata failed");
+            };
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Read(part.Object));
+            Assert.Contains("Cannot refresh", error.Message);
+            if (failMetadata) Assert.Contains("metadata failed", Assert.IsType<AggregateException>(error.InnerException).ToString());
+            Assert.Equal("Other", active);
             Assert.Equal(0, fixture.NumericReads);
         }
 
@@ -753,6 +839,7 @@ namespace SW2URDF.Test
                 var manager = new Mock<ConfigurationManager>();
                 manager.SetupGet(value => value.ActiveConfiguration).Returns(Configuration.Object);
                 Assembly.Setup(value => value.GetType()).Returns((int)swDocumentTypes_e.swDocASSEMBLY);
+                Assembly.Setup(value => value.ForceRebuild3(false)).Returns(true);
                 Assembly.SetupGet(value => value.ConfigurationManager).Returns(manager.Object);
                 Assembly.SetupGet(value => value.Extension).Returns(Extension.Object);
                 Assembly.SetupGet(value => value.SelectionManager).Returns(SelectionManager.Object);
@@ -793,6 +880,7 @@ namespace SW2URDF.Test
                 manager.SetupGet(value => value.ActiveConfiguration).Returns(configuration.Object);
                 var document = new Mock<ModelDoc2>(MockBehavior.Strict);
                 document.SetupGet(value => value.ConfigurationManager).Returns(manager.Object);
+                document.Setup(value => value.ShowConfiguration2(It.IsAny<string>())).Returns(false);
                 component.Setup(value => value.GetModelDoc2()).Returns(document.Object);
                 ComponentConfigurations.Add(name, configuration);
                 component.Setup(value => value.GetParent()).Returns(parent);

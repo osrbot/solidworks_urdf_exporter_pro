@@ -124,29 +124,54 @@ namespace SW2URDF.URDFExport
         {
             if (!IsResolved)
                 throw new InvalidOperationException("Select every unresolved coordinate system and axis before migration.");
-            InitializeReferences(root);
+            var copies = new Dictionary<Link, Link>();
+            Link migrated = CopyStructure(root, null, copies);
             foreach (var item in references)
             {
                 if (item.Kind == ReferenceGeometryKind.CoordinateSystem)
-                    item.Link.FrameReference = item.Selected.Reference.Clone();
+                    copies[item.Link].FrameReference = item.Selected.Reference.Clone();
                 else
-                    item.Link.Joint.AxisReference = item.Selected.Reference.Clone();
+                    copies[item.Link].Joint.AxisReference = item.Selected.Reference.Clone();
             }
-            var node = new LinkNode(root.Clone());
+            var node = new LinkNode(migrated);
             LinkTreeRootJointPolicy.Normalize(node);
             node.NeedsSaving = true;
             return node;
         }
 
-        private static void InitializeReferences(Link link)
+        // All supported wire formats converge here. Copy only bindings and design intent;
+        // calculated geometry, inertia and editing provenance must start from fresh state.
+        private static Link CopyStructure(Link source, Link parent, IDictionary<Link, Link> copies)
         {
-            link.FrameReference = CadFeatureReference.Automatic(ReferenceGeometryKind.CoordinateSystem);
-            // Empty legacy axis means keep the stored numeric axis, not re-detect it from CAD.
+            var link = new Link(parent)
+            {
+                Name = source.Name,
+                SWComponentPIDs = source.SWComponentPIDs == null ? null :
+                    source.SWComponentPIDs.Select(pid => pid == null ? null : (byte[])pid.Clone()).ToList(),
+                SWMainComponentPID = source.SWMainComponentPID == null ? null : (byte[])source.SWMainComponentPID.Clone(),
+                isFixedFrame = source.isFixedFrame,
+                isIncomplete = source.isIncomplete,
+                JointKinematicsDirty = parent != null,
+                JointLimitsDirty = parent != null,
+                InertialEditing = new InertialEditingState { Source = new Inertial() }
+            };
+            copies.Add(source, link);
+            link.Joint.Name = source.Joint.Name;
+            link.Joint.Type = source.Joint.Type;
+            // Without a named CAD axis, the numeric direction is the only recorded intent.
             link.Joint.AxisReference = CadFeatureReference.None(ReferenceGeometryKind.Axis);
-            link.Joint.LegacyCoordinateSystemName = null;
-            link.Joint.LegacyAxisName = null;
-            foreach (var child in link.Children)
-                InitializeReferences(child);
+            if (string.IsNullOrEmpty(source.Joint.LegacyAxisName) && source.Joint.Axis != null)
+                link.Joint.Axis.SetElement(source.Joint.Axis);
+            // These settings cannot reliably be inferred from geometry. Limit positions
+            // remain a fallback until the current CAD limit mates have been evaluated.
+            if (source.Joint.Limit != null) link.Joint.Limit.SetElement(source.Joint.Limit);
+            if (source.Joint.Dynamics != null) link.Joint.Dynamics.SetElement(source.Joint.Dynamics);
+            if (source.Joint.Safety != null) link.Joint.Safety.SetElement(source.Joint.Safety);
+            if (source.Joint.Calibration != null) link.Joint.Calibration.SetElement(source.Joint.Calibration);
+            if (source.Joint.Mimic != null) link.Joint.Mimic.SetElement(source.Joint.Mimic);
+            foreach (var child in source.Children)
+                link.Children.Add(CopyStructure(child, link, copies));
+            return link;
         }
     }
 

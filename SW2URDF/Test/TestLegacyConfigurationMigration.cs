@@ -104,16 +104,15 @@ namespace SW2URDF.Test
             Assert.Equal("wheel_link", child.Link.Name);
             Assert.Equal(new byte[] { 4, 0, 254 }, child.Link.SWMainComponentPID);
             Assert.Equal(child.Link.SWMainComponentPID, Assert.Single(child.Link.SWComponentPIDs));
-            Assert.True(child.Link.STLQualityFine);
+            Assert.False(child.Link.STLQualityFine);
             Assert.Equal("wheel_joint", child.Link.Joint.Name);
             Assert.Equal("revolute", child.Link.Joint.Type);
-            Assert.Equal(new double[] { 0, -1, 0 }, child.Link.Joint.Axis.GetXYZ());
+            Assert.Equal(new Axis().GetXYZ(), child.Link.Joint.Axis.GetXYZ());
             Assert.Equal(-1.25, child.Link.Joint.Limit.Lower);
             Assert.Equal(2.5, child.Link.Joint.Limit.Upper);
             Assert.Equal(12, child.Link.Joint.Limit.Effort);
             Assert.Equal(3, child.Link.Joint.Limit.Velocity);
-            Assert.Equal(4.125, child.Link.Inertial.Mass.Value);
-            Assert.Equal(0.0023456789, child.Link.Inertial.Inertia.Ixx);
+            AssertFreshDerivedData(child.Link);
             Assert.Equal(frame.Reference, child.Link.FrameReference);
             Assert.Equal(axis.Reference, child.Link.Joint.AxisReference);
         }
@@ -331,7 +330,7 @@ namespace SW2URDF.Test
         [InlineData(1.3)]
         [InlineData(1.4)]
         [InlineData(1.5)]
-        public void ReviewedTreeAndVersionTwoRoundTripPreserveLegacyData(double version)
+        public void ReviewedTreeAndVersionTwoRoundTripPreserveBindingsAndResetDerivedData(double version)
         {
             Link original = CreateTree();
             original.Joint.LegacyCoordinateSystemName = " root frame";
@@ -683,21 +682,84 @@ namespace SW2URDF.Test
             Assert.Equal(expected.SWComponentPIDs.Count, child.SWComponentPIDs.Count);
             for (int index = 0; index < expected.SWComponentPIDs.Count; index++)
                 Assert.Equal(expected.SWComponentPIDs[index], child.SWComponentPIDs[index]);
-            Assert.Equal(expected.STLQualityFine, child.STLQualityFine);
-            Assert.Equal(expected.MeshReductionRatio, child.MeshReductionRatio);
-            Assert.Equal(expected.CollisionMeshStrategy, child.CollisionMeshStrategy);
+            Assert.False(child.STLQualityFine);
+            Assert.Equal(0, child.MeshReductionRatio);
+            Assert.Equal(CollisionMeshStrategy.VisualMesh, child.CollisionMeshStrategy);
             Assert.Equal(expected.Joint.Name, child.Joint.Name);
             Assert.Equal(expected.Joint.Type, child.Joint.Type);
-            Assert.Equal(expected.Joint.Axis.GetXYZ(), child.Joint.Axis.GetXYZ());
-            Assert.Equal(expected.Joint.Origin.X, child.Joint.Origin.X);
-            Assert.Equal(expected.Joint.Origin.Yaw, child.Joint.Origin.Yaw);
-            Assert.Equal(expected.Joint.Origin.isCustomized, child.Joint.Origin.isCustomized);
+            Assert.Equal(string.IsNullOrEmpty(expected.Joint.LegacyAxisName)
+                ? expected.Joint.Axis.GetXYZ() : new Axis().GetXYZ(), child.Joint.Axis.GetXYZ());
+            Assert.Equal(new Origin(false).GetXYZ(), child.Joint.Origin.GetXYZ());
+            Assert.Equal(new Origin(false).GetRPY(), child.Joint.Origin.GetRPY());
+            Assert.False(child.Joint.Origin.isCustomized);
             Assert.Equal(expected.Joint.Limit.Lower, child.Joint.Limit.Lower);
             Assert.Equal(expected.Joint.Limit.Upper, child.Joint.Limit.Upper);
             Assert.Equal(expected.Joint.Limit.Effort, child.Joint.Limit.Effort);
             Assert.Equal(expected.Joint.Limit.Velocity, child.Joint.Limit.Velocity);
-            Assert.Equal(expected.Inertial.Mass.Value, child.Inertial.Mass.Value);
-            Assert.Equal(expected.Inertial.Inertia.Ixx, child.Inertial.Inertia.Ixx);
+            AssertFreshDerivedData(child);
+        }
+
+        private static void AssertFreshDerivedData(Link link)
+        {
+            Assert.Equal(0, link.Inertial.Mass.Value);
+            Assert.Equal(new Inertial().Inertia.GetMoment(), link.Inertial.Inertia.GetMoment());
+            Assert.NotNull(link.InertialEditing);
+            Assert.False(link.InertialEditing.SourceIsSolidWorks);
+            Assert.False(link.InertialEditing.MassEdited);
+            Assert.False(link.InertialEditing.OriginEdited);
+            Assert.False(link.InertialEditing.TensorEdited);
+            Assert.False(link.InertialEditing.LegacyValuesPreserved);
+            Assert.Empty(link.AdditionalCollisions);
+            Assert.Null(link.ModelSettingsJson);
+            Assert.Null(link.SimulationSettingsJson);
+        }
+
+        [Theory]
+        [InlineData(1.3)]
+        [InlineData(1.4)]
+        [InlineData(1.5)]
+        public void RepeatedMigrationIsIndependentAndNewSourceWinsOverOldEdits(double version)
+        {
+            var old = CreateTree();
+            var oldChild = old.Children[0];
+            oldChild.InertialEditing = new InertialEditingState
+            {
+                Source = oldChild.Inertial, MassEdited = true, OriginEdited = true,
+                TensorEdited = true, LegacyValuesPreserved = true, FrameChangePending = true
+            };
+            oldChild.AdditionalCollisions.Add(new Collision());
+            oldChild.ModelSettingsJson = "old settings";
+            oldChild.SimulationSettingsJson = "old simulation";
+            oldChild.Joint.LegacyCoordinateSystemName = "frame";
+            var frame = Entry("frame", ReferenceGeometryKind.CoordinateSystem, 9);
+            var plan = new LegacyConfigurationMigration(SerializeLegacy(old), version, new[] { frame });
+            var first = plan.CreateReviewedTree();
+            var firstChild = ((LinkNode)first.Nodes[0]).Link;
+            AssertFreshDerivedData(firstChild);
+            firstChild.SWComponentPIDs[0][0] = 99;
+            firstChild.Joint.Limit.Effort = 99;
+            var second = ConfigurationSerialization.DeserializeDraftPayload(
+                ConfigurationSerialization.SerializeDraftPayload(plan.CreateReviewedTree()));
+            var secondChild = ((LinkNode)second.Nodes[0]).Link;
+            Assert.Equal(4, secondChild.SWComponentPIDs[0][0]);
+            Assert.Equal(12, secondChild.Joint.Limit.Effort);
+            Assert.Equal(frame.Reference, secondChild.FrameReference);
+            AssertFreshDerivedData(secondChild);
+            Assert.True(secondChild.JointKinematicsDirty);
+            Assert.True(secondChild.JointLimitsDirty);
+            // Exercise the actual editing policy after a save/read round trip.
+            InertialEditingPolicy.EnsureSource(secondChild);
+            var calculated = new Inertial();
+            calculated.Mass.Value = 8.5;
+            calculated.Origin.X = 0.75;
+            calculated.Inertia.Ixx = 0.125;
+            InertialEditingPolicy.ApplySource(secondChild, calculated, false);
+            Assert.Equal(8.5, secondChild.Inertial.Mass.Value);
+            Assert.Equal(0.75, secondChild.Inertial.Origin.X);
+            Assert.Equal(0.125, secondChild.Inertial.Inertia.Ixx);
+            Assert.True(secondChild.InertialEditing.SourceIsSolidWorks);
+            Assert.Equal(4.125, oldChild.Inertial.Mass.Value);
+            Assert.Equal(12, oldChild.Joint.Limit.Effort);
         }
 
         private static string SerializeLegacy(Link root)
