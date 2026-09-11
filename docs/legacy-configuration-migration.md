@@ -43,3 +43,28 @@ Validation on 2026-09-11: Debug x64 build succeeded; migration tests 51/51,
 serialization tests 13/13 and draft-store tests 6/6 passed. The migration tests also
 caught and now cover `LinkNode.Clone` losing incomplete/save-state flags before
 serialization. The build used SDK 8.0.424 and did not register or install the plug-in.
+
+## Native SolidWorks acceptance (2026-09-11)
+
+After merging current `origin/master` into the migration branch (`e2909ef`), the
+candidate was exercised against SolidWorks 2023 SP1 (revision 31.1.0). A disposable
+copy of the upstream `examples/3_DOF_ARM` assembly carried its actual v1.4 attribute:
+4 links and 7 explicit geometry references. `scripts/ProbeLegacyConfiguration.cs`
+verified the following against the candidate DLL:
+
+- Every named reference resolves before migration; stored parameters and component
+  PIDs survive migration and strict v2 serialization.
+- The review dialog renders at both tested sizes and cancellation leaves the source
+  unchanged.
+- The migrated assembly is saved with `Save3`, closed with `CloseDoc`, and reopened
+  with `OpenDoc6`. The v2 configuration loads, component PIDs and explicit geometry
+  references resolve, and stored physical/joint parameters match.
+- The old v1.4 attribute remains byte-for-byte intact. SHA-256 checks confirm all
+  four input CAD files still match the upstream sources.
+- Four native model previews were exported; the review report passed and visual
+  inspection of the isometric view confirmed the assembled robot geometry.
+
+Evidence is retained locally under the SW2-1 automation's `live-ros-arm` directory:
+`probe.log`, original/migrated XML, saved assembly copy, `source-hashes.json`, and
+`review/migrated_review_report.json` with BMP previews. The test operates on copies;
+it does not overwrite the user's assembly or source CAD.

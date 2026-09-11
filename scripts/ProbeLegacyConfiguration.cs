@@ -86,7 +86,7 @@ internal static class ProbeLegacyConfiguration
                 File.WriteAllText(Path.Combine(output, "legacy-configuration.xml"), original, new UTF8Encoding(false));
                 File.WriteAllText(Path.Combine(output, "migrated-configuration.xml"), payload, new UTF8Encoding(false));
                 CheckDialog(plan, output);
-                CheckSavedCopy(sw, model, tree, oldRoot, original, output);
+                CheckSavedCopy(sw, model, tree, oldRoot, original, version, output);
             }
             return 0;
         }
@@ -152,7 +152,7 @@ internal static class ProbeLegacyConfiguration
     }
 
     private static void CheckSavedCopy(SldWorks sw, ModelDoc2 source, LinkNode tree,
-        Link oldRoot, string original, string output)
+        Link oldRoot, string original, double sourceVersion, string output)
     {
         if (source.GetSaveFlag())
             throw new InvalidOperationException("Save-copy testing requires a source with no unsaved edits.");
@@ -188,14 +188,20 @@ internal static class ProbeLegacyConfiguration
             bool retained = false;
             foreach (Feature feature in (object[])copy.FeatureManager.GetFeatures(true))
             {
-                if (feature.Name != "URDF Export Configuration (v1.5)")
+                if (feature.GetTypeName2() != "Attribute" ||
+                    !feature.Name.StartsWith("URDF Export Configuration", StringComparison.Ordinal))
                     continue;
                 var attribute = (SolidWorks.Interop.sldworks.Attribute)feature.GetSpecificFeature2();
-                retained = ((Parameter)attribute.GetParameter("data")).GetStringValue() == original;
+                var dataParameter = (Parameter)attribute.GetParameter("data");
+                var versionParameter = (Parameter)attribute.GetParameter("exporterVersion");
+                retained |= dataParameter != null && versionParameter != null &&
+                    dataParameter.GetStringValue() == original && versionParameter.GetDoubleValue() == sourceVersion;
             }
             if (!retained)
                 throw new InvalidOperationException("The old configuration was not retained byte-for-byte in the copy.");
-            Console.WriteLine("PASS: assembly copy saved/reopened; v2 loads; parameters/PIDs retained; original v1.5 attribute retained.");
+            var reopenedResolver = new ReferenceGeometryResolver(copy);
+            CheckReferences(restored, reopenedResolver);
+            Console.WriteLine("PASS: assembly copy saved/reopened; v2 loads; parameters/PIDs/references retained; original v" + sourceVersion + " attribute retained.");
         }
         finally
         {
@@ -206,9 +212,18 @@ internal static class ProbeLegacyConfiguration
         string after;
         double version;
         ConfigurationSerialization.TryReadLegacyConfiguration(source, out after, out version);
-        if (source.GetSaveFlag() || original != after || version != 1.5)
+        if (source.GetSaveFlag() || original != after || version != sourceVersion)
             throw new InvalidOperationException("Original assembly changed during copy verification.");
         Console.WriteLine("PASS: original assembly still unmodified.");
+    }
+
+    private static void CheckReferences(LinkNode node, ReferenceGeometryResolver resolver)
+    {
+        foreach (var reference in new[] { node.Link.FrameReference, node.Link.Joint.AxisReference })
+            if (reference != null && reference.IsExplicit && !resolver.Resolve(reference).IsResolved)
+                throw new InvalidOperationException("Saved geometry reference no longer resolves: " + node.Name);
+        foreach (LinkNode child in node.Nodes)
+            CheckReferences(child, resolver);
     }
 
     private static void Compare(Link source, LinkNode target, bool root)
