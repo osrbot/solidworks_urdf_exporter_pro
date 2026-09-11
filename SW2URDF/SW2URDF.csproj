@@ -401,6 +401,7 @@
     <Compile Include="Test\TestLinkTreeDocumentTransactions.cs" />
     <Compile Include="Test\TestInertiaConvention.cs" />
     <Compile Include="Test\TestMassPropertyFrameConverter.cs" />
+    <Compile Include="Test\TestInertiaDiagnostics.cs" />
     <Compile Include="Test\TestSolidWorksInertiaApiIntegration.cs" />
     <Compile Include="Test\TestSolidWorksAppearanceResolver.cs" />
     <Compile Include="Test\TestInertiaPreview.cs" />
@@ -482,6 +483,7 @@
     <Compile Include="URDFExport\LinkTreeStores.cs" />
     <Compile Include="URDFExport\LinkTreeValidation.cs" />
     <Compile Include="URDFExport\MassPropertyFrameConverter.cs" />
+    <Compile Include="URDFExport\InertiaDiagnostics.cs" />
     <Compile Include="URDFExport\ReferenceGeometryCatalog.cs" />
     <Compile Include="URDFExport\ReferenceGeometryResolver.cs" />
     <Compile Include="URDFExport\SolidWorksAppearanceResolver.cs" />

@@ -13,6 +13,27 @@ namespace SW2URDF.Test
 {
     public class TestSolidWorksEffectiveMass
     {
+        [Fact]
+        public void DiagnosticReadKeepsScopeAndOriginalTensorWhenPrincipalProbeThrows()
+        {
+            var fixture = new Fixture();
+            fixture.ConfigureProperty = (property, index) => property.SetupGet(value => value.PrincipalMomentsOfInertia)
+                .Throws(new COMException("principal getter failed"));
+            var lines = new List<string>();
+            using (InertiaDiagnostics.Begin("diagnostic-test", lines.Add))
+            {
+                var result = fixture.Read(fixture.Component("part-1", 3.0).Object);
+                Assert.Equal(Fixture.Moment, result.Moment);
+                Assert.Equal(3.0, result.Mass);
+            }
+            Assert.Contains(lines, line => line.Contains("A.api-document"));
+            Assert.Contains(lines, line => line.Contains("A.apiPrincipalMoments unavailable"));
+            Assert.Contains(lines, line => line.Contains("end selection.restore"));
+            Assert.Contains(lines, line => line.Contains("end refresh.restore"));
+            fixture.AssertRefreshRestored();
+            Assert.False(fixture.SelectionSuspended);
+        }
+
         [Theory]
         [InlineData(true, true, true)]
         [InlineData(false, false, false)]

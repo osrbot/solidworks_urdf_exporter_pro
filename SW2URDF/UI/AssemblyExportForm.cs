@@ -2162,6 +2162,12 @@ namespace SW2URDF.UI
 
         private void ButtonShowInertiaPreviewClick(object sender, EventArgs e)
         {
+            using (InertiaDiagnostics.Begin("inertia-preview"))
+                InertiaDiagnostics.Call("preview", () => { ShowInertiaPreviewCore(); return true; });
+        }
+
+        private void ShowInertiaPreviewCore()
+        {
             if (inertiaPreview.IsVisible)
             {
                 ClearInertiaPreview();

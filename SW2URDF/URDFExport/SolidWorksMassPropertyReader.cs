@@ -29,7 +29,7 @@ namespace SW2URDF.URDFExport
             Exception readFailure = null;
             try
             {
-                refresh.Suspend();
+                InertiaDiagnostics.Call("refresh.suspend", () => { refresh.Suspend(); return true; });
                 return ReadWithRefreshSuspended(assembly, selectedComponents);
             }
             catch (Exception error)
@@ -39,7 +39,7 @@ namespace SW2URDF.URDFExport
             }
             finally
             {
-                refresh.Restore(readFailure);
+                InertiaDiagnostics.Call("refresh.restore", () => { refresh.Restore(readFailure); return true; });
             }
         }
 
@@ -118,11 +118,14 @@ namespace SW2URDF.URDFExport
                     throw new ArgumentException("Component selections require an assembly; whole-document reads require a part or assembly.", "assembly");
 
                 string configuration = ActiveConfigurationName(assembly);
+                InertiaDiagnostics.Write("assembly configuration=" + configuration);
                 var observed = new Dictionary<string, ComponentState>(StringComparer.OrdinalIgnoreCase);
                 var selected = new Dictionary<string, Component2>(StringComparer.OrdinalIgnoreCase);
                 foreach (Component2 component in selectedComponents ?? new Component2[0])
                 {
                     Observe(component, observed);
+                    if (InertiaDiagnostics.Enabled)
+                        InertiaDiagnostics.Write("selected component=" + component.Name2 + " configuration=" + component.ReferencedConfiguration);
                     selected[component.Name2] = component;
                 }
 
@@ -151,7 +154,7 @@ namespace SW2URDF.URDFExport
                     throw new InvalidOperationException("SolidWorks returned no selection manager; mass-property selection cannot be isolated.");
                 // SelectedItems can change the working selection, and fresh properties inherit it.
                 // Suspend once for the entire read; 0 (an empty saved list) is also success.
-                selectionManager.SuspendSelectionList();
+                InertiaDiagnostics.Call("selection.suspend", () => selectionManager.SuspendSelectionList());
                 selectionSuspended = true;
 
                 // For bounded reads, the empty selection ONLY inspects document-level overrides.
@@ -192,11 +195,28 @@ namespace SW2URDF.URDFExport
                 // Never ReleaseComObject: these RCWs are owned by SolidWorks and releasing them
                 // has terminated the host after repeated Link queries.
                 IMassProperty2 centerProperty = CreateScopedProperty(assembly, extension, bounded);
-                double[] center = ReadArray(centerProperty.CenterOfMass, 3, "CenterOfMass");
-                double mass = centerProperty.Mass;
+                double[] center = ReadArray(InertiaDiagnostics.Call("numeric.center", () => centerProperty.CenterOfMass), 3, "CenterOfMass");
+                double mass = InertiaDiagnostics.Call("numeric.mass", () => centerProperty.Mass);
                 IMassProperty2 inertiaProperty = CreateScopedProperty(assembly, extension, bounded);
-                double[] moment = ReadArray(inertiaProperty.GetMomentOfInertia(
-                    (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass), 9, "GetMomentOfInertia");
+                double[] moment = ReadArray(InertiaDiagnostics.Call("numeric.tensor", () => inertiaProperty.GetMomentOfInertia(
+                    (int)swMassPropertyMoment_e.swMassPropertyMomentAboutCenterOfMass)), 9, "GetMomentOfInertia");
+
+                if (InertiaDiagnostics.Enabled)
+                {
+                    InertiaDiagnostics.Snapshot("A.api-document", new MassPropertySnapshot(mass, center, moment,
+                        (flags & Overrides.Mass) != 0, (flags & Overrides.Center) != 0, (flags & Overrides.Inertia) != 0));
+                    InertiaDiagnostics.Observe("A.inertiaObject.mass", () => inertiaProperty.Mass);
+                    InertiaDiagnostics.Observe("A.apiPrincipalMoments", () => inertiaProperty.PrincipalMomentsOfInertia);
+                    for (int axis = 0; axis < 3; axis++)
+                    {
+                        int capturedAxis = axis;
+                        InertiaDiagnostics.Observe("A.apiPrincipalAxis" + axis, () => inertiaProperty.get_PrincipalAxesOfInertia(capturedAxis));
+                    }
+                    InertiaDiagnostics.Observe("A.accuracy", () => inertiaProperty.AccuracyLevel);
+                    InertiaDiagnostics.Observe("A.includeHidden", () => inertiaProperty.IncludeHiddenBodiesOrComponents);
+                    InertiaDiagnostics.Observe("A.systemUnits", () => inertiaProperty.UseSystemUnits);
+                    VerifyScope(inertiaProperty, bounded, "after diagnostic getters");
+                }
 
                 if (!IsFinite(mass) || mass <= 0)
                     throw new InvalidOperationException("SolidWorks returned a non-positive or non-finite effective mass for the selected components.");
@@ -225,7 +245,7 @@ namespace SW2URDF.URDFExport
                 {
                     try
                     {
-                        selectionManager.ResumeSelectionList2(false);
+                        InertiaDiagnostics.Call("selection.restore", () => { selectionManager.ResumeSelectionList2(false); return true; });
                     }
                     catch (Exception restoreError)
                     {
@@ -240,10 +260,10 @@ namespace SW2URDF.URDFExport
         {
             // Only called inside the suspended list. Never clear the user's saved selection.
             // Earlier metadata/numeric reads can populate this temporary list again.
-            document.ClearSelection2(true);
+            InertiaDiagnostics.Call("selection.clear-temporary", () => { document.ClearSelection2(true); return true; });
             if (((SelectionMgr)document.SelectionManager).GetSelectedObjectCount2(-1) != 0)
                 throw new InvalidOperationException("SolidWorks did not clear the temporary mass-property selection; refusing inherited component scope.");
-            IMassProperty2 property = extension.CreateMassProperty2() as IMassProperty2;
+            IMassProperty2 property = InertiaDiagnostics.Call("api.create", () => extension.CreateMassProperty2()) as IMassProperty2;
             if (property == null)
                 throw new InvalidOperationException(
                     "SolidWorks CreateMassProperty2 is unavailable or returned no applicable mass properties. " +
@@ -260,7 +280,7 @@ namespace SW2URDF.URDFExport
             property.UseSystemUnits = true;
             property.IncludeHiddenBodiesOrComponents = true;
             SetScope(property, components);
-            if (!property.Recalculate())
+            if (!InertiaDiagnostics.Call("api.recalculate", () => property.Recalculate()))
                 throw new InvalidOperationException("SolidWorks IMassProperty2.Recalculate failed for the requested component scope.");
             VerifyScope(property, components, "after Recalculate");
             return property;
@@ -271,8 +291,11 @@ namespace SW2URDF.URDFExport
             // SW2023 faults natively on a null setter value, even on a fresh property.
             // An empty SAFEARRAY requests document scope; never send VT_EMPTY here.
             // Nonempty interface arrays must be marshaled as IDispatch, not VARIANT elements.
-            property.SelectedItems = components.Count == 0 ? (object)new object[0]
-                : components.Select(component => new DispatchWrapper(component)).ToArray();
+            InertiaDiagnostics.Call("api.set-scope count=" + components.Count, () => {
+                property.SelectedItems = components.Count == 0 ? (object)new object[0]
+                    : components.Select(component => new DispatchWrapper(component)).ToArray();
+                return true;
+            });
             VerifyScope(property, components, "scope assignment");
         }
 
@@ -309,7 +332,7 @@ namespace SW2URDF.URDFExport
             // leave hidden/unit settings untouched and recalculate only the two numeric objects.
             foreach (Component2 component in components) VerifyMetadataConfiguration(component);
             SetScope(property, components);
-            IMassPropertyOverrideOptions options = property.GetOverrideOptions() as IMassPropertyOverrideOptions;
+            IMassPropertyOverrideOptions options = InertiaDiagnostics.Call("api.override-options", () => property.GetOverrideOptions()) as IMassPropertyOverrideOptions;
             if (options == null)
                 throw new InvalidOperationException("SolidWorks GetOverrideOptions returned no override metadata; effective mass properties cannot be verified.");
             Overrides result = (options.OverrideMass ? Overrides.Mass : Overrides.None) |

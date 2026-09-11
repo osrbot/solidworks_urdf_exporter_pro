@@ -58,6 +58,8 @@ namespace SW2URDF.URDFExport
 
             Matrix<double> sourceToTarget =
                 targetFrameToDocument.Inverse() * sourceFrameToDocument;
+            if (InertiaDiagnostics.Enabled)
+                InertiaDiagnostics.Write("frame sourceToTarget=" + InertiaDiagnostics.Format(sourceToTarget.ToRowMajorArray()));
             double[] centerOfMass = TransformPoint(
                 sourceToTarget,
                 source.CenterOfMass);
@@ -130,6 +132,21 @@ namespace SW2URDF.URDFExport
                     "A frame transform must be a 4x4 matrix.",
                     parameterName);
             }
+            const double tolerance = 1e-8;
+            foreach (double value in transform.ToRowMajorArray())
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                    throw new ArgumentException("A frame transform must contain finite values.", parameterName);
+            if (Math.Abs(transform[3, 0]) > tolerance || Math.Abs(transform[3, 1]) > tolerance ||
+                Math.Abs(transform[3, 2]) > tolerance || Math.Abs(transform[3, 3] - 1) > tolerance)
+                throw new ArgumentException("A frame transform must be affine.", parameterName);
+            var rotation = transform.SubMatrix(0, 3, 0, 3);
+            double error = (rotation.TransposeThisAndMultiply(rotation) - Matrix<double>.Build.DenseIdentity(3)).L2Norm();
+            double determinant = rotation.Determinant();
+            InertiaDiagnostics.Write(parameterName + " orthogonalError=" + InertiaDiagnostics.Format(error) +
+                " determinant=" + InertiaDiagnostics.Format(determinant));
+            // Reflection is also orthogonal and preserves inertia invariants. Reject scale/shear.
+            if (error > tolerance || Math.Abs(Math.Abs(determinant) - 1) > tolerance)
+                throw new ArgumentException("A frame transform must be orthogonal; scale or shear would corrupt inertia.", parameterName);
         }
     }
 }

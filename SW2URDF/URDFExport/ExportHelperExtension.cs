@@ -363,6 +363,12 @@ namespace SW2URDF.URDFExport
 
         internal void ComputeInertialProperties(Link link)
         {
+            using (InertiaDiagnostics.Begin(link.Name))
+                InertiaDiagnostics.Call("compute-and-validate", () => { ComputeInertialPropertiesCore(link); return true; });
+        }
+
+        private void ComputeInertialPropertiesCore(Link link)
+        {
             ResolvePendingInertialFrameChange(link);
             MathTransform linkTransform = GetCoordinateSystemTransform(
                 link.FrameReference);
@@ -380,6 +386,7 @@ namespace SW2URDF.URDFExport
                 linkTransform);
 
             ApplyMassPropertyToLink(link, massProperty);
+            InertiaDiagnostics.Final(link);
 
             if (!InertiaEllipsoid.TryCreate(
                 link.Inertial.Mass.Value,
@@ -396,7 +403,7 @@ namespace SW2URDF.URDFExport
                 double[] urdfMoment = link.Inertial.Inertia.GetMoment();
                 throw new Exception(string.Format(
                     CultureInfo.InvariantCulture,
-                    "Computed inertia for link {0} is not physically valid: {1} " +
+                    InertiaDiagnostics.InvalidSourceLabel(link) + " for link {0} is not physically valid: {1} " +
                     "mass={2:G17} kg, tensor=[{3:G17}, {4:G17}, {5:G17}; " +
                     "{6:G17}, {7:G17}, {8:G17}; {9:G17}, {10:G17}, {11:G17}] kg*m^2",
                     link.Name,
@@ -1650,8 +1657,10 @@ namespace SW2URDF.URDFExport
         private MassPropertySnapshot ReadEffectiveLinkMassProperty(Link link, MathTransform linkFrameToDocument)
         {
             var source = SolidWorksMassPropertyReader.Read(ActiveSWModel, link.SWComponents);
-            return MassPropertyFrameConverter.Convert(source,
+            var result = MassPropertyFrameConverter.Convert(source,
                 Matrix<double>.Build.DenseIdentity(4), MathOps.GetTransformation(linkFrameToDocument));
+            InertiaDiagnostics.Snapshot("B.link-frame", result);
+            return result;
         }
 
         private static void ComputeVisualCollisionProperties(Link link)
