@@ -4,6 +4,25 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## Unreleased
 
+## 2026-09-11 / v20260911-beta1 (Prepared / 待发布)
+
+Beta installer publication is pending third-party source/runtime checks. The
+following changes and measurements are complete; this heading is not a public
+download announcement.
+Beta 安装包仍待第三方源码与运行时检查；以下功能和测量已完成，不代表已公开提供下载。
+
+- MuJoCo 与其他格式共用手动设置的输出名称；许可证支持常用下拉选项和自定义输入。修复模型元数据和输出目标的保存，以及“不含网格”导出的元数据校验。
+- MuJoCo shares the configured output name with other targets. Add editable license presets and preserve model metadata/export targets, including validation in mesh-free export.
+- 示例装配体实测设置移除 70% 三角面：大型 Link 从 32.10 MB 降至 10.64 MB，全部可视 STL 从 41.35 MB 降至 16.20 MB，实际缩小 60.82%。目标比例不是保证值。
+- With 70% requested removal on an example assembly, a large Link fell from 32.10 MB to 10.64 MB; all visual STLs fell from 41.35 MB to 16.20 MB (60.82% smaller). These use the export's measured source sizes, not a guaranteed ratio.
+- 用户实际导出四目标成功，总耗时 8 分 38 秒；独立检查通过 ROS 引用/校验和、MJCF 一步零控制仿真和 USD 结构重开。未验证 Isaac Sim、长时间仿真或训练表现。
+- User export succeeded for all four targets in 8m38s. Independent checks passed for ROS references/checksums, one zero-control MuJoCo step and OpenUSD structural reopening; no Isaac Sim, long-horizon or training acceptance is claimed.
+- 已知问题：原生圆柱没有独立碰撞 STL 是正常行为，但 CSV 仍保留临时 STL 的存在标记；减面警告可能重复。部分 Link 未达到目标比例；质量和惯性不随网格减面改变。
+- Known issues: native cylinders correctly omit collision STL files, but CSV retains stale temporary-STL flags; reduction warnings may repeat. Some links do not reach their target. Mesh reduction does not alter mass or inertia.
+
+Evidence: [integration and export verification](docs/reviews/2026-09-10-partition-plugin-integration.md),
+[Beta preparation notes](.github/release-notes/v20260911-beta1.md).
+
 - 将分区 STL 减面接入独立进程，保留共享接口和无法安全精简的区域；增加内容缓存及处理超时保护。可视 STL 与精简碰撞 STL 共用比例，质量和惯性不变。
 - 比例旁显示目标剩余 STL 大小，导出结果列出各 Link 的实际原始/最终大小；100% 不再显示误导性的零体积目标。
 - Run partitioned STL reduction in an isolated helper with shared-interface preservation, content caching and time limits. Show target remaining size beside the slider and measured per-Link sizes after export; maximum reduction never promises zero bytes.

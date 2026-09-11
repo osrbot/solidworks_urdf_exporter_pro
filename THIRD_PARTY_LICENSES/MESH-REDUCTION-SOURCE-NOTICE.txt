@@ -13,12 +13,37 @@ Its wheel's complete license, including bundled numerical libraries, is
 retained at tools/openusd_runtime/Lib/site-packages/numpy-2.2.6.dist-info/LICENSE.txt
 and copied to THIRD_PARTY_LICENSES/numpy-2.2.6-LICENSE.txt.
 
-PyMeshLab 2025.7.post1 wheel and upstream source locations:
-https://pypi.org/project/pymeshlab/2025.7.post1/#files
-https://github.com/cnr-isti-vclab/PyMeshLab
-https://github.com/cnr-isti-vclab/PyMeshLab/tree/v2025.7
-https://github.com/cnr-isti-vclab/PyMeshLab/blob/v2025.7/src/README.md
-https://github.com/cnr-isti-vclab/meshlab
+PyMeshLab 2025.7.post1 identity (verified 2026-09-11):
+Wheel: pymeshlab-2025.7.post1-cp311-cp311-win_amd64.whl
+SHA256: 3c1b87f3d6e6c8b129311b44f5c75a22df23c969b9d4300843286220a0d2a49c
+The official GitHub release asset digest, PyPI digest, runtime lock, and
+locally inspected wheel agree. Primary distribution evidence:
+https://pypi.org/pypi/pymeshlab/2025.7.post1/json
+https://github.com/cnr-isti-vclab/PyMeshLab/releases/tag/v2025.7.post1
+https://api.github.com/repos/cnr-isti-vclab/PyMeshLab/releases/tags/v2025.7.post1
+
+The exact published tag is v2025.7.post1, at commit:
+1dc199f9b6c43e58b6db346ba4600866b950b8ae
+https://github.com/cnr-isti-vclab/PyMeshLab/tree/1dc199f9b6c43e58b6db346ba4600866b950b8ae
+https://github.com/cnr-isti-vclab/PyMeshLab/blob/1dc199f9b6c43e58b6db346ba4600866b950b8ae/src/README.md
+
+Recorded recursive submodule commits:
+src/meshlab: d876376e3cc4f92d257e248023d82cbac5b03c7d
+https://github.com/cnr-isti-vclab/meshlab/tree/d876376e3cc4f92d257e248023d82cbac5b03c7d
+src/pymeshlab/pybind11: a2e59f0e7065404b44dfe92a28aca47ba1378dc4
+https://github.com/pybind/pybind11/tree/a2e59f0e7065404b44dfe92a28aca47ba1378dc4
+src/meshlab/src/vcglib: c94ef4e12e9ea3ae986d9af91005be8328d13719
+https://github.com/cnr-isti-vclab/vcglib/tree/c94ef4e12e9ea3ae986d9af91005be8328d13719
+
+The upstream release workflow run reports successful Windows CPython 3.11
+build and wheel tests:
+https://github.com/cnr-isti-vclab/PyMeshLab/actions/runs/21508274041
+It started at c3f062acc7758ca8a27ab23a4413f3dca5e5adfc and updated the
+version to the release commit above. The workflow builds from main and
+uses an external-library cache. Its intermediate artifacts have expired;
+the PyPI wheel provenance endpoint returned HTTP 404 during this audit.
+This is release identity evidence, not an independent reconstruction of
+every compiler, cached input, or third-party binary used by that build.
 
 PyMeshLab's wheel declares GPL3. Its GNU GPL version 3 license is retained at
 tools/openusd_runtime/Lib/site-packages/pymeshlab-2025.7.post1.dist-info/licenses/LICENSE
@@ -32,12 +57,29 @@ Refer to their license texts for redistribution terms and warranty disclaimers.
 
 PUBLIC RELEASE PREREQUISITES (NOT YET VERIFIED)
 
-The v2025.7 tree is a source discovery starting point, NOT a verified exact
-source match for the 2025.7.post1 Windows wheel. Before public distribution,
-the release owner must establish and provide the complete Corresponding
-Source matching the shipped binaries, including the necessary submodules,
+The exact release tag and wheel identity are established. Complete source
+availability for the full binary payload is NOT yet established. Before
+public distribution, the release owner must establish and provide the
+complete Corresponding Source matching the shipped binaries, including the necessary submodules,
 third-party native components, modifications, and build/install scripts.
 An automatic GitHub source ZIP without submodules must not be assumed complete.
+
+The wheel contains 97 DLL/PYD files and only one license-named file (its
+GPL text). Retaining that file does not supply the other components' terms.
+Observed binary versions include Qt 5.15.2, Embree 4.3.3, TBB 2021.11,
+GMP 5.0.1, and MPFR 3.0.0; the software OpenGL binary contains a Mesa
+12.0.0-rc2 version string. Version strings alone do not identify patches.
+Qt source is available from:
+https://download.qt.io/archive/qt/5.15/5.15.2/single/
+The upstream external-library recipes are available from:
+https://github.com/cnr-isti-vclab/meshlab/tree/d876376e3cc4f92d257e248023d82cbac5b03c7d/src/external
+The CGAL auxiliary GMP/MPFR ZIP contains binaries, headers, notices and
+README files, not complete sources. Matching patches/build recipes for
+these binaries and the Mesa payload, plus a complete dependency source
+and license inventory, remain unresolved. Do not identify the shipped
+TBB DLL as 2021.6 merely from the recipe's separate build dependency;
+the deployed DLL is copied from the Embree binary archive.
+
 GPLv3 sections 1 and 6 describe Corresponding Source and ways of conveying
 object code. For download distribution, arrange equivalent source access
 with clear directions alongside the installer, and maintain availability
@@ -48,11 +90,26 @@ combined-work obligations; a subprocess boundary is not a legal conclusion.
 
 The actual cp311 PyMeshLab wheel METADATA also lists Requires-Dist:
 msvc-runtime, although PyPI's release JSON lists only numpy. This package is
-not supplied by this two-wheel lock. Confirm the exact native runtime
-requirements, redistribution rights, and provisioning on a clean supported
-Windows system before release. A smoke pass on a developer machine with
-Visual C++ installed does not establish standalone runtime completeness.
+not supplied by this two-wheel lock. Static PE inspection confirms imports
+of MSVCP140.dll, MSVCP140_1.dll, VCOMP140.dll, VCRUNTIME140.dll and
+VCRUNTIME140_1.dll. Embedded Python's two VCRUNTIME DLLs are not the whole
+dependency set. The current installer checks .NET 4.8, not VC++ redist.
+
+The x64 Visual C++ v14 Redistributable must be no earlier than the MSVC
+toolchain used to build the binaries. That exact toolchain minimum is not
+established by this audit. Select and record a supported Microsoft runtime,
+verify the complete payload on a clean supported Windows system, and make
+the prerequisite explicit or implement tested installer detection. If
+redistributing Microsoft binaries, separately confirm redistribution terms;
+do not copy DLLs from a developer's system as a substitute.
+https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist
+A smoke pass on a developer machine with Visual C++ installed does not
+establish standalone runtime completeness.
 
 These are engineering release-review notes, not legal advice or an assertion
 of completed license compliance. Public release remains blocked until the
 source availability and native runtime prerequisites above are resolved.
+
+This 2026-09-11 source-worktree notice update does not modify the previously
+tested local installer or its embedded notices. No installer was rebuilt or
+changed by this audit. Its own provenance continues to identify its source.
