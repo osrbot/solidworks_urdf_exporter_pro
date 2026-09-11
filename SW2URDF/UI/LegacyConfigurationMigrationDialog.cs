@@ -34,8 +34,8 @@ namespace SW2URDF.UI
             {
                 AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 12),
                 Text = string.Format(ChineseUiText.Translate(
-                    "{0} links found. Review the references below; select any missing matches.\r\nThe old configuration is retained. Nothing is written until you save the export configuration.",
-                    "已读取 {0} 个 Link。请核对以下引用，并为未匹配项重新选择对象。\r\n旧配置会保留；只有正式保存导出配置时，才会写入新版配置。"), plan.LinkCount)
+                    "{0} links found. Connections, names and component/reference bindings will be restored. Review missing matches below.\r\nMass, inertia, poses and meshes will be recalculated; old manual values and mesh settings will be reset. Joint design settings are retained.\r\nThe old configuration is retained. Nothing is written until you save the export configuration.",
+                    "已读取 {0} 个 Link，将恢复连接、命名及组件和参考几何绑定。请补选下方未匹配项。\r\n质量、惯量、位姿及网格将重新计算，旧手填值和网格设置将重置；关节设计参数保留。\r\n旧配置会保留；只有正式保存导出配置时，才会写入新版配置。"), plan.LinkCount)
             }, 0, 0);
             grid = new DataGridView
             {

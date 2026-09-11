@@ -7,12 +7,25 @@ installed plug-in release. The ROS exporter still writes storage version 1.4 at
 | Storage version | Payload | Migration |
 | --- | --- | --- |
 | 1.0–1.2 | `XmlSerializer` / `SerialNode` | Rebuild Link hierarchy, names, component PIDs and named frame/axis references |
-| 1.3–1.4 (ROS), 1.5 (maintained fork) | `DataContractSerializer` / `Link` | Read the shared contract, preserving IDs/backreferences and stored physical/joint/export settings |
+| 1.3–1.4 (ROS), 1.5 (maintained fork) | `DataContractSerializer` / `Link` | Read the shared contract, then rebuild using the same explicit structural whitelist |
 | 2.0 | Current configuration slots | Existing v2 reader; never reinterpreted as legacy |
 
 The adapters feed the same reference-review and v2 save path. Missing or ambiguous
 geometry names require an explicit selection. Reading or reviewing does not modify
 the assembly. Saving writes v2 and retains old attributes.
+
+Migration constructs fresh Links instead of cloning old Links. It preserves names,
+hierarchy, component-instance PIDs, named frames/axes and fixed-frame intent. Joint
+type, limits, dynamics, safety, calibration and mimic settings are retained because
+they cannot reliably be inferred from geometry. An unnamed numeric axis is retained
+as the only recorded direction; a named axis is resolved from CAD.
+
+Old mass, inertia, poses, visual/collision data, mesh settings and editing provenance
+are discarded. Fresh inertial state is marked as not yet read from SolidWorks;
+kinematics and limits are pending recalculation. A successful new mass read must
+replace the fresh state without restoring old manual edits. This does not fix the
+separate mixed-configuration mass-reader limitation. Supported storage versions
+remain explicitly enumerated; an arbitrary unknown version below 2 is not accepted.
 
 Old exporters leave lower-version attributes behind when upgrading. Migration now
 selects the highest supported stored version, independent of feature order. Two
@@ -34,12 +47,12 @@ with the maintained fork's classes. No SolidWorks document or proprietary binary
 included in the fixture.
 
 The independent sample contains two links, Chinese root name, component PIDs,
-named frame and axis, a revolute joint, limits, mass and inertia. Tests verify these
-values after migration and v2 round-trip, alongside fork 1.3/1.4/1.5 payloads,
+named frame and axis, a revolute joint, limits, mass and inertia. Tests verify bindings
+and joint design settings survive while derived values reset after migration and v2 round-trip, alongside fork 1.3/1.4/1.5 payloads,
 SerialNode XML, retained historical attributes and rejection paths. These are unit
 and mocked-storage checks; actual assembly save/reopen still requires SolidWorks.
 
-Validation on 2026-09-11: Debug x64 build succeeded; migration tests 51/51,
+Historical validation before structural-only migration on 2026-09-11: Debug x64 build succeeded; migration tests 51/51,
 serialization tests 13/13 and draft-store tests 6/6 passed. The migration tests also
 caught and now cover `LinkNode.Clone` losing incomplete/save-state flags before
 serialization. The build used SDK 8.0.424 and did not register or install the plug-in.

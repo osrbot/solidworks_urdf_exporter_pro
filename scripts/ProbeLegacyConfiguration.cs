@@ -91,7 +91,7 @@ internal static class ProbeLegacyConfiguration
             ConfigurationSerialization.TryReadLegacyConfiguration(model, out after, out afterVersion);
             if (original != after || version != afterVersion || dirty != model.GetSaveFlag())
                 throw new InvalidOperationException("The original document or configuration changed during read-only inspection.");
-            Console.WriteLine("PASS: references resolve; parameters/PIDs preserved; strict v2 round-trip; components restored; original unchanged.");
+            Console.WriteLine("PASS: references resolve; structure/design settings/PIDs preserved; derived values reset; strict v2 round-trip; original unchanged.");
             if (args.Length == 1)
             {
                 string output = Path.GetFullPath(args[0]);
@@ -245,19 +245,28 @@ internal static class ProbeLegacyConfiguration
     {
         if (source.Name != target.Link.Name || source.Children.Count != target.Nodes.Count ||
             !BytesEqual(source.SWMainComponentPID, target.Link.SWMainComponentPID) ||
-            source.SWComponentPIDs.Count != target.Link.SWComponentPIDs.Count ||
-            source.STLQualityFine != target.Link.STLQualityFine ||
-            source.CollisionMeshStrategy != target.Link.CollisionMeshStrategy ||
-            source.MeshReductionRatio != target.Link.MeshReductionRatio)
+            source.SWComponentPIDs.Count != target.Link.SWComponentPIDs.Count)
             throw new InvalidOperationException("Tree or component identity changed: " + source.Name);
         for (int i = 0; i < source.SWComponentPIDs.Count; i++)
             if (!BytesEqual(source.SWComponentPIDs[i], target.Link.SWComponentPIDs[i]))
                 throw new InvalidOperationException("Component PID changed: " + source.Name);
-        CompareElement(source.Inertial, target.Link.Inertial);
-        CompareElement(source.Visual, target.Link.Visual);
-        CompareElement(source.Collision, target.Link.Collision);
+        CompareElement(new Inertial(), target.Link.Inertial);
+        CompareElement(new Visual(), target.Link.Visual);
+        CompareElement(new SW2URDF.URDF.Collision(), target.Link.Collision);
+        var state = target.Link.InertialEditing;
+        if (state == null || state.SourceIsSolidWorks || state.MassEdited || state.OriginEdited ||
+            state.TensorEdited || state.LegacyValuesPreserved || target.Link.AdditionalCollisions.Count != 0 ||
+            target.Link.STLQualityFine || target.Link.MeshReductionRatio != 0 ||
+            target.Link.CollisionMeshStrategy != CollisionMeshStrategy.VisualMesh)
+            throw new InvalidOperationException("Derived data was not reset: " + source.Name);
         if (!root)
-            CompareElement(source.Joint, target.Link.Joint);
+        {
+            if (source.Joint.Name != target.Link.Joint.Name || source.Joint.Type != target.Link.Joint.Type)
+                throw new InvalidOperationException("Joint identity changed: " + source.Name);
+            CompareElement(new Origin(false), target.Link.Joint.Origin);
+            CompareElement(source.Joint.Limit, target.Link.Joint.Limit);
+            CompareElement(source.Joint.Dynamics, target.Link.Joint.Dynamics);
+        }
         for (int i = 0; i < source.Children.Count; i++)
             Compare(source.Children[i], (LinkNode)target.Nodes[i], false);
     }
