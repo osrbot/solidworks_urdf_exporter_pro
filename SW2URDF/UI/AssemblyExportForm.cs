@@ -90,6 +90,8 @@ namespace SW2URDF.UI
                 treeSelectionUpdateGuard = new TreeSelectionUpdateGuard();
                 InitializeComponent();
                 ChineseUiText.Apply(this);
+                if (System.Environment.GetEnvironmentVariable("SW2URDF_INERTIA_DIAGNOSTICS") == "1")
+                    Shown += (sender, args) => Text += " [SW2-3 DIAGNOSTIC]";
                 InitializeLinkCoordinateSystemControls();
                 InitializeUsageGuideButton();
                 InitializeMaterialIdentityControls();

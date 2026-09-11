@@ -3,7 +3,20 @@
 此功能采集诊断信息，不会自动翻转非对角项，不会用主惯量重建结果替换源数据。
 当前不能据此声称已修复 GitHub #1 或 SolidWorks 2025 原生崩溃。
 
-## 启用
+## SW2-3 专用安装包
+
+文件名包含 `SW2-3_DIAGNOSTIC`，安装界面也标明诊断版。它沿用正式版插件身份，安装后替换已有版本，不支持与正式版并排加载。此包包含现有旧配置迁移和混合配置质量读取修复。
+
+1. 保存工作并正常关闭所有 SolidWorks 窗口，然后安装诊断包。
+2. 从开始菜单运行 **SW2URDF SW2-3 Diagnostic**。找不到 SolidWorks 时，选择实际的 `SLDWORKS.exe`。
+3. 打开问题装配体，确认导出窗口标题出现 `[SW2-3 DIAGNOSTIC]`，再复现一次问题。
+4. 启动器会打开本次日志目录：`%LOCALAPPDATA%\SW2URDF\Diagnostics\SW2-3-时间-编号`。保留 `session.txt`、`sw2urdf.log` 及滚动备份；检查内容后提供日志即可，无需提供 CAD。
+
+启动器只为本次 SolidWorks 子进程启用诊断，不修改永久环境变量，也不收集或上传 CAD、崩溃转储。已有 SolidWorks 进程时会拒绝启动，不会强制结束进程。诊断结束后正常退出；从原入口启动不会启用额外诊断。需要恢复正式版二进制时重新安装正式包。
+
+维护者使用 `scripts/BuildInstaller.ps1 -Diagnostic` 构建；其余依赖参数与正常打包相同，仍执行完整构建与测试门禁。
+
+## 手动启用
 
 先安装包含此功能的构建。保存并正常退出自己的 SolidWorks，然后从 Windows PowerShell 启动：
 

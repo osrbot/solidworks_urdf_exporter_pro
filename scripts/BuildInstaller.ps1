@@ -3,7 +3,8 @@ param(
     [string]$Platform = "x64",
     [string]$SolidWorksInstallDir = "",
     [string]$InnoCompilerPath = "",
-    [string]$DotNetPath = ""
+    [string]$DotNetPath = "",
+    [switch]$Diagnostic
 )
 
 $ErrorActionPreference = "Stop"
@@ -443,6 +444,9 @@ $PreviousDotNetRoot = $null
 $PreviousMSBuildSDKsPath = $null
 $PreviousMSBuildEnableWorkloadResolver = $null
 $InstallerFileName = "sw2urdfSetup_${InstallerDate}_${InstallerCommit}.exe"
+if ($Diagnostic) {
+    $InstallerFileName = "sw2urdf_SW2-3_DIAGNOSTIC_${InstallerDate}_${InstallerCommit}.exe"
+}
 $InstallerPath = Join-Path $OutputDirectory $InstallerFileName
 $Sha256Path = "$InstallerPath.sha256"
 $ProvenancePath = "$InstallerPath.provenance.json"
@@ -805,7 +809,16 @@ try {
     ) | ForEach-Object {
         Get-Item -LiteralPath (Join-Path $BuildOutputDirectory ("schemas\" + $_))
     }
+    $DiagnosticPayload = @()
+    if ($Diagnostic) {
+        $DiagnosticDirectory = Join-Path $BuildOutputDirectory "tools\inertia_diagnostics"
+        New-Item -ItemType Directory -Path $DiagnosticDirectory -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $BuildRoot "scripts\Start-InertiaDiagnostic.ps1") -Destination $DiagnosticDirectory
+        Copy-Item -LiteralPath (Join-Path $BuildRoot "docs\inertia-diagnostics.md") -Destination $DiagnosticDirectory
+        $DiagnosticPayload = @(Get-ChildItem -LiteralPath $DiagnosticDirectory -File)
+    }
     $PayloadCandidates = @(
+        $DiagnosticPayload
         Get-ChildItem -LiteralPath $BuildOutputDirectory -File -Filter "*.dll"
         Get-Item -LiteralPath (Join-Path $BuildOutputDirectory "SW2URDF.png")
         Get-Item -LiteralPath (Join-Path $BuildOutputDirectory "LICENSE")
@@ -975,7 +988,9 @@ try {
         })
 
     Assert-NoPythonBytecode $BuildOutputDirectory
-    & $ISCC "/DInstallerDate=$InstallerDate" "/DInstallerCommit=$InstallerCommit" `
+    $DiagnosticCompilerOptions = @()
+    if ($Diagnostic) { $DiagnosticCompilerOptions = @("/DDiagnosticPackage=1") }
+    & $ISCC @DiagnosticCompilerOptions "/DInstallerDate=$InstallerDate" "/DInstallerCommit=$InstallerCommit" `
         "/DBuildConfiguration=$Configuration" "/DBuildPlatform=$Platform" $InstallerScript
     if ($LASTEXITCODE -ne 0) {
         throw "Inno Setup compiler failed with exit code $LASTEXITCODE."
@@ -1038,6 +1053,7 @@ try {
         installerFile = $InstallerFileName
         installerSha256 = $InstallerSha256
         configuration = $Configuration
+        diagnosticIssue = $(if ($Diagnostic) { "SW2-3" } else { $null })
         platform = $Platform
         tools = [ordered]@{
             nuget = [ordered]@{
