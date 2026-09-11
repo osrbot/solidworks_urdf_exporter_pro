@@ -305,7 +305,7 @@ namespace SW2URDF.UI
             builder.AppendLine("   复杂层级可点 编辑 Link 树... 进入自由画布，再点 大纲编辑，用 #/##/### 批量写出父子层级。");
             builder.AppendLine("3. 在画布为每个新增 Joint 明确选择类型并检查名称；点击应用后，再回属性页配置新增 Link 的组件、坐标系和轴。");
             builder.AppendLine("4. 可用“自动配色”为整棵 Link 树生成稳定层级颜色，再按需手动修改单个 Link 的材质 ID 或 RGBA。");
-            builder.AppendLine("5. 选好碰撞策略、材质 ID、网格精简比例后导出。");
+            builder.AppendLine("5. 选好碰撞策略、材质 ID、目标三角面减面比例后导出。0% 不减面，50% 目标移除一半三角面，100% 在形状保护下最大限度简化，不清空网格。实际减面可能达不到目标，以导出报告的实际统计为准。");
             builder.AppendLine("6. 重新打开同一个装配体时，插件会优先加载保存在装配体内的 Link 树配置；不用从头重新建树。");
             builder.AppendLine();
             builder.AppendLine("碰撞策略怎么选");
@@ -356,7 +356,7 @@ namespace SW2URDF.UI
             builder.AppendLine("   For a complex hierarchy, open Edit Link Tree..., then use Outline Edit to write parent-child levels with #/##/### headings.");
             builder.AppendLine("3. Explicitly choose every new Joint type and review its name on the canvas. Apply the tree, then assign components, coordinate systems, and axes for new Links on the property page.");
             builder.AppendLine("4. Optionally use Auto Links for stable level-based colors, then override any Link material ID or RGBA manually.");
-            builder.AppendLine("5. Pick collision strategy, material ID, color, and STL reduction ratio, then export.");
+            builder.AppendLine("5. Pick collision strategy, material ID, color, and target triangle reduction, then export. 0% means no decimation; 50% targets removal of half the triangles; 100% means maximum simplification within shape safeguards, not an empty mesh. Shape preservation may prevent reaching the target; use actual statistics in the export report.");
             builder.AppendLine("6. When the same assembly is reopened, the saved Link tree configuration is loaded from the assembly so the tree does not have to be rebuilt from scratch.");
             builder.AppendLine();
             builder.AppendLine("Choosing a collision strategy");

@@ -563,27 +563,39 @@ namespace SW2URDF.Test
             int finishExport = form.IndexOf(
                 "private void FinishExport(bool exportSTL)",
                 StringComparison.Ordinal);
+            Assert.True(finishExport >= 0);
             int captureTargets = form.IndexOf(
-                "? CaptureExportTargetOptions()",
+                "Exporter.ExportTargets = CaptureExportTargetOptionsForExport(exportSTL);",
                 finishExport,
                 StringComparison.Ordinal);
-            int legacyTargets = form.IndexOf(
-                ": ExportTargetOptions.LegacyCompatibilityDefaults();",
-                captureTargets,
-                StringComparison.Ordinal);
+            Assert.True(captureTargets > finishExport);
             int validateTargets = form.IndexOf(
                 "Exporter.ExportTargets.ValidateSharedFindings()",
-                legacyTargets,
+                captureTargets,
                 StringComparison.Ordinal);
-
-            Assert.True(finishExport >= 0);
-            Assert.True(captureTargets > finishExport);
-            Assert.True(legacyTargets > captureTargets);
-            Assert.True(validateTargets > legacyTargets);
+            Assert.True(validateTargets > captureTargets);
+            Assert.True(form.IndexOf("Exporter.ExportTargets.ValidateRosMetadataFindings()",
+                validateTargets, StringComparison.Ordinal) > validateTargets);
             Assert.DoesNotContain("Exporter.ExportTargets.ValidateFindings()", form);
             Assert.Contains(
                 "derived target packages require a complete mesh export",
                 form.Substring(finishExport, validateTargets - finishExport));
+
+            int captureMethod = form.IndexOf(
+                "internal ExportTargetOptions CaptureExportTargetOptionsForExport(bool exportMeshes)",
+                StringComparison.Ordinal);
+            Assert.True(captureMethod >= 0);
+            int captureEnd = form.IndexOf("return options;", captureMethod, StringComparison.Ordinal);
+            Assert.True(captureEnd > captureMethod);
+            string capture = form.Substring(captureMethod, captureEnd - captureMethod);
+            Assert.Contains("ExportTargetOptions options = CaptureExportTargetOptions();", capture);
+            Assert.Contains("if (!exportMeshes)", capture);
+            Assert.Contains("options.UseV2Pipeline = false;", capture);
+            Assert.Contains("options.ExportRos1Legacy = true;", capture);
+            Assert.Contains("options.ExportRos2 = true;", capture);
+            Assert.Contains("options.ExportUsdAsset = false;", capture);
+            Assert.Contains("options.ExportMjcfAsset = false;", capture);
+            Assert.DoesNotContain("LegacyCompatibilityDefaults", capture);
         }
 
         [Fact]

@@ -159,8 +159,29 @@ namespace SW2URDF.Test
                 });
             state.Helper.ResetUserPreferences();
             Assert.Equal(originalQuality, state.Integers[quality]);
-            Assert.Equal(0.01, state.Doubles[deviation]);
-            Assert.Equal(0.01, state.Doubles[angle]);
+            Assert.Equal(originalQuality == 3 || unchangedTolerances ? 0.01 : 0.02, state.Doubles[deviation]);
+            Assert.Equal(originalQuality == 3 || unchangedTolerances ? 0.01 : 0.02, state.Doubles[angle]);
+        }
+
+        [Theory]
+        [InlineData(1, Double.PositiveInfinity)]
+        [InlineData(2, Double.NaN)]
+        [InlineData(1, 0.000069044396140779)]
+        public void RestorePresetDoesNotWriteOrValidateContextDependentCustomTolerances(int originalQuality, double tolerance)
+        {
+            var state = new StlPreferenceState();
+            int quality = (int)swUserPreferenceIntegerValue_e.swSTLQuality;
+            int deviation = (int)swUserPreferenceDoubleValue_e.swSTLDeviation;
+            int angle = (int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance;
+            state.Integers[quality] = originalQuality;
+            state.Helper.SaveUserPreferences();
+            state.Integers[quality] = 3;
+            state.Doubles[deviation] = tolerance;
+            state.Doubles[angle] = tolerance;
+            state.Helper.ResetUserPreferences();
+            Assert.Equal(originalQuality, state.Integers[quality]);
+            state.App.Verify(x => x.SetUserPreferenceDoubleValue(deviation, It.IsAny<double>()), Times.Never);
+            state.App.Verify(x => x.SetUserPreferenceDoubleValue(angle, It.IsAny<double>()), Times.Never);
         }
 
         private sealed class StlPreferenceState
@@ -183,7 +204,7 @@ namespace SW2URDF.Test
                     swUserPreferenceToggle_e.swSTLPreview, swUserPreferenceToggle_e.swSTLComponentsIntoOneFile })
                     Toggles[(int)item] = false;
                 Integers[(int)swUserPreferenceIntegerValue_e.swExportStlUnits] = (int)swLengthUnit_e.swMM;
-                Integers[(int)swUserPreferenceIntegerValue_e.swSTLQuality] = (int)swSTLQuality_e.swSTLQuality_Coarse;
+                Integers[(int)swUserPreferenceIntegerValue_e.swSTLQuality] = (int)swSTLQuality_e.swSTLQuality_Custom;
                 foreach (var item in new[] { swUserPreferenceDoubleValue_e.swSTLDeviation,
                     swUserPreferenceDoubleValue_e.swSTLAngleTolerance, swUserPreferenceDoubleValue_e.swViewTransitionHideShowComponent })
                     Doubles[(int)item] = 0.01;
@@ -223,7 +244,7 @@ namespace SW2URDF.Test
                     Assert.False(item.Value);
                 foreach (var item in Integers.Where(x => ((swUserPreferenceIntegerValue_e)x.Key).ToString() != ignored))
                     Assert.Equal(item.Key == (int)swUserPreferenceIntegerValue_e.swExportStlUnits
-                        ? (int)swLengthUnit_e.swMM : (int)swSTLQuality_e.swSTLQuality_Coarse, item.Value);
+                        ? (int)swLengthUnit_e.swMM : (int)swSTLQuality_e.swSTLQuality_Custom, item.Value);
                 foreach (var item in Doubles.Where(x => ((swUserPreferenceDoubleValue_e)x.Key).ToString() != ignored))
                     Assert.Equal(0.01, item.Value);
             }
@@ -459,74 +480,42 @@ namespace SW2URDF.Test
         }
 
         [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public void AdjustedStlSettingsAreReportedAndUsedEvenWhenSetterClaimsSuccess(bool accepted)
+        [InlineData(false, 0.0, true)]
+        [InlineData(false, 0.5, true)]
+        [InlineData(false, 1.0, false)]
+        [InlineData(true, 0.0, false)]
+        [InlineData(true, 0.5, true)]
+        [InlineData(true, 1.0, true)]
+        public void TriangleReductionUsesVerifiedPresetWithoutReadingOrWritingCustomTolerances(bool fine, double ratio, bool accepted)
         {
-            var app = SettingsApp((int)swSTLQuality_e.swSTLQuality_Custom, 0.027, 0.52, accepted);
-            var requested = ExportHelper.CreateStlMeshSettings(false, 1.0);
-            string warning;
-            var actual = ExportHelper.ApplyStlMeshSettings(app.Object, requested, out warning);
-            Assert.NotNull(warning);
-            Assert.Equal(0.027, actual.Deviation);
-            Assert.Equal(0.52, actual.AngleTolerance);
-            var stats = ExportHelper.CreateStlExportStats(new Link(), actual, settings => 20);
-            Assert.Equal(actual.Deviation, stats.Deviation.Value);
-            Assert.Equal(actual.AngleTolerance, stats.AngleTolerance.Value);
-        }
-
-        [Fact]
-        public void AcceptedMatchingSettingsDoNotWarn()
-        {
-            var requested = ExportHelper.CreateStlMeshSettings(false, 0.5);
-            var app = SettingsApp((int)swSTLQuality_e.swSTLQuality_Custom, requested.Deviation, requested.AngleTolerance, true);
-            string warning;
-            ExportHelper.ApplyStlMeshSettings(app.Object, requested, out warning);
+            int quality = fine ? (int)swSTLQuality_e.swSTLQuality_Fine : (int)swSTLQuality_e.swSTLQuality_Coarse;
+            var app = SettingsApp(quality, Double.PositiveInfinity, Double.NaN, accepted);
+            var actual = ExportHelper.ApplyStlMeshSettings(app.Object,
+                ExportHelper.CreateStlMeshSettings(fine, ratio), out var warning);
             Assert.Null(warning);
-        }
-
-        [Theory]
-        [InlineData(0.0)]
-        [InlineData(-1.0)]
-        [InlineData(Double.NaN)]
-        [InlineData(Double.PositiveInfinity)]
-        public void InvalidReadbackStopsBeforeMeshExport(double deviation)
-        {
-            var app = SettingsApp((int)swSTLQuality_e.swSTLQuality_Custom, deviation, 0.5, true);
-            Assert.Throws<InvalidOperationException>(() =>
-                ExportHelper.ApplyStlMeshSettings(app.Object, ExportHelper.CreateStlMeshSettings(false, 0.5), out _));
+            Assert.False(actual.UseCustom);
+            Assert.Equal(fine ? "fine" : "coarse", actual.QualityLabel);
+            Assert.Equal(ratio, actual.ReductionRatio);
+            var stats = ExportHelper.StlExportStats.FromSettings(actual);
+            Assert.Null(stats.Deviation);
+            Assert.Null(stats.AngleTolerance);
+            Assert.Null(stats.EstimatedTriangles);
+            app.Verify(x => x.GetUserPreferenceDoubleValue(It.IsAny<int>()), Times.Never);
+            app.Verify(x => x.SetUserPreferenceDoubleValue(It.IsAny<int>(), It.IsAny<double>()), Times.Never);
         }
 
         [Theory]
         [InlineData(0)]
-        [InlineData(42)]
-        public void UnreducedMeshEstimatesOnceUsingEffectiveSettings(int triangles)
+        [InlineData(2)]
+        [InlineData(3)]
+        [InlineData(99)]
+        public void RejectedPresetStopsBeforeMeshExportEvenWhenSetterClaimsSuccess(int quality)
         {
-            var settings = ExportHelper.CreateStlMeshSettings(false, 0);
-            settings.Deviation = 0.0006;
-            int calls = 0;
-            var stats = ExportHelper.CreateStlExportStats(new Link(), settings, actual =>
-            {
-                Assert.Same(settings, actual);
-                calls++;
-                return triangles;
-            });
-            Assert.Equal(1, calls);
-            Assert.Equal(triangles > 0 ? (int?)triangles : null, stats.EstimatedTriangles);
-        }
-
-        [Fact]
-        public void ReducedMeshKeepsDistinctBaselineEstimate()
-        {
-            var calls = new List<double>();
-            var stats = ExportHelper.CreateStlExportStats(new Link(), ExportHelper.CreateStlMeshSettings(false, 0.5), settings =>
-            {
-                calls.Add(settings.ReductionRatio);
-                return settings.ReductionRatio == 0 ? 100 : 50;
-            });
-            Assert.Equal(new[] { 0.0, 0.5 }, calls);
-            Assert.Equal(100, stats.BaselineEstimatedTriangles);
-            Assert.Equal(50, stats.EstimatedTriangles);
+            var app = SettingsApp(quality, 0.001, 0.5, true);
+            var error = Assert.Throws<InvalidOperationException>(() => ExportHelper.ApplyStlMeshSettings(
+                app.Object, ExportHelper.CreateStlMeshSettings(false, 0.5), out _));
+            Assert.Contains("readback quality=" + quality, error.Message);
+            Assert.Contains("setter accepted", error.Message);
         }
 
         private static Mock<ISldWorks> SettingsApp(int quality, double deviation, double angle, bool accepted)

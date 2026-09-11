@@ -15,6 +15,10 @@ MuJoCo 可以继续使用的机器人模型。
 
 ## 本次更新
 
+**Beta 准备中：**[v20260911-beta1 说明](.github/release-notes/v20260911-beta1.md) 包含分区 STL 减面、实际体积统计、统一输出名称和模型信息保存修复。安装包已完成本地测试，公开下载仍待第三方源码与运行时检查。最新已发布候选版为 [v20260908-rc2](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases/tag/v20260908-rc2)，正式版 Latest 不变。
+
+- 可视 STL 与精简碰撞网格共用目标比例，导出后显示实际大小；需要保留的几何细节可能使结果达不到目标比例。
+
 - 旧版配置可以在核对组件、坐标系和轴后迁移，原配置保留。
 - 支持 SolidWorks 质量属性覆盖和实测质量校准，惯性预览与导出使用同一组结果。
 - 修复 Link 多选、修改层级、Joint 重命名及惯性坐标系转换中的数据保留问题。
@@ -141,6 +145,8 @@ pnpm docs:dev
 </picture>
 
 ## 许可证与致谢
+
+随包的第三方组件保留各自许可证，不因本项目采用 MIT 而改变。详见[第三方说明](THIRD_PARTY_NOTICES.md)。
 
 项目按 [MIT License](LICENSE) 发布，并保留上游项目历史、作者和贡献记录。感谢原项目作者
 Stephen Brawner，以及 PickNik Consulting、Verb Surgical、Open Robotics、Willow Garage 和

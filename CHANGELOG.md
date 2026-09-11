@@ -2,6 +2,94 @@
 
 All notable OSRBot-maintained changes to this fork are documented here.
 
+## Unreleased
+
+## 2026-09-11 / v20260911-beta1 (Prepared / 待发布)
+
+Beta installer publication is pending third-party source/runtime checks. The
+following changes and measurements are complete; this heading is not a public
+download announcement.
+Beta 安装包仍待第三方源码与运行时检查；以下功能和测量已完成，不代表已公开提供下载。
+
+- MuJoCo 与其他格式共用手动设置的输出名称；许可证支持常用下拉选项和自定义输入。修复模型元数据和输出目标的保存，以及“不含网格”导出的元数据校验。
+- MuJoCo shares the configured output name with other targets. Add editable license presets and preserve model metadata/export targets, including validation in mesh-free export.
+- 示例装配体实测设置移除 70% 三角面：大型 Link 从 32.10 MB 降至 10.64 MB，全部可视 STL 从 41.35 MB 降至 16.20 MB，实际缩小 60.82%。目标比例不是保证值。
+- With 70% requested removal on an example assembly, a large Link fell from 32.10 MB to 10.64 MB; all visual STLs fell from 41.35 MB to 16.20 MB (60.82% smaller). These use the export's measured source sizes, not a guaranteed ratio.
+- 用户实际导出四目标成功，总耗时 8 分 38 秒；独立检查通过 ROS 引用/校验和、MJCF 一步零控制仿真和 USD 结构重开。未验证 Isaac Sim、长时间仿真或训练表现。
+- User export succeeded for all four targets in 8m38s. Independent checks passed for ROS references/checksums, one zero-control MuJoCo step and OpenUSD structural reopening; no Isaac Sim, long-horizon or training acceptance is claimed.
+- 已知问题：原生圆柱没有独立碰撞 STL 是正常行为，但 CSV 仍保留临时 STL 的存在标记；减面警告可能重复。部分 Link 未达到目标比例；质量和惯性不随网格减面改变。
+- Known issues: native cylinders correctly omit collision STL files, but CSV retains stale temporary-STL flags; reduction warnings may repeat. Some links do not reach their target. Mesh reduction does not alter mass or inertia.
+
+Evidence: [integration and export verification](docs/reviews/2026-09-10-partition-plugin-integration.md),
+[Beta preparation notes](.github/release-notes/v20260911-beta1.md).
+
+- 将分区 STL 减面接入独立进程，保留共享接口和无法安全精简的区域；增加内容缓存及处理超时保护。可视 STL 与精简碰撞 STL 共用比例，质量和惯性不变。
+- 比例旁显示目标剩余 STL 大小，导出结果列出各 Link 的实际原始/最终大小；100% 不再显示误导性的零体积目标。
+- Run partitioned STL reduction in an isolated helper with shared-interface preservation, content caching and time limits. Show target remaining size beside the slider and measured per-Link sizes after export; maximum reduction never promises zero bytes.
+
+- 减面允许合并直线轮廓上的冗余顶点，保留拐角、分叉、孔洞和独立几何；区分 STL 写出舍入误差与真实形变。新增不启动 SolidWorks 的 STL 批量回归及前后对照工具。
+- Allow redundant collinear feature vertices to collapse while preserving corners, junctions, holes, and separate shells. Account for STL float rounding without widening input feature detection. Add offline corpus regression and comparison tools.
+- 精简碰撞 STL 改为与可视 STL 共用目标减面比例，不再固定请求最大减面；精确网格、基础几何体和可视网格复制策略保持原有含义。
+- Simplified collision STL now shares the visual STL target reduction ratio instead of always requesting maximum reduction; accurate meshes, primitives, and visual-mesh copies retain their existing behavior.
+- 修复“不含网格”导出忽略当前模型元数据的问题，ROS 1/ROS 2 的版本、说明、维护者、许可证和作者保持一致。
+- 导出结果直接显示警告数量和内容；减面警告纳入报告状态。惯性校验和网格阶段显示当前 Link 及序号/总数。
+- 简化碰撞预览明确为原始 CAD 外形参考。保留全局可视网格减面行为及现有名称，碰撞简化仍由碰撞策略决定；未更改 MJCF 速度限制行为。
+- Preserve model metadata in mesh-free ROS exports, expose warnings in results, and show per-Link progress. Clarify that simplified collision previews show the original CAD shape; visual reduction scope and MJCF speed-limit behavior are unchanged.
+
+- STL 精简比例改为真实目标减面：0 不减面，0.5 目标移除一半三角面，1 在保护形状的前提下尽可能减面。旧配置数值直接按此含义读取。
+- 先按 SW 粗糙/精细预设导出，再减面；不再用比例写固定毫米公差，避免小 Link 返回无穷大公差的问题。
+- 报告增加原始/目标/最终三角面数及文件大小。保留独立几何部分并检查候选形状，没有更小的有效结果时保留原网格并提示；不修改 CAD 质量或惯性。
+- 收尾恢复按原模式处理：预设恢复模式，自定义模式恢复公差和模式，避免对随网格上下文变化的预设公差作错误校验。
+- Interpret existing STL reduction values as the fraction of triangles to remove: 0 disables reduction, 0.5 targets half, and 1 requests maximum shape-protected reduction.
+- Decimate after preset-based SW export instead of mapping reduction to fixed custom tolerances. Report measured original/final triangles and bytes, preserve separate shells, and retain the original file if no smaller valid candidate is available. CAD mass and inertia are unchanged.
+- Restore preset modes without validating their context-dependent custom tolerance readback; continue restoring and validating explicit tolerances for Custom mode.
+
+## 2026-09-08 / v20260908-rc2 (Pre-release / 候选版)
+
+### 简体中文
+
+- MJCF 在生成网格前检查驱动参数；标记缺失的刚度、阻尼，确认后可保留不完整草稿。
+- 多目标导出允许明确跳过配置有问题的 MJCF，继续其他目标；不自动猜测增益或复制 OpenUSD 参数。
+- 隔离 WinForms 布局测试的并发干扰，未跳过用例或放宽截图断言；撤回试探性的窗口布局调整。
+- 沿用已安装的 `49c01cb` 包；Core 129 项、官方 MuJoCo 9 项、插件 997 项通过。远端 249 个载荷文件及注册校验正常，用户手动验证反馈暂未发现新问题。
+- 候选版不替换稳定版；不扩大解释手动测试覆盖范围。
+
+### English
+
+- Validate MJCF drive parameters before generating meshes; mark missing gains and allow incomplete drafts after confirmation.
+- Explicitly skip an invalid MJCF target and continue other selected targets, without invented gains or copying OpenUSD parameters.
+- Isolate concurrent WinForms layout tests without skips or relaxed screenshot assertions; revert speculative UI layout changes.
+- Reuse the installed `49c01cb` binary. Core 129, official MuJoCo 9, and plug-in 997 tests passed. All 249 installed payload files and registration verified; the user reported no new issues so far after manual testing.
+- Pre-release only, with no expanded claims about test coverage.
+
+Evidence: [verification record](docs/reviews/2026-09-08-mjcf-preflight.md),
+[candidate notes](.github/release-notes/v20260908-rc2.md).
+
+## 2026-09-08 / v20260908-rc1 (Pre-release / 候选版)
+
+### 简体中文
+
+- 新增公共“仿真设置”：统一选择基座模式和 Joint 驱动意图，OpenUSD 与 MJCF 分别填写增益，不会互相覆盖。修复实际应用设置时找不到根 Link 的问题；保存后重启 SolidWorks 可以恢复。
+- 直接输入 Link 实测质量即可校准完整惯性矩阵，不必先恢复 SW 值；不修改 SW 零部件质量属性。预览与导出共用结果；质量和惯性同比缩放时，等效长方体尺寸不变是正常现象。
+- 修复导出坐标系设置被 SW 拒绝时的处理，核对实际生效状态；校验 STL 单位、禁止平移和精度参数，并按有效顺序恢复。
+- 修复取消保存失败后树为空、Mimic 名称大小写回填错误，以及 ROS 专属配置错误拦截其他目标的问题。
+- 修复初始 DPI 重复缩放、部分控件溢出，以及仿真子标签自动布局被固定尺寸缓存干扰的问题。
+- 沿用已实测的 `a422ed7` 安装包，不重新编译。Core 129 项、官方 MuJoCo 9 项、插件 992 项通过。远端 SW2023 SP1 四目标导出成功：119 个文件、234.27 MiB、1 分 33 秒。不同模型和设置之间不作速度倍数比较。
+- 候选版不替代正式版 Latest。未纳入开发区尚未验收的 CSV 几何往返和取消自动保存改动；不宣称所有 DPI、SW 版本、Isaac Sim 或长时间仿真均已验证。
+
+### English
+
+- Add shared Simulation Settings for base mode and joint drive intent, with independent OpenUSD/MJCF gains. Fix applying settings through the real root Link; settings survive saving and restarting SolidWorks.
+- Calibrate a Link's full inertia tensor directly from measured mass without first resetting SW values or modifying CAD component properties. Preview and export use the same result; proportional mass/inertia scaling correctly leaves cuboid dimensions unchanged.
+- Verify effective export coordinates and STL units, translation and resolution settings; restore coupled settings in the effective order.
+- Preserve the tree after a failed cancel/save, match Mimic names case-sensitively, and keep ROS-only configuration errors from blocking other targets.
+- Fix initial DPI scaling, clipped controls and cached sizing of dynamic simulation tabs.
+- Reuse the unchanged, remotely tested `a422ed7` installer. Core 129, official MuJoCo 9 and plug-in 992 tests passed. Remote SW2023 SP1 exported all four targets: 119 files, 234.27 MiB, 1:33. This is not a speedup comparison across different models/settings.
+- Pre-release only; the stable Latest release remains unchanged. Unverified CSV roundtrip and no-auto-save development changes are excluded. Not blanket validation of all displays, SW versions, Isaac Sim or long simulations.
+
+Evidence: [shared simulation acceptance](docs/reviews/2026-09-07-shared-simulation-settings.md),
+[candidate notes](.github/release-notes/v20260908-rc1.md).
+
 ## 2026-09-06 / v20260906
 
 Published on 2026-09-07 using the unchanged, tested `fc88a14` installer built on 2026-09-06.

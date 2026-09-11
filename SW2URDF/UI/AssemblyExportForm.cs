@@ -1086,20 +1086,45 @@ namespace SW2URDF.UI
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+            if (exportSTL)
+            {
+                var options = CaptureExportTargetOptions();
+                var findings = OpenUsdSettingsDialog.GetMjcfPreflightFindings(
+                    options, BuildOpenUsdJointDescriptors(BaseNode));
+                if (findings.Count > 0)
+                {
+                    string details = String.Join("\n", findings.Select(finding =>
+                        finding.Code + ": " + finding.Message));
+                    bool otherTargets = options.ExportRos1Legacy || options.ExportRos2 || options.ExportUsdAsset;
+                    if (!otherTargets)
+                    {
+                        MessageBox.Show(this, ChineseUiText.Translate(
+                            "Complete the MuJoCo tab in Simulation settings before exporting.\n\n",
+                            "请先在仿真设置的 MuJoCo 页补齐参数，再导出。\n\n") + details,
+                            "MuJoCo MJCF", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    if (MessageBox.Show(this, ChineseUiText.Translate(
+                        "MJCF is not ready. Skip MJCF and export the other selected targets? Choose No to return and edit Simulation settings.\n\n",
+                        "MJCF 配置尚未完成。是否跳过 MJCF，继续导出其他已选目标？选择“否”返回修改仿真设置。\n\n") + details,
+                        "MuJoCo MJCF", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                    modernMjcfAssetCheckBox.Checked = false;
+                }
+            }
             ClearPreviews();
             logger.Info("Completing URDF export");
             Exporter.RosPackageName = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
             textBoxRosPackageName.Text = Exporter.RosPackageName;
             UpdateRosPackageNameHint();
-            Exporter.ExportTargets = exportSTL
-                ? CaptureExportTargetOptions()
-                : ExportTargetOptions.LegacyCompatibilityDefaults();
+            Exporter.ExportTargets = CaptureExportTargetOptionsForExport(exportSTL);
             if (!exportSTL)
             {
                 logger.Info("Using the lightweight URDF-only compatibility path; derived target packages require a complete mesh export.");
             }
             IList<ExportTargetValidationFinding> targetErrors =
-                Exporter.ExportTargets.ValidateSharedFindings();
+                exportSTL ? Exporter.ExportTargets.ValidateSharedFindings()
+                    : Exporter.ExportTargets.ValidateRosMetadataFindings();
             if (targetErrors.Count > 0)
             {
                 ExportDiagnosticsDialog.ShowValidation(
@@ -1281,13 +1306,6 @@ namespace SW2URDF.UI
         private void UpdateRosPackageNameHintCore(bool updateLayout)
         {
             string sanitized = URDFPackage.SanitizePackageName(textBoxRosPackageName.Text);
-            string robotName = Exporter == null
-                ? sanitized
-                : URDFPackage.SanitizePackageName(Exporter.PackageName);
-            if (string.IsNullOrWhiteSpace(robotName))
-            {
-                robotName = sanitized;
-            }
             List<string> paths = new List<string>();
             if (modernRos1CheckBox == null || modernRos1CheckBox.Checked)
             {
@@ -1303,7 +1321,7 @@ namespace SW2URDF.UI
             }
             if (modernMjcfAssetCheckBox != null && modernMjcfAssetCheckBox.Checked)
             {
-                paths.Add("MuJoCo/" + robotName);
+                paths.Add("MuJoCo/" + OSURDF.Core.Export.MjcfAssetExporter.GetRobotDirectoryName(sanitized));
             }
             string hint = paths.Count == 0
                 ? ChineseUiText.Translate("No target selected", "未选择输出目标")
@@ -1346,6 +1364,10 @@ namespace SW2URDF.UI
             ExportTargetOptions options = restore
                 ? existing
                 : ExportTargetOptions.RecommendedDefaults(Exporter.RosPackageName);
+            string outputName = ExportTargetOptions.RestoreModelSettings(
+                BaseNode == null ? null : BaseNode.Link, options);
+            if (outputName != null)
+                textBoxRosPackageName.Text = outputName;
             if (!restore)
             {
                 string restoreError;
@@ -1378,7 +1400,7 @@ namespace SW2URDF.UI
                 modernPackageDescriptionTextBox.Text = options.Description;
                 modernMaintainerNameTextBox.Text = options.MaintainerName;
                 modernMaintainerEmailTextBox.Text = options.MaintainerEmail;
-                modernModelLicenseTextBox.Text = options.ModelLicense;
+                modernModelLicenseComboBox.Text = options.ModelLicense;
                 modernModelAuthorTextBox.Text = options.ModelAuthor;
             }
             finally
@@ -1394,12 +1416,32 @@ namespace SW2URDF.UI
                         "配置公共基座与 Joint 驱动意图，以及独立的 OpenUSD 和 MuJoCo 增益。"));
             }
             packagePathToolTip.SetToolTip(
-                modernModelLicenseTextBox,
+                modernModelLicenseComboBox,
                 ChineseUiText.Translate(
                     "NOASSERTION means the model license has not been confirmed. Review it before publishing.",
                     "NOASSERTION 表示模型许可证尚未确认；公开发布前必须审核。"));
             SynchronizeAssetMeshFormatControls();
             UpdateRosPackageNameHintForTargetChange();
+        }
+
+        internal void CaptureModelSettingsForPersistence()
+        {
+            if (!modernUiInitialized || BaseNode == null) return;
+            CaptureExportTargetOptions().SaveModelSettings(BaseNode.Link, textBoxRosPackageName.Text);
+        }
+
+        internal ExportTargetOptions CaptureExportTargetOptionsForExport(bool exportMeshes)
+        {
+            ExportTargetOptions options = CaptureExportTargetOptions();
+            if (!exportMeshes)
+            {
+                options.UseV2Pipeline = false;
+                options.ExportRos1Legacy = true;
+                options.ExportRos2 = true;
+                options.ExportUsdAsset = false;
+                options.ExportMjcfAsset = false;
+            }
+            return options;
         }
 
         private ExportTargetOptions CaptureExportTargetOptions()
@@ -1415,7 +1457,7 @@ namespace SW2URDF.UI
                 Description = modernPackageDescriptionTextBox.Text.Trim(),
                 MaintainerName = modernMaintainerNameTextBox.Text.Trim(),
                 MaintainerEmail = modernMaintainerEmailTextBox.Text.Trim(),
-                ModelLicense = modernModelLicenseTextBox.Text.Trim(),
+                ModelLicense = modernModelLicenseComboBox.Text.Trim(),
                 ModelAuthor = modernModelAuthorTextBox.Text.Trim(),
                 UsdSimulation = ExportTargetOptions.CloneUsdSimulation(
                     modernUsdSimulationProfile),
@@ -2449,6 +2491,7 @@ namespace SW2URDF.UI
 
         private void CaptureCurrentExportSession()
         {
+            CaptureModelSettingsForPersistence();
             bool editingLink = modernUiInitialized
                 ? modernActivePage != ModernAssemblyPage.Joint
                 : panelLinkProperties.Visible;
@@ -2493,12 +2536,44 @@ namespace SW2URDF.UI
         private void UpdateMeshReductionLabel()
         {
             double ratio = TrackBarValueToMeshReductionRatio(trackBarMeshReduction.Value);
-            labelMeshReductionValue.Text = ratio.ToString("0.00", URDFAttribute.URDFNumberFormat);
-            SetModernLinkStatusText(
-                labelEstimatedMeshSize,
-                ChineseUiText.Translate(
-                    "Rough STL estimate: logged on export",
-                    "\u7c97\u7565 STL \u4f30\u7b97\uff1a\u5bfc\u51fa\u65f6\u5199\u5165\u65e5\u5fd7"));
+            labelMeshReductionValue.Text = (ratio * 100.0).ToString("0", URDFAttribute.URDFNumberFormat) + "%";
+            // Slider feedback must not invalidate or rebuild the cached page layout.
+            labelEstimatedMeshSize.Text = FormatMeshReductionTarget(
+                ratio, ChineseUiText.ShouldUseChinese());
+        }
+
+        // Only pass current, verified STL byte counts, never CAD document sizes.
+        internal static string FormatMeshReductionTarget(
+            double removalRatio, bool useChinese, long? verifiedOriginalStlBytes = null)
+        {
+            if (Double.IsNaN(removalRatio)) removalRatio = 0.0;
+            int removedPercent = MeshReductionRatioToTrackBarValue(removalRatio);
+            if (removedPercent == 0)
+            {
+                return useChinese ? "不减面；目标 STL 大小：原始的 100%"
+                    : "No reduction; target STL size: 100% of original";
+            }
+            if (removedPercent == 100)
+            {
+                return useChinese ? "尽可能精简；实际大小以导出结果为准"
+                    : "Reduce as much as possible; actual size is reported after export";
+            }
+
+            string remaining = (100 - removedPercent).ToString(URDFAttribute.URDFNumberFormat);
+            string target = useChinese ? "目标 STL 大小：约原始的 " + remaining + "%"
+                : "Target STL size: approx. " + remaining + "% of original";
+            if (verifiedOriginalStlBytes.HasValue && verifiedOriginalStlBytes.Value > 0)
+            {
+                double bytes = Math.Max(1.0,
+                    verifiedOriginalStlBytes.Value * ((100 - removedPercent) / 100.0));
+                string size = bytes >= 1048576.0
+                    ? (bytes / 1048576.0).ToString("0.##", URDFAttribute.URDFNumberFormat) + " MiB"
+                    : bytes >= 1024.0
+                        ? (bytes / 1024.0).ToString("0.##", URDFAttribute.URDFNumberFormat) + " KiB"
+                        : Math.Ceiling(bytes).ToString("0", URDFAttribute.URDFNumberFormat) + " B";
+                target += useChinese ? "（约 " + size + "）" : " (approx. " + size + ")";
+            }
+            return target;
         }
 
         private static int MeshReductionRatioToTrackBarValue(double ratio)
@@ -2521,8 +2596,8 @@ namespace SW2URDF.UI
 
             ApplyMeshReductionToTree(BaseNode, meshReductionRatioForExport);
             logger.Info(String.Format(
-                "Applying STL mesh reduction ratio {0:0.00} to every link for this export",
-                meshReductionRatioForExport));
+                "Applying target STL triangle reduction {0:0}% to every link for this export",
+                meshReductionRatioForExport * 100.0));
         }
 
         internal static void ApplyMeshReductionToTree(LinkNode node, double ratio)

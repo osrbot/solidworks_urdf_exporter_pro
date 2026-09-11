@@ -26,6 +26,34 @@ public sealed partial class MjcfAssetExporterTests : IDisposable
         Directory.CreateDirectory(temporaryDirectory);
     }
 
+    [Theory]
+    [InlineData("osracer_description", "osracer_description")]
+    [InlineData("../other/robot", "other_robot")]
+    [InlineData("CON", "CON_item")]
+    [InlineData(null, "minimal_robot")]
+    [InlineData(" ", "minimal_robot")]
+    public void OutputDirectoryOverridePreservesModelIdentityAndRelativeReferences(string? name, string expected)
+    {
+        string bundle = BuildBundle(LoadFixtureRobot(), "minimal-bundle");
+        var result = new MjcfAssetExporter().Export(new MjcfExportOptions
+        {
+            BundleDirectory = bundle,
+            OutputDirectory = Path.Combine(temporaryDirectory, "delivery"),
+            OutputDirectoryName = name,
+            CompilerValidator = new RecordingValidator()
+        });
+        Assert.Equal(Path.Combine(temporaryDirectory, "delivery", "MuJoCo", expected), result.OutputDirectory);
+        var robot = XDocument.Load(result.RobotXmlPath);
+        Assert.Equal("minimal_robot", (string?)robot.Root!.Attribute("model"));
+        Assert.Equal("robot.xml", (string?)XDocument.Load(result.SceneXmlPath).Root!.Element("include")!.Attribute("file"));
+        foreach (var mesh in robot.Root.Element("asset")!.Elements("mesh"))
+        {
+            string path = (string)mesh.Attribute("file")!;
+            Assert.False(Path.IsPathRooted(path));
+            Assert.True(File.Exists(Path.Combine(result.OutputDirectory, path)));
+        }
+    }
+
     [Fact]
     public void ExportPreservesHierarchyGeometryInertiaAndCanonicalMeshes()
     {

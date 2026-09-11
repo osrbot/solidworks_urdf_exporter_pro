@@ -35,6 +35,11 @@ namespace SW2URDF.UI
                 ? ChineseUiText.Translate("Export partially completed", "导出部分完成")
                 : summary.HasFailures ? ChineseUiText.Translate("Export failed", "导出失败")
                 : ChineseUiText.Translate("Export completed", "导出完成");
+            if (summary.Warnings.Count > 0)
+            {
+                Text += String.Format(ChineseUiText.Translate(" ({0} warnings)", "（有{0}项警告）"),
+                    summary.Warnings.Count);
+            }
             StartPosition = FormStartPosition.CenterParent;
             ShowIcon = false;
             ShowInTaskbar = false;
@@ -127,7 +132,7 @@ namespace SW2URDF.UI
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Both,
                 WordWrap = false,
-                Text = summary.FormatDetails() + (String.IsNullOrWhiteSpace(this.logPath) ? String.Empty :
+                Text = FormatResultDetails(summary) + (String.IsNullOrWhiteSpace(this.logPath) ? String.Empty :
                     Environment.NewLine + Environment.NewLine + ChineseUiText.Translate("Log: ", "日志: ") + this.logPath),
                 Margin = new Padding(0)
             };
@@ -175,6 +180,18 @@ namespace SW2URDF.UI
         }
 
         internal MessageBoxIcon ResultIcon { get; private set; }
+
+        private static string FormatResultDetails(ExportResultSummary summary)
+        {
+            if (summary.Warnings.Count == 0)
+                return summary.FormatDetails();
+
+            var withoutWarnings = new ExportResultSummary(summary.OutputRoot, summary.FileCount,
+                summary.TotalBytes, summary.Elapsed, summary.Targets, meshReductionDetails: summary.MeshReductionDetails);
+            return ChineseUiText.Translate("Warnings:", "警告:") + Environment.NewLine +
+                String.Join(Environment.NewLine, summary.Warnings) + Environment.NewLine +
+                Environment.NewLine + withoutWarnings.FormatDetails();
+        }
 
         internal static void ShowResults(IWin32Window owner, ExportResultSummary summary, string logPath)
         {

@@ -382,6 +382,33 @@ namespace SW2URDF.Test
         }
 
         [Theory]
+        [InlineData(0, false, "PASS")]
+        [InlineData(0, true, "WARN")]
+        [InlineData(1, true, "PARTIAL")]
+        [InlineData(4, true, "FAIL")]
+        public void RootReportWarningStatusDoesNotChangeTargetOutcomes(int failed, bool warn, string status)
+        {
+            List<ExportTargetJob> jobs = CreateJobs();
+            for (int index = 0; index < failed; index++)
+                jobs[index].Validate = target => { throw new IOException("isolated-failure"); };
+            V2ExportResult result = IndependentTargetExport.Run(outputRoot, jobs);
+            if (warn) result.Warnings.Add("mesh reduction limited: base_link");
+
+            string report = ExportHelper.BuildIndependentExportReport(
+                new URDFPackage("test_robot", outputRoot), result, TimeSpan.Zero);
+
+            Assert.Contains("Status: " + status + Environment.NewLine, report);
+            Assert.Equal(4 - failed, result.Targets.Count(target => target.Succeeded));
+            Assert.Contains("Succeeded: " + (4 - failed) + "; failed: " + failed, report);
+            if (warn)
+            {
+                Assert.Contains("## Warnings", report);
+                Assert.Contains("mesh reduction limited: base_link", report);
+                Assert.DoesNotContain("Status: PASS", report);
+            }
+        }
+
+        [Theory]
         [InlineData(false, "PARTIAL", 3)]
         [InlineData(true, "FAIL", 0)]
         public void RootReportCountsOnlyCurrentSuccessAndExplicitlyLabelsRetainedOldOutput(

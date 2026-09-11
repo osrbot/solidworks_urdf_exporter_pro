@@ -4,15 +4,23 @@ The final page collects package information, selects output formats, and starts 
 
 ## Basic information
 
-- ROS package name and version.
+- Output name and package version.
 - Package description.
 - Maintainer name and email.
-- License.
+- Model license: choose a common identifier such as MIT, Apache-2.0, BSD, or CC, or type a custom name. Existing values are retained; `NOASSERTION` means the license has not been confirmed.
 - Author or configurator.
 
 Even when exporting only OpenUSD or MJCF, use a clear name and license so the output directory and reports can be identified correctly.
 
+All four targets share the output name. For example, `osracer_description` produces
+`ROS1/osracer_description`, `ROS2/osracer_description`, `USD/osracer_description`, and
+`MuJoCo/osracer_description`. The preview shows normalized directory names. This does not rename the assembly or the model inside the exported files.
+
 ## Output options
+
+The output name, version, description, maintainer, email, license, author, and target selections are saved with the export configuration.
+Choose Save when closing to retain edits; choosing not to save does not commit them. Window-close recovery drafts also include these fields.
+After writing the configuration to the assembly, save the SolidWorks document normally to retain it when reopening the file.
 
 - ROS 1 package.
 - ROS 2 package.
@@ -27,11 +35,15 @@ Common simulation settings select base behavior and passive, position, velocity,
 
 Defaults create no actuators or active drives. Without common settings, legacy configuration is preserved. A common `source` base preserves the target's previous behavior; explicit `fixed` / `floating` and common joint modes override legacy target choices. These settings configure a robot asset, not a training world, rewards, policy, or training project.
 
+MJCF position control requires positive stiffness and explicitly entered nonnegative damping. Velocity control requires positive velocity gain (the damping column). Missing values are marked, but you can confirm saving an incomplete draft. Export checks them before mesh generation: return to edit by default, or explicitly skip MJCF and continue with other selected targets.
+
 ## Two export buttons
 
 - **Export URDF without meshes**: faster and useful for checking structure and values only.
+  This lightweight path writes ROS 1/ROS 2 descriptions using the current version, description, maintainer, email, license, and author. It does not generate OpenUSD/MJCF. Without mesh assets, it is not a complete model delivery.
 - **Export URDF and meshes**: generates the deliverable directory. OpenUSD and MJCF require this path.
 
 Do not click repeatedly while export is running. When it finishes, read `export_report.md` first, then open the relevant target directory.
+Inertia validation and mesh export show the current Link and its index/total. When reduction is limited or collision generation falls back, the results window shows warning counts and details without blocking other valid outputs.
 
 After a partial failure, successful outputs are retained and the export form stays open so you can retry only failed targets. Check the results window and error details for old output not updated this run or directories requiring recovery. See [Choose an Export Target](/en/exports/).

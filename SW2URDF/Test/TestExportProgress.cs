@@ -1,5 +1,6 @@
 using SW2URDF.URDFExport;
 using SW2URDF.UI;
+using SW2URDF.URDF;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,6 +10,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Reflection;
+using System.Runtime.Serialization;
 using System.Threading;
 using System.Windows.Forms;
 using Xunit;
@@ -17,6 +20,39 @@ namespace SW2URDF.Test
 {
     public class TestExportProgress
     {
+        [Fact]
+        public void LinkStagesCountPhysicalLinksAndClearTheMeshCounter()
+        {
+            var root = new Link { Name = "base_link" };
+            var frame = new Link { Name = "frame", isFixedFrame = true };
+            var sensor = new Link { Name = "sensor" };
+            root.Children.Add(frame);
+            frame.Children.Add(sensor);
+            var helper = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+            var titles = new List<string>();
+            helper.ExportProgressChanged += (sender, args) => titles.Add(args.Stage);
+            string directory = Path.Combine(Path.GetTempPath(), "sw2urdf-progress-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                typeof(ExportHelper).GetMethod("LogInertialValidation", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(helper, new object[] { root, Path.Combine(directory, "inertia.csv") });
+                Assert.Equal(2, titles.Count);
+                Assert.Contains("base_link (1/2)", titles[0]);
+                Assert.Contains("sensor (2/2)", titles[1]);
+                titles.Clear();
+                typeof(ExportHelper).GetMethod("ExportFiles", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(helper, new object[] { root, new URDFPackage("robot", directory), false, MeshExportFormat.STL, null });
+                Assert.Equal(2, titles.Count);
+                Assert.Contains("base_link (1/2)", titles[0]);
+                Assert.Contains("sensor (2/2)", titles[1]);
+                typeof(ExportHelper).GetMethod("UpdateProgressTitle", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(helper, new object[] { "Writing report", "Writing report" });
+                Assert.Equal("Writing report", titles.Last());
+            }
+            finally { Directory.Delete(directory, true); }
+        }
+
         [Fact]
         public void TestExportProgressWindowStaysAboveSolidWorks()
         {

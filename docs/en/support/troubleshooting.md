@@ -36,6 +36,19 @@ For inertia validation failures, the error details give the retained diagnostic 
 
 Mass calculations during initial **Preview and Export** preparation and pre-export inertia validation can still take a long time, temporarily leaving SolidWorks unresponsive. This remains a known limitation. Do not click repeatedly. Record assembly size, elapsed time, and logs, then follow [How to ask for help](/en/support/help-and-contribute).
 
+## Invalid STL Reduction Settings
+
+A custom deviation that is too large for a small Link can be accepted by SolidWorks but produce an
+invalid tolerance. The new reduction setting no longer maps to SW tolerances: it removes triangles
+after a normal STL export. Previously saved `0.5` values also mean a target of 50% triangles removed.
+Reports show original/final counts and bytes. Shape protection may prevent reaching the target; if
+no smaller valid result is available, the original mesh is retained with a warning. Units,
+coordinate systems, mass, and inertia do not change.
+
+For older builds reporting `invalid effective STL settings`, try setting the affected Link's
+reduction ratio to 0 and selecting Fine quality. Keep the log; this error does not by itself mean
+that the coordinate system is configured incorrectly.
+
 ## USD Opens Without Geometry
 
 Confirm that you copied the complete `USD/<package>` directory, not only `robot.usd`. Check that

@@ -80,8 +80,8 @@ $LockCoordinates = @($LegacyLock.packages | ForEach-Object {
         "Legacy package lock contains an invalid SHA256."
     (([string]$_.id).ToLowerInvariant() + "|" + [string]$_.version)
 } | Sort-Object)
-Assert-True ($ConfigCoordinates.Count -eq 24) `
-    "Legacy packages.config must contain the expected 24 locked packages."
+Assert-True ($ConfigCoordinates.Count -eq 25) `
+    "Legacy packages.config must contain the expected 25 locked packages."
 Assert-True (($ConfigCoordinates -join "`n") -ceq ($LockCoordinates -join "`n")) `
     "Legacy package lock must exactly cover packages.config coordinates."
 

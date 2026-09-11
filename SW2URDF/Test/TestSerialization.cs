@@ -13,6 +13,60 @@ namespace SW2URDF.Test
         private const string SimulationEnvelope =
             "{\"version\":1,\"simulation\":{\"baseMode\":\"fixed\"},\"usdSimulation\":{}}";
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void ModelSettingsSurviveSerializedReloadIncludingEmptyValues(bool empty)
+        {
+            var root = new LinkNode { IsBaseNode = true };
+            root.Link.Name = "base_link";
+            var options = ExportTargetOptions.RecommendedDefaults("old_name");
+            options.ExportRos1Legacy = false;
+            options.ExportRos2 = false;
+            options.ExportUsdAsset = !empty;
+            options.ExportMjcfAsset = false;
+            options.PackageVersion = empty ? "" : "0.2.3";
+            options.Description = empty ? "" : "Custom model description";
+            options.MaintainerName = empty ? "" : "kitso666";
+            options.MaintainerEmail = empty ? "" : "kitso@osrbot.com";
+            options.ModelLicense = empty ? "" : "LicenseRef-Custom";
+            options.ModelAuthor = empty ? "" : "OSR team";
+            options.SaveModelSettings(root.Link, "osracer_description");
+            root.Link.SimulationSettingsJson = SimulationEnvelope;
+            root.Nodes.Add(new LinkNode());
+            var restoredRoot = ConfigurationSerialization.DeserializeDraftPayload(
+                ConfigurationSerialization.SerializeDraftPayload(root));
+            var restored = ExportTargetOptions.RecommendedDefaults("different_name");
+            Assert.Equal("osracer_description", ExportTargetOptions.RestoreModelSettings(restoredRoot.Link, restored));
+            foreach (string name in new[] { "ExportRos1Legacy", "ExportRos2", "ExportUsdAsset", "ExportMjcfAsset",
+                "PackageVersion", "Description", "MaintainerName", "MaintainerEmail", "ModelLicense", "ModelAuthor" })
+            {
+                var property = typeof(ExportTargetOptions).GetProperty(name);
+                Assert.Equal(property.GetValue(options), property.GetValue(restored));
+            }
+            Assert.Null(((LinkNode)restoredRoot.Nodes[0]).Link.ModelSettingsJson);
+            Assert.Equal(SimulationEnvelope, restoredRoot.Link.SimulationSettingsJson);
+        }
+
+        [Fact]
+        public void ModelSettingsPreserveLegacyDefaultsAndRootOwnership()
+        {
+            var root = new Link { Name = "base_link" };
+            var defaults = ExportTargetOptions.RecommendedDefaults("robot");
+            Assert.Null(ExportTargetOptions.RestoreModelSettings(root, defaults));
+            Assert.Equal("NOASSERTION", defaults.ModelLicense);
+            defaults.SaveModelSettings(root, "robot");
+            var clone = root.Clone();
+            Assert.Equal(root.ModelSettingsJson, clone.ModelSettingsJson);
+            var child = new Link(root);
+            child.SetElement(root);
+            Assert.Null(child.ModelSettingsJson);
+            Assert.Throws<ArgumentException>(() => defaults.SaveModelSettings(child, "child"));
+            var session = new LinkTreeSession(new LinkNode(clone));
+            session.ApplyTree(session.LoadTree());
+            Assert.Equal(root.ModelSettingsJson, session.CreateActiveProjection().Link.ModelSettingsJson);
+        }
+
         [Fact]
         public void SimulationSettingsRoundTripPreservesOnlyRootEnvelope()
         {

@@ -20,9 +20,11 @@ USD/<package>/
 
 `robot.usd` 包含机器人层级、Visual、Collision、质量、质心、惯性和 Joint。
 
-## OpenUSD 设置
+## 仿真设置
 
-主导出页只显示一个 OpenUSD 选项。勾选后，可以按需打开设置：
+勾选 OpenUSD 或 MJCF 后打开 **“仿真设置”**。基座和 Joint 意图放在公共区，OpenUSD 的增益、机器人类型和自碰撞放在 OpenUSD 子标签；MJCF 增益单独保存。
+
+可调整的内容包括：
 
 - **基座方式**：保持源模型、固定基座或浮动基座；
 - **机器人类型**：为下游工具提供分类；

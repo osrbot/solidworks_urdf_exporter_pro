@@ -54,6 +54,63 @@ namespace SW2URDF.URDFExport
         public string UsdSimulationRestoreError { get; set; }
         public string MjcfSimulationRestoreError { get; set; }
 
+        private sealed class SavedModelSettings
+        {
+            public int Version { get; set; }
+            public string OutputName { get; set; }
+            public bool? ExportRos1Legacy { get; set; }
+            public bool? ExportRos2 { get; set; }
+            public bool? ExportUsdAsset { get; set; }
+            public bool? ExportMjcfAsset { get; set; }
+            public string PackageVersion { get; set; }
+            public string Description { get; set; }
+            public string MaintainerName { get; set; }
+            public string MaintainerEmail { get; set; }
+            public string ModelLicense { get; set; }
+            public string ModelAuthor { get; set; }
+        }
+
+        public void SaveModelSettings(SW2URDF.URDF.Link root, string outputName)
+        {
+            if (root == null || root.Parent != null)
+                throw new ArgumentException("Model settings belong to the root Link.");
+            root.ModelSettingsJson = JsonConvert.SerializeObject(new SavedModelSettings
+            {
+                Version = 1,
+                OutputName = outputName ?? string.Empty,
+                ExportRos1Legacy = ExportRos1Legacy,
+                ExportRos2 = ExportRos2,
+                ExportUsdAsset = ExportUsdAsset,
+                ExportMjcfAsset = ExportMjcfAsset,
+                PackageVersion = PackageVersion ?? string.Empty,
+                Description = Description ?? string.Empty,
+                MaintainerName = MaintainerName ?? string.Empty,
+                MaintainerEmail = MaintainerEmail ?? string.Empty,
+                ModelLicense = ModelLicense ?? string.Empty,
+                ModelAuthor = ModelAuthor ?? string.Empty,
+            });
+        }
+
+        public static string RestoreModelSettings(SW2URDF.URDF.Link root, ExportTargetOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            if (root == null || string.IsNullOrWhiteSpace(root.ModelSettingsJson)) return null;
+            var saved = JsonConvert.DeserializeObject<SavedModelSettings>(root.ModelSettingsJson);
+            if (saved == null || saved.Version != 1)
+                throw new InvalidDataException("Unsupported saved model settings version.");
+            if (saved.ExportRos1Legacy.HasValue) options.ExportRos1Legacy = saved.ExportRos1Legacy.Value;
+            if (saved.ExportRos2.HasValue) options.ExportRos2 = saved.ExportRos2.Value;
+            if (saved.ExportUsdAsset.HasValue) options.ExportUsdAsset = saved.ExportUsdAsset.Value;
+            if (saved.ExportMjcfAsset.HasValue) options.ExportMjcfAsset = saved.ExportMjcfAsset.Value;
+            if (saved.PackageVersion != null) options.PackageVersion = saved.PackageVersion;
+            if (saved.Description != null) options.Description = saved.Description;
+            if (saved.MaintainerName != null) options.MaintainerName = saved.MaintainerName;
+            if (saved.MaintainerEmail != null) options.MaintainerEmail = saved.MaintainerEmail;
+            if (saved.ModelLicense != null) options.ModelLicense = saved.ModelLicense;
+            if (saved.ModelAuthor != null) options.ModelAuthor = saved.ModelAuthor;
+            return saved.OutputName;
+        }
+
         public static SimulationProfile CloneSimulation(SimulationProfile source)
         {
             return source == null ? null : JsonConvert.DeserializeObject<SimulationProfile>(
@@ -197,6 +254,31 @@ namespace SW2URDF.URDFExport
             return errors;
         }
 
+        public IList<ExportTargetValidationFinding> ValidateRosMetadataFindings()
+        {
+            var errors = new List<ExportTargetValidationFinding>();
+            if (!ExactVersion.IsMatch(PackageVersion ?? string.Empty))
+            {
+                Add(errors, "PACKAGE_VERSION", "PackageVersion",
+                    "Package version must be an exact semantic version, for example 0.1.0.");
+            }
+            Require(errors, Description, "PACKAGE_DESCRIPTION", "Description",
+                "Package description");
+            Require(errors, ModelLicense, "MODEL_LICENSE", "ModelLicense",
+                "Model license");
+            Require(errors, MaintainerName, "MAINTAINER_NAME", "MaintainerName",
+                "Maintainer name");
+            Require(errors, MaintainerEmail, "MAINTAINER_EMAIL", "MaintainerEmail",
+                "Maintainer email");
+            if (!string.IsNullOrWhiteSpace(MaintainerEmail) &&
+                !EmailAddress.IsMatch(MaintainerEmail))
+            {
+                Add(errors, "MAINTAINER_EMAIL_FORMAT", "MaintainerEmail",
+                    "Maintainer email is not a valid email address.");
+            }
+            return errors;
+        }
+
         public IList<ExportTargetValidationFinding> ValidateFindings()
         {
             var errors = new List<ExportTargetValidationFinding>(ValidateSharedFindings());
@@ -207,25 +289,7 @@ namespace SW2URDF.URDFExport
                 Add(errors, "MJCF_SIMULATION_RESTORE", "Simulation.Mjcf", MjcfSimulationRestoreError);
             if (ExportRos1Legacy || ExportRos2)
             {
-                if (!ExactVersion.IsMatch(PackageVersion ?? string.Empty))
-                {
-                    Add(errors, "PACKAGE_VERSION", "PackageVersion",
-                        "Package version must be an exact semantic version, for example 0.1.0.");
-                }
-                Require(errors, Description, "PACKAGE_DESCRIPTION", "Description",
-                    "Package description");
-                Require(errors, ModelLicense, "MODEL_LICENSE", "ModelLicense",
-                    "Model license");
-                Require(errors, MaintainerName, "MAINTAINER_NAME", "MaintainerName",
-                    "Maintainer name");
-                Require(errors, MaintainerEmail, "MAINTAINER_EMAIL", "MaintainerEmail",
-                    "Maintainer email");
-                if (!string.IsNullOrWhiteSpace(MaintainerEmail) &&
-                    !EmailAddress.IsMatch(MaintainerEmail))
-                {
-                    Add(errors, "MAINTAINER_EMAIL_FORMAT", "MaintainerEmail",
-                        "Maintainer email is not a valid email address.");
-                }
+                errors.AddRange(ValidateRosMetadataFindings());
             }
             if (ExportRos2 &&
                 !(string.Equals(Ros2Distribution, "lyrical", StringComparison.OrdinalIgnoreCase) &&

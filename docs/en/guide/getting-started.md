@@ -37,6 +37,8 @@ Initial **Preview and Export** preparation and pre-export inertia validation can
 
 Visual geometry is for display; Collision geometry is for contact. Prefer collision geometry that is simple while preserving important contact features. On the Appearance page, you can set RGBA values or color Links automatically by hierarchy.
 
+STL target triangle reduction is shown as a percentage: 0% means no decimation, 50% targets removal of half the triangles, and 100% means maximum simplification within shape safeguards, not an empty mesh. Shape preservation may prevent reaching the target; use actual statistics in the export report.
+
 [View Visual and Collision](/en/features/collision) · [View Appearance](/en/features/appearance)
 
 ## 6. Select output

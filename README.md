@@ -16,6 +16,10 @@ OpenUSD, or MuJoCo workflows.
 
 ## This update
 
+**Beta preparation:** [v20260911-beta1 notes](.github/release-notes/v20260911-beta1.md) cover partitioned STL reduction, measured file-size feedback, shared output naming and metadata persistence. The installer is tested locally but public distribution awaits third-party source/runtime checks. The latest published candidate is [v20260908-rc2](https://github.com/osrbot/solidworks_urdf_exporter_pro/releases/tag/v20260908-rc2); the stable Latest download is unchanged.
+
+- Reduce visual STL and simplified collision meshes with the same target ratio. Show measured sizes after export; protected geometry may prevent reaching the target.
+
 - Migrate older configurations after reviewing components, frames, and axes; retain the original configuration.
 - Use SolidWorks mass-property overrides and measured-mass calibration consistently in inertia preview and export.
 - Preserve data through Link multi-selection, hierarchy edits, Joint renaming, and inertia-frame changes.
@@ -144,6 +148,8 @@ pnpm docs:dev
 </picture>
 
 ## License and credits
+
+Bundled third-party components keep their own licenses; the project's MIT license does not replace them. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
 This project is released under the [MIT License](LICENSE) and preserves the upstream project
 history, authors, and contributions. Thanks to original author Stephen Brawner, PickNik Consulting,

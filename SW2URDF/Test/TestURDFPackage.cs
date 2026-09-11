@@ -827,6 +827,71 @@ namespace SW2URDF.Test
                 finding.Field == "MaintainerEmail");
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void RosMetadataValidationAcceptsValidValuesWithoutTargetOrPipelineGates(bool useV2)
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.UseV2Pipeline = useV2;
+            options.ExportRos1Legacy = options.ExportRos2 = options.ExportUsdAsset = options.ExportMjcfAsset = false;
+            options.Ros2Distribution = "unsupported";
+            options.GazeboDistribution = "unsupported";
+            options.Ros2ControlProfileFile = "missing-profile.json";
+            options.UsdSimulationRestoreError = "unrelated USD error";
+            Assert.Empty(options.ValidateRosMetadataFindings());
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void RosMetadataValidationRejectsEmptyRequiredFields(bool useV2)
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.UseV2Pipeline = useV2;
+            options.PackageVersion = options.Description = options.ModelLicense =
+                options.MaintainerName = options.MaintainerEmail = string.Empty;
+            var findings = options.ValidateRosMetadataFindings();
+            Assert.Equal(5, findings.Count);
+            foreach (string code in new[] { "PACKAGE_VERSION", "PACKAGE_DESCRIPTION", "MODEL_LICENSE",
+                "MAINTAINER_NAME", "MAINTAINER_EMAIL" })
+                Assert.Contains(findings, finding => finding.Code == code);
+        }
+
+        [Theory]
+        [InlineData("invalid", "owner@example.com", "PACKAGE_VERSION")]
+        [InlineData("1.2.3", "invalid", "MAINTAINER_EMAIL_FORMAT")]
+        public void LegacyRosMetadataValidationRejectsInvalidVersionAndEmail(string version, string email, string code)
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.UseV2Pipeline = false;
+            options.PackageVersion = version;
+            options.MaintainerEmail = email;
+            Assert.Equal(code, Assert.Single(options.ValidateRosMetadataFindings()).Code);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void InvalidRosMetadataDoesNotBlockSharedV2OrUsdOnlyValidation(bool includeRos)
+        {
+            var options = ExportTargetOptions.RecommendedDefaults("robot");
+            options.ExportRos1Legacy = includeRos;
+            options.ExportRos2 = options.ExportMjcfAsset = false;
+            options.ExportUsdAsset = true;
+            options.PackageVersion = "invalid";
+            options.MaintainerEmail = "invalid";
+            Assert.Empty(options.ValidateSharedFindings());
+            var findings = options.ValidateFindings();
+            if (includeRos)
+            {
+                Assert.Equal(2, findings.Count);
+                Assert.Contains(findings, finding => finding.Code == "PACKAGE_VERSION");
+                Assert.Contains(findings, finding => finding.Code == "MAINTAINER_EMAIL_FORMAT");
+            }
+            else Assert.Empty(findings);
+        }
+
         private static void WriteMarker(string directory, string value)
         {
             Directory.CreateDirectory(directory);
@@ -999,8 +1064,10 @@ namespace SW2URDF.Test
             Directory.Delete(tempDirectory, true);
         }
 
-        [Fact]
-        public void TestGeneratedPackageMetadataHasMaintainer()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void TestGeneratedPackageMetadataHasMaintainer(bool explicitNull)
         {
             string tempDirectory = CreateRandomTempDirectory();
             URDFPackage pkg = new URDFPackage("metadata_robot", tempDirectory);
@@ -1009,7 +1076,9 @@ namespace SW2URDF.Test
 
             string ros1PackageXml = Path.Combine(pkg.WindowsPackageDirectory, "package.xml");
             PackageXMLWriter packageXmlWriter = new PackageXMLWriter(ros1PackageXml);
-            PackageXML packageXml = new PackageXML(pkg.PackageName);
+            PackageXML packageXml = explicitNull
+                ? new PackageXML(pkg.PackageName, null)
+                : new PackageXML(pkg.PackageName);
             packageXml.WriteElement(packageXmlWriter);
 
             string ros1Urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
@@ -1018,7 +1087,8 @@ namespace SW2URDF.Test
                 "<?xml version=\"1.0\"?><robot name=\"metadata_robot\"><link name=\"base_link\" /></robot>",
                 new UTF8Encoding(false));
             CreateRos1LaunchFiles(pkg);
-            pkg.CreateRos2Package(ros1Urdf);
+            if (explicitNull) pkg.CreateRos2Package(ros1Urdf, null);
+            else pkg.CreateRos2Package(ros1Urdf);
 
             string ros1Package = File.ReadAllText(ros1PackageXml, Encoding.UTF8);
             string ros2Package = File.ReadAllText(
@@ -1041,8 +1111,128 @@ namespace SW2URDF.Test
                 ros2Package);
             Assert.Contains("maintainer='" + PackageXML.DefaultMaintainerName + "'", ros2Setup);
             Assert.Contains("maintainer_email='" + PackageXML.DefaultMaintainerEmail + "'", ros2Setup);
+            Assert.Equal("1.0.0", System.Xml.Linq.XDocument.Parse(ros1Package).Root.Element("version").Value);
+            Assert.Equal("BSD", System.Xml.Linq.XDocument.Parse(ros1Package).Root.Element("license").Value);
+            Assert.Equal("1.0.0", System.Xml.Linq.XDocument.Parse(ros2Package).Root.Element("version").Value);
+            Assert.Equal("BSD", System.Xml.Linq.XDocument.Parse(ros2Package).Root.Element("license").Value);
+            Assert.Contains("version='1.0.0'", ros2Setup);
+            Assert.Contains("license='BSD'", ros2Setup);
+            Assert.Contains("URDF Description package for metadata_robot", ros1Package);
+            Assert.Contains("ROS 2 URDF description package for metadata_robot", ros2Package);
+            Assert.Contains("description='ROS 2 URDF description package for metadata_robot'", ros2Setup);
+            Assert.Equal(PackageXML.DefaultMaintainerName,
+                System.Xml.Linq.XDocument.Parse(ros1Package).Root.Element("author").Value);
 
             Directory.Delete(tempDirectory, true);
+        }
+
+        [Theory]
+        [InlineData("Model author")]
+        [InlineData("")]
+        [InlineData("   ")]
+        [InlineData(null)]
+        public void TestLegacyPackageMetadataWithoutMeshes(string author)
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            try
+            {
+                var metadata = new ExportTargetOptions
+                {
+                    UseV2Pipeline = false,
+                    PackageVersion = "2.3.4",
+                    Description = "Robot & <model> \"quoted\" 'single' \\path\n\u4e2d\u6587",
+                    MaintainerName = "Maintainer & <team>",
+                    MaintainerEmail = "maintainer@example.com",
+                    ModelLicense = "MIT",
+                    ModelAuthor = author
+                };
+                var pkg = new URDFPackage("metadata_robot", tempDirectory);
+                pkg.CreateDirectories();
+                string ros1Xml = Path.Combine(pkg.WindowsPackageDirectory, "package.xml");
+                new PackageXML(pkg.PackageName, metadata).WriteElement(new PackageXMLWriter(ros1Xml));
+                string urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+                File.WriteAllText(urdf, "<robot name=\"metadata_robot\"><link name=\"base_link\" /></robot>");
+                pkg.CreateRos2Package(urdf, metadata);
+
+                foreach (string path in new[] { ros1Xml, Path.Combine(pkg.WindowsRos2PackageDirectory, "package.xml") })
+                {
+                    var root = System.Xml.Linq.XDocument.Load(path).Root;
+                    Assert.Equal(metadata.PackageVersion, root.Element("version").Value);
+                    Assert.Equal(metadata.Description, root.Element("description").Value);
+                    Assert.False(root.Element("description").HasElements);
+                    Assert.Equal(metadata.ModelLicense, root.Element("license").Value);
+                    Assert.Equal(metadata.MaintainerName, root.Element("maintainer").Value);
+                    Assert.Equal(metadata.MaintainerEmail, root.Element("maintainer").Attribute("email").Value);
+                    if (string.IsNullOrWhiteSpace(author)) Assert.Null(root.Element("author"));
+                    else Assert.Equal(author, root.Element("author").Value);
+                    Assert.NotNull(root.Element("buildtool_depend"));
+                    Assert.NotNull(root.Element("export"));
+                }
+
+                string setup = File.ReadAllText(Path.Combine(pkg.WindowsRos2PackageDirectory, "setup.py"));
+                var fields = new Dictionary<string, string>
+                {
+                    { "version", metadata.PackageVersion }, { "description", metadata.Description },
+                    { "maintainer", metadata.MaintainerName }, { "maintainer_email", metadata.MaintainerEmail },
+                    { "license", metadata.ModelLicense }
+                };
+                if (!string.IsNullOrWhiteSpace(author)) fields.Add("author", author);
+                else Assert.DoesNotContain("    author=", setup);
+                foreach (var field in fields)
+                    Assert.Contains("    " + field.Key + "=" + Newtonsoft.Json.JsonConvert.SerializeObject(field.Value) + ",", setup);
+                Assert.Empty(Directory.GetFiles(pkg.WindowsMeshesDirectory, "*", SearchOption.AllDirectories));
+                Assert.Empty(Directory.GetFiles(pkg.WindowsRos2MeshesDirectory, "*", SearchOption.AllDirectories));
+            }
+            finally
+            {
+                Directory.Delete(tempDirectory, true);
+            }
+        }
+
+        [Fact]
+        public void TestExplicitEmptyLegacyMetadataDoesNotUseDefaults()
+        {
+            string tempDirectory = CreateRandomTempDirectory();
+            try
+            {
+                var metadata = new ExportTargetOptions
+                {
+                    PackageVersion = string.Empty,
+                    Description = string.Empty,
+                    MaintainerName = string.Empty,
+                    MaintainerEmail = string.Empty,
+                    ModelLicense = string.Empty,
+                    ModelAuthor = string.Empty
+                };
+                var pkg = new URDFPackage("metadata_robot", tempDirectory);
+                pkg.CreateDirectories();
+                string ros1Xml = Path.Combine(pkg.WindowsPackageDirectory, "package.xml");
+                new PackageXML(pkg.PackageName, metadata).WriteElement(new PackageXMLWriter(ros1Xml));
+                string urdf = Path.Combine(pkg.WindowsRobotsDirectory, pkg.RobotName + ".urdf");
+                File.WriteAllText(urdf, "<robot name=\"metadata_robot\"><link name=\"base_link\" /></robot>");
+                pkg.CreateRos2Package(urdf, metadata);
+
+                foreach (string path in new[] { ros1Xml, Path.Combine(pkg.WindowsRos2PackageDirectory, "package.xml") })
+                {
+                    var root = System.Xml.Linq.XDocument.Load(path).Root;
+                    foreach (string field in new[] { "version", "description", "maintainer", "license" })
+                    {
+                        Assert.NotNull(root.Element(field));
+                        Assert.Equal(string.Empty, root.Element(field).Value);
+                    }
+                    Assert.Equal(string.Empty, root.Element("maintainer").Attribute("email").Value);
+                    Assert.False(root.Element("description").HasElements);
+                    Assert.Null(root.Element("author"));
+                }
+                string setup = File.ReadAllText(Path.Combine(pkg.WindowsRos2PackageDirectory, "setup.py"));
+                foreach (string field in new[] { "version", "description", "maintainer", "maintainer_email", "license" })
+                    Assert.Contains("    " + field + "=\"\",", setup);
+                Assert.DoesNotContain("    author=", setup);
+            }
+            finally
+            {
+                Directory.Delete(tempDirectory, true);
+            }
         }
 
         [Fact]
@@ -1275,7 +1465,7 @@ namespace SW2URDF.Test
             Assert.Contains("| Inertial validation | PASS | rows=1, failures=0, warnings=0 |", report);
             Assert.Contains("| Mesh manifest paths | PASS | rows=1, missing_visual=0, missing_collision=0 |", report);
             Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=VisualMesh=1, effective=VisualMesh=1, urdf_refs=mesh=1 |", report);
-            Assert.Contains("| STL reduction | PASS | stats_rows=1, high_estimate_errors=0, ratios=0.5=1 |", report);
+            Assert.Contains("| STL reduction | PASS | stats_rows=1, high_estimate_errors=0, reduction_warnings=0, ratios=0.5=1 |", report);
             Assert.Contains("Plugin version: ", report);
             Assert.Contains("Commit hash: ", report);
             Assert.Contains("Build time UTC: ", report);
@@ -1351,11 +1541,11 @@ namespace SW2URDF.Test
             Assert.Contains("Average estimated STL reduction: 50%", report);
             Assert.Contains("Average actual STL reduction: 50%", report);
             Assert.Contains("## STL Reduction Details", report);
-            Assert.Contains("| Link | Quality | Ratio | Custom | Deviation (m) | Angle tolerance (rad) | Baseline est. bytes | Baseline est. triangles | Estimated bytes | Estimated triangles | Actual visual bytes | Actual visual triangles | Estimate error | Estimated reduction | Actual reduction |", report);
+            Assert.Contains("| Link | Quality | Target removal ratio | Original bytes | Original triangles | Target triangles | Final bytes | Final triangles | Actual reduction | Result | Notes |", report);
             Assert.Contains(
-                "| base_link | custom | 0.5 | true | 0.001 | 1 | 5084 | 100 | 2584 | 50 | " +
+                "| base_link | custom | 0.5 |  |  |  | " +
                 new FileInfo(visualMesh).Length.ToString() +
-                " | 0 | 0% | 50% | 50% |",
+                " | 0 | 50% |  |  |",
                 report);
             Assert.DoesNotContain("FAIL:", report);
 
@@ -1481,7 +1671,7 @@ namespace SW2URDF.Test
             Assert.Contains("| Inertial validation | PASS | rows=5, failures=0, warnings=0 |", report);
             Assert.Contains("| Mesh manifest paths | PASS | rows=5, missing_visual=0, missing_collision=0 |", report);
             Assert.Contains("| Collision strategy | PASS | fallbacks=0, requested=VisualMesh=5, effective=VisualMesh=5, urdf_refs=mesh=5 |", report);
-            Assert.Contains("| STL reduction | PASS | stats_rows=5, high_estimate_errors=0, ratios=0.35=5 |", report);
+            Assert.Contains("| STL reduction | PASS | stats_rows=5, high_estimate_errors=0, reduction_warnings=0, ratios=0.35=5 |", report);
             Assert.Contains("| meshes/visual | WheelLF-1.STL | yes | yes | yes |", report);
             Assert.Contains("| meshes/collision | LiDAR-B.STL | yes | yes | yes |", report);
             Assert.Contains("| WheelLF-1 | Origin_global | PASS | 1 | 1 | 0 | 0 | 0 | 0 | 0% | none | none |", report);

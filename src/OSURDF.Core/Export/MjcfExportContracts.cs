@@ -9,6 +9,9 @@ namespace OSURDF.Core.Export
 
         public string OutputDirectory { get; set; }
 
+        // Optional directory leaf; does not change the model's internal identity.
+        public string OutputDirectoryName { get; set; }
+
         public bool Overwrite { get; set; }
 
         public IMjcfCompilerValidator CompilerValidator { get; set; }

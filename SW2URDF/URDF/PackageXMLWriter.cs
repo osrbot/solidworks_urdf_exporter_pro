@@ -1,7 +1,9 @@
 ﻿using log4net;
 using SW2URDF.Utilities;
+using SW2URDF.URDFExport;
 using System.Text;
 using System.Xml;
+using System.Xml.Linq;
 
 namespace SW2URDF.URDF
 {
@@ -9,10 +11,12 @@ namespace SW2URDF.URDF
     public class PackageXMLWriter
     {
         public XmlWriter writer;
+        internal string SavePath { get; private set; }
         private static readonly ILog logger = Logger.GetLogger();
 
         public PackageXMLWriter(string savePath)
         {
+            SavePath = savePath;
             XmlWriterSettings settings = new XmlWriterSettings();
             settings.Encoding = new UTF8Encoding(false);
             settings.OmitXmlDeclaration = true;
@@ -38,6 +42,12 @@ namespace SW2URDF.URDF
         public Dependencies dependencies;
         public Author author;
         public License license;
+        private readonly ExportTargetOptions metadata;
+
+        public PackageXML(string name, ExportTargetOptions metadata) : this(name)
+        {
+            this.metadata = metadata;
+        }
 
         public PackageXML(string name)
         {
@@ -76,6 +86,31 @@ namespace SW2URDF.URDF
             writer.WriteEndElement();
             writer.WriteEndDocument();
             writer.Close();
+            ApplyMetadata(mWriter.SavePath, metadata);
+        }
+
+        internal static void ApplyMetadata(string path, ExportTargetOptions metadata)
+        {
+            if (metadata == null) return;
+            XDocument document = XDocument.Load(path);
+            XElement root = document.Root;
+            root.SetElementValue("version", metadata.PackageVersion ?? string.Empty);
+            root.SetElementValue("description", metadata.Description ?? string.Empty);
+            root.SetElementValue("license", metadata.ModelLicense ?? string.Empty);
+            root.Elements("maintainer").Remove();
+            root.Add(new XElement("maintainer",
+                new XAttribute("email", metadata.MaintainerEmail ?? string.Empty),
+                metadata.MaintainerName ?? string.Empty));
+            root.Elements("author").Remove();
+            if (!string.IsNullOrWhiteSpace(metadata.ModelAuthor))
+                root.Add(new XElement("author", metadata.ModelAuthor));
+            using (XmlWriter output = XmlWriter.Create(path, new XmlWriterSettings
+            {
+                Encoding = new UTF8Encoding(false),
+                Indent = true,
+                OmitXmlDeclaration = document.Declaration == null
+            }))
+                document.Save(output);
         }
     }
 

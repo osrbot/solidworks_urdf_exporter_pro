@@ -61,7 +61,8 @@ namespace SW2URDF.URDFExport
             StringBuilder report = new StringBuilder();
             report.AppendLine("# SW2URDF Export Report");
             report.AppendLine();
-            report.AppendLine("Status: " + (succeeded == 0 ? "FAIL" : failed > 0 ? "PARTIAL" : "PASS"));
+            report.AppendLine("Status: " + (succeeded == 0 ? "FAIL" : failed > 0 ? "PARTIAL" :
+                result.Warnings.Count > 0 ? "WARN" : "PASS"));
             report.AppendLine("Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture));
             report.AppendLine("Commit: " + Versioning.Version.GetCommitHash());
             report.AppendLine("Elapsed: " + Utilities.OperationHeartbeat.FormatElapsed(elapsed));
@@ -448,6 +449,16 @@ namespace SW2URDF.URDFExport
             }
             foreach (MeshExportRecord record in meshList)
             {
+                if (HasStlReductionWarning(record.StlStats))
+                {
+                    StlExportStats stats = record.StlStats;
+                    findings.Add("WARN: STL reduction for link " + record.LinkName +
+                        " status=" + stats.ReductionStatus +
+                        ", target_triangles=" + FormatNullableUInt(stats.TargetTriangles) +
+                        ", actual_triangles=" + FormatNullableUInt(stats.ActualTriangles) +
+                        (String.IsNullOrWhiteSpace(stats.ReductionWarning) ? "." :
+                            ", reason=" + stats.ReductionWarning));
+                }
                 if (CollisionStrategyChanged(record))
                 {
                     findings.Add("WARN: Collision strategy for link " + record.LinkName +
@@ -963,6 +974,18 @@ namespace SW2URDF.URDFExport
                 ", urdf_refs=" + FormatCollisionUrdfReferenceKinds(rows));
         }
 
+        private static bool HasStlReductionWarning(StlExportStats stats)
+        {
+            return stats != null &&
+                (String.Equals(stats.ReductionStatus, "failed", StringComparison.OrdinalIgnoreCase) ||
+                 String.Equals(stats.ReductionStatus, "limited", StringComparison.OrdinalIgnoreCase) ||
+                 !String.IsNullOrWhiteSpace(stats.ReductionWarning) ||
+                 (stats.ReductionRatio.GetValueOrDefault() > 0 &&
+                  (String.Equals(stats.ReductionStatus, "unchanged", StringComparison.OrdinalIgnoreCase) ||
+                   (stats.ActualTriangles.HasValue && stats.TargetTriangles.HasValue &&
+                    stats.ActualTriangles.Value > stats.TargetTriangles.Value))));
+        }
+
         private static void AppendStlReductionHealthRow(
             StringBuilder builder,
             IEnumerable<MeshExportRecord> records,
@@ -975,12 +998,13 @@ namespace SW2URDF.URDFExport
                 r.StlStats != null &&
                 r.StlStats.EstimateErrorPercent.HasValue &&
                 Math.Abs(r.StlStats.EstimateErrorPercent.Value) > 50.0);
+            int reductionWarnings = rows.Count(r => HasStlReductionWarning(r.StlStats));
             string status;
             if (!exportMeshes || meshFormat != MeshExportFormat.STL)
             {
                 status = "SKIP";
             }
-            else if (highEstimateErrors > 0 || statsRows == 0)
+            else if (highEstimateErrors > 0 || statsRows == 0 || reductionWarnings > 0)
             {
                 status = "WARN";
             }
@@ -995,6 +1019,7 @@ namespace SW2URDF.URDFExport
                 status,
                 "stats_rows=" + statsRows.ToString(CultureInfo.InvariantCulture) +
                 ", high_estimate_errors=" + highEstimateErrors.ToString(CultureInfo.InvariantCulture) +
+                ", reduction_warnings=" + reductionWarnings.ToString(CultureInfo.InvariantCulture) +
                 ", ratios=" + FormatStlReductionRatios(rows));
         }
 
@@ -1456,26 +1481,36 @@ namespace SW2URDF.URDFExport
             builder.AppendLine("- Collision mesh bytes: " + collisionBytes.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Visual STL triangles: " + visualTriangles.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine("- Collision STL triangles: " + collisionTriangles.ToString(CultureInfo.InvariantCulture));
+            if (rows.Any(r => r.StlStats.OriginalTriangles.HasValue))
+            {
+                builder.AppendLine("- Original visual STL triangles: " + rows.Sum(r => (long)r.StlStats.OriginalTriangles.GetValueOrDefault()));
+                builder.AppendLine("- Original visual STL bytes: " + rows.Sum(r => r.StlStats.OriginalBytes.GetValueOrDefault()));
+                builder.AppendLine("- Target ratios describe triangles to remove; actual results are measured from exported STL files.");
+            }
             builder.AppendLine("- Average collision mesh byte reduction vs visual: " +
                 FormatNullablePercent(AverageNullableDouble(rows.Select(CalculateCollisionBytesReductionPercent))));
             builder.AppendLine("- Average collision mesh triangle reduction vs visual: " +
                 FormatNullablePercent(AverageNullableDouble(rows.Select(CalculateCollisionTrianglesReductionPercent))));
-            builder.AppendLine("- Baseline estimated visual STL bytes: " +
-                baselineEstimatedVisualBytes.ToString(CultureInfo.InvariantCulture));
-            builder.AppendLine("- Baseline estimated visual STL triangles: " +
-                baselineEstimatedVisualTriangles.ToString(CultureInfo.InvariantCulture));
-            builder.AppendLine("- Estimated visual STL bytes: " +
-                estimatedVisualBytes.ToString(CultureInfo.InvariantCulture));
-            builder.AppendLine("- Estimated visual STL triangles: " +
-                estimatedVisualTriangles.ToString(CultureInfo.InvariantCulture));
+            if (rows.Any(r => r.StlStats.EstimatedTriangles.HasValue))
+            {
+                builder.AppendLine("- Baseline estimated visual STL bytes: " +
+                    baselineEstimatedVisualBytes.ToString(CultureInfo.InvariantCulture));
+                builder.AppendLine("- Baseline estimated visual STL triangles: " +
+                    baselineEstimatedVisualTriangles.ToString(CultureInfo.InvariantCulture));
+                builder.AppendLine("- Estimated visual STL bytes: " +
+                    estimatedVisualBytes.ToString(CultureInfo.InvariantCulture));
+                builder.AppendLine("- Estimated visual STL triangles: " +
+                    estimatedVisualTriangles.ToString(CultureInfo.InvariantCulture));
+            }
             builder.AppendLine("- Requested STL reduction ratios: " +
                 FormatStlReductionRatios(rows));
             builder.AppendLine("- STL quality settings: " +
                 FormatStlQualitySettings(rows));
-            builder.AppendLine("- Average estimated STL reduction: " +
-                FormatNullablePercent(AverageNullableDouble(rows
-                    .Where(r => r.StlStats != null)
-                    .Select(r => r.StlStats.EstimatedReductionPercent))));
+            if (rows.Any(r => r.StlStats.EstimatedReductionPercent.HasValue))
+                builder.AppendLine("- Average estimated STL reduction: " +
+                    FormatNullablePercent(AverageNullableDouble(rows
+                        .Where(r => r.StlStats != null)
+                        .Select(r => r.StlStats.EstimatedReductionPercent))));
             builder.AppendLine("- Average actual STL reduction: " +
                 FormatNullablePercent(AverageNullableDouble(rows
                     .Where(r => r.StlStats != null)
@@ -1499,31 +1534,25 @@ namespace SW2URDF.URDFExport
             List<MeshExportRecord> rows = records.ToList();
             builder.AppendLine("## STL Reduction Details");
             builder.AppendLine();
-            builder.AppendLine("| Link | Quality | Ratio | Custom | Deviation (m) | Angle tolerance (rad) | Baseline est. bytes | Baseline est. triangles | Estimated bytes | Estimated triangles | Actual visual bytes | Actual visual triangles | Estimate error | Estimated reduction | Actual reduction |");
-            builder.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+            builder.AppendLine("| Link | Quality | Target removal ratio | Original bytes | Original triangles | Target triangles | Final bytes | Final triangles | Actual reduction | Result | Notes |");
+            builder.AppendLine("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
             foreach (MeshExportRecord row in rows)
             {
                 StlExportStats stats = row.StlStats ?? StlExportStats.NotExported();
                 builder.AppendLine("| " + MarkdownCell(row.LinkName) +
                     " | " + MarkdownCell(stats.QualityLabel) +
                     " | " + FormatNullableDouble(stats.ReductionRatio) +
-                    " | " + FormatNullableBool(stats.CustomSettings) +
-                    " | " + FormatNullableDouble(stats.Deviation) +
-                    " | " + FormatNullableDouble(stats.AngleTolerance) +
-                    " | " + FormatNullableLong(stats.BaselineEstimatedBytes) +
-                    " | " + FormatNullableInt(stats.BaselineEstimatedTriangles) +
-                    " | " + FormatNullableLong(stats.EstimatedBytes) +
-                    " | " + FormatNullableInt(stats.EstimatedTriangles) +
+                    " | " + FormatNullableLong(stats.OriginalBytes) +
+                    " | " + FormatNullableUInt(stats.OriginalTriangles) +
+                    " | " + FormatNullableUInt(stats.TargetTriangles) +
                     " | " + FormatNullableLong(row.VisualBytes) +
                     " | " + FormatNullableUInt(row.VisualTriangles) +
-                    " | " + FormatNullablePercent(stats.EstimateErrorPercent) +
-                    " | " + FormatNullablePercent(stats.EstimatedReductionPercent) +
-                    " | " + FormatNullablePercent(stats.ActualReductionPercent) + " |");
+                    " | " + FormatNullablePercent(stats.ActualReductionPercent) +
+                    " | " + MarkdownCell(stats.ReductionStatus) +
+                    " | " + MarkdownCell(stats.ReductionWarning) + " |");
             }
             if (rows.Count == 0)
-            {
-                builder.AppendLine("| none |  |  |  |  |  |  |  |  |  |  |  | none | none | none |");
-            }
+                builder.AppendLine("| none | | | | | | | | none | | |");
             builder.AppendLine();
         }
 

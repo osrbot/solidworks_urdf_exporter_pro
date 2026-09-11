@@ -425,6 +425,13 @@ namespace SW2URDF.Test
         }
     }
 
+    [CollectionDefinition("WinForms layout", DisableParallelization = true)]
+    public sealed class WinFormsLayoutCollection
+    {
+    }
+
+    // WinForms TableLayout uses shared mutable size proxies across UI threads.
+    [Collection("WinForms layout")]
     public class TestAssemblyExportLayout
     {
         [Fact]
@@ -889,6 +896,46 @@ namespace SW2URDF.Test
             Assert.Equal("custom", ChineseUiText.JointTypeValue("custom"));
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void TestExportCapturePreservesMetadataAndOnlySwitchesLightweightTargets(bool exportMeshes)
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                GetControl<CheckBox>(form, "modernRos1CheckBox").Checked = false;
+                GetControl<CheckBox>(form, "modernRos2CheckBox").Checked = false;
+                GetControl<CheckBox>(form, "modernUsdAssetCheckBox").Checked = true;
+                GetControl<CheckBox>(form, "modernMjcfAssetCheckBox").Checked = true;
+                GetControl<TextBox>(form, "modernPackageVersionTextBox").Text = " 2.3.4 ";
+                GetControl<TextBox>(form, "modernPackageDescriptionTextBox").Text = " Custom model ";
+                GetControl<TextBox>(form, "modernMaintainerNameTextBox").Text = " Maintainer ";
+                GetControl<TextBox>(form, "modernMaintainerEmailTextBox").Text = " owner@example.com ";
+                GetControl<ComboBox>(form, "modernModelLicenseComboBox").Text = "MIT";
+                GetControl<TextBox>(form, "modernModelAuthorTextBox").Text = " Model author ";
+
+                var options = form.CaptureExportTargetOptionsForExport(exportMeshes);
+                Assert.Equal(exportMeshes, options.UseV2Pipeline);
+                Assert.Equal(!exportMeshes, options.ExportRos1Legacy);
+                Assert.Equal(!exportMeshes, options.ExportRos2);
+                Assert.Equal(exportMeshes, options.ExportUsdAsset);
+                Assert.Equal(exportMeshes, options.ExportMjcfAsset);
+                Assert.Equal("2.3.4", options.PackageVersion);
+                Assert.Equal("Custom model", options.Description);
+                Assert.Equal("Maintainer", options.MaintainerName);
+                Assert.Equal("owner@example.com", options.MaintainerEmail);
+                Assert.Equal("MIT", options.ModelLicense);
+                Assert.Equal("Model author", options.ModelAuthor);
+                var unchanged = form.CaptureExportTargetOptionsForExport(true);
+                Assert.True(unchanged.UseV2Pipeline);
+                Assert.False(unchanged.ExportRos1Legacy);
+                Assert.False(unchanged.ExportRos2);
+                Assert.True(unchanged.ExportUsdAsset);
+                Assert.True(unchanged.ExportMjcfAsset);
+                Assert.NotSame(options, unchanged);
+            }
+        }
+
         [Fact]
         public void TestFourExportTargetsAreExplicitAndCapturedWithoutLegacyProfiles()
         {
@@ -1088,7 +1135,7 @@ namespace SW2URDF.Test
                 string[] paths =
                 {
                     "ROS1/rover_description", "ROS2/rover_description",
-                    "USD/rover_description", "MuJoCo/robot_model"
+                    "USD/rover_description", "MuJoCo/rover_description"
                 };
                 for (int cycle = 0; cycle < 3; cycle++)
                 {
@@ -1922,8 +1969,8 @@ namespace SW2URDF.Test
                 Assert.DoesNotContain("and", packageHint.Text);
                 Assert.DoesNotContain("\u548c", packageHint.Text);
                 Assert.True(
-                    packageLabel.Text == "ROS package" ||
-                    packageLabel.Text == "ROS \u5305\u540d");
+                    packageLabel.Text == "Output name" ||
+                    packageLabel.Text == "\u8f93\u51fa\u540d\u79f0");
 
                 form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(
                     typeof(ExportHelper));
@@ -1934,12 +1981,93 @@ namespace SW2URDF.Test
                 mjcfTarget.Checked = true;
                 InvokePrivate(form, "UpdateRosPackageNameHint");
                 Assert.Equal(
-                    "USD/rover_description | MuJoCo/robot_model",
+                    "USD/rover_description | MuJoCo/rover_description",
                     packageHint.Text);
             }
             finally
             {
                 form.Dispose();
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public void TestModelSettingsReloadIntoANewFormWithoutInMemoryExportTargets(bool recoveryDraft, bool staleMemory)
+        {
+            string payload;
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                var root = new SW2URDF.URDF.LinkNode { IsBaseNode = true };
+                root.Link.Name = "base_link";
+                typeof(AssemblyExportForm).GetField("BaseNode", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(form, root);
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                // URDF-only export uses temporary legacy options; persistence must use the UI instead.
+                form.Exporter.ExportTargets = ExportTargetOptions.LegacyCompatibilityDefaults();
+                InvokePrivate(form, "InitializeExportTargetControls");
+                GetControl<TextBox>(form, "textBoxRosPackageName").Text = "osracer_description";
+                GetControl<TextBox>(form, "modernPackageVersionTextBox").Text = "0.1.1";
+                GetControl<TextBox>(form, "modernPackageDescriptionTextBox").Text = "Saved description";
+                GetControl<TextBox>(form, "modernMaintainerNameTextBox").Text = "kitso666";
+                GetControl<TextBox>(form, "modernMaintainerEmailTextBox").Text = "kitso@osrbot.com";
+                GetControl<TextBox>(form, "modernModelAuthorTextBox").Text = "Model author";
+                GetControl<ComboBox>(form, "modernModelLicenseComboBox").Text = "LicenseRef-My-Custom";
+                GetControl<CheckBox>(form, "modernRos1CheckBox").Checked = false;
+                GetControl<CheckBox>(form, "modernUsdAssetCheckBox").Checked = false;
+                if (recoveryDraft) InvokePrivate(form, "CaptureCurrentExportSession");
+                else form.CaptureModelSettingsForPersistence();
+                payload = ConfigurationSerialization.SerializeDraftPayload(root);
+            }
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                typeof(AssemblyExportForm).GetField("BaseNode", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(form, ConfigurationSerialization.DeserializeDraftPayload(payload));
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                Assert.Null(form.Exporter.ExportTargets);
+                if (staleMemory)
+                    form.Exporter.ExportTargets = ExportTargetOptions.RecommendedDefaults("outdated_name");
+                InvokePrivate(form, "InitializeExportTargetControls");
+                Assert.Equal("osracer_description", GetControl<TextBox>(form, "textBoxRosPackageName").Text);
+                Assert.Equal("0.1.1", GetControl<TextBox>(form, "modernPackageVersionTextBox").Text);
+                Assert.Equal("Saved description", GetControl<TextBox>(form, "modernPackageDescriptionTextBox").Text);
+                Assert.Equal("kitso666", GetControl<TextBox>(form, "modernMaintainerNameTextBox").Text);
+                Assert.Equal("kitso@osrbot.com", GetControl<TextBox>(form, "modernMaintainerEmailTextBox").Text);
+                Assert.Equal("Model author", GetControl<TextBox>(form, "modernModelAuthorTextBox").Text);
+                Assert.Equal("LicenseRef-My-Custom", GetControl<ComboBox>(form, "modernModelLicenseComboBox").Text);
+                Assert.False(GetControl<CheckBox>(form, "modernRos1CheckBox").Checked);
+                Assert.True(GetControl<CheckBox>(form, "modernRos2CheckBox").Checked);
+                Assert.False(GetControl<CheckBox>(form, "modernUsdAssetCheckBox").Checked);
+                Assert.True(GetControl<CheckBox>(form, "modernMjcfAssetCheckBox").Checked);
+            }
+        }
+
+        [Fact]
+        public void TestModelLicenseOffersPresetsAndCapturesCustomText()
+        {
+            using (var form = (AssemblyExportForm)Activator.CreateInstance(typeof(AssemblyExportForm), true))
+            {
+                var license = GetControl<ComboBox>(form, "modernModelLicenseComboBox");
+                form.Exporter = (ExportHelper)FormatterServices.GetUninitializedObject(typeof(ExportHelper));
+                form.Exporter.ExportTargets = ExportTargetOptions.RecommendedDefaults("robot");
+                InvokePrivate(form, "InitializeExportTargetControls");
+                Assert.Equal(ComboBoxStyle.DropDown, license.DropDownStyle);
+                Assert.Equal("NOASSERTION", license.Text);
+                Assert.Contains("MIT", license.Items.Cast<string>());
+                Assert.Contains("Apache-2.0", license.Items.Cast<string>());
+                Assert.Contains("CC-BY-4.0", license.Items.Cast<string>());
+                foreach (string value in new[] { "MIT", "LicenseRef-My-Custom-License", "MIT OR Apache-2.0" })
+                {
+                    license.Text = value;
+                    var options = (ExportTargetOptions)typeof(AssemblyExportForm).GetMethod(
+                        "CaptureExportTargetOptions", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(form, null);
+                    Assert.Equal(value, options.ModelLicense);
+                    form.Exporter.ExportTargets = options;
+                    license.Text = string.Empty;
+                    InvokePrivate(form, "InitializeExportTargetControls");
+                    Assert.Equal(value, license.Text);
+                }
             }
         }
 
@@ -2314,6 +2442,9 @@ namespace SW2URDF.Test
                 SimulationProfile captured;
                 Assert.True(dialog.TryCaptureSettings(out usd, out captured));
                 var mjcf = (DataGridView)FindDescendant(dialog, "mjcfJointDriveGrid");
+                dialog.MarkMissingMjcfGains();
+                if (mode == "position" || mode == "velocity")
+                    Assert.NotEmpty(mjcf.Rows[0].Cells["dampingColumn"].ErrorText);
                 mjcf.Rows[0].Cells[column].Value = value;
                 Assert.False(dialog.TryCaptureSettings(out usd, out captured));
                 Assert.NotEmpty(mjcf.Rows[0].Cells[column].ErrorText);

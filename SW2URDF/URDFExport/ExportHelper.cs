@@ -74,10 +74,14 @@ namespace SW2URDF.URDFExport
         private string mExportCoordinateSystem;
         private string mLegacyExportCoordinateSystem;
         private readonly List<string> meshPreferenceWarnings = new List<string>();
+        private readonly List<string> meshReductionDetails = new List<string>();
 
         private UserProgressBar progressBar;
         private Stopwatch exportStopwatch;
         private int exportStageNumber;
+        private int meshProgressIndex;
+        private int meshProgressTotal;
+        private bool collisionProgress;
         public event EventHandler<ExportProgressEventArgs> ExportProgressChanged;
 
         [XmlIgnore]
@@ -129,11 +133,6 @@ namespace SW2URDF.URDFExport
         private readonly ReferenceGeometryCatalog referenceGeometryCatalog;
         private readonly ReferenceGeometryResolver referenceGeometryResolver;
 
-        private const double MinimumCustomStlDeviation = 0.001;
-        private const double MaximumCustomStlDeviation = 0.02;
-        private const double MinimumCustomStlAngleTolerance = Math.PI / 6.0;
-        private const double MaximumCustomStlAngleTolerance = 2.0 * Math.PI / 3.0;
-
         private bool ComputeInertialValues;
         private bool ComputeVisualCollision;
         private bool ComputeJointKinematics;
@@ -157,7 +156,8 @@ namespace SW2URDF.URDFExport
             ComputeVisualCollision = true;
             ComputeJointKinematics = true;
             ComputeJointLimits = true;
-            ExportTargets = ExportTargetOptions.LegacyCompatibilityDefaults();
+            // No explicit options: retain the legacy writers' metadata defaults.
+            ExportTargets = null;
         }
 
         public void SetComputeInertial(bool computeInertial)
@@ -195,6 +195,7 @@ namespace SW2URDF.URDFExport
             ExportErrorWhy = "";
             LastExportSummary = null;
             meshPreferenceWarnings.Clear();
+            meshReductionDetails.Clear();
             exportStopwatch = Stopwatch.StartNew();
             exportStageNumber = 0;
             logger.Info("Beginning the export process");
@@ -264,7 +265,7 @@ namespace SW2URDF.URDFExport
 
                 logger.Info("Creating package.xml at " + windowsPackageXMLFileName);
                 PackageXMLWriter packageXMLWriter = new PackageXMLWriter(windowsPackageXMLFileName);
-                PackageXML packageXML = new PackageXML(RosPackageName);
+                PackageXML packageXML = new PackageXML(RosPackageName, ExportTargets);
                 packageXML.WriteElement(packageXMLWriter);
 
                 Rviz rviz = new Rviz(RosPackageName, URDFRobot.Name + ".urdf");
@@ -354,7 +355,7 @@ namespace SW2URDF.URDFExport
                 {
                     UpdateProgressTitle("Creating ROS 2 package", "\u6b63\u5728\u521b\u5efa ROS 2 \u529f\u80fd\u5305");
                     logger.Info("Creating ROS 2 package at " + package.WindowsRos2PackageDirectory);
-                    package.CreateRos2Package(windowsURDFFileName);
+                    package.CreateRos2Package(windowsURDFFileName, ExportTargets);
                 }
 
                 if (v2Result == null)
@@ -437,14 +438,14 @@ namespace SW2URDF.URDFExport
                 {
                     LastExportSummary = ExportResultSummary.Create(
                         exportedPackage, outputBeforeExport, exportStopwatch.Elapsed,
-                        v2Result.Targets, v2Result.Warnings);
+                        v2Result.Targets, v2Result.Warnings, meshReductionDetails);
                 }
                 catch (Exception exception) when (IndependentTargetExport.IsTargetFailure(exception))
                 {
                     v2Result.Warnings.Add("File statistics are unavailable: " + exception.Message);
                     LastExportSummary = new ExportResultSummary(
                         exportedPackage.WindowsExportRootDirectory, 0, 0, exportStopwatch.Elapsed,
-                        v2Result.Targets, v2Result.Warnings);
+                        v2Result.Targets, v2Result.Warnings, meshReductionDetails);
                 }
                 if (!success)
                     ExportErrorWhy = String.Join(System.Environment.NewLine,
@@ -465,7 +466,7 @@ namespace SW2URDF.URDFExport
                 LastExportSummary = ExportResultSummary.Create(
                     exportedPackage,
                     outputBeforeExport,
-                    exportStopwatch.Elapsed, warnings: meshPreferenceWarnings);
+                    exportStopwatch.Elapsed, warnings: meshPreferenceWarnings, meshReductionDetails: meshReductionDetails);
             }
             catch (Exception summaryException)
             {
@@ -644,11 +645,21 @@ namespace SW2URDF.URDFExport
             MeshExportFormat meshFormat = MeshExportFormat.STL,
             List<MeshExportRecord> meshRecords = null)
         {
-            int count = 0;
-            foreach (Link link in GetMeshExportLinks(root))
+            IList<Link> links = GetMeshExportLinks(root);
+            meshProgressTotal = links.Count;
+            try
             {
-                ExportLinkFiles(link, package, count, exportSTL, meshFormat, meshRecords);
-                count++;
+                for (int count = 0; count < links.Count; count++)
+                {
+                    meshProgressIndex = count + 1;
+                    collisionProgress = false;
+                    ExportLinkFiles(links[count], package, count, exportSTL, meshFormat, meshRecords);
+                }
+            }
+            finally
+            {
+                meshProgressIndex = meshProgressTotal = 0;
+                collisionProgress = false;
             }
         }
 
@@ -723,10 +734,10 @@ namespace SW2URDF.URDFExport
             MeshExportFormat meshFormat,
             List<MeshExportRecord> meshRecords)
         {
-            progressBar.UpdateProgress(count);
-            progressBar.UpdateTitle(ChineseUiText.Translate(
-                "Exporting mesh: " + link.Name,
-                "\u6b63\u5728\u5bfc\u51fa\u7f51\u683c: " + link.Name));
+            if (progressBar != null) progressBar.UpdateProgress(count);
+            UpdateProgressTitle(
+                (exportSTL ? "Exporting mesh: " : "Writing mesh references: ") + link.Name,
+                (exportSTL ? "正在导出网格: " : "正在写入网格引用: ") + link.Name);
             logger.Info("Exporting link: " + link.Name);
             logger.Info("Link " + link.Name + " has " + link.Children.Count + " children");
 
@@ -768,6 +779,8 @@ namespace SW2URDF.URDFExport
                         visualStlStats = SaveSTL(link, meshFiles.WindowsVisualMeshFilename);
                         break;
                 }
+                collisionProgress = true;
+                UpdateProgressTitle("Preparing collision: " + link.Name, "正在准备碰撞几何: " + link.Name);
                 collisionExport = ExportCollisionMesh(link, meshFiles, meshFormat);
             }
             link.Visual.Geometry.UseMesh(meshFiles.VisualMeshFilename);
@@ -913,7 +926,7 @@ namespace SW2URDF.URDFExport
         {
             StringBuilder builder = new StringBuilder();
             builder.AppendLine(
-                "link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,stl_quality,mesh_reduction_ratio,stl_custom,deviation_m,angle_tolerance_rad,baseline_estimated_visual_bytes,baseline_estimated_visual_triangles,estimated_visual_bytes,estimated_visual_triangles,estimate_error_percent,estimated_reduction_percent,actual_reduction_percent,visual_uri,collision_uri,collision_urdf_reference,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles,collision_vs_visual_bytes_reduction_percent,collision_vs_visual_triangles_reduction_percent");
+                "link,collision_strategy,collision_effective_strategy,collision_geometry,collision_notes,mesh_format,stl_quality,mesh_reduction_ratio,stl_custom,deviation_m,angle_tolerance_rad,baseline_estimated_visual_bytes,baseline_estimated_visual_triangles,estimated_visual_bytes,estimated_visual_triangles,estimate_error_percent,estimated_reduction_percent,actual_reduction_percent,visual_uri,collision_uri,collision_urdf_reference,visual_windows_path,collision_windows_path,visual_exists,collision_exists,visual_bytes,collision_bytes,visual_triangles,collision_triangles,collision_vs_visual_bytes_reduction_percent,collision_vs_visual_triangles_reduction_percent,original_visual_bytes,original_visual_triangles,target_visual_triangles,mesh_reduction_status,mesh_reduction_warning");
             foreach (MeshExportRecord record in records)
             {
                 StlExportStats stats = record.StlStats ?? StlExportStats.NotExported();
@@ -949,7 +962,12 @@ namespace SW2URDF.URDFExport
                     FormatNullableUInt(record.VisualTriangles),
                     FormatNullableUInt(record.CollisionTriangles),
                     FormatNullableDouble(CalculateCollisionBytesReductionPercent(record)),
-                    FormatNullableDouble(CalculateCollisionTrianglesReductionPercent(record))
+                    FormatNullableDouble(CalculateCollisionTrianglesReductionPercent(record)),
+                    FormatNullableLong(stats.OriginalBytes),
+                    FormatNullableUInt(stats.OriginalTriangles),
+                    FormatNullableUInt(stats.TargetTriangles),
+                    CsvField(stats.ReductionStatus),
+                    CsvField(stats.ReductionWarning)
                 }));
             }
 
@@ -1198,14 +1216,15 @@ namespace SW2URDF.URDFExport
                             : "convex_hull_requires_stl_visual_mesh_fallback");
 
                 case CollisionMeshStrategy.SimplifiedMesh:
+                    string simplifiedNotes = "";
                     if (meshFormat == MeshExportFormat.STL &&
-                        TrySaveCollisionStl(link, meshFiles.WindowsCollisionMeshFilename, 1.0))
+                        TrySaveCollisionStl(link, meshFiles.WindowsCollisionMeshFilename, null, out simplifiedNotes))
                     {
                         return new CollisionMeshExportResult(
                             CollisionMeshStrategy.SimplifiedMesh,
                             CollisionMeshStrategy.SimplifiedMesh,
                             "simplified_stl",
-                            "ok");
+                            simplifiedNotes);
                     }
                     logger.Warn(link.Name + ": simplified collision STL failed; falling back to visual mesh copy");
                     CopyVisualMeshToCollisionMesh(link, meshFiles);
@@ -1214,18 +1233,19 @@ namespace SW2URDF.URDFExport
                         CollisionMeshStrategy.VisualMesh,
                         "visual_mesh_copy",
                         meshFormat == MeshExportFormat.STL
-                            ? "simplified_stl_failed_visual_mesh_fallback"
+                            ? "simplified_stl_failed_visual_mesh_fallback; attempted collision: " + simplifiedNotes
                             : "simplified_stl_requires_stl_visual_mesh_fallback");
 
                 case CollisionMeshStrategy.AccurateMesh:
+                    string accurateNotes = "";
                     if (meshFormat == MeshExportFormat.STL &&
-                        TrySaveCollisionStl(link, meshFiles.WindowsCollisionMeshFilename, 0.0))
+                        TrySaveCollisionStl(link, meshFiles.WindowsCollisionMeshFilename, 0.0, out accurateNotes))
                     {
                         return new CollisionMeshExportResult(
                             CollisionMeshStrategy.AccurateMesh,
                             CollisionMeshStrategy.AccurateMesh,
                             "accurate_stl",
-                            "ok");
+                            accurateNotes);
                     }
                     logger.Warn(link.Name + ": accurate collision STL failed; falling back to visual mesh copy");
                     CopyVisualMeshToCollisionMesh(link, meshFiles);
@@ -1234,7 +1254,7 @@ namespace SW2URDF.URDFExport
                         CollisionMeshStrategy.VisualMesh,
                         "visual_mesh_copy",
                         meshFormat == MeshExportFormat.STL
-                            ? "accurate_stl_failed_visual_mesh_fallback"
+                            ? "accurate_stl_failed_visual_mesh_fallback; attempted collision: " + accurateNotes
                             : "accurate_stl_requires_stl_visual_mesh_fallback");
 
                 case CollisionMeshStrategy.VisualMesh:
@@ -1267,15 +1287,32 @@ namespace SW2URDF.URDFExport
                 meshFiles.WindowsCollisionMeshFilename);
         }
 
-        private bool TrySaveCollisionStl(Link link, string windowsCollisionMeshFilename, double reductionRatio)
+        private bool TrySaveCollisionStl(Link link, string windowsCollisionMeshFilename, double? reductionRatioOverride,
+            out string notes, Func<StlExportStats> save = null)
         {
             try
             {
-                SaveSTL(link, windowsCollisionMeshFilename, reductionRatio);
-                return File.Exists(windowsCollisionMeshFilename);
+                double reductionRatio = CreateStlMeshSettings(link.STLQualityFine,
+                    reductionRatioOverride ?? link.MeshReductionRatio).ReductionRatio;
+                StlExportStats stats = save == null
+                    ? SaveSTL(link, windowsCollisionMeshFilename, reductionRatio) : save();
+                bool limited = reductionRatio > 0 && stats.ActualTriangles.HasValue &&
+                    stats.TargetTriangles.HasValue && stats.ActualTriangles.Value > stats.TargetTriangles.Value;
+                notes = String.Format(CultureInfo.InvariantCulture,
+                    "target removal={0:P0}; triangles={1}->{2}; bytes={3}->{4}; status={5}; limited={6}; reason={7}",
+                    reductionRatio, FormatNullableUInt(stats.OriginalTriangles), FormatNullableUInt(stats.ActualTriangles),
+                    FormatNullableLong(stats.OriginalBytes), FormatNullableLong(stats.ActualBytes),
+                    stats.ReductionStatus, limited, stats.ReductionWarning ?? "");
+                bool exists = File.Exists(windowsCollisionMeshFilename);
+                if (!exists) notes += "; collision STL file missing";
+                return exists && !String.Equals(stats.ReductionStatus, "failed", StringComparison.OrdinalIgnoreCase) &&
+                    (reductionRatio == 0 ||
+                    (stats.ActualTriangles.HasValue && stats.OriginalTriangles.HasValue &&
+                     stats.ActualTriangles.Value < stats.OriginalTriangles.Value));
             }
             catch (Exception e)
             {
+                notes = "status=failed; reason=" + e.Message;
                 logger.Warn(link.Name + ": collision STL export failed: " + e.Message);
                 return false;
             }
@@ -2693,7 +2730,7 @@ namespace SW2URDF.URDFExport
                 (int)swSaveAsOptions_e.swSaveAsOptions_Copy;
             StlMeshSettings meshSettings =
                 SetLinkSpecificSTLPreferences(link, activeDoc, reductionRatioOverride);
-            StlExportStats stlStats = CreateStlExportStats(link, meshSettings);
+            StlExportStats stlStats;
 
             logger.Info("Saving STL to " + windowsMeshFilename);
             logger.Info(String.Format(
@@ -2734,6 +2771,7 @@ namespace SW2URDF.URDFExport
                     "The STL for Link " + link.Name +
                     " could not be transformed into its Link coordinate frame.");
             }
+            stlStats = ReduceExportedStl(link, windowsMeshFilename, meshSettings);
             LogActualBinaryStlSize(link, windowsMeshFilename, stlStats);
             return stlStats;
         }
@@ -3038,7 +3076,7 @@ namespace SW2URDF.URDFExport
                 SaveUserPreferences();
                 preferencesSaved = true;
                 SetSTLExportPreferences();
-                SetLinkSpecificSTLPreferences(URDFRobot.BaseLink, ActiveSWModel);
+                StlMeshSettings meshSettings = SetLinkSpecificSTLPreferences(URDFRobot.BaseLink, ActiveSWModel);
                 int errors = 0;
                 int warnings = 0;
 
@@ -3056,6 +3094,8 @@ namespace SW2URDF.URDFExport
                     throw new InvalidOperationException(
                         "The part STL could not be transformed into its Link coordinate frame.");
                 }
+                StlExportStats stats = ReduceExportedStl(URDFRobot.BaseLink, windowsMeshFileName, meshSettings);
+                LogActualBinaryStlSize(URDFRobot.BaseLink, windowsMeshFileName, stats);
                 if (warnings != 0)
                 {
                     logger.Warn("Exporting part STL completed with warnings " + warnings + ".");
@@ -3458,7 +3498,8 @@ namespace SW2URDF.URDFExport
                 () => RestorePreference(swUserPreferenceToggle_e.swSTLDontTranslateToPositive, mTranslateToPositive),
                 () => RestorePreference(swUserPreferenceIntegerValue_e.swExportStlUnits, mSTLUnits),
                 RestoreStlDeviation,
-                () => RestorePreference(swUserPreferenceDoubleValue_e.swSTLAngleTolerance, mSTLAngleTolerance),
+                () => { if (mSTLQuality == (int)swSTLQuality_e.swSTLQuality_Custom)
+                    RestorePreference(swUserPreferenceDoubleValue_e.swSTLAngleTolerance, mSTLAngleTolerance); },
                 () => RestorePreference(swUserPreferenceIntegerValue_e.swSTLQuality, mSTLQuality),
                 () => RestorePreference(swUserPreferenceToggle_e.swSTLShowInfoOnSave, mshowInfo),
                 () => RestorePreference(swUserPreferenceToggle_e.swSTLPreview, mSTLPreview),
@@ -3480,6 +3521,9 @@ namespace SW2URDF.URDFExport
 
         private void RestoreStlDeviation()
         {
+            // Fine/Coarse own their tolerances. SaveAs can change their readback with the mesh context.
+            if (mSTLQuality != (int)swSTLQuality_e.swSTLQuality_Custom)
+                return;
             // SW 2023 activates Custom only after writing a tolerance, even if it is unchanged.
             // Restore the mode last because tolerance writes can switch Fine/Coarse to Custom.
             if (mSTLQuality == (int)swSTLQuality_e.swSTLQuality_Custom &&
@@ -3560,7 +3604,14 @@ namespace SW2URDF.URDFExport
                 : link.MeshReductionRatio;
             StlMeshSettings settings = CreateStlMeshSettings(link.STLQualityFine, reductionRatio);
             string adjustment;
-            settings = ApplyStlMeshSettings(iSwApp, settings, out adjustment);
+            try
+            {
+                settings = ApplyStlMeshSettings(iSwApp, settings, out adjustment);
+            }
+            catch (InvalidOperationException exception)
+            {
+                throw new InvalidOperationException(link.Name + ": " + exception.Message, exception);
+            }
             if (adjustment != null)
             {
                 string warning = link.Name + ": " + adjustment;
@@ -3568,6 +3619,12 @@ namespace SW2URDF.URDFExport
                 meshPreferenceWarnings.Add(warning);
             }
 
+            if (!settings.UseCustom)
+            {
+                logger.Info(link.Name + ": STL mesh settings quality=" + settings.QualityLabel +
+                    "; SolidWorks preset controls tessellation; custom tolerance readback is not used.");
+                return settings;
+            }
             logger.Info(string.Format(
                 "{0}: STL mesh settings quality={1}, reduction={2:0.00}, custom={3}, deviation={4:G5} m, angle={5:G5} rad",
                 link.Name,
@@ -3581,137 +3638,79 @@ namespace SW2URDF.URDFExport
 
         internal static StlMeshSettings ApplyStlMeshSettings(ISldWorks app, StlMeshSettings requested, out string warning)
         {
-            int requestedQuality = requested.UseCustom ? (int)swSTLQuality_e.swSTLQuality_Custom :
-                (requested.QualityLabel == "fine" ? (int)swSTLQuality_e.swSTLQuality_Fine : (int)swSTLQuality_e.swSTLQuality_Coarse);
-            bool qualityAccepted = app.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, requestedQuality);
-            bool deviationAccepted = true;
-            bool angleAccepted = true;
-            if (requested.UseCustom)
-            {
-                deviationAccepted = app.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation, requested.Deviation);
-                angleAccepted = app.SetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance, requested.AngleTolerance);
-            }
-            int quality = app.GetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality);
-            double deviation = app.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLDeviation);
-            double angle = app.GetUserPreferenceDoubleValue((int)swUserPreferenceDoubleValue_e.swSTLAngleTolerance);
-            if ((quality != (int)swSTLQuality_e.swSTLQuality_Custom && quality != (int)swSTLQuality_e.swSTLQuality_Fine &&
-                quality != (int)swSTLQuality_e.swSTLQuality_Coarse) || !InertialEditingPolicy.IsPositiveFinite(deviation) ||
-                !InertialEditingPolicy.IsPositiveFinite(angle))
-                throw new InvalidOperationException("SolidWorks returned invalid effective STL settings; mesh export was not started.");
-            var effective = new StlMeshSettings
-            {
-                UseCustom = quality == (int)swSTLQuality_e.swSTLQuality_Custom,
-                QualityLabel = quality == (int)swSTLQuality_e.swSTLQuality_Custom ? "custom" :
-                    (quality == (int)swSTLQuality_e.swSTLQuality_Fine ? "fine" : "coarse"),
-                ReductionRatio = requested.ReductionRatio,
-                Deviation = deviation,
-                AngleTolerance = angle
-            };
-            bool changed = !qualityAccepted || !deviationAccepted || !angleAccepted || quality != requestedQuality ||
-                (requested.UseCustom && (!InertialEditingPolicy.Same(requested.Deviation, deviation) ||
-                    !InertialEditingPolicy.Same(requested.AngleTolerance, angle)));
-            warning = changed ? String.Format(CultureInfo.InvariantCulture,
-                ChineseUiText.Translate(
-                    "SolidWorks adjusted or rejected STL settings. Requested quality={0}, deviation={1:R}, angle={2:R}; effective quality={3}, deviation={4:R}, angle={5:R}. Export and estimates use the effective settings.",
-                    "SolidWorks 调整或拒绝了 STL 参数。请求 quality={0}, deviation={1:R}, angle={2:R}；实际 quality={3}, deviation={4:R}, angle={5:R}。导出和估算使用实际参数。"),
-                requested.QualityLabel, requested.Deviation, requested.AngleTolerance, effective.QualityLabel, deviation, angle) : null;
-            return effective;
+            int requestedQuality = requested.QualityLabel == "fine"
+                ? (int)swSTLQuality_e.swSTLQuality_Fine : (int)swSTLQuality_e.swSTLQuality_Coarse;
+            bool accepted = app.SetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality, requestedQuality);
+            int actual = app.GetUserPreferenceIntegerValue((int)swUserPreferenceIntegerValue_e.swSTLQuality);
+            if (actual != requestedQuality)
+                throw new InvalidOperationException(String.Format(CultureInfo.InvariantCulture,
+                    "SolidWorks did not apply the requested STL preset; mesh export was not started. Requested quality={0}; readback quality={1}; setter accepted={2}.",
+                    requestedQuality, actual, accepted));
+            // Triangle reduction is a file operation, never a SolidWorks custom tolerance.
+            warning = null;
+            return CreateStlMeshSettings(requestedQuality == (int)swSTLQuality_e.swSTLQuality_Fine, requested.ReductionRatio);
         }
 
         internal static StlMeshSettings CreateStlMeshSettings(bool qualityFine, double reductionRatio)
         {
+            if (Double.IsNaN(reductionRatio) || Double.IsInfinity(reductionRatio))
+                throw new ArgumentOutOfRangeException("reductionRatio", "Triangle reduction must be finite.");
             reductionRatio = Math.Max(0.0, Math.Min(1.0, reductionRatio));
-            double estimateRatio = reductionRatio > 0 ? reductionRatio : (qualityFine ? 0.25 : 0.75);
-            double curvedRatio = estimateRatio * estimateRatio;
             return new StlMeshSettings
             {
-                UseCustom = reductionRatio > 0,
-                QualityLabel = reductionRatio > 0 ? "custom" : (qualityFine ? "fine" : "coarse"),
+                UseCustom = false,
+                QualityLabel = qualityFine ? "fine" : "coarse",
                 ReductionRatio = reductionRatio,
-                Deviation = MinimumCustomStlDeviation +
-                    (MaximumCustomStlDeviation - MinimumCustomStlDeviation) * curvedRatio,
-                AngleTolerance = MinimumCustomStlAngleTolerance +
-                    (MaximumCustomStlAngleTolerance - MinimumCustomStlAngleTolerance) * estimateRatio
+                Deviation = Double.NaN,
+                AngleTolerance = Double.NaN
             };
         }
 
-        private StlExportStats CreateStlExportStats(Link link, StlMeshSettings settings)
+        private StlExportStats ReduceExportedStl(Link link, string filename, StlMeshSettings settings)
         {
-            return CreateStlExportStats(link, settings, candidate => EstimateStlTriangleCount(link, candidate));
+            UpdateProgressTitle("Reducing STL triangles: " + link.Name, "正在精简 STL 三角面: " + link.Name);
+            var progressClock = Stopwatch.StartNew();
+            StlExportStats stats = ReduceStlFile(filename, settings, update =>
+            {
+                if (progressClock.ElapsedMilliseconds < 1000 && update.Completed != update.Total) return;
+                progressClock.Restart();
+                string detail = update.Total > 0
+                    ? " (" + update.Completed + "/" + update.Total + ")" : "";
+                UpdateProgressTitle("Reducing STL regions: " + link.Name + detail,
+                    "正在精简 STL 分区: " + link.Name + detail);
+            });
+            logger.Info(String.Format(CultureInfo.InvariantCulture,
+                "{0}: STL triangle reduction requested={1:P0}, target={2}; triangles {3} -> {4}; bytes {5} -> {6}; status={7}",
+                link.Name, settings.ReductionRatio, stats.TargetTriangles, stats.OriginalTriangles,
+                stats.ActualTriangles, stats.OriginalBytes, stats.ActualBytes, stats.ReductionStatus));
+            if (settings.ReductionRatio > 0 && stats.OriginalBytes.HasValue && stats.ActualBytes.HasValue)
+                meshReductionDetails.Add(link.Name + (collisionProgress ? " [collision STL]: " : " [visual STL]: ") +
+                    FormatByteSize(stats.OriginalBytes.Value) + " -> " + FormatByteSize(stats.ActualBytes.Value));
+            if (!String.IsNullOrEmpty(stats.ReductionWarning))
+            {
+                string warning = link.Name + ": " + stats.ReductionWarning;
+                logger.Warn(warning);
+                meshPreferenceWarnings.Add(warning);
+            }
+            return stats;
         }
 
-        internal static StlExportStats CreateStlExportStats(Link link, StlMeshSettings settings, Func<StlMeshSettings, int> estimate)
+        internal static StlExportStats ReduceStlFile(string filename, StlMeshSettings settings,
+            Action<BundledStlMeshReducer.Progress> progress = null)
         {
-            StlExportStats stats = StlExportStats.FromSettings(settings);
-            try
-            {
-                StlMeshSettings baselineSettings = settings.ReductionRatio == 0.0 ? settings : CreateStlMeshSettings(link.STLQualityFine, 0.0);
-                int baselineTriangleCount = estimate(baselineSettings);
-                if (baselineTriangleCount > 0)
-                {
-                    stats.BaselineEstimatedTriangles = baselineTriangleCount;
-                    stats.BaselineEstimatedBytes = EstimateBinaryStlSizeBytes(baselineTriangleCount);
-                }
-
-                int triangleCount = settings.ReductionRatio == 0.0 ? baselineTriangleCount : estimate(settings);
-                if (triangleCount <= 0)
-                {
-                    logger.Info(link.Name + ": STL size estimate unavailable because tessellation returned no facets");
-                    return stats;
-                }
-
-                long estimatedBytes = EstimateBinaryStlSizeBytes(triangleCount);
-                stats.EstimatedTriangles = triangleCount;
-                stats.EstimatedBytes = estimatedBytes;
-                stats.EstimatedReductionPercent =
-                    CalculateReductionPercent(triangleCount, baselineTriangleCount);
-                logger.Info(string.Format(
-                    "{0}: SolidWorks API rough STL estimate {1} ({2} triangles) before export; " +
-                    "the final SaveAs tessellation can differ",
-                    link.Name, FormatByteSize(estimatedBytes), triangleCount));
-                if (stats.EstimatedReductionPercent.HasValue)
-                {
-                    logger.Info(string.Format(
-                        "{0}: Rough STL estimated triangle reduction {1:+0.##;-0.##;0}% " +
-                        "against baseline estimate {2} triangles",
-                        link.Name,
-                        stats.EstimatedReductionPercent.Value,
-                        baselineTriangleCount));
-                }
-                return stats;
-            }
-            catch (Exception e)
-            {
-                logger.Warn("Could not estimate STL size for link " + link.Name, e);
-                return stats;
-            }
+            var result = BundledStlMeshReducer.ReduceFile(filename, settings.ReductionRatio, progress);
+            var stats = StlExportStats.FromSettings(settings);
+            stats.OriginalTriangles = result.OriginalTriangles;
+            stats.OriginalBytes = result.OriginalBytes;
+            stats.TargetTriangles = result.TargetTriangles;
+            stats.ActualTriangles = result.FinalTriangles;
+            stats.ActualBytes = result.FinalBytes;
+            stats.ReductionStatus = result.Status;
+            stats.ReductionWarning = result.Warning;
+            stats.ActualReductionPercent = CalculateReductionPercent(result.FinalTriangles, result.OriginalTriangles);
+            return stats;
         }
 
-        private int EstimateStlTriangleCount(Link link, StlMeshSettings settings)
-        {
-            int totalFacetCount = 0;
-            List<Body2> bodies = GetBodies(link.SWComponents);
-            foreach (Body2 body in bodies)
-            {
-                Tessellation tessellation = body.GetTessellation(null) as Tessellation;
-                if (tessellation == null)
-                {
-                    continue;
-                }
-
-                tessellation.SurfacePlaneTolerance = settings.Deviation;
-                tessellation.SurfacePlaneAngleTolerance = settings.AngleTolerance;
-                tessellation.CurveChordTolerance = settings.Deviation;
-                tessellation.CurveChordAngleTolerance = settings.AngleTolerance;
-                tessellation.ImprovedQuality = !settings.UseCustom;
-                if (tessellation.Tessellate())
-                {
-                    totalFacetCount += tessellation.GetFacetCount();
-                }
-            }
-
-            return totalFacetCount;
-        }
 
         private void LogActualBinaryStlSize(Link link, string filename, StlExportStats stats)
         {
@@ -3731,7 +3730,7 @@ namespace SW2URDF.URDFExport
                     stats.ActualTriangles = triangleCount.Value;
                     stats.ActualReductionPercent = CalculateReductionPercent(
                         triangleCount.Value,
-                        stats.BaselineEstimatedTriangles.GetValueOrDefault());
+                        stats.OriginalTriangles.GetValueOrDefault());
                 }
 
                 logger.Info(string.Format("{0}: Actual STL size {1} ({2} triangles) at {3}",
@@ -3764,10 +3763,10 @@ namespace SW2URDF.URDFExport
                 {
                     logger.Info(string.Format(
                         "{0}: Actual STL triangle reduction {1:+0.##;-0.##;0}% " +
-                        "against baseline estimate {2} triangles",
+                        "against original STL {2} triangles",
                         link.Name,
                         stats.ActualReductionPercent.Value,
-                        stats.BaselineEstimatedTriangles.GetValueOrDefault()));
+                        stats.OriginalTriangles.GetValueOrDefault()));
                 }
             }
             catch (Exception e)
@@ -3916,9 +3915,18 @@ namespace SW2URDF.URDFExport
             return mib.ToString("0.##") + " MiB";
         }
 
+        internal static string FormatLinkProgressTitle(string title, int index, int total)
+        {
+            return String.Format(CultureInfo.InvariantCulture, "{0} ({1}/{2})", title, index, total);
+        }
+
         private void UpdateProgressTitle(string english, string chinese)
         {
             string title = ChineseUiText.Translate(english, chinese);
+            if (meshProgressTotal > 0)
+                title = FormatLinkProgressTitle(title, meshProgressIndex, meshProgressTotal) +
+                    ChineseUiText.Translate(collisionProgress ? " [collision]" : " [visual]",
+                        collisionProgress ? " [碰撞]" : " [可视]");
             exportStageNumber++;
             string elapsed = exportStopwatch == null
                 ? "not available"

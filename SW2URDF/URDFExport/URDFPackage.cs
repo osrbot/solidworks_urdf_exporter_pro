@@ -173,6 +173,11 @@ namespace SW2URDF.URDFExport
 
         public void CreateRos2Package(string windowsURDFFileName)
         {
+            CreateRos2Package(windowsURDFFileName, null);
+        }
+
+        public void CreateRos2Package(string windowsURDFFileName, ExportTargetOptions metadata)
+        {
             logger.Info("Creating ROS 2 package at " + WindowsRos2PackageDirectory);
             CreateRos2Directories();
             logger.Info("Copying ROS 2 meshes from " + WindowsMeshesDirectory + " to " + WindowsRos2MeshesDirectory);
@@ -197,7 +202,8 @@ namespace SW2URDF.URDFExport
             File.WriteAllText(ros2URDFFileName, urdf, new UTF8Encoding(false));
 
             CreateRos2PackageXml();
-            CreateRos2SetupPy();
+            PackageXML.ApplyMetadata(WindowsRos2PackageDirectory + "package.xml", metadata);
+            CreateRos2SetupPy(metadata);
             CreateRos2ResourceMarker();
             CreateRos2DisplayLaunch();
             CreateRos2GazeboLaunch();
@@ -242,7 +248,7 @@ namespace SW2URDF.URDFExport
             }
         }
 
-        private void CreateRos2SetupPy()
+        private void CreateRos2SetupPy(ExportTargetOptions metadata)
         {
             string ros2Name = Ros2PackageName;
             string path = WindowsRos2PackageDirectory + "setup.py";
@@ -265,7 +271,8 @@ namespace SW2URDF.URDFExport
                 file.WriteLine("");
                 file.WriteLine("setup(");
                 file.WriteLine("    name=package_name,");
-                file.WriteLine("    version='1.0.0',");
+                file.WriteLine(metadata == null ? "    version='1.0.0'," :
+                    "    version=" + Newtonsoft.Json.JsonConvert.SerializeObject(metadata.PackageVersion ?? string.Empty) + ",");
                 file.WriteLine("    packages=[],");
                 file.WriteLine("    data_files=[");
                 file.WriteLine("        ('share/ament_index/resource_index/packages', ['resource/' + package_name]),");
@@ -275,10 +282,22 @@ namespace SW2URDF.URDFExport
                 file.WriteLine("    ] + package_files('meshes') + package_files('textures') + package_files('config'),");
                 file.WriteLine("    install_requires=['setuptools'],");
                 file.WriteLine("    zip_safe=True,");
-                file.WriteLine("    maintainer='" + PackageXML.DefaultMaintainerName + "',");
-                file.WriteLine("    maintainer_email='" + PackageXML.DefaultMaintainerEmail + "',");
-                file.WriteLine("    description='ROS 2 URDF description package for " + PackageName + "',");
-                file.WriteLine("    license='BSD',");
+                if (metadata == null)
+                {
+                    file.WriteLine("    maintainer='" + PackageXML.DefaultMaintainerName + "',");
+                    file.WriteLine("    maintainer_email='" + PackageXML.DefaultMaintainerEmail + "',");
+                    file.WriteLine("    description='ROS 2 URDF description package for " + PackageName + "',");
+                    file.WriteLine("    license='BSD',");
+                }
+                else
+                {
+                    file.WriteLine("    maintainer=" + Newtonsoft.Json.JsonConvert.SerializeObject(metadata.MaintainerName ?? string.Empty) + ",");
+                    file.WriteLine("    maintainer_email=" + Newtonsoft.Json.JsonConvert.SerializeObject(metadata.MaintainerEmail ?? string.Empty) + ",");
+                    file.WriteLine("    description=" + Newtonsoft.Json.JsonConvert.SerializeObject(metadata.Description ?? string.Empty) + ",");
+                    file.WriteLine("    license=" + Newtonsoft.Json.JsonConvert.SerializeObject(metadata.ModelLicense ?? string.Empty) + ",");
+                    if (!string.IsNullOrWhiteSpace(metadata.ModelAuthor))
+                        file.WriteLine("    author=" + Newtonsoft.Json.JsonConvert.SerializeObject(metadata.ModelAuthor) + ",");
+                }
                 file.WriteLine(")");
             }
         }
