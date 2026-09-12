@@ -1,0 +1,73 @@
+name: Verify shipped Windows release runtime
+
+on:
+  push:
+    branches: [codex/sw2-7-release]
+    paths:
+      - .github/workflows/verify-release-runtime.yml
+      - scripts/Test-CleanReleaseRuntime.ps1
+      - scripts/release_runtime_probe.py
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing draft release tag containing the exact installer'
+        type: string
+        required: true
+      installer_asset:
+        description: 'Exact installer asset filename'
+        type: string
+        required: true
+      installer_sha256:
+        description: 'Expected installer SHA256'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Shipped runtime on fresh Windows Server 2022
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Download exact draft installer using read-only GitHub API access
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag || 'v20260913' }}
+          INSTALLER_ASSET: ${{ inputs.installer_asset || 'sw2urdfSetup_20260911_a0af2c5.exe' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:INSTALLER_ASSET -notmatch '^sw2urdfSetup_[0-9]{8}_[0-9a-f]{7,40}\.exe$') { throw 'Invalid asset filename' }
+          New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/candidate" | Out-Null
+          gh release download "$env:RELEASE_TAG" --pattern "$env:INSTALLER_ASSET" --dir "$env:RUNNER_TEMP/candidate"
+          if ($LASTEXITCODE -ne 0) { throw 'Authenticated draft asset download failed' }
+      - name: Install prerequisite and qualify the installed runtime
+        shell: pwsh
+        env:
+          SW2URDF_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          INSTALLER_ASSET: ${{ inputs.installer_asset || 'sw2urdfSetup_20260911_a0af2c5.exe' }}
+          INSTALLER_SHA256: ${{ inputs.installer_sha256 || 'bf7c25db6779b9eb1d6c4b1bfa1d369f4155e1c9a1799320283a9b2bc245eb0f' }}
+        run: |
+          ./scripts/Test-CleanReleaseRuntime.ps1 `
+            -Installer "$env:RUNNER_TEMP/candidate/$env:INSTALLER_ASSET" `
+            -InstallerSha256 "$env:INSTALLER_SHA256" `
+            -OutputDirectory "$env:RUNNER_TEMP/runtime-evidence"
+      - name: Retain qualification evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release-runtime-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/runtime-evidence/**/*.json
+            ${{ runner.temp }}/runtime-evidence/**/*.jsonl
+            ${{ runner.temp }}/runtime-evidence/**/*.txt
+            ${{ runner.temp }}/runtime-evidence/**/*.log
+            !${{ runner.temp }}/runtime-evidence/installed/**
+          if-no-files-found: warn
+          retention-days: 30
