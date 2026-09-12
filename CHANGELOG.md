@@ -4,23 +4,25 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## Unreleased
 
-## 2026-09-13 / v20260913 (Draft / 发布准备)
+## 2026-09-13 / v20260913
 
 - All eight collision strategies use mesh references in the normal STL export path. Box/cylinder/sphere approximations generate STL; component boxes are combined per Link. Generated mesh origins avoid double transforms.
 - 正常 STL 导出路径中，全部八种碰撞策略使用网格引用；箱体/圆柱/球体生成 STL，组件包围盒按 Link 合并，生成网格原点避免重复变换。
 - Fix decoded legacy XML parsing, migrate structural configuration bindings while recomputing derived data, and restore document configurations after mixed-configuration mass reads.
 - 修复旧 XML 字符串解析；迁移结构绑定并重新计算派生数据；修复混合配置质量读取并恢复文档配置。
-- Prepare the unchanged `a0af2c5` installer and bilingual notes. Public Latest publication still requires third-party source/notices, clean-Windows runtime verification and exact-candidate native acceptance.
-- 整理原 `a0af2c5` 安装包与双语说明。公开 Latest 仍待第三方源码/声明材料、干净 Windows 运行时和同一候选包的原生验收。
+- Keep the unchanged `a0af2c5` installer. Complete the source/notice collection and qualification on independent Windows Server 2022 VMs with the explicit VC prerequisite: packaged runtime, installation/overwrite/uninstall/reinstall, and direct upgrade from stable v20260906. This is not a bare Windows desktop or SolidWorks activation test.
+- 沿用原 `a0af2c5` 安装包。源码/声明材料收集已完成；在具备明确 VC 前置依赖的独立 Windows Server 2022 虚拟机通过运行时、初装/覆盖/卸载/重装，以及从 v20260906 稳定版直接升级。此结果不是裸 Windows 桌面或 SolidWorks 激活验证。
+- SolidWorks 2023 SP1.0 passed all eight collision strategies across four targets (32 outputs), migration/save/reopen, add-in activation, deep/hidden previews and real export UI checks. No strategy fallback; all 11 original CAD hashes unchanged.
+- SolidWorks 2023 SP1.0 实机八种策略、四类目标共 32 组导出通过；迁移/保存/重开、插件加载、深层隐藏预览及真实导出 UI 检查通过，无策略回退，11 个原始 CAD 文件哈希不变。
 
-Details: [release draft](.github/release-notes/v20260913.md), [preparation evidence and gaps](docs/reviews/2026-09-13-latest-preparation.md).
+Details: [bilingual release notes](.github/release-notes/v20260913.md), [release acceptance evidence](docs/reviews/2026-09-13-latest-preparation.md).
 
 ## 2026-09-11 / v20260911-beta1 (Prepared / 待发布)
 
-Beta installer publication is pending third-party source/runtime checks. The
-following changes and measurements are complete; this heading is not a public
-download announcement.
-Beta 安装包仍待第三方源码与运行时检查；以下功能和测量已完成，不代表已公开提供下载。
+Historical preparation entry; this beta was not separately published. Its
+source/runtime follow-up is recorded under v20260913 above. The measurements
+below retain their original validation scope.
+历史准备记录，此 Beta 未单独发布；源码/运行时补充验证见上方 v20260913。下列测量保留原有验证范围。
 
 - MuJoCo 与其他格式共用手动设置的输出名称；许可证支持常用下拉选项和自定义输入。修复模型元数据和输出目标的保存，以及“不含网格”导出的元数据校验。
 - MuJoCo shares the configured output name with other targets. Add editable license presets and preserve model metadata/export targets, including validation in mesh-free export.

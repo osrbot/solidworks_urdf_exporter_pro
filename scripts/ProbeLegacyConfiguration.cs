@@ -21,6 +21,11 @@ using System.Xml.Linq;
 
 internal static class ProbeLegacyConfiguration
 {
+    private static bool collisionMatrix;
+    private static bool collisionMatrixOnly;
+    private static bool directCollisionMatrix;
+    private static string[] selectedStrategies;
+    private static bool showExportUi;
     [STAThread]
     private static int Main(string[] args)
     {
@@ -38,6 +43,21 @@ internal static class ProbeLegacyConfiguration
                 expectedProcessId = int.Parse(args[0].Substring("--owned-pid=".Length));
                 args = args.Skip(1).ToArray();
             }
+            directCollisionMatrix = args.Contains("--direct-collision-matrix");
+            showExportUi = args.Contains("--show-export-ui");
+            args = args.Where(value => value != "--show-export-ui").ToArray();
+            collisionMatrixOnly = directCollisionMatrix || args.Contains("--collision-matrix-only");
+            collisionMatrix = collisionMatrixOnly || args.Contains("--collision-matrix");
+            string selection = args.SingleOrDefault(value => value.StartsWith("--collision-strategies=", StringComparison.Ordinal));
+            if (selection != null)
+            {
+                selectedStrategies = selection.Substring("--collision-strategies=".Length).Split(',');
+                foreach (string value in selectedStrategies)
+                    if (!Enum.IsDefined(typeof(CollisionMeshStrategy), value))
+                        throw new ArgumentException("Unknown collision strategy: " + value);
+                args = args.Where(value => value != selection).ToArray();
+            }
+            args = args.Where(value => value != "--collision-matrix" && value != "--collision-matrix-only" && value != "--direct-collision-matrix").ToArray();
             var sw = expectedProcessId > 0
                 ? (SldWorks)Activator.CreateInstance(Type.GetTypeFromProgID("SldWorks.Application"))
                 : (SldWorks)Marshal.GetActiveObject("SldWorks.Application");
@@ -111,8 +131,26 @@ internal static class ProbeLegacyConfiguration
                 Directory.CreateDirectory(output);
                 File.WriteAllText(Path.Combine(output, "legacy-configuration.xml"), original, new UTF8Encoding(false));
                 File.WriteAllText(Path.Combine(output, "migrated-configuration.xml"), payload, new UTF8Encoding(false));
-                CheckDialog(plan, output);
-                CheckSavedCopy(sw, model, tree, oldRoot, original, version, output);
+                if (directCollisionMatrix)
+                {
+                    if (!model.GetPathName().Contains(Path.DirectorySeparatorChar + ".codex-build" + Path.DirectorySeparatorChar))
+                        throw new InvalidOperationException("Direct collision testing requires a disposable .codex-build assembly.");
+                    byte[] originalFile = ReadSharedFile(model.GetPathName());
+                    typeof(ExportHelper).Assembly.GetType("SW2URDF.UI.AssemblyExportForm")
+                        .GetMethod("ApplyMissingRequiredJointLimitDefaultsToTree", BindingFlags.Static | BindingFlags.NonPublic,
+                            null, new[] { typeof(LinkNode) }, null).Invoke(null, new object[] { restored });
+                    try { RunCollisionMatrix(sw, restored, output); }
+                    finally
+                    {
+                        if (!originalFile.SequenceEqual(ReadSharedFile(model.GetPathName())))
+                            throw new InvalidOperationException("Disposable source file changed during collision export.");
+                    }
+                }
+                else
+                {
+                    CheckDialog(plan, output);
+                    CheckSavedCopy(sw, model, tree, oldRoot, original, version, output);
+                }
             }
             return 0;
         }
@@ -247,10 +285,11 @@ internal static class ProbeLegacyConfiguration
                 PackageName = "migration_test",
                 RosPackageName = "migration_test"
             };
-            if (!exporter.CreateRobotFromTreeView(restored))
+            if (!collisionMatrixOnly && !exporter.CreateRobotFromTreeView(restored))
                 throw new InvalidOperationException("Migrated model preview failed: " + exporter.ExportErrorWhy);
-            if (!exporter.ExportRobot())
+            if (!collisionMatrixOnly && !exporter.ExportRobot())
                 throw new InvalidOperationException("Migrated model export failed: " + exporter.ExportErrorWhy);
+            if (collisionMatrix) RunCollisionMatrix(sw, restored, output);
             string[] urdfPaths = Directory.GetFiles(output, "*.urdf", SearchOption.AllDirectories);
             if (urdfPaths.Length == 0) throw new InvalidOperationException("Export produced no URDF.");
             foreach (string urdfPath in urdfPaths)
@@ -284,6 +323,134 @@ internal static class ProbeLegacyConfiguration
         if (!sourceFile.SequenceEqual(ReadSharedFile(source.GetPathName())) || original != after || version != sourceVersion)
             throw new InvalidOperationException("Original assembly changed during copy verification.");
         Console.WriteLine("PASS: source file and legacy configuration unchanged; source was not saved. Rebuild dirty flag=" + source.GetSaveFlag());
+    }
+
+    private static void RunCollisionMatrix(SldWorks sw, LinkNode tree, string output)
+    {
+        foreach (CollisionMeshStrategy strategy in new[] {
+            CollisionMeshStrategy.VisualMesh, CollisionMeshStrategy.SimplifiedMesh,
+            CollisionMeshStrategy.AccurateMesh, CollisionMeshStrategy.BoxPrimitive,
+            CollisionMeshStrategy.CylinderPrimitive, CollisionMeshStrategy.SpherePrimitive,
+            CollisionMeshStrategy.ComponentBoxes, CollisionMeshStrategy.ConvexHull })
+        {
+            if (selectedStrategies != null && !selectedStrategies.Contains(strategy.ToString())) continue;
+            ConfigureCollision(tree, strategy);
+            string destination = Path.Combine(output, "collision-matrix", strategy.ToString());
+            Directory.CreateDirectory(destination);
+            var options = ExportTargetOptions.RecommendedDefaults("collision_test");
+            options.Simulation = new OSURDF.Core.Model.SimulationProfile { BaseMode = "fixed" };
+            var exporter = new ExportHelper(sw) {
+                SavePath = destination, PackageName = "collision_test", RosPackageName = "collision_test",
+                ExportTargets = options
+            };
+            exporter.ExportProgressChanged += (sender, progress) => Console.WriteLine(strategy + ": " + progress.Stage);
+            if (!exporter.CreateRobotFromTreeView(tree) || !ExportWithOptionalUi(exporter, destination))
+                throw new InvalidOperationException(strategy + " export failed: " + exporter.ExportErrorWhy);
+            string[] urdfs = Directory.GetFiles(destination, "*.urdf", SearchOption.AllDirectories);
+            if (urdfs.Length != 2) throw new InvalidOperationException(strategy + " did not produce ROS1 and ROS2 URDFs.");
+            foreach (string urdf in urdfs)
+            {
+                foreach (XElement link in XDocument.Load(urdf).Root.Elements("link"))
+                {
+                    XElement[] collisions = link.Elements("collision").ToArray();
+                    if (collisions.Length != 1 || collisions[0].Element("geometry").Element("mesh") == null)
+                        throw new InvalidOperationException(strategy + " did not export one collision mesh for " + link.Attribute("name"));
+                }
+            }
+            string mjcfReport = Path.Combine(destination, "MuJoCo", "collision_test", "export_report.json");
+            if (Directory.GetFiles(destination, "*.usd*", SearchOption.AllDirectories).Length == 0 || !File.Exists(mjcfReport))
+                throw new InvalidOperationException(strategy + " missed USD or MuJoCo report.");
+            var report = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(mjcfReport));
+            if ((string)report["officialCompilation"]["status"] != "passed" ||
+                (string)report["officialCompilation"]["validator"] != "bundled-official-mujoco-tools")
+                throw new InvalidOperationException(strategy + " failed official MuJoCo validation.");
+            Console.WriteLine("PASS: collision matrix " + strategy + " produced all four targets.");
+        }
+    }
+
+    private static bool ExportWithOptionalUi(ExportHelper exporter, string destination)
+    {
+        if (!showExportUi) return exporter.ExportRobot();
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        Type sessionType = typeof(ExportHelper).Assembly.GetType("SW2URDF.UI.ExportProgressSession", true);
+        var session = (IDisposable)Activator.CreateInstance(sessionType, flags, null, new object[] { null, null }, null);
+        MethodInfo update = sessionType.GetMethod("UpdateProgress", flags);
+        int progressCount = 0;
+        bool progressCaptured = false;
+        Exception progressFailure = null;
+        EventHandler<ExportProgressEventArgs> handler = (sender, progress) => {
+            try
+            {
+            update.Invoke(session, new object[] { progress });
+            if (++progressCount == 3)
+            {
+                Form form = Application.OpenForms.Cast<Form>().Single(value => value.GetType().Name == "ExportProgressForm");
+                form.Invoke(new Action(() => {
+                    if (!form.Visible || !form.TopMost) throw new InvalidOperationException("Real export progress is not visible and topmost.");
+                    using (var bitmap = new Bitmap(form.Width, form.Height))
+                    {
+                        form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
+                        bitmap.Save(Path.Combine(destination, "native-ui-progress.png"));
+                    }
+                    File.WriteAllText(Path.Combine(destination, "native-ui-progress.json"), "{\"visible\":true,\"topMost\":true,\"realExportEvent\":true}");
+                    progressCaptured = true;
+                }));
+            }
+            }
+            catch (Exception error)
+            {
+                // ExportHelper intentionally isolates progress subscribers. Keep
+                // acceptance failures and check them on the main execution path.
+                progressFailure = error;
+            }
+        };
+        bool succeeded;
+        using (session)
+        {
+            sessionType.GetMethod("Start", flags).Invoke(session, new object[] { 5000 });
+            if (!(bool)sessionType.GetProperty("IsRunning", flags).GetValue(session, null))
+                throw new InvalidOperationException("Installed progress session did not start.");
+            exporter.ExportProgressChanged += handler;
+            try { succeeded = exporter.ExportRobot(); }
+            finally { exporter.ExportProgressChanged -= handler; }
+            if (progressFailure != null)
+                throw new InvalidOperationException("Real export progress acceptance failed.", progressFailure);
+            if (!progressCaptured)
+                throw new InvalidOperationException("No real export progress screenshot was captured.");
+            if (sessionType.GetProperty("Failure", flags).GetValue(session, null) != null)
+                throw new InvalidOperationException("Installed progress session failed.");
+        }
+        if (exporter.LastExportSummary == null) throw new InvalidOperationException("No real export summary.");
+        File.WriteAllText(Path.Combine(destination, "native-ui-summary.json"),
+            Newtonsoft.Json.JsonConvert.SerializeObject(exporter.LastExportSummary, Newtonsoft.Json.Formatting.Indented), new UTF8Encoding(false));
+        Type dialogType = typeof(ExportHelper).Assembly.GetType("SW2URDF.UI.ExportResultsDialog", true);
+        using (var dialog = (Form)Activator.CreateInstance(dialogType, flags, null,
+            new object[] { exporter.LastExportSummary, null, null }, null))
+        using (var closeTimer = new System.Windows.Forms.Timer { Interval = 10000 })
+        {
+            closeTimer.Tick += (sender, args) => { closeTimer.Stop(); dialog.Close(); };
+            dialog.Shown += (sender, args) => {
+                Application.DoEvents();
+                using (var bitmap = new Bitmap(dialog.Width, dialog.Height))
+                {
+                    dialog.DrawToBitmap(bitmap, new Rectangle(Point.Empty, dialog.Size));
+                    bitmap.Save(Path.Combine(destination, "native-ui-results.png"));
+                }
+                closeTimer.Start();
+            };
+            dialog.ShowDialog();
+        }
+        return succeeded;
+    }
+
+    private static void ConfigureCollision(LinkNode node, CollisionMeshStrategy strategy)
+    {
+        node.Link.CollisionMeshStrategy = strategy;
+        node.Link.MeshReductionRatio = strategy == CollisionMeshStrategy.SimplifiedMesh ? 0.5 : 0;
+        if (node.Link.Joint != null)
+            node.Link.Joint.MarkManualConfiguration(
+                "Release test fixture: retained historical joint type, axis, frame and limits reviewed against the migrated configuration.");
+        foreach (LinkNode child in node.Nodes) ConfigureCollision(child, strategy);
     }
 
     private static IEnumerable<string> DescribeBindings(ModelDoc2 model, LinkNode node, string location)
