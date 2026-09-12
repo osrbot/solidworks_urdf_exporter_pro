@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/verify-release-runtime.yml
       - scripts/Test-CleanReleaseRuntime.ps1
+      - scripts/Test-ReleaseInstallLifecycle.ps1
       - scripts/release_runtime_probe.py
   workflow_dispatch:
     inputs:
@@ -79,6 +80,17 @@ jobs:
             -Installer "$env:RUNNER_TEMP/candidate/$env:INSTALLER_ASSET" `
             -InstallerSha256 "$env:INSTALLER_SHA256" `
             -OutputDirectory "$env:RUNNER_TEMP/runtime-evidence"
+      - name: Verify exact-candidate overwrite uninstall and reinstall lifecycle
+        shell: pwsh
+        env:
+          SW2URDF_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          INSTALLER_ASSET: ${{ inputs.installer_asset || 'sw2urdfSetup_20260911_a0af2c5.exe' }}
+          INSTALLER_SHA256: ${{ inputs.installer_sha256 || 'bf7c25db6779b9eb1d6c4b1bfa1d369f4155e1c9a1799320283a9b2bc245eb0f' }}
+        run: |
+          ./scripts/Test-ReleaseInstallLifecycle.ps1 `
+            -Installer "$env:RUNNER_TEMP/candidate/$env:INSTALLER_ASSET" `
+            -InstallerSha256 "$env:INSTALLER_SHA256" `
+            -RuntimeEvidenceDirectory "$env:RUNNER_TEMP/runtime-evidence"
       - name: Retain qualification evidence even on failure
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

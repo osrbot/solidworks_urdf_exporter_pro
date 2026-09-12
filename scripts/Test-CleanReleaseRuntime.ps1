@@ -60,7 +60,7 @@ $bundle = Join-Path $OutputDirectory 'installed'
 $installLog = Join-Path $OutputDirectory 'installer.log'
 $setup = Start-Process -FilePath $Installer -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=`"$bundle`"", "/LOG=`"$installLog`"") -Wait -PassThru -WindowStyle Hidden
 $registrationLines = @(Get-Content -LiteralPath $installLog | Where-Object { $_ -match 'RegAsm|Process exit code|Registering' })
-Save-Json ([ordered]@{ exitCode = $setup.ExitCode; registrationLog = $registrationLines; solidWorksInstalled = $false; scope = 'Runtime payload qualification only; SolidWorks COM activation is not asserted.' }) 'installer-result.json'
+Save-Json ([ordered]@{ exitCode = $setup.ExitCode; registrationLog = $registrationLines; scope = 'Runtime payload qualification only; SolidWorks COM activation is not asserted.' }) 'installer-result.json'
 if ($setup.ExitCode -ne 0) { throw "Release installer failed: $($setup.ExitCode)" }
 $python = Join-Path $bundle 'tools/openusd_runtime/python.exe'
 if (-not (Test-Path -LiteralPath $python)) { throw 'Installed embedded Python missing.' }
