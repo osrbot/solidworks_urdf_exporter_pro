@@ -10,9 +10,13 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Existing draft release tag containing the exact installer'
+        description: 'Existing draft release tag (used when asset_id is empty)'
         type: string
-        required: true
+        required: false
+      asset_id:
+        description: 'Exact GitHub release asset ID; bypasses draft release listing'
+        type: string
+        required: false
       installer_asset:
         description: 'Exact installer asset filename'
         type: string
@@ -40,13 +44,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag || 'v20260913' }}
+          ASSET_ID: ${{ github.event_name == 'push' && '559578706' || inputs.asset_id }}
           INSTALLER_ASSET: ${{ inputs.installer_asset || 'sw2urdfSetup_20260911_a0af2c5.exe' }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:INSTALLER_ASSET -notmatch '^sw2urdfSetup_[0-9]{8}_[0-9a-f]{7,40}\.exe$') { throw 'Invalid asset filename' }
           New-Item -ItemType Directory -Path "$env:RUNNER_TEMP/candidate" | Out-Null
-          gh release download "$env:RELEASE_TAG" --pattern "$env:INSTALLER_ASSET" --dir "$env:RUNNER_TEMP/candidate"
-          if ($LASTEXITCODE -ne 0) { throw 'Authenticated draft asset download failed' }
+          if ($env:ASSET_ID) {
+            if ($env:ASSET_ID -notmatch '^[0-9]+$') { throw 'Invalid asset ID' }
+            $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/octet-stream'; 'X-GitHub-Api-Version' = '2022-11-28' }
+            try {
+              Invoke-WebRequest -Uri "https://api.github.com/repos/$env:GH_REPO/releases/assets/$env:ASSET_ID" `
+                -Headers $headers -OutFile "$env:RUNNER_TEMP/candidate/$env:INSTALLER_ASSET"
+            } catch { throw 'Direct authenticated asset download failed; no download URL or credentials are logged.' }
+          } else {
+            gh release download "$env:RELEASE_TAG" --pattern "$env:INSTALLER_ASSET" --dir "$env:RUNNER_TEMP/candidate"
+            if ($LASTEXITCODE -ne 0) { throw 'Authenticated draft asset download failed' }
+          }
       - name: Install prerequisite and qualify the installed runtime
         shell: pwsh
         env:
