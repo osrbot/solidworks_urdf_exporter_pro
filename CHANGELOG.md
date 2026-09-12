@@ -4,6 +4,17 @@ All notable OSRBot-maintained changes to this fork are documented here.
 
 ## Unreleased
 
+## 2026-09-13 / v20260913 (Draft / 发布准备)
+
+- All eight collision strategies use mesh references in the normal STL export path. Box/cylinder/sphere approximations generate STL; component boxes are combined per Link. Generated mesh origins avoid double transforms.
+- 正常 STL 导出路径中，全部八种碰撞策略使用网格引用；箱体/圆柱/球体生成 STL，组件包围盒按 Link 合并，生成网格原点避免重复变换。
+- Fix decoded legacy XML parsing, migrate structural configuration bindings while recomputing derived data, and restore document configurations after mixed-configuration mass reads.
+- 修复旧 XML 字符串解析；迁移结构绑定并重新计算派生数据；修复混合配置质量读取并恢复文档配置。
+- Prepare the unchanged `a0af2c5` installer and bilingual notes. Public Latest publication still requires third-party source/notices, clean-Windows runtime verification and exact-candidate native acceptance.
+- 整理原 `a0af2c5` 安装包与双语说明。公开 Latest 仍待第三方源码/声明材料、干净 Windows 运行时和同一候选包的原生验收。
+
+Details: [release draft](.github/release-notes/v20260913.md), [preparation evidence and gaps](docs/reviews/2026-09-13-latest-preparation.md).
+
 ## 2026-09-11 / v20260911-beta1 (Prepared / 待发布)
 
 Beta installer publication is pending third-party source/runtime checks. The
