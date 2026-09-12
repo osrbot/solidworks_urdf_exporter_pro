@@ -7,6 +7,7 @@ on:
       - .github/workflows/verify-release-runtime.yml
       - scripts/Test-CleanReleaseRuntime.ps1
       - scripts/Test-ReleaseInstallLifecycle.ps1
+      - scripts/Test-StableReleaseUpgrade.ps1
       - scripts/release_runtime_probe.py
   workflow_dispatch:
     inputs:
@@ -102,5 +103,62 @@ jobs:
             ${{ runner.temp }}/runtime-evidence/**/*.txt
             ${{ runner.temp }}/runtime-evidence/**/*.log
             !${{ runner.temp }}/runtime-evidence/installed/**
+          if-no-files-found: warn
+          retention-days: 30
+
+  stable-upgrade:
+    name: Published v20260906 to exact candidate upgrade
+    runs-on: windows-2022
+    timeout-minutes: 20
+    permissions:
+      contents: write # Required only to download the unpublished candidate asset.
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Download pinned stable and candidate installers and provenance
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $download = "$env:RUNNER_TEMP/stable-upgrade-inputs"
+          New-Item -ItemType Directory -Path $download | Out-Null
+          $assets = @(
+            @{ id = '547403854'; name = 'sw2urdfSetup_20260906_fc88a14.exe' },
+            @{ id = '547403856'; name = 'sw2urdfSetup_20260906_fc88a14.exe.provenance.json' },
+            @{ id = '559578706'; name = 'sw2urdfSetup_20260911_a0af2c5.exe' },
+            @{ id = '559578696'; name = 'sw2urdfSetup_20260911_a0af2c5.exe.provenance.json' }
+          )
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/octet-stream'; 'X-GitHub-Api-Version' = '2022-11-28' }
+          foreach ($asset in $assets) {
+            try {
+              Invoke-WebRequest -Uri "https://api.github.com/repos/$env:GH_REPO/releases/assets/$($asset.id)" `
+                -Headers $headers -OutFile (Join-Path $download $asset.name)
+            } catch {
+              $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+              throw "Pinned upgrade input download failed (HTTP $status); URL and credentials suppressed."
+            }
+          }
+      - name: Install stable then upgrade in place and qualify candidate
+        shell: pwsh
+        env:
+          SW2URDF_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          ./scripts/Test-StableReleaseUpgrade.ps1 `
+            -DownloadDirectory "$env:RUNNER_TEMP/stable-upgrade-inputs" `
+            -OutputDirectory "$env:RUNNER_TEMP/stable-upgrade-evidence"
+      - name: Retain stable upgrade evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-stable-upgrade-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/stable-upgrade-evidence/**/*.json
+            ${{ runner.temp }}/stable-upgrade-evidence/**/*.jsonl
+            ${{ runner.temp }}/stable-upgrade-evidence/**/*.txt
+            ${{ runner.temp }}/stable-upgrade-evidence/**/*.log
+            !${{ runner.temp }}/stable-upgrade-evidence/installed/**
           if-no-files-found: warn
           retention-days: 30
